@@ -1,0 +1,750 @@
+{"tick": 0, "soll_s": 0.0, "ist_s": 0.0, "spaet_ms": 0.0, "uhrzeit": 1794397485.474166, "note": "gueltig", "telegramm": "%0.50001;1;1;1794397485.474168"}
+{"tick": 1, "soll_s": 0.1, "ist_s": 0.1001, "spaet_ms": 0.1, "uhrzeit": 1794397485.5742266, "note": "gueltig", "telegramm": "%0.50002;1;2;1794397485.574232"}
+{"tick": 2, "soll_s": 0.2, "ist_s": 0.2003, "spaet_ms": 0.3, "uhrzeit": 1794397485.6744783, "note": "gueltig", "telegramm": "%0.50003;1;3;1794397485.674482"}
+{"tick": 3, "soll_s": 0.3, "ist_s": 0.3006, "spaet_ms": 0.6, "uhrzeit": 1794397485.7747574, "note": "gueltig", "telegramm": "%0.50004;1;4;1794397485.774761"}
+{"tick": 4, "soll_s": 0.4, "ist_s": 0.4001, "spaet_ms": 0.1, "uhrzeit": 1794397485.8742921, "note": "gueltig", "telegramm": "%0.50005;1;5;1794397485.874297"}
+{"tick": 5, "soll_s": 0.5, "ist_s": 0.5004, "spaet_ms": 0.4, "uhrzeit": 1794397485.9745111, "note": "gueltig", "telegramm": "%0.50006;1;6;1794397485.974515"}
+{"tick": 6, "soll_s": 0.6, "ist_s": 0.6001, "spaet_ms": 0.1, "uhrzeit": 1794397486.074281, "note": "gueltig", "telegramm": "%0.50007;1;7;1794397486.074298"}
+{"tick": 7, "soll_s": 0.7, "ist_s": 0.7004, "spaet_ms": 0.4, "uhrzeit": 1794397486.1745622, "note": "gueltig", "telegramm": "%0.50008;1;8;1794397486.174566"}
+{"tick": 8, "soll_s": 0.8, "ist_s": 0.8001, "spaet_ms": 0.1, "uhrzeit": 1794397486.2742712, "note": "gueltig", "telegramm": "%0.50009;1;9;1794397486.274275"}
+{"tick": 9, "soll_s": 0.9, "ist_s": 0.9003, "spaet_ms": 0.3, "uhrzeit": 1794397486.3744686, "note": "gueltig", "telegramm": "%0.50010;1;10;1794397486.374473"}
+{"tick": 10, "soll_s": 1.0, "ist_s": 1.0004, "spaet_ms": 0.4, "uhrzeit": 1794397486.4745376, "note": "gueltig", "telegramm": "%0.50011;1;11;1794397486.474542"}
+{"tick": 11, "soll_s": 1.1, "ist_s": 1.1006, "spaet_ms": 0.6, "uhrzeit": 1794397486.5747428, "note": "gueltig", "telegramm": "%0.50012;1;12;1794397486.574747"}
+{"tick": 12, "soll_s": 1.2, "ist_s": 1.2001, "spaet_ms": 0.1, "uhrzeit": 1794397486.6742256, "note": "gueltig", "telegramm": "%0.50013;1;13;1794397486.674243"}
+{"tick": 13, "soll_s": 1.3, "ist_s": 1.3002, "spaet_ms": 0.2, "uhrzeit": 1794397486.774408, "note": "gueltig", "telegramm": "%0.50014;1;14;1794397486.774412"}
+{"tick": 14, "soll_s": 1.4, "ist_s": 1.4006, "spaet_ms": 0.6, "uhrzeit": 1794397486.874712, "note": "gueltig", "telegramm": "%0.50015;1;15;1794397486.874717"}
+{"tick": 15, "soll_s": 1.5, "ist_s": 1.5002, "spaet_ms": 0.2, "uhrzeit": 1794397486.9743392, "note": "gueltig", "telegramm": "%0.50016;1;16;1794397486.974344"}
+{"tick": 16, "soll_s": 1.6, "ist_s": 1.6021, "spaet_ms": 2.1, "uhrzeit": 1794397487.0763607, "note": "gueltig", "telegramm": "%0.50017;1;17;1794397487.076365"}
+{"tick": 17, "soll_s": 1.7, "ist_s": 1.7002, "spaet_ms": 0.1, "uhrzeit": 1794397487.174311, "note": "gueltig", "telegramm": "%0.50018;1;18;1794397487.174315"}
+{"tick": 18, "soll_s": 1.8, "ist_s": 1.8001, "spaet_ms": 0.1, "uhrzeit": 1794397487.2742474, "note": "gueltig", "telegramm": "%0.50019;1;19;1794397487.274252"}
+{"tick": 19, "soll_s": 1.9, "ist_s": 1.9, "spaet_ms": 0.0, "uhrzeit": 1794397487.3741965, "note": "gueltig", "telegramm": "%0.50020;1;20;1794397487.374200"}
+{"tick": 20, "soll_s": 2.0, "ist_s": 2.0005, "spaet_ms": 0.5, "uhrzeit": 1794397487.4746816, "note": "gueltig", "telegramm": "%0.50021;1;21;1794397487.474686"}
+{"tick": 21, "soll_s": 2.1, "ist_s": 2.1004, "spaet_ms": 0.4, "uhrzeit": 1794397487.5745063, "note": "gueltig", "telegramm": "%0.50022;1;22;1794397487.574510"}
+{"tick": 22, "soll_s": 2.2, "ist_s": 2.2004, "spaet_ms": 0.4, "uhrzeit": 1794397487.674605, "note": "gueltig", "telegramm": "%0.50023;1;23;1794397487.674609"}
+{"tick": 23, "soll_s": 2.3, "ist_s": 2.3004, "spaet_ms": 0.4, "uhrzeit": 1794397487.774531, "note": "gueltig", "telegramm": "%0.50024;1;24;1794397487.774534"}
+{"tick": 24, "soll_s": 2.4, "ist_s": 2.4004, "spaet_ms": 0.4, "uhrzeit": 1794397487.8745093, "note": "gueltig", "telegramm": "%0.50025;1;25;1794397487.874513"}
+{"tick": 25, "soll_s": 2.5, "ist_s": 2.5001, "spaet_ms": 0.1, "uhrzeit": 1794397487.9742684, "note": "gueltig", "telegramm": "%0.50026;1;26;1794397487.974273"}
+{"tick": 26, "soll_s": 2.6, "ist_s": 2.6003, "spaet_ms": 0.3, "uhrzeit": 1794397488.0744622, "note": "gueltig", "telegramm": "%0.50027;1;27;1794397488.074466"}
+{"tick": 27, "soll_s": 2.7, "ist_s": 2.7005, "spaet_ms": 0.5, "uhrzeit": 1794397488.17461, "note": "gueltig", "telegramm": "%0.50028;1;28;1794397488.174614"}
+{"tick": 28, "soll_s": 2.8, "ist_s": 2.8003, "spaet_ms": 0.3, "uhrzeit": 1794397488.2744553, "note": "gueltig", "telegramm": "%0.50029;1;29;1794397488.274459"}
+{"tick": 29, "soll_s": 2.9, "ist_s": 2.9004, "spaet_ms": 0.4, "uhrzeit": 1794397488.3744998, "note": "gueltig", "telegramm": "%0.50030;1;30;1794397488.374504"}
+{"tick": 30, "soll_s": 3.0, "ist_s": 3.0001, "spaet_ms": 0.1, "uhrzeit": 1794397488.4742436, "note": "gueltig", "telegramm": "%0.50031;1;31;1794397488.474248"}
+{"tick": 31, "soll_s": 3.1, "ist_s": 3.1004, "spaet_ms": 0.4, "uhrzeit": 1794397488.574528, "note": "gueltig", "telegramm": "%0.50032;1;32;1794397488.574532"}
+{"tick": 32, "soll_s": 3.2, "ist_s": 3.2002, "spaet_ms": 0.2, "uhrzeit": 1794397488.6743257, "note": "gueltig", "telegramm": "%0.50033;1;33;1794397488.674330"}
+{"tick": 33, "soll_s": 3.3, "ist_s": 3.3002, "spaet_ms": 0.2, "uhrzeit": 1794397488.7743921, "note": "gueltig", "telegramm": "%0.50034;1;34;1794397488.774396"}
+{"tick": 34, "soll_s": 3.4, "ist_s": 3.4002, "spaet_ms": 0.2, "uhrzeit": 1794397488.8743563, "note": "gueltig", "telegramm": "%0.50035;1;35;1794397488.874360"}
+{"tick": 35, "soll_s": 3.5, "ist_s": 3.5005, "spaet_ms": 0.5, "uhrzeit": 1794397488.9746296, "note": "gueltig", "telegramm": "%0.50036;1;36;1794397488.974633"}
+{"tick": 36, "soll_s": 3.6, "ist_s": 3.6005, "spaet_ms": 0.5, "uhrzeit": 1794397489.0746722, "note": "gueltig", "telegramm": "%0.50037;1;37;1794397489.074676"}
+{"tick": 37, "soll_s": 3.7, "ist_s": 3.7003, "spaet_ms": 0.3, "uhrzeit": 1794397489.174429, "note": "gueltig", "telegramm": "%0.50038;1;38;1794397489.174433"}
+{"tick": 38, "soll_s": 3.8, "ist_s": 3.8004, "spaet_ms": 0.4, "uhrzeit": 1794397489.2745202, "note": "gueltig", "telegramm": "%0.50039;1;39;1794397489.274524"}
+{"tick": 39, "soll_s": 3.9, "ist_s": 3.9005, "spaet_ms": 0.5, "uhrzeit": 1794397489.374673, "note": "gueltig", "telegramm": "%0.50040;1;40;1794397489.374677"}
+{"tick": 40, "soll_s": 4.0, "ist_s": 4.0003, "spaet_ms": 0.3, "uhrzeit": 1794397489.4744468, "note": "gueltig", "telegramm": "%0.50041;1;41;1794397489.474451"}
+{"tick": 41, "soll_s": 4.1, "ist_s": 4.1006, "spaet_ms": 0.6, "uhrzeit": 1794397489.5747004, "note": "gueltig", "telegramm": "%0.50042;1;42;1794397489.574704"}
+{"tick": 42, "soll_s": 4.2, "ist_s": 4.2005, "spaet_ms": 0.5, "uhrzeit": 1794397489.6746285, "note": "gueltig", "telegramm": "%0.50043;1;43;1794397489.674634"}
+{"tick": 43, "soll_s": 4.3, "ist_s": 4.3001, "spaet_ms": 0.1, "uhrzeit": 1794397489.774273, "note": "gueltig", "telegramm": "%0.50044;1;44;1794397489.774277"}
+{"tick": 44, "soll_s": 4.4, "ist_s": 4.4004, "spaet_ms": 0.4, "uhrzeit": 1794397489.874545, "note": "gueltig", "telegramm": "%0.50045;1;45;1794397489.874549"}
+{"tick": 45, "soll_s": 4.5, "ist_s": 4.5001, "spaet_ms": 0.1, "uhrzeit": 1794397489.9742281, "note": "gueltig", "telegramm": "%0.50046;1;46;1794397489.974232"}
+{"tick": 46, "soll_s": 4.6, "ist_s": 4.6005, "spaet_ms": 0.5, "uhrzeit": 1794397490.0746255, "note": "gueltig", "telegramm": "%0.50047;1;47;1794397490.074629"}
+{"tick": 47, "soll_s": 4.7, "ist_s": 4.7005, "spaet_ms": 0.5, "uhrzeit": 1794397490.1746123, "note": "gueltig", "telegramm": "%0.50048;1;48;1794397490.174616"}
+{"tick": 48, "soll_s": 4.8, "ist_s": 4.8002, "spaet_ms": 0.2, "uhrzeit": 1794397490.274402, "note": "gueltig", "telegramm": "%0.50049;1;49;1794397490.274406"}
+{"tick": 49, "soll_s": 4.9, "ist_s": 4.9003, "spaet_ms": 0.3, "uhrzeit": 1794397490.374477, "note": "gueltig", "telegramm": "%0.50050;1;50;1794397490.374481"}
+{"tick": 50, "soll_s": 5.0, "ist_s": 5.0003, "spaet_ms": 0.3, "uhrzeit": 1794397490.4744904, "note": "marker 1E+300", "telegramm": "%1E+300;0;51;1794397490.474504"}
+{"tick": 51, "soll_s": 5.1, "ist_s": 5.1002, "spaet_ms": 0.2, "uhrzeit": 1794397490.574365, "note": "marker 1E+300", "telegramm": "%1E+300;0;52;1794397490.574369"}
+{"tick": 52, "soll_s": 5.2, "ist_s": 5.2006, "spaet_ms": 0.6, "uhrzeit": 1794397490.6747258, "note": "marker 1E+300", "telegramm": "%1E+300;0;53;1794397490.674730"}
+{"tick": 53, "soll_s": 5.3, "ist_s": 5.3005, "spaet_ms": 0.5, "uhrzeit": 1794397490.7746027, "note": "marker 1E+300", "telegramm": "%1E+300;0;54;1794397490.774607"}
+{"tick": 54, "soll_s": 5.4, "ist_s": 5.4003, "spaet_ms": 0.3, "uhrzeit": 1794397490.8744223, "note": "marker 1E+300", "telegramm": "%1E+300;0;55;1794397490.874427"}
+{"tick": 55, "soll_s": 5.5, "ist_s": 5.5004, "spaet_ms": 0.4, "uhrzeit": 1794397490.9745011, "note": "marker 1E+300", "telegramm": "%1E+300;0;56;1794397490.974505"}
+{"tick": 56, "soll_s": 5.6, "ist_s": 5.6003, "spaet_ms": 0.3, "uhrzeit": 1794397491.0744555, "note": "marker 1E+300", "telegramm": "%1E+300;0;57;1794397491.074460"}
+{"tick": 57, "soll_s": 5.7, "ist_s": 5.7005, "spaet_ms": 0.5, "uhrzeit": 1794397491.1746457, "note": "marker 1E+300", "telegramm": "%1E+300;0;58;1794397491.174650"}
+{"tick": 58, "soll_s": 5.8, "ist_s": 5.8005, "spaet_ms": 0.5, "uhrzeit": 1794397491.2746577, "note": "marker 1E+300", "telegramm": "%1E+300;0;59;1794397491.274663"}
+{"tick": 59, "soll_s": 5.9, "ist_s": 5.9004, "spaet_ms": 0.4, "uhrzeit": 1794397491.374513, "note": "marker 1E+300", "telegramm": "%1E+300;0;60;1794397491.374517"}
+{"tick": 60, "soll_s": 6.0, "ist_s": 6.0002, "spaet_ms": 0.2, "uhrzeit": 1794397491.4742975, "note": "marker 1E+300", "telegramm": "%1E+300;0;61;1794397491.474302"}
+{"tick": 61, "soll_s": 6.1, "ist_s": 6.1003, "spaet_ms": 0.3, "uhrzeit": 1794397491.5744028, "note": "marker 1E+300", "telegramm": "%1E+300;0;62;1794397491.574407"}
+{"tick": 62, "soll_s": 6.2, "ist_s": 6.2005, "spaet_ms": 0.5, "uhrzeit": 1794397491.6746922, "note": "marker 1E+300", "telegramm": "%1E+300;0;63;1794397491.674696"}
+{"tick": 63, "soll_s": 6.3, "ist_s": 6.3004, "spaet_ms": 0.4, "uhrzeit": 1794397491.7745144, "note": "marker 1E+300", "telegramm": "%1E+300;0;64;1794397491.774518"}
+{"tick": 64, "soll_s": 6.4, "ist_s": 6.4002, "spaet_ms": 0.2, "uhrzeit": 1794397491.8743813, "note": "marker 1E+300", "telegramm": "%1E+300;0;65;1794397491.874386"}
+{"tick": 65, "soll_s": 6.5, "ist_s": 6.5005, "spaet_ms": 0.5, "uhrzeit": 1794397491.9746377, "note": "marker 1E+300", "telegramm": "%1E+300;0;66;1794397491.974642"}
+{"tick": 66, "soll_s": 6.6, "ist_s": 6.6003, "spaet_ms": 0.3, "uhrzeit": 1794397492.0744956, "note": "marker 1E+300", "telegramm": "%1E+300;0;67;1794397492.074511"}
+{"tick": 67, "soll_s": 6.7, "ist_s": 6.7001, "spaet_ms": 0.1, "uhrzeit": 1794397492.174297, "note": "marker 1E+300", "telegramm": "%1E+300;0;68;1794397492.174301"}
+{"tick": 68, "soll_s": 6.8, "ist_s": 6.8002, "spaet_ms": 0.2, "uhrzeit": 1794397492.2743375, "note": "marker 1E+300", "telegramm": "%1E+300;0;69;1794397492.274341"}
+{"tick": 69, "soll_s": 6.9, "ist_s": 6.9005, "spaet_ms": 0.5, "uhrzeit": 1794397492.3746834, "note": "marker 1E+300", "telegramm": "%1E+300;0;70;1794397492.374687"}
+{"tick": 70, "soll_s": 7.0, "ist_s": 7.0004, "spaet_ms": 0.4, "uhrzeit": 1794397492.474539, "note": "marker 1E+300", "telegramm": "%1E+300;0;71;1794397492.474543"}
+{"tick": 71, "soll_s": 7.1, "ist_s": 7.1003, "spaet_ms": 0.3, "uhrzeit": 1794397492.5744352, "note": "marker 1E+300", "telegramm": "%1E+300;0;72;1794397492.574439"}
+{"tick": 72, "soll_s": 7.2, "ist_s": 7.2005, "spaet_ms": 0.5, "uhrzeit": 1794397492.674616, "note": "marker 1E+300", "telegramm": "%1E+300;0;73;1794397492.674620"}
+{"tick": 73, "soll_s": 7.3, "ist_s": 7.3001, "spaet_ms": 0.1, "uhrzeit": 1794397492.7742624, "note": "marker 1E+300", "telegramm": "%1E+300;0;74;1794397492.774267"}
+{"tick": 74, "soll_s": 7.4, "ist_s": 7.4004, "spaet_ms": 0.4, "uhrzeit": 1794397492.874521, "note": "marker 1E+300", "telegramm": "%1E+300;0;75;1794397492.874526"}
+{"tick": 75, "soll_s": 7.5, "ist_s": 7.5006, "spaet_ms": 0.6, "uhrzeit": 1794397492.9747386, "note": "marker 1E+300", "telegramm": "%1E+300;0;76;1794397492.974743"}
+{"tick": 76, "soll_s": 7.6, "ist_s": 7.6003, "spaet_ms": 0.3, "uhrzeit": 1794397493.0744448, "note": "marker 1E+300", "telegramm": "%1E+300;0;77;1794397493.074450"}
+{"tick": 77, "soll_s": 7.7, "ist_s": 7.7002, "spaet_ms": 0.2, "uhrzeit": 1794397493.174386, "note": "marker 1E+300", "telegramm": "%1E+300;0;78;1794397493.174391"}
+{"tick": 78, "soll_s": 7.8, "ist_s": 7.8003, "spaet_ms": 0.3, "uhrzeit": 1794397493.2743988, "note": "marker 1E+300", "telegramm": "%1E+300;0;79;1794397493.274403"}
+{"tick": 79, "soll_s": 7.9, "ist_s": 7.9004, "spaet_ms": 0.4, "uhrzeit": 1794397493.3745096, "note": "marker 1E+300", "telegramm": "%1E+300;0;80;1794397493.374514"}
+{"tick": 80, "soll_s": 8.0, "ist_s": 8.0006, "spaet_ms": 0.6, "uhrzeit": 1794397493.4747055, "note": "marker 1E+300", "telegramm": "%1E+300;0;81;1794397493.474710"}
+{"tick": 81, "soll_s": 8.1, "ist_s": 8.1002, "spaet_ms": 0.2, "uhrzeit": 1794397493.5743194, "note": "marker 1E+300", "telegramm": "%1E+300;0;82;1794397493.574324"}
+{"tick": 82, "soll_s": 8.2, "ist_s": 8.2003, "spaet_ms": 0.3, "uhrzeit": 1794397493.6744492, "note": "marker 1E+300", "telegramm": "%1E+300;0;83;1794397493.674453"}
+{"tick": 83, "soll_s": 8.3, "ist_s": 8.3005, "spaet_ms": 0.5, "uhrzeit": 1794397493.774681, "note": "marker 1E+300", "telegramm": "%1E+300;0;84;1794397493.774685"}
+{"tick": 84, "soll_s": 8.4, "ist_s": 8.4005, "spaet_ms": 0.5, "uhrzeit": 1794397493.8746202, "note": "marker 1E+300", "telegramm": "%1E+300;0;85;1794397493.874625"}
+{"tick": 85, "soll_s": 8.5, "ist_s": 8.5005, "spaet_ms": 0.5, "uhrzeit": 1794397493.9746587, "note": "marker 1E+300", "telegramm": "%1E+300;0;86;1794397493.974663"}
+{"tick": 86, "soll_s": 8.6, "ist_s": 8.6002, "spaet_ms": 0.2, "uhrzeit": 1794397494.0743678, "note": "marker 1E+300", "telegramm": "%1E+300;0;87;1794397494.074372"}
+{"tick": 87, "soll_s": 8.7, "ist_s": 8.7005, "spaet_ms": 0.5, "uhrzeit": 1794397494.1746845, "note": "marker 1E+300", "telegramm": "%1E+300;0;88;1794397494.174689"}
+{"tick": 88, "soll_s": 8.8, "ist_s": 8.8002, "spaet_ms": 0.2, "uhrzeit": 1794397494.2743332, "note": "marker 1E+300", "telegramm": "%1E+300;0;89;1794397494.274338"}
+{"tick": 89, "soll_s": 8.9, "ist_s": 8.9006, "spaet_ms": 0.6, "uhrzeit": 1794397494.3747342, "note": "marker 1E+300", "telegramm": "%1E+300;0;90;1794397494.374738"}
+{"tick": 90, "soll_s": 9.0, "ist_s": 9.0002, "spaet_ms": 0.2, "uhrzeit": 1794397494.474329, "note": "marker 1E+300", "telegramm": "%1E+300;0;91;1794397494.474333"}
+{"tick": 91, "soll_s": 9.1, "ist_s": 9.1002, "spaet_ms": 0.2, "uhrzeit": 1794397494.5743527, "note": "marker 1E+300", "telegramm": "%1E+300;0;92;1794397494.574357"}
+{"tick": 92, "soll_s": 9.2, "ist_s": 9.2001, "spaet_ms": 0.1, "uhrzeit": 1794397494.6742513, "note": "marker 1E+300", "telegramm": "%1E+300;0;93;1794397494.674256"}
+{"tick": 93, "soll_s": 9.3, "ist_s": 9.3001, "spaet_ms": 0.1, "uhrzeit": 1794397494.774267, "note": "marker 1E+300", "telegramm": "%1E+300;0;94;1794397494.774271"}
+{"tick": 94, "soll_s": 9.4, "ist_s": 9.4004, "spaet_ms": 0.4, "uhrzeit": 1794397494.8745258, "note": "marker 1E+300", "telegramm": "%1E+300;0;95;1794397494.874530"}
+{"tick": 95, "soll_s": 9.5, "ist_s": 9.5005, "spaet_ms": 0.5, "uhrzeit": 1794397494.9746249, "note": "marker 1E+300", "telegramm": "%1E+300;0;96;1794397494.974629"}
+{"tick": 96, "soll_s": 9.6, "ist_s": 9.6002, "spaet_ms": 0.2, "uhrzeit": 1794397495.0743253, "note": "marker 1E+300", "telegramm": "%1E+300;0;97;1794397495.074329"}
+{"tick": 97, "soll_s": 9.7, "ist_s": 9.7003, "spaet_ms": 0.3, "uhrzeit": 1794397495.174507, "note": "marker 1E+300", "telegramm": "%1E+300;0;98;1794397495.174511"}
+{"tick": 98, "soll_s": 9.8, "ist_s": 9.8004, "spaet_ms": 0.4, "uhrzeit": 1794397495.274583, "note": "marker 1E+300", "telegramm": "%1E+300;0;99;1794397495.274587"}
+{"tick": 99, "soll_s": 9.9, "ist_s": 9.9004, "spaet_ms": 0.4, "uhrzeit": 1794397495.37455, "note": "marker 1E+300", "telegramm": "%1E+300;0;100;1794397495.374554"}
+{"tick": 100, "soll_s": 10.0, "ist_s": 10.0004, "spaet_ms": 0.4, "uhrzeit": 1794397495.4745562, "note": "gueltig", "telegramm": "%0.50101;1;101;1794397495.474560"}
+{"tick": 101, "soll_s": 10.1, "ist_s": 10.1002, "spaet_ms": 0.2, "uhrzeit": 1794397495.5743437, "note": "gueltig", "telegramm": "%0.50102;1;102;1794397495.574347"}
+{"tick": 102, "soll_s": 10.2, "ist_s": 10.2003, "spaet_ms": 0.3, "uhrzeit": 1794397495.6744628, "note": "gueltig", "telegramm": "%0.50103;1;103;1794397495.674467"}
+{"tick": 103, "soll_s": 10.3, "ist_s": 10.3001, "spaet_ms": 0.1, "uhrzeit": 1794397495.7742603, "note": "gueltig", "telegramm": "%0.50104;1;104;1794397495.774264"}
+{"tick": 104, "soll_s": 10.4, "ist_s": 10.4004, "spaet_ms": 0.4, "uhrzeit": 1794397495.8745227, "note": "gueltig", "telegramm": "%0.50105;1;105;1794397495.874527"}
+{"tick": 105, "soll_s": 10.5, "ist_s": 10.5001, "spaet_ms": 0.1, "uhrzeit": 1794397495.9742823, "note": "gueltig", "telegramm": "%0.50106;1;106;1794397495.974287"}
+{"tick": 106, "soll_s": 10.6, "ist_s": 10.6003, "spaet_ms": 0.3, "uhrzeit": 1794397496.0744984, "note": "gueltig", "telegramm": "%0.50107;1;107;1794397496.074502"}
+{"tick": 107, "soll_s": 10.7, "ist_s": 10.7003, "spaet_ms": 0.3, "uhrzeit": 1794397496.174432, "note": "gueltig", "telegramm": "%0.50108;1;108;1794397496.174437"}
+{"tick": 108, "soll_s": 10.8, "ist_s": 10.8005, "spaet_ms": 0.5, "uhrzeit": 1794397496.2745972, "note": "gueltig", "telegramm": "%0.50109;1;109;1794397496.274601"}
+{"tick": 109, "soll_s": 10.9, "ist_s": 10.9002, "spaet_ms": 0.2, "uhrzeit": 1794397496.3743327, "note": "gueltig", "telegramm": "%0.50110;1;110;1794397496.374337"}
+{"tick": 110, "soll_s": 11.0, "ist_s": 11.0004, "spaet_ms": 0.4, "uhrzeit": 1794397496.4745796, "note": "gueltig", "telegramm": "%0.50111;1;111;1794397496.474584"}
+{"tick": 111, "soll_s": 11.1, "ist_s": 11.1005, "spaet_ms": 0.5, "uhrzeit": 1794397496.5746727, "note": "gueltig", "telegramm": "%0.50112;1;112;1794397496.574677"}
+{"tick": 112, "soll_s": 11.2, "ist_s": 11.2004, "spaet_ms": 0.4, "uhrzeit": 1794397496.674539, "note": "gueltig", "telegramm": "%0.50113;1;113;1794397496.674543"}
+{"tick": 113, "soll_s": 11.3, "ist_s": 11.3002, "spaet_ms": 0.2, "uhrzeit": 1794397496.7743573, "note": "gueltig", "telegramm": "%0.50114;1;114;1794397496.774371"}
+{"tick": 114, "soll_s": 11.4, "ist_s": 11.4003, "spaet_ms": 0.3, "uhrzeit": 1794397496.8744466, "note": "gueltig", "telegramm": "%0.50115;1;115;1794397496.874450"}
+{"tick": 115, "soll_s": 11.5, "ist_s": 11.5006, "spaet_ms": 0.6, "uhrzeit": 1794397496.9747386, "note": "gueltig", "telegramm": "%0.50116;1;116;1794397496.974743"}
+{"tick": 116, "soll_s": 11.6, "ist_s": 11.6002, "spaet_ms": 0.2, "uhrzeit": 1794397497.0743086, "note": "gueltig", "telegramm": "%0.50117;1;117;1794397497.074313"}
+{"tick": 117, "soll_s": 11.7, "ist_s": 11.7002, "spaet_ms": 0.2, "uhrzeit": 1794397497.1743512, "note": "gueltig", "telegramm": "%0.50118;1;118;1794397497.174356"}
+{"tick": 118, "soll_s": 11.8, "ist_s": 11.8005, "spaet_ms": 0.5, "uhrzeit": 1794397497.2746422, "note": "gueltig", "telegramm": "%0.50119;1;119;1794397497.274646"}
+{"tick": 119, "soll_s": 11.9, "ist_s": 11.9006, "spaet_ms": 0.6, "uhrzeit": 1794397497.374701, "note": "gueltig", "telegramm": "%0.50120;1;120;1794397497.374706"}
+{"tick": 120, "soll_s": 12.0, "ist_s": 12.0005, "spaet_ms": 0.5, "uhrzeit": 1794397497.4746652, "note": "gueltig", "telegramm": "%0.50121;1;121;1794397497.474669"}
+{"tick": 121, "soll_s": 12.1, "ist_s": 12.1004, "spaet_ms": 0.4, "uhrzeit": 1794397497.5745487, "note": "gueltig", "telegramm": "%0.50122;1;122;1794397497.574553"}
+{"tick": 122, "soll_s": 12.2, "ist_s": 12.2004, "spaet_ms": 0.4, "uhrzeit": 1794397497.67455, "note": "gueltig", "telegramm": "%0.50123;1;123;1794397497.674554"}
+{"tick": 123, "soll_s": 12.3, "ist_s": 12.3003, "spaet_ms": 0.3, "uhrzeit": 1794397497.7744358, "note": "gueltig", "telegramm": "%0.50124;1;124;1794397497.774440"}
+{"tick": 124, "soll_s": 12.4, "ist_s": 12.4001, "spaet_ms": 0.1, "uhrzeit": 1794397497.874271, "note": "gueltig", "telegramm": "%0.50125;1;125;1794397497.874274"}
+{"tick": 125, "soll_s": 12.5, "ist_s": 12.5005, "spaet_ms": 0.5, "uhrzeit": 1794397497.9746933, "note": "gueltig", "telegramm": "%0.50126;1;126;1794397497.974708"}
+{"tick": 126, "soll_s": 12.6, "ist_s": 12.6004, "spaet_ms": 0.4, "uhrzeit": 1794397498.0745091, "note": "gueltig", "telegramm": "%0.50127;1;127;1794397498.074513"}
+{"tick": 127, "soll_s": 12.7, "ist_s": 12.7006, "spaet_ms": 0.6, "uhrzeit": 1794397498.1747117, "note": "gueltig", "telegramm": "%0.50128;1;128;1794397498.174716"}
+{"tick": 128, "soll_s": 12.8, "ist_s": 12.8003, "spaet_ms": 0.3, "uhrzeit": 1794397498.2744527, "note": "gueltig", "telegramm": "%0.50129;1;129;1794397498.274457"}
+{"tick": 129, "soll_s": 12.9, "ist_s": 12.9004, "spaet_ms": 0.4, "uhrzeit": 1794397498.3745291, "note": "gueltig", "telegramm": "%0.50130;1;130;1794397498.374533"}
+{"tick": 130, "soll_s": 13.0, "ist_s": 13.0001, "spaet_ms": 0.1, "uhrzeit": 1794397498.4742486, "note": "gueltig", "telegramm": "%0.50131;1;131;1794397498.474252"}
+{"tick": 131, "soll_s": 13.1, "ist_s": 13.1005, "spaet_ms": 0.5, "uhrzeit": 1794397498.5746326, "note": "gueltig", "telegramm": "%0.50132;1;132;1794397498.574637"}
+{"tick": 132, "soll_s": 13.2, "ist_s": 13.2005, "spaet_ms": 0.5, "uhrzeit": 1794397498.6746233, "note": "gueltig", "telegramm": "%0.50133;1;133;1794397498.674627"}
+{"tick": 133, "soll_s": 13.3, "ist_s": 13.3003, "spaet_ms": 0.3, "uhrzeit": 1794397498.7744424, "note": "gueltig", "telegramm": "%0.50134;1;134;1794397498.774446"}
+{"tick": 134, "soll_s": 13.4, "ist_s": 13.4005, "spaet_ms": 0.5, "uhrzeit": 1794397498.8746767, "note": "gueltig", "telegramm": "%0.50135;1;135;1794397498.874694"}
+{"tick": 135, "soll_s": 13.5, "ist_s": 13.5007, "spaet_ms": 0.7, "uhrzeit": 1794397498.9748552, "note": "gueltig", "telegramm": "%0.50136;1;136;1794397498.974859"}
+{"tick": 136, "soll_s": 13.6, "ist_s": 13.6005, "spaet_ms": 0.5, "uhrzeit": 1794397499.074661, "note": "gueltig", "telegramm": "%0.50137;1;137;1794397499.074678"}
+{"tick": 137, "soll_s": 13.7, "ist_s": 13.7009, "spaet_ms": 0.9, "uhrzeit": 1794397499.1750033, "note": "gueltig", "telegramm": "%0.50138;1;138;1794397499.175008"}
+{"tick": 138, "soll_s": 13.8, "ist_s": 13.8001, "spaet_ms": 0.1, "uhrzeit": 1794397499.2742834, "note": "gueltig", "telegramm": "%0.50139;1;139;1794397499.274300"}
+{"tick": 139, "soll_s": 13.9, "ist_s": 13.9001, "spaet_ms": 0.1, "uhrzeit": 1794397499.3742354, "note": "gueltig", "telegramm": "%0.50140;1;140;1794397499.374239"}
+{"tick": 140, "soll_s": 14.0, "ist_s": 14.0002, "spaet_ms": 0.2, "uhrzeit": 1794397499.4743254, "note": "gueltig", "telegramm": "%0.50141;1;141;1794397499.474329"}
+{"tick": 141, "soll_s": 14.1, "ist_s": 14.1005, "spaet_ms": 0.5, "uhrzeit": 1794397499.5746365, "note": "gueltig", "telegramm": "%0.50142;1;142;1794397499.574640"}
+{"tick": 142, "soll_s": 14.2, "ist_s": 14.2006, "spaet_ms": 0.6, "uhrzeit": 1794397499.6747136, "note": "gueltig", "telegramm": "%0.50143;1;143;1794397499.674717"}
+{"tick": 143, "soll_s": 14.3, "ist_s": 14.3002, "spaet_ms": 0.2, "uhrzeit": 1794397499.7743163, "note": "gueltig", "telegramm": "%0.50144;1;144;1794397499.774320"}
+{"tick": 144, "soll_s": 14.4, "ist_s": 14.4005, "spaet_ms": 0.5, "uhrzeit": 1794397499.8746638, "note": "gueltig", "telegramm": "%0.50145;1;145;1794397499.874668"}
+{"tick": 145, "soll_s": 14.5, "ist_s": 14.5003, "spaet_ms": 0.3, "uhrzeit": 1794397499.9744265, "note": "gueltig", "telegramm": "%0.50146;1;146;1794397499.974431"}
+{"tick": 146, "soll_s": 14.6, "ist_s": 14.6005, "spaet_ms": 0.5, "uhrzeit": 1794397500.0746136, "note": "gueltig", "telegramm": "%0.50147;1;147;1794397500.074618"}
+{"tick": 147, "soll_s": 14.7, "ist_s": 14.7004, "spaet_ms": 0.4, "uhrzeit": 1794397500.1745317, "note": "gueltig", "telegramm": "%0.50148;1;148;1794397500.174536"}
+{"tick": 148, "soll_s": 14.8, "ist_s": 14.8005, "spaet_ms": 0.5, "uhrzeit": 1794397500.2746322, "note": "gueltig", "telegramm": "%0.50149;1;149;1794397500.274636"}
+{"tick": 149, "soll_s": 14.9, "ist_s": 14.9001, "spaet_ms": 0.1, "uhrzeit": 1794397500.3742552, "note": "gueltig", "telegramm": "%0.50150;1;150;1794397500.374259"}
+{"tick": 150, "soll_s": 15.0, "ist_s": 15.0005, "spaet_ms": 0.5, "uhrzeit": 1794397500.4746222, "note": "marker 1e300", "telegramm": "%1e300;0;151;1794397500.474626"}
+{"tick": 151, "soll_s": 15.1, "ist_s": 15.1006, "spaet_ms": 0.6, "uhrzeit": 1794397500.5747242, "note": "marker 1e300", "telegramm": "%1e300;0;152;1794397500.574728"}
+{"tick": 152, "soll_s": 15.2, "ist_s": 15.2001, "spaet_ms": 0.1, "uhrzeit": 1794397500.6742234, "note": "marker 1e300", "telegramm": "%1e300;0;153;1794397500.674227"}
+{"tick": 153, "soll_s": 15.3, "ist_s": 15.3005, "spaet_ms": 0.5, "uhrzeit": 1794397500.7746122, "note": "marker 1e300", "telegramm": "%1e300;0;154;1794397500.774616"}
+{"tick": 154, "soll_s": 15.4, "ist_s": 15.4005, "spaet_ms": 0.5, "uhrzeit": 1794397500.8746955, "note": "marker 1e300", "telegramm": "%1e300;0;155;1794397500.874700"}
+{"tick": 155, "soll_s": 15.5, "ist_s": 15.5003, "spaet_ms": 0.3, "uhrzeit": 1794397500.9744258, "note": "marker 1e300", "telegramm": "%1e300;0;156;1794397500.974430"}
+{"tick": 156, "soll_s": 15.6, "ist_s": 15.6002, "spaet_ms": 0.2, "uhrzeit": 1794397501.0743248, "note": "marker 1e300", "telegramm": "%1e300;0;157;1794397501.074329"}
+{"tick": 157, "soll_s": 15.7, "ist_s": 15.7001, "spaet_ms": 0.1, "uhrzeit": 1794397501.1742656, "note": "marker 1e300", "telegramm": "%1e300;0;158;1794397501.174270"}
+{"tick": 158, "soll_s": 15.8, "ist_s": 15.8003, "spaet_ms": 0.3, "uhrzeit": 1794397501.2744362, "note": "marker 1e300", "telegramm": "%1e300;0;159;1794397501.274441"}
+{"tick": 159, "soll_s": 15.9, "ist_s": 15.9002, "spaet_ms": 0.2, "uhrzeit": 1794397501.374325, "note": "marker 1e300", "telegramm": "%1e300;0;160;1794397501.374329"}
+{"tick": 160, "soll_s": 16.0, "ist_s": 16.0001, "spaet_ms": 0.1, "uhrzeit": 1794397501.4742217, "note": "marker 1e300", "telegramm": "%1e300;0;161;1794397501.474226"}
+{"tick": 161, "soll_s": 16.1, "ist_s": 16.1006, "spaet_ms": 0.6, "uhrzeit": 1794397501.5747213, "note": "marker 1e300", "telegramm": "%1e300;0;162;1794397501.574726"}
+{"tick": 162, "soll_s": 16.2, "ist_s": 16.2001, "spaet_ms": 0.1, "uhrzeit": 1794397501.6742127, "note": "marker 1e300", "telegramm": "%1e300;0;163;1794397501.674217"}
+{"tick": 163, "soll_s": 16.3, "ist_s": 16.3004, "spaet_ms": 0.4, "uhrzeit": 1794397501.7745867, "note": "marker 1e300", "telegramm": "%1e300;0;164;1794397501.774595"}
+{"tick": 164, "soll_s": 16.4, "ist_s": 16.4001, "spaet_ms": 0.1, "uhrzeit": 1794397501.874281, "note": "marker 1e300", "telegramm": "%1e300;0;165;1794397501.874286"}
+{"tick": 165, "soll_s": 16.5, "ist_s": 16.5004, "spaet_ms": 0.4, "uhrzeit": 1794397501.9745302, "note": "marker 1e300", "telegramm": "%1e300;0;166;1794397501.974542"}
+{"tick": 166, "soll_s": 16.6, "ist_s": 16.6003, "spaet_ms": 0.3, "uhrzeit": 1794397502.0744755, "note": "marker 1e300", "telegramm": "%1e300;0;167;1794397502.074480"}
+{"tick": 167, "soll_s": 16.7, "ist_s": 16.7006, "spaet_ms": 0.6, "uhrzeit": 1794397502.1747258, "note": "marker 1e300", "telegramm": "%1e300;0;168;1794397502.174730"}
+{"tick": 168, "soll_s": 16.8, "ist_s": 16.8005, "spaet_ms": 0.5, "uhrzeit": 1794397502.274687, "note": "marker 1e300", "telegramm": "%1e300;0;169;1794397502.274691"}
+{"tick": 169, "soll_s": 16.9, "ist_s": 16.9003, "spaet_ms": 0.3, "uhrzeit": 1794397502.3744771, "note": "marker 1e300", "telegramm": "%1e300;0;170;1794397502.374481"}
+{"tick": 170, "soll_s": 17.0, "ist_s": 17.0001, "spaet_ms": 0.1, "uhrzeit": 1794397502.4742646, "note": "marker 1e300", "telegramm": "%1e300;0;171;1794397502.474269"}
+{"tick": 171, "soll_s": 17.1, "ist_s": 17.1006, "spaet_ms": 0.6, "uhrzeit": 1794397502.5747888, "note": "marker 1e300", "telegramm": "%1e300;0;172;1794397502.574794"}
+{"tick": 172, "soll_s": 17.2, "ist_s": 17.2004, "spaet_ms": 0.4, "uhrzeit": 1794397502.674576, "note": "marker 1e300", "telegramm": "%1e300;0;173;1794397502.674581"}
+{"tick": 173, "soll_s": 17.3, "ist_s": 17.3005, "spaet_ms": 0.5, "uhrzeit": 1794397502.7746634, "note": "marker 1e300", "telegramm": "%1e300;0;174;1794397502.774668"}
+{"tick": 174, "soll_s": 17.4, "ist_s": 17.4003, "spaet_ms": 0.3, "uhrzeit": 1794397502.874432, "note": "marker 1e300", "telegramm": "%1e300;0;175;1794397502.874437"}
+{"tick": 175, "soll_s": 17.5, "ist_s": 17.5006, "spaet_ms": 0.6, "uhrzeit": 1794397502.9747548, "note": "marker 1e300", "telegramm": "%1e300;0;176;1794397502.974759"}
+{"tick": 176, "soll_s": 17.6, "ist_s": 17.6006, "spaet_ms": 0.6, "uhrzeit": 1794397503.074738, "note": "marker 1e300", "telegramm": "%1e300;0;177;1794397503.074742"}
+{"tick": 177, "soll_s": 17.7, "ist_s": 17.7001, "spaet_ms": 0.1, "uhrzeit": 1794397503.1742065, "note": "marker 1e300", "telegramm": "%1e300;0;178;1794397503.174223"}
+{"tick": 178, "soll_s": 17.8, "ist_s": 17.8005, "spaet_ms": 0.5, "uhrzeit": 1794397503.2746565, "note": "marker 1e300", "telegramm": "%1e300;0;179;1794397503.274661"}
+{"tick": 179, "soll_s": 17.9, "ist_s": 17.9006, "spaet_ms": 0.6, "uhrzeit": 1794397503.374721, "note": "marker 1e300", "telegramm": "%1e300;0;180;1794397503.374726"}
+{"tick": 180, "soll_s": 18.0, "ist_s": 18.0004, "spaet_ms": 0.4, "uhrzeit": 1794397503.4745688, "note": "marker 1e300", "telegramm": "%1e300;0;181;1794397503.474573"}
+{"tick": 181, "soll_s": 18.1, "ist_s": 18.1004, "spaet_ms": 0.4, "uhrzeit": 1794397503.5745213, "note": "marker 1e300", "telegramm": "%1e300;0;182;1794397503.574525"}
+{"tick": 182, "soll_s": 18.2, "ist_s": 18.2003, "spaet_ms": 0.3, "uhrzeit": 1794397503.6744218, "note": "marker 1e300", "telegramm": "%1e300;0;183;1794397503.674426"}
+{"tick": 183, "soll_s": 18.3, "ist_s": 18.3003, "spaet_ms": 0.3, "uhrzeit": 1794397503.7744443, "note": "marker 1e300", "telegramm": "%1e300;0;184;1794397503.774448"}
+{"tick": 184, "soll_s": 18.4, "ist_s": 18.4002, "spaet_ms": 0.2, "uhrzeit": 1794397503.8743033, "note": "marker 1e300", "telegramm": "%1e300;0;185;1794397503.874308"}
+{"tick": 185, "soll_s": 18.5, "ist_s": 18.5003, "spaet_ms": 0.3, "uhrzeit": 1794397503.9744587, "note": "marker 1e300", "telegramm": "%1e300;0;186;1794397503.974463"}
+{"tick": 186, "soll_s": 18.6, "ist_s": 18.6006, "spaet_ms": 0.6, "uhrzeit": 1794397504.0747437, "note": "marker 1e300", "telegramm": "%1e300;0;187;1794397504.074748"}
+{"tick": 187, "soll_s": 18.7, "ist_s": 18.7005, "spaet_ms": 0.5, "uhrzeit": 1794397504.1746132, "note": "marker 1e300", "telegramm": "%1e300;0;188;1794397504.174617"}
+{"tick": 188, "soll_s": 18.8, "ist_s": 18.8002, "spaet_ms": 0.2, "uhrzeit": 1794397504.2743273, "note": "marker 1e300", "telegramm": "%1e300;0;189;1794397504.274332"}
+{"tick": 189, "soll_s": 18.9, "ist_s": 18.9004, "spaet_ms": 0.4, "uhrzeit": 1794397504.3745372, "note": "marker 1e300", "telegramm": "%1e300;0;190;1794397504.374543"}
+{"tick": 190, "soll_s": 19.0, "ist_s": 19.0007, "spaet_ms": 0.7, "uhrzeit": 1794397504.4748378, "note": "marker 1e300", "telegramm": "%1e300;0;191;1794397504.474842"}
+{"tick": 191, "soll_s": 19.1, "ist_s": 19.1006, "spaet_ms": 0.6, "uhrzeit": 1794397504.5747266, "note": "marker 1e300", "telegramm": "%1e300;0;192;1794397504.574730"}
+{"tick": 192, "soll_s": 19.2, "ist_s": 19.2005, "spaet_ms": 0.5, "uhrzeit": 1794397504.674617, "note": "marker 1e300", "telegramm": "%1e300;0;193;1794397504.674621"}
+{"tick": 193, "soll_s": 19.3, "ist_s": 19.3002, "spaet_ms": 0.2, "uhrzeit": 1794397504.77437, "note": "marker 1e300", "telegramm": "%1e300;0;194;1794397504.774374"}
+{"tick": 194, "soll_s": 19.4, "ist_s": 19.4004, "spaet_ms": 0.4, "uhrzeit": 1794397504.8745315, "note": "marker 1e300", "telegramm": "%1e300;0;195;1794397504.874536"}
+{"tick": 195, "soll_s": 19.5, "ist_s": 19.5004, "spaet_ms": 0.4, "uhrzeit": 1794397504.9745758, "note": "marker 1e300", "telegramm": "%1e300;0;196;1794397504.974580"}
+{"tick": 196, "soll_s": 19.6, "ist_s": 19.6004, "spaet_ms": 0.4, "uhrzeit": 1794397505.0745347, "note": "marker 1e300", "telegramm": "%1e300;0;197;1794397505.074539"}
+{"tick": 197, "soll_s": 19.7, "ist_s": 19.7005, "spaet_ms": 0.5, "uhrzeit": 1794397505.1746523, "note": "marker 1e300", "telegramm": "%1e300;0;198;1794397505.174657"}
+{"tick": 198, "soll_s": 19.8, "ist_s": 19.8003, "spaet_ms": 0.3, "uhrzeit": 1794397505.2744315, "note": "marker 1e300", "telegramm": "%1e300;0;199;1794397505.274436"}
+{"tick": 199, "soll_s": 19.9, "ist_s": 19.9004, "spaet_ms": 0.4, "uhrzeit": 1794397505.374594, "note": "marker 1e300", "telegramm": "%1e300;0;200;1794397505.374598"}
+{"tick": 200, "soll_s": 20.0, "ist_s": 20.0001, "spaet_ms": 0.1, "uhrzeit": 1794397505.4742892, "note": "gueltig", "telegramm": "%0.50201;1;201;1794397505.474293"}
+{"tick": 201, "soll_s": 20.1, "ist_s": 20.1005, "spaet_ms": 0.5, "uhrzeit": 1794397505.5746362, "note": "gueltig", "telegramm": "%0.50202;1;202;1794397505.574641"}
+{"tick": 202, "soll_s": 20.2, "ist_s": 20.2001, "spaet_ms": 0.1, "uhrzeit": 1794397505.6742604, "note": "gueltig", "telegramm": "%0.50203;1;203;1794397505.674277"}
+{"tick": 203, "soll_s": 20.3, "ist_s": 20.3002, "spaet_ms": 0.2, "uhrzeit": 1794397505.774377, "note": "gueltig", "telegramm": "%0.50204;1;204;1794397505.774382"}
+{"tick": 204, "soll_s": 20.4, "ist_s": 20.4002, "spaet_ms": 0.2, "uhrzeit": 1794397505.8743584, "note": "gueltig", "telegramm": "%0.50205;1;205;1794397505.874364"}
+{"tick": 205, "soll_s": 20.5, "ist_s": 20.5003, "spaet_ms": 0.3, "uhrzeit": 1794397505.9744604, "note": "gueltig", "telegramm": "%0.50206;1;206;1794397505.974464"}
+{"tick": 206, "soll_s": 20.6, "ist_s": 20.6005, "spaet_ms": 0.5, "uhrzeit": 1794397506.0746167, "note": "gueltig", "telegramm": "%0.50207;1;207;1794397506.074621"}
+{"tick": 207, "soll_s": 20.7, "ist_s": 20.7005, "spaet_ms": 0.5, "uhrzeit": 1794397506.1746118, "note": "gueltig", "telegramm": "%0.50208;1;208;1794397506.174617"}
+{"tick": 208, "soll_s": 20.8, "ist_s": 20.8006, "spaet_ms": 0.6, "uhrzeit": 1794397506.2747238, "note": "gueltig", "telegramm": "%0.50209;1;209;1794397506.274728"}
+{"tick": 209, "soll_s": 20.9, "ist_s": 20.9003, "spaet_ms": 0.3, "uhrzeit": 1794397506.3744116, "note": "gueltig", "telegramm": "%0.50210;1;210;1794397506.374416"}
+{"tick": 210, "soll_s": 21.0, "ist_s": 21.0001, "spaet_ms": 0.1, "uhrzeit": 1794397506.4743066, "note": "gueltig", "telegramm": "%0.50211;1;211;1794397506.474311"}
+{"tick": 211, "soll_s": 21.1, "ist_s": 21.1003, "spaet_ms": 0.3, "uhrzeit": 1794397506.5744603, "note": "gueltig", "telegramm": "%0.50212;1;212;1794397506.574464"}
+{"tick": 212, "soll_s": 21.2, "ist_s": 21.2009, "spaet_ms": 0.9, "uhrzeit": 1794397506.6750793, "note": "gueltig", "telegramm": "%0.50213;1;213;1794397506.675084"}
+{"tick": 213, "soll_s": 21.3, "ist_s": 21.3002, "spaet_ms": 0.2, "uhrzeit": 1794397506.7743125, "note": "gueltig", "telegramm": "%0.50214;1;214;1794397506.774317"}
+{"tick": 214, "soll_s": 21.4, "ist_s": 21.4004, "spaet_ms": 0.4, "uhrzeit": 1794397506.8745208, "note": "gueltig", "telegramm": "%0.50215;1;215;1794397506.874525"}
+{"tick": 215, "soll_s": 21.5, "ist_s": 21.5006, "spaet_ms": 0.6, "uhrzeit": 1794397506.9747827, "note": "gueltig", "telegramm": "%0.50216;1;216;1794397506.974803"}
+{"tick": 216, "soll_s": 21.6, "ist_s": 21.6006, "spaet_ms": 0.6, "uhrzeit": 1794397507.0747213, "note": "gueltig", "telegramm": "%0.50217;1;217;1794397507.074726"}
+{"tick": 217, "soll_s": 21.7, "ist_s": 21.7004, "spaet_ms": 0.4, "uhrzeit": 1794397507.1745393, "note": "gueltig", "telegramm": "%0.50218;1;218;1794397507.174544"}
+{"tick": 218, "soll_s": 21.8, "ist_s": 21.8005, "spaet_ms": 0.5, "uhrzeit": 1794397507.2747095, "note": "gueltig", "telegramm": "%0.50219;1;219;1794397507.274713"}
+{"tick": 219, "soll_s": 21.9, "ist_s": 21.9003, "spaet_ms": 0.3, "uhrzeit": 1794397507.3744378, "note": "gueltig", "telegramm": "%0.50220;1;220;1794397507.374442"}
+{"tick": 220, "soll_s": 22.0, "ist_s": 22.0002, "spaet_ms": 0.2, "uhrzeit": 1794397507.4743881, "note": "gueltig", "telegramm": "%0.50221;1;221;1794397507.474392"}
+{"tick": 221, "soll_s": 22.1, "ist_s": 22.1005, "spaet_ms": 0.5, "uhrzeit": 1794397507.5746472, "note": "gueltig", "telegramm": "%0.50222;1;222;1794397507.574651"}
+{"tick": 222, "soll_s": 22.2, "ist_s": 22.2005, "spaet_ms": 0.5, "uhrzeit": 1794397507.6746056, "note": "gueltig", "telegramm": "%0.50223;1;223;1794397507.674611"}
+{"tick": 223, "soll_s": 22.3, "ist_s": 22.3002, "spaet_ms": 0.2, "uhrzeit": 1794397507.774352, "note": "gueltig", "telegramm": "%0.50224;1;224;1794397507.774356"}
+{"tick": 224, "soll_s": 22.4, "ist_s": 22.4005, "spaet_ms": 0.5, "uhrzeit": 1794397507.874613, "note": "gueltig", "telegramm": "%0.50225;1;225;1794397507.874617"}
+{"tick": 225, "soll_s": 22.5, "ist_s": 22.5005, "spaet_ms": 0.5, "uhrzeit": 1794397507.974655, "note": "gueltig", "telegramm": "%0.50226;1;226;1794397507.974660"}
+{"tick": 226, "soll_s": 22.6, "ist_s": 22.6004, "spaet_ms": 0.4, "uhrzeit": 1794397508.0745184, "note": "gueltig", "telegramm": "%0.50227;1;227;1794397508.074522"}
+{"tick": 227, "soll_s": 22.7, "ist_s": 22.7005, "spaet_ms": 0.5, "uhrzeit": 1794397508.1746566, "note": "gueltig", "telegramm": "%0.50228;1;228;1794397508.174661"}
+{"tick": 228, "soll_s": 22.8, "ist_s": 22.8001, "spaet_ms": 0.1, "uhrzeit": 1794397508.2742858, "note": "gueltig", "telegramm": "%0.50229;1;229;1794397508.274290"}
+{"tick": 229, "soll_s": 22.9, "ist_s": 22.9004, "spaet_ms": 0.4, "uhrzeit": 1794397508.3745372, "note": "gueltig", "telegramm": "%0.50230;1;230;1794397508.374541"}
+{"tick": 230, "soll_s": 23.0, "ist_s": 23.0002, "spaet_ms": 0.2, "uhrzeit": 1794397508.4743946, "note": "gueltig", "telegramm": "%0.50231;1;231;1794397508.474399"}
+{"tick": 231, "soll_s": 23.1, "ist_s": 23.1005, "spaet_ms": 0.5, "uhrzeit": 1794397508.574604, "note": "gueltig", "telegramm": "%0.50232;1;232;1794397508.574619"}
+{"tick": 232, "soll_s": 23.2, "ist_s": 23.2004, "spaet_ms": 0.4, "uhrzeit": 1794397508.6745703, "note": "gueltig", "telegramm": "%0.50233;1;233;1794397508.674574"}
+{"tick": 233, "soll_s": 23.3, "ist_s": 23.3005, "spaet_ms": 0.5, "uhrzeit": 1794397508.7747045, "note": "gueltig", "telegramm": "%0.50234;1;234;1794397508.774709"}
+{"tick": 234, "soll_s": 23.4, "ist_s": 23.4004, "spaet_ms": 0.4, "uhrzeit": 1794397508.8745909, "note": "gueltig", "telegramm": "%0.50235;1;235;1794397508.874605"}
+{"tick": 235, "soll_s": 23.5, "ist_s": 23.5001, "spaet_ms": 0.1, "uhrzeit": 1794397508.9742062, "note": "gueltig", "telegramm": "%0.50236;1;236;1794397508.974210"}
+{"tick": 236, "soll_s": 23.6, "ist_s": 23.6005, "spaet_ms": 0.5, "uhrzeit": 1794397509.074689, "note": "gueltig", "telegramm": "%0.50237;1;237;1794397509.074693"}
+{"tick": 237, "soll_s": 23.7, "ist_s": 23.7005, "spaet_ms": 0.5, "uhrzeit": 1794397509.1746433, "note": "gueltig", "telegramm": "%0.50238;1;238;1794397509.174647"}
+{"tick": 238, "soll_s": 23.8, "ist_s": 23.8006, "spaet_ms": 0.6, "uhrzeit": 1794397509.2746985, "note": "gueltig", "telegramm": "%0.50239;1;239;1794397509.274703"}
+{"tick": 239, "soll_s": 23.9, "ist_s": 23.9005, "spaet_ms": 0.5, "uhrzeit": 1794397509.3746274, "note": "gueltig", "telegramm": "%0.50240;1;240;1794397509.374631"}
+{"tick": 240, "soll_s": 24.0, "ist_s": 24.0002, "spaet_ms": 0.2, "uhrzeit": 1794397509.474305, "note": "gueltig", "telegramm": "%0.50241;1;241;1794397509.474322"}
+{"tick": 241, "soll_s": 24.1, "ist_s": 24.1006, "spaet_ms": 0.6, "uhrzeit": 1794397509.5747094, "note": "gueltig", "telegramm": "%0.50242;1;242;1794397509.574714"}
+{"tick": 242, "soll_s": 24.2, "ist_s": 24.2006, "spaet_ms": 0.6, "uhrzeit": 1794397509.6747766, "note": "gueltig", "telegramm": "%0.50243;1;243;1794397509.674780"}
+{"tick": 243, "soll_s": 24.3, "ist_s": 24.3004, "spaet_ms": 0.4, "uhrzeit": 1794397509.7745466, "note": "gueltig", "telegramm": "%0.50244;1;244;1794397509.774550"}
+{"tick": 244, "soll_s": 24.4, "ist_s": 24.4002, "spaet_ms": 0.2, "uhrzeit": 1794397509.874365, "note": "gueltig", "telegramm": "%0.50245;1;245;1794397509.874369"}
+{"tick": 245, "soll_s": 24.5, "ist_s": 24.5003, "spaet_ms": 0.3, "uhrzeit": 1794397509.9744623, "note": "gueltig", "telegramm": "%0.50246;1;246;1794397509.974466"}
+{"tick": 246, "soll_s": 24.6, "ist_s": 24.6006, "spaet_ms": 0.6, "uhrzeit": 1794397510.074714, "note": "gueltig", "telegramm": "%0.50247;1;247;1794397510.074718"}
+{"tick": 247, "soll_s": 24.7, "ist_s": 24.7002, "spaet_ms": 0.2, "uhrzeit": 1794397510.1743712, "note": "gueltig", "telegramm": "%0.50248;1;248;1794397510.174375"}
+{"tick": 248, "soll_s": 24.8, "ist_s": 24.8004, "spaet_ms": 0.4, "uhrzeit": 1794397510.2745621, "note": "gueltig", "telegramm": "%0.50249;1;249;1794397510.274566"}
+{"tick": 249, "soll_s": 24.9, "ist_s": 24.9002, "spaet_ms": 0.2, "uhrzeit": 1794397510.3743107, "note": "gueltig", "telegramm": "%0.50250;1;250;1794397510.374315"}
+{"tick": 250, "soll_s": 25.0, "ist_s": 25.0001, "spaet_ms": 0.1, "uhrzeit": 1794397510.4742734, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;251;1794397510.474278"}
+{"tick": 251, "soll_s": 25.1, "ist_s": 25.1002, "spaet_ms": 0.2, "uhrzeit": 1794397510.5743103, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;252;1794397510.574314"}
+{"tick": 252, "soll_s": 25.2, "ist_s": 25.2004, "spaet_ms": 0.4, "uhrzeit": 1794397510.6745539, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;253;1794397510.674558"}
+{"tick": 253, "soll_s": 25.3, "ist_s": 25.3003, "spaet_ms": 0.3, "uhrzeit": 1794397510.774435, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;254;1794397510.774439"}
+{"tick": 254, "soll_s": 25.4, "ist_s": 25.4004, "spaet_ms": 0.4, "uhrzeit": 1794397510.8745422, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;255;1794397510.874559"}
+{"tick": 255, "soll_s": 25.5, "ist_s": 25.5005, "spaet_ms": 0.5, "uhrzeit": 1794397510.9746127, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;256;1794397510.974617"}
+{"tick": 256, "soll_s": 25.6, "ist_s": 25.6002, "spaet_ms": 0.2, "uhrzeit": 1794397511.0743086, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;257;1794397511.074312"}
+{"tick": 257, "soll_s": 25.7, "ist_s": 25.7002, "spaet_ms": 0.2, "uhrzeit": 1794397511.174342, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;258;1794397511.174348"}
+{"tick": 258, "soll_s": 25.8, "ist_s": 25.8004, "spaet_ms": 0.4, "uhrzeit": 1794397511.2745976, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;259;1794397511.274617"}
+{"tick": 259, "soll_s": 25.9, "ist_s": 25.9004, "spaet_ms": 0.4, "uhrzeit": 1794397511.3745632, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;260;1794397511.374568"}
+{"tick": 260, "soll_s": 26.0, "ist_s": 26.0001, "spaet_ms": 0.1, "uhrzeit": 1794397511.4742558, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;261;1794397511.474261"}
+{"tick": 261, "soll_s": 26.1, "ist_s": 26.1001, "spaet_ms": 0.1, "uhrzeit": 1794397511.5742288, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;262;1794397511.574233"}
+{"tick": 262, "soll_s": 26.2, "ist_s": 26.2002, "spaet_ms": 0.2, "uhrzeit": 1794397511.674379, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;263;1794397511.674395"}
+{"tick": 263, "soll_s": 26.3, "ist_s": 26.3005, "spaet_ms": 0.5, "uhrzeit": 1794397511.7746396, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;264;1794397511.774644"}
+{"tick": 264, "soll_s": 26.4, "ist_s": 26.4002, "spaet_ms": 0.2, "uhrzeit": 1794397511.8743563, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;265;1794397511.874360"}
+{"tick": 265, "soll_s": 26.5, "ist_s": 26.5006, "spaet_ms": 0.6, "uhrzeit": 1794397511.974698, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;266;1794397511.974703"}
+{"tick": 266, "soll_s": 26.6, "ist_s": 26.6003, "spaet_ms": 0.3, "uhrzeit": 1794397512.0744636, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;267;1794397512.074468"}
+{"tick": 267, "soll_s": 26.7, "ist_s": 26.7005, "spaet_ms": 0.5, "uhrzeit": 1794397512.1746297, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;268;1794397512.174634"}
+{"tick": 268, "soll_s": 26.8, "ist_s": 26.8003, "spaet_ms": 0.3, "uhrzeit": 1794397512.274414, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;269;1794397512.274432"}
+{"tick": 269, "soll_s": 26.9, "ist_s": 26.9005, "spaet_ms": 0.5, "uhrzeit": 1794397512.3746734, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;270;1794397512.374678"}
+{"tick": 270, "soll_s": 27.0, "ist_s": 27.0002, "spaet_ms": 0.2, "uhrzeit": 1794397512.4743893, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;271;1794397512.474393"}
+{"tick": 271, "soll_s": 27.1, "ist_s": 27.1003, "spaet_ms": 0.3, "uhrzeit": 1794397512.57444, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;272;1794397512.574445"}
+{"tick": 272, "soll_s": 27.2, "ist_s": 27.2003, "spaet_ms": 0.3, "uhrzeit": 1794397512.6744475, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;273;1794397512.674452"}
+{"tick": 273, "soll_s": 27.3, "ist_s": 27.3006, "spaet_ms": 0.6, "uhrzeit": 1794397512.7747095, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;274;1794397512.774714"}
+{"tick": 274, "soll_s": 27.4, "ist_s": 27.4005, "spaet_ms": 0.5, "uhrzeit": 1794397512.8746495, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;275;1794397512.874654"}
+{"tick": 275, "soll_s": 27.5, "ist_s": 27.5006, "spaet_ms": 0.6, "uhrzeit": 1794397512.9747062, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;276;1794397512.974710"}
+{"tick": 276, "soll_s": 27.6, "ist_s": 27.6003, "spaet_ms": 0.3, "uhrzeit": 1794397513.0744977, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;277;1794397513.074502"}
+{"tick": 277, "soll_s": 27.7, "ist_s": 27.7004, "spaet_ms": 0.4, "uhrzeit": 1794397513.174539, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;278;1794397513.174543"}
+{"tick": 278, "soll_s": 27.8, "ist_s": 27.8005, "spaet_ms": 0.5, "uhrzeit": 1794397513.2746563, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;279;1794397513.274661"}
+{"tick": 279, "soll_s": 27.9, "ist_s": 27.9004, "spaet_ms": 0.4, "uhrzeit": 1794397513.3745942, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;280;1794397513.374599"}
+{"tick": 280, "soll_s": 28.0, "ist_s": 28.0002, "spaet_ms": 0.2, "uhrzeit": 1794397513.4743953, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;281;1794397513.474400"}
+{"tick": 281, "soll_s": 28.1, "ist_s": 28.1006, "spaet_ms": 0.6, "uhrzeit": 1794397513.5747485, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;282;1794397513.574753"}
+{"tick": 282, "soll_s": 28.2, "ist_s": 28.2003, "spaet_ms": 0.3, "uhrzeit": 1794397513.6744685, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;283;1794397513.674474"}
+{"tick": 283, "soll_s": 28.3, "ist_s": 28.3003, "spaet_ms": 0.3, "uhrzeit": 1794397513.7744274, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;284;1794397513.774431"}
+{"tick": 284, "soll_s": 28.4, "ist_s": 28.4003, "spaet_ms": 0.3, "uhrzeit": 1794397513.8744926, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;285;1794397513.874497"}
+{"tick": 285, "soll_s": 28.5, "ist_s": 28.5003, "spaet_ms": 0.3, "uhrzeit": 1794397513.9744694, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;286;1794397513.974474"}
+{"tick": 286, "soll_s": 28.6, "ist_s": 28.6005, "spaet_ms": 0.5, "uhrzeit": 1794397514.0747137, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;287;1794397514.074718"}
+{"tick": 287, "soll_s": 28.7, "ist_s": 28.7004, "spaet_ms": 0.4, "uhrzeit": 1794397514.174525, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;288;1794397514.174529"}
+{"tick": 288, "soll_s": 28.8, "ist_s": 28.8002, "spaet_ms": 0.2, "uhrzeit": 1794397514.274326, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;289;1794397514.274331"}
+{"tick": 289, "soll_s": 28.9, "ist_s": 28.9005, "spaet_ms": 0.5, "uhrzeit": 1794397514.3746133, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;290;1794397514.374618"}
+{"tick": 290, "soll_s": 29.0, "ist_s": 29.0006, "spaet_ms": 0.6, "uhrzeit": 1794397514.4747202, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;291;1794397514.474725"}
+{"tick": 291, "soll_s": 29.1, "ist_s": 29.1001, "spaet_ms": 0.1, "uhrzeit": 1794397514.574238, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;292;1794397514.574243"}
+{"tick": 292, "soll_s": 29.2, "ist_s": 29.2005, "spaet_ms": 0.5, "uhrzeit": 1794397514.6746643, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;293;1794397514.674668"}
+{"tick": 293, "soll_s": 29.3, "ist_s": 29.3004, "spaet_ms": 0.4, "uhrzeit": 1794397514.7745957, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;294;1794397514.774601"}
+{"tick": 294, "soll_s": 29.4, "ist_s": 29.4002, "spaet_ms": 0.2, "uhrzeit": 1794397514.874342, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;295;1794397514.874347"}
+{"tick": 295, "soll_s": 29.5, "ist_s": 29.5003, "spaet_ms": 0.3, "uhrzeit": 1794397514.9744728, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;296;1794397514.974477"}
+{"tick": 296, "soll_s": 29.6, "ist_s": 29.6005, "spaet_ms": 0.5, "uhrzeit": 1794397515.0746768, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;297;1794397515.074682"}
+{"tick": 297, "soll_s": 29.7, "ist_s": 29.7005, "spaet_ms": 0.5, "uhrzeit": 1794397515.1746755, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;298;1794397515.174680"}
+{"tick": 298, "soll_s": 29.8, "ist_s": 29.8003, "spaet_ms": 0.3, "uhrzeit": 1794397515.2744088, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;299;1794397515.274413"}
+{"tick": 299, "soll_s": 29.9, "ist_s": 29.9004, "spaet_ms": 0.4, "uhrzeit": 1794397515.3746061, "note": "marker +1.0E+300", "telegramm": "%+1.0E+300;0;300;1794397515.374611"}
+{"tick": 300, "soll_s": 30.0, "ist_s": 30.0003, "spaet_ms": 0.3, "uhrzeit": 1794397515.474497, "note": "gueltig", "telegramm": "%0.50301;1;301;1794397515.474501"}
+{"tick": 301, "soll_s": 30.1, "ist_s": 30.1005, "spaet_ms": 0.5, "uhrzeit": 1794397515.5746386, "note": "gueltig", "telegramm": "%0.50302;1;302;1794397515.574656"}
+{"tick": 302, "soll_s": 30.2, "ist_s": 30.2002, "spaet_ms": 0.2, "uhrzeit": 1794397515.6743076, "note": "gueltig", "telegramm": "%0.50303;1;303;1794397515.674311"}
+{"tick": 303, "soll_s": 30.3, "ist_s": 30.3004, "spaet_ms": 0.4, "uhrzeit": 1794397515.7745965, "note": "gueltig", "telegramm": "%0.50304;1;304;1794397515.774601"}
+{"tick": 304, "soll_s": 30.4, "ist_s": 30.4004, "spaet_ms": 0.4, "uhrzeit": 1794397515.8745658, "note": "gueltig", "telegramm": "%0.50305;1;305;1794397515.874583"}
+{"tick": 305, "soll_s": 30.5, "ist_s": 30.5004, "spaet_ms": 0.4, "uhrzeit": 1794397515.9745157, "note": "gueltig", "telegramm": "%0.50306;1;306;1794397515.974520"}
+{"tick": 306, "soll_s": 30.6, "ist_s": 30.6001, "spaet_ms": 0.1, "uhrzeit": 1794397516.0742962, "note": "gueltig", "telegramm": "%0.50307;1;307;1794397516.074300"}
+{"tick": 307, "soll_s": 30.7, "ist_s": 30.7003, "spaet_ms": 0.3, "uhrzeit": 1794397516.1744118, "note": "gueltig", "telegramm": "%0.50308;1;308;1794397516.174416"}
+{"tick": 308, "soll_s": 30.8, "ist_s": 30.8003, "spaet_ms": 0.3, "uhrzeit": 1794397516.2744799, "note": "gueltig", "telegramm": "%0.50309;1;309;1794397516.274484"}
+{"tick": 309, "soll_s": 30.9, "ist_s": 30.9005, "spaet_ms": 0.5, "uhrzeit": 1794397516.3746219, "note": "gueltig", "telegramm": "%0.50310;1;310;1794397516.374626"}
+{"tick": 310, "soll_s": 31.0, "ist_s": 31.0004, "spaet_ms": 0.4, "uhrzeit": 1794397516.4745874, "note": "gueltig", "telegramm": "%0.50311;1;311;1794397516.474592"}
+{"tick": 311, "soll_s": 31.1, "ist_s": 31.1004, "spaet_ms": 0.4, "uhrzeit": 1794397516.5745773, "note": "gueltig", "telegramm": "%0.50312;1;312;1794397516.574582"}
+{"tick": 312, "soll_s": 31.2, "ist_s": 31.2002, "spaet_ms": 0.2, "uhrzeit": 1794397516.6743653, "note": "gueltig", "telegramm": "%0.50313;1;313;1794397516.674370"}
+{"tick": 313, "soll_s": 31.3, "ist_s": 31.3001, "spaet_ms": 0.1, "uhrzeit": 1794397516.7742622, "note": "gueltig", "telegramm": "%0.50314;1;314;1794397516.774267"}
+{"tick": 314, "soll_s": 31.4, "ist_s": 31.4003, "spaet_ms": 0.3, "uhrzeit": 1794397516.8744369, "note": "gueltig", "telegramm": "%0.50315;1;315;1794397516.874441"}
+{"tick": 315, "soll_s": 31.5, "ist_s": 31.5002, "spaet_ms": 0.2, "uhrzeit": 1794397516.9743881, "note": "gueltig", "telegramm": "%0.50316;1;316;1794397516.974393"}
+{"tick": 316, "soll_s": 31.6, "ist_s": 31.6005, "spaet_ms": 0.5, "uhrzeit": 1794397517.074639, "note": "gueltig", "telegramm": "%0.50317;1;317;1794397517.074643"}
+{"tick": 317, "soll_s": 31.7, "ist_s": 31.7003, "spaet_ms": 0.3, "uhrzeit": 1794397517.1744955, "note": "gueltig", "telegramm": "%0.50318;1;318;1794397517.174500"}
+{"tick": 318, "soll_s": 31.8, "ist_s": 31.8004, "spaet_ms": 0.4, "uhrzeit": 1794397517.2745786, "note": "gueltig", "telegramm": "%0.50319;1;319;1794397517.274583"}
+{"tick": 319, "soll_s": 31.9, "ist_s": 31.9004, "spaet_ms": 0.4, "uhrzeit": 1794397517.3745053, "note": "gueltig", "telegramm": "%0.50320;1;320;1794397517.374509"}
+{"tick": 320, "soll_s": 32.0, "ist_s": 32.0001, "spaet_ms": 0.1, "uhrzeit": 1794397517.4742374, "note": "gueltig", "telegramm": "%0.50321;1;321;1794397517.474242"}
+{"tick": 321, "soll_s": 32.1, "ist_s": 32.1001, "spaet_ms": 0.1, "uhrzeit": 1794397517.5742493, "note": "gueltig", "telegramm": "%0.50322;1;322;1794397517.574254"}
+{"tick": 322, "soll_s": 32.2, "ist_s": 32.2003, "spaet_ms": 0.3, "uhrzeit": 1794397517.674485, "note": "gueltig", "telegramm": "%0.50323;1;323;1794397517.674489"}
+{"tick": 323, "soll_s": 32.3, "ist_s": 32.3002, "spaet_ms": 0.2, "uhrzeit": 1794397517.774339, "note": "gueltig", "telegramm": "%0.50324;1;324;1794397517.774343"}
+{"tick": 324, "soll_s": 32.4, "ist_s": 32.4001, "spaet_ms": 0.1, "uhrzeit": 1794397517.8742602, "note": "gueltig", "telegramm": "%0.50325;1;325;1794397517.874278"}
+{"tick": 325, "soll_s": 32.5, "ist_s": 32.5005, "spaet_ms": 0.5, "uhrzeit": 1794397517.974607, "note": "gueltig", "telegramm": "%0.50326;1;326;1794397517.974611"}
+{"tick": 326, "soll_s": 32.6, "ist_s": 32.6005, "spaet_ms": 0.5, "uhrzeit": 1794397518.0746176, "note": "gueltig", "telegramm": "%0.50327;1;327;1794397518.074635"}
+{"tick": 327, "soll_s": 32.7, "ist_s": 32.7002, "spaet_ms": 0.2, "uhrzeit": 1794397518.174331, "note": "gueltig", "telegramm": "%0.50328;1;328;1794397518.174335"}
+{"tick": 328, "soll_s": 32.8, "ist_s": 32.8006, "spaet_ms": 0.6, "uhrzeit": 1794397518.2748065, "note": "gueltig", "telegramm": "%0.50329;1;329;1794397518.274811"}
+{"tick": 329, "soll_s": 32.9, "ist_s": 32.9002, "spaet_ms": 0.2, "uhrzeit": 1794397518.3743856, "note": "gueltig", "telegramm": "%0.50330;1;330;1794397518.374390"}
+{"tick": 330, "soll_s": 33.0, "ist_s": 33.0003, "spaet_ms": 0.3, "uhrzeit": 1794397518.4744437, "note": "gueltig", "telegramm": "%0.50331;1;331;1794397518.474459"}
+{"tick": 331, "soll_s": 33.1, "ist_s": 33.1001, "spaet_ms": 0.1, "uhrzeit": 1794397518.57429, "note": "gueltig", "telegramm": "%0.50332;1;332;1794397518.574294"}
+{"tick": 332, "soll_s": 33.2, "ist_s": 33.2003, "spaet_ms": 0.3, "uhrzeit": 1794397518.6744504, "note": "gueltig", "telegramm": "%0.50333;1;333;1794397518.674454"}
+{"tick": 333, "soll_s": 33.3, "ist_s": 33.3001, "spaet_ms": 0.1, "uhrzeit": 1794397518.7742412, "note": "gueltig", "telegramm": "%0.50334;1;334;1794397518.774246"}
+{"tick": 334, "soll_s": 33.4, "ist_s": 33.4006, "spaet_ms": 0.6, "uhrzeit": 1794397518.8747518, "note": "gueltig", "telegramm": "%0.50335;1;335;1794397518.874756"}
+{"tick": 335, "soll_s": 33.5, "ist_s": 33.5005, "spaet_ms": 0.5, "uhrzeit": 1794397518.9746742, "note": "gueltig", "telegramm": "%0.50336;1;336;1794397518.974679"}
+{"tick": 336, "soll_s": 33.6, "ist_s": 33.6003, "spaet_ms": 0.3, "uhrzeit": 1794397519.0744255, "note": "gueltig", "telegramm": "%0.50337;1;337;1794397519.074430"}
+{"tick": 337, "soll_s": 33.7, "ist_s": 33.7002, "spaet_ms": 0.2, "uhrzeit": 1794397519.1743548, "note": "gueltig", "telegramm": "%0.50338;1;338;1794397519.174359"}
+{"tick": 338, "soll_s": 33.8, "ist_s": 33.8003, "spaet_ms": 0.3, "uhrzeit": 1794397519.2744045, "note": "gueltig", "telegramm": "%0.50339;1;339;1794397519.274409"}
+{"tick": 339, "soll_s": 33.9, "ist_s": 33.9002, "spaet_ms": 0.2, "uhrzeit": 1794397519.3743093, "note": "gueltig", "telegramm": "%0.50340;1;340;1794397519.374313"}
+{"tick": 340, "soll_s": 34.0, "ist_s": 34.0001, "spaet_ms": 0.1, "uhrzeit": 1794397519.4742603, "note": "gueltig", "telegramm": "%0.50341;1;341;1794397519.474265"}
+{"tick": 341, "soll_s": 34.1, "ist_s": 34.1005, "spaet_ms": 0.5, "uhrzeit": 1794397519.5746903, "note": "gueltig", "telegramm": "%0.50342;1;342;1794397519.574695"}
+{"tick": 342, "soll_s": 34.2, "ist_s": 34.2003, "spaet_ms": 0.3, "uhrzeit": 1794397519.6745203, "note": "gueltig", "telegramm": "%0.50343;1;343;1794397519.674525"}
+{"tick": 343, "soll_s": 34.3, "ist_s": 34.3007, "spaet_ms": 0.7, "uhrzeit": 1794397519.7748964, "note": "gueltig", "telegramm": "%0.50344;1;344;1794397519.774900"}
+{"tick": 344, "soll_s": 34.4, "ist_s": 34.4003, "spaet_ms": 0.3, "uhrzeit": 1794397519.8744, "note": "gueltig", "telegramm": "%0.50345;1;345;1794397519.874404"}
+{"tick": 345, "soll_s": 34.5, "ist_s": 34.5002, "spaet_ms": 0.2, "uhrzeit": 1794397519.974391, "note": "gueltig", "telegramm": "%0.50346;1;346;1794397519.974396"}
+{"tick": 346, "soll_s": 34.6, "ist_s": 34.6006, "spaet_ms": 0.6, "uhrzeit": 1794397520.074704, "note": "gueltig", "telegramm": "%0.50347;1;347;1794397520.074708"}
+{"tick": 347, "soll_s": 34.7, "ist_s": 34.7001, "spaet_ms": 0.1, "uhrzeit": 1794397520.1742108, "note": "gueltig", "telegramm": "%0.50348;1;348;1794397520.174215"}
+{"tick": 348, "soll_s": 34.8, "ist_s": 34.8004, "spaet_ms": 0.4, "uhrzeit": 1794397520.274527, "note": "gueltig", "telegramm": "%0.50349;1;349;1794397520.274544"}
+{"tick": 349, "soll_s": 34.9, "ist_s": 34.9001, "spaet_ms": 0.1, "uhrzeit": 1794397520.374224, "note": "gueltig", "telegramm": "%0.50350;1;350;1794397520.374229"}
+{"tick": 350, "soll_s": 35.0, "ist_s": 35.0006, "spaet_ms": 0.6, "uhrzeit": 1794397520.474707, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;351;1794397520.474711"}
+{"tick": 351, "soll_s": 35.1, "ist_s": 35.1004, "spaet_ms": 0.4, "uhrzeit": 1794397520.5745971, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;352;1794397520.574602"}
+{"tick": 352, "soll_s": 35.2, "ist_s": 35.2004, "spaet_ms": 0.4, "uhrzeit": 1794397520.6745372, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;353;1794397520.674541"}
+{"tick": 353, "soll_s": 35.3, "ist_s": 35.3005, "spaet_ms": 0.5, "uhrzeit": 1794397520.7746565, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;354;1794397520.774661"}
+{"tick": 354, "soll_s": 35.4, "ist_s": 35.4002, "spaet_ms": 0.2, "uhrzeit": 1794397520.8743815, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;355;1794397520.874386"}
+{"tick": 355, "soll_s": 35.5, "ist_s": 35.5007, "spaet_ms": 0.7, "uhrzeit": 1794397520.9748702, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;356;1794397520.974875"}
+{"tick": 356, "soll_s": 35.6, "ist_s": 35.6006, "spaet_ms": 0.6, "uhrzeit": 1794397521.0747612, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;357;1794397521.074765"}
+{"tick": 357, "soll_s": 35.7, "ist_s": 35.7003, "spaet_ms": 0.3, "uhrzeit": 1794397521.1744566, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;358;1794397521.174461"}
+{"tick": 358, "soll_s": 35.8, "ist_s": 35.8003, "spaet_ms": 0.3, "uhrzeit": 1794397521.2744966, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;359;1794397521.274501"}
+{"tick": 359, "soll_s": 35.9, "ist_s": 35.9001, "spaet_ms": 0.1, "uhrzeit": 1794397521.3742166, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;360;1794397521.374221"}
+{"tick": 360, "soll_s": 36.0, "ist_s": 36.0003, "spaet_ms": 0.3, "uhrzeit": 1794397521.4744642, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;361;1794397521.474468"}
+{"tick": 361, "soll_s": 36.1, "ist_s": 36.1002, "spaet_ms": 0.2, "uhrzeit": 1794397521.5743415, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;362;1794397521.574359"}
+{"tick": 362, "soll_s": 36.2, "ist_s": 36.2004, "spaet_ms": 0.4, "uhrzeit": 1794397521.6745336, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;363;1794397521.674538"}
+{"tick": 363, "soll_s": 36.3, "ist_s": 36.3003, "spaet_ms": 0.3, "uhrzeit": 1794397521.7744946, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;364;1794397521.774499"}
+{"tick": 364, "soll_s": 36.4, "ist_s": 36.4003, "spaet_ms": 0.3, "uhrzeit": 1794397521.8744388, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;365;1794397521.874443"}
+{"tick": 365, "soll_s": 36.5, "ist_s": 36.5007, "spaet_ms": 0.7, "uhrzeit": 1794397521.9748452, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;366;1794397521.974850"}
+{"tick": 366, "soll_s": 36.6, "ist_s": 36.6002, "spaet_ms": 0.2, "uhrzeit": 1794397522.0743175, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;367;1794397522.074322"}
+{"tick": 367, "soll_s": 36.7, "ist_s": 36.7013, "spaet_ms": 1.3, "uhrzeit": 1794397522.1755152, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;368;1794397522.175519"}
+{"tick": 368, "soll_s": 36.8, "ist_s": 36.8006, "spaet_ms": 0.6, "uhrzeit": 1794397522.2747955, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;369;1794397522.274800"}
+{"tick": 369, "soll_s": 36.9, "ist_s": 36.9005, "spaet_ms": 0.5, "uhrzeit": 1794397522.3746107, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;370;1794397522.374615"}
+{"tick": 370, "soll_s": 37.0, "ist_s": 37.0003, "spaet_ms": 0.3, "uhrzeit": 1794397522.47442, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;371;1794397522.474425"}
+{"tick": 371, "soll_s": 37.1, "ist_s": 37.1005, "spaet_ms": 0.5, "uhrzeit": 1794397522.5747104, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;372;1794397522.574728"}
+{"tick": 372, "soll_s": 37.2, "ist_s": 37.2003, "spaet_ms": 0.3, "uhrzeit": 1794397522.6744606, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;373;1794397522.674465"}
+{"tick": 373, "soll_s": 37.3, "ist_s": 37.3003, "spaet_ms": 0.3, "uhrzeit": 1794397522.7744594, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;374;1794397522.774464"}
+{"tick": 374, "soll_s": 37.4, "ist_s": 37.4002, "spaet_ms": 0.2, "uhrzeit": 1794397522.8743799, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;375;1794397522.874384"}
+{"tick": 375, "soll_s": 37.5, "ist_s": 37.5003, "spaet_ms": 0.3, "uhrzeit": 1794397522.9744668, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;376;1794397522.974471"}
+{"tick": 376, "soll_s": 37.6, "ist_s": 37.6002, "spaet_ms": 0.2, "uhrzeit": 1794397523.074357, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;377;1794397523.074362"}
+{"tick": 377, "soll_s": 37.7, "ist_s": 37.7005, "spaet_ms": 0.5, "uhrzeit": 1794397523.1746185, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;378;1794397523.174623"}
+{"tick": 378, "soll_s": 37.8, "ist_s": 37.8005, "spaet_ms": 0.5, "uhrzeit": 1794397523.2746055, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;379;1794397523.274622"}
+{"tick": 379, "soll_s": 37.9, "ist_s": 37.9003, "spaet_ms": 0.3, "uhrzeit": 1794397523.3744094, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;380;1794397523.374414"}
+{"tick": 380, "soll_s": 38.0, "ist_s": 38.0002, "spaet_ms": 0.2, "uhrzeit": 1794397523.474359, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;381;1794397523.474375"}
+{"tick": 381, "soll_s": 38.1, "ist_s": 38.1007, "spaet_ms": 0.7, "uhrzeit": 1794397523.5748842, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;382;1794397523.574888"}
+{"tick": 382, "soll_s": 38.2, "ist_s": 38.2029, "spaet_ms": 2.9, "uhrzeit": 1794397523.6770115, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;383;1794397523.677016"}
+{"tick": 383, "soll_s": 38.3, "ist_s": 38.3006, "spaet_ms": 0.6, "uhrzeit": 1794397523.7747123, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;384;1794397523.774716"}
+{"tick": 384, "soll_s": 38.4, "ist_s": 38.4004, "spaet_ms": 0.4, "uhrzeit": 1794397523.8745804, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;385;1794397523.874585"}
+{"tick": 385, "soll_s": 38.5, "ist_s": 38.5003, "spaet_ms": 0.3, "uhrzeit": 1794397523.9744644, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;386;1794397523.974469"}
+{"tick": 386, "soll_s": 38.6, "ist_s": 38.6007, "spaet_ms": 0.7, "uhrzeit": 1794397524.0748572, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;387;1794397524.074862"}
+{"tick": 387, "soll_s": 38.7, "ist_s": 38.7003, "spaet_ms": 0.3, "uhrzeit": 1794397524.1744294, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;388;1794397524.174434"}
+{"tick": 388, "soll_s": 38.8, "ist_s": 38.8004, "spaet_ms": 0.4, "uhrzeit": 1794397524.2746058, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;389;1794397524.274611"}
+{"tick": 389, "soll_s": 38.9, "ist_s": 38.9005, "spaet_ms": 0.5, "uhrzeit": 1794397524.3746417, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;390;1794397524.374646"}
+{"tick": 390, "soll_s": 39.0, "ist_s": 39.0005, "spaet_ms": 0.5, "uhrzeit": 1794397524.4746623, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;391;1794397524.474667"}
+{"tick": 391, "soll_s": 39.1, "ist_s": 39.1001, "spaet_ms": 0.1, "uhrzeit": 1794397524.574272, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;392;1794397524.574277"}
+{"tick": 392, "soll_s": 39.2, "ist_s": 39.2005, "spaet_ms": 0.5, "uhrzeit": 1794397524.674682, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;393;1794397524.674686"}
+{"tick": 393, "soll_s": 39.3, "ist_s": 39.3008, "spaet_ms": 0.8, "uhrzeit": 1794397524.774947, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;394;1794397524.774952"}
+{"tick": 394, "soll_s": 39.4, "ist_s": 39.4002, "spaet_ms": 0.2, "uhrzeit": 1794397524.8743007, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;395;1794397524.874305"}
+{"tick": 395, "soll_s": 39.5, "ist_s": 39.5005, "spaet_ms": 0.5, "uhrzeit": 1794397524.9746382, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;396;1794397524.974643"}
+{"tick": 396, "soll_s": 39.6, "ist_s": 39.6003, "spaet_ms": 0.3, "uhrzeit": 1794397525.0744464, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;397;1794397525.074451"}
+{"tick": 397, "soll_s": 39.7, "ist_s": 39.7003, "spaet_ms": 0.3, "uhrzeit": 1794397525.1744878, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;398;1794397525.174493"}
+{"tick": 398, "soll_s": 39.8, "ist_s": 39.8003, "spaet_ms": 0.3, "uhrzeit": 1794397525.2744312, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;399;1794397525.274436"}
+{"tick": 399, "soll_s": 39.9, "ist_s": 39.9007, "spaet_ms": 0.7, "uhrzeit": 1794397525.374898, "note": "marker 99999999.0", "telegramm": "%99999999.0;0;400;1794397525.374903"}
+{"tick": 400, "soll_s": 40.0, "ist_s": 40.001, "spaet_ms": 1.0, "uhrzeit": 1794397525.475137, "note": "gueltig", "telegramm": "%0.50401;1;401;1794397525.475141"}
+{"tick": 401, "soll_s": 40.1, "ist_s": 40.1001, "spaet_ms": 0.1, "uhrzeit": 1794397525.5742755, "note": "gueltig", "telegramm": "%0.50402;1;402;1794397525.574280"}
+{"tick": 402, "soll_s": 40.2, "ist_s": 40.2001, "spaet_ms": 0.1, "uhrzeit": 1794397525.674267, "note": "gueltig", "telegramm": "%0.50403;1;403;1794397525.674272"}
+{"tick": 403, "soll_s": 40.3, "ist_s": 40.3003, "spaet_ms": 0.3, "uhrzeit": 1794397525.7745285, "note": "gueltig", "telegramm": "%0.50404;1;404;1794397525.774533"}
+{"tick": 404, "soll_s": 40.4, "ist_s": 40.4001, "spaet_ms": 0.1, "uhrzeit": 1794397525.8742435, "note": "gueltig", "telegramm": "%0.50405;1;405;1794397525.874247"}
+{"tick": 405, "soll_s": 40.5, "ist_s": 40.5001, "spaet_ms": 0.1, "uhrzeit": 1794397525.9742684, "note": "gueltig", "telegramm": "%0.50406;1;406;1794397525.974272"}
+{"tick": 406, "soll_s": 40.6, "ist_s": 40.6005, "spaet_ms": 0.5, "uhrzeit": 1794397526.074646, "note": "gueltig", "telegramm": "%0.50407;1;407;1794397526.074650"}
+{"tick": 407, "soll_s": 40.7, "ist_s": 40.7003, "spaet_ms": 0.3, "uhrzeit": 1794397526.174408, "note": "gueltig", "telegramm": "%0.50408;1;408;1794397526.174413"}
+{"tick": 408, "soll_s": 40.8, "ist_s": 40.8003, "spaet_ms": 0.3, "uhrzeit": 1794397526.2744386, "note": "gueltig", "telegramm": "%0.50409;1;409;1794397526.274443"}
+{"tick": 409, "soll_s": 40.9, "ist_s": 40.9002, "spaet_ms": 0.2, "uhrzeit": 1794397526.3743567, "note": "gueltig", "telegramm": "%0.50410;1;410;1794397526.374361"}
+{"tick": 410, "soll_s": 41.0, "ist_s": 41.0003, "spaet_ms": 0.3, "uhrzeit": 1794397526.4744194, "note": "gueltig", "telegramm": "%0.50411;1;411;1794397526.474424"}
+{"tick": 411, "soll_s": 41.1, "ist_s": 41.1003, "spaet_ms": 0.3, "uhrzeit": 1794397526.5744996, "note": "gueltig", "telegramm": "%0.50412;1;412;1794397526.574504"}
+{"tick": 412, "soll_s": 41.2, "ist_s": 41.2005, "spaet_ms": 0.5, "uhrzeit": 1794397526.6746964, "note": "gueltig", "telegramm": "%0.50413;1;413;1794397526.674718"}
+{"tick": 413, "soll_s": 41.3, "ist_s": 41.3005, "spaet_ms": 0.5, "uhrzeit": 1794397526.7746634, "note": "gueltig", "telegramm": "%0.50414;1;414;1794397526.774668"}
+{"tick": 414, "soll_s": 41.4, "ist_s": 41.4002, "spaet_ms": 0.2, "uhrzeit": 1794397526.8743665, "note": "gueltig", "telegramm": "%0.50415;1;415;1794397526.874371"}
+{"tick": 415, "soll_s": 41.5, "ist_s": 41.5001, "spaet_ms": 0.1, "uhrzeit": 1794397526.9742773, "note": "gueltig", "telegramm": "%0.50416;1;416;1794397526.974282"}
+{"tick": 416, "soll_s": 41.6, "ist_s": 41.6004, "spaet_ms": 0.4, "uhrzeit": 1794397527.0745506, "note": "gueltig", "telegramm": "%0.50417;1;417;1794397527.074555"}
+{"tick": 417, "soll_s": 41.7, "ist_s": 41.7004, "spaet_ms": 0.4, "uhrzeit": 1794397527.1745708, "note": "gueltig", "telegramm": "%0.50418;1;418;1794397527.174575"}
+{"tick": 418, "soll_s": 41.8, "ist_s": 41.8004, "spaet_ms": 0.4, "uhrzeit": 1794397527.2745419, "note": "gueltig", "telegramm": "%0.50419;1;419;1794397527.274546"}
+{"tick": 419, "soll_s": 41.9, "ist_s": 41.9006, "spaet_ms": 0.6, "uhrzeit": 1794397527.37474, "note": "gueltig", "telegramm": "%0.50420;1;420;1794397527.374745"}
+{"tick": 420, "soll_s": 42.0, "ist_s": 42.0006, "spaet_ms": 0.6, "uhrzeit": 1794397527.4747822, "note": "gueltig", "telegramm": "%0.50421;1;421;1794397527.474787"}
+{"tick": 421, "soll_s": 42.1, "ist_s": 42.1001, "spaet_ms": 0.1, "uhrzeit": 1794397527.57424, "note": "gueltig", "telegramm": "%0.50422;1;422;1794397527.574244"}
+{"tick": 422, "soll_s": 42.2, "ist_s": 42.2004, "spaet_ms": 0.4, "uhrzeit": 1794397527.6745307, "note": "gueltig", "telegramm": "%0.50423;1;423;1794397527.674536"}
+{"tick": 423, "soll_s": 42.3, "ist_s": 42.3005, "spaet_ms": 0.5, "uhrzeit": 1794397527.7746549, "note": "gueltig", "telegramm": "%0.50424;1;424;1794397527.774660"}
+{"tick": 424, "soll_s": 42.4, "ist_s": 42.4049, "spaet_ms": 4.9, "uhrzeit": 1794397527.8790197, "note": "gueltig", "telegramm": "%0.50425;1;425;1794397527.879024"}
+{"tick": 425, "soll_s": 42.5, "ist_s": 42.5026, "spaet_ms": 2.6, "uhrzeit": 1794397527.976747, "note": "gueltig", "telegramm": "%0.50426;1;426;1794397527.976751"}
+{"tick": 426, "soll_s": 42.6, "ist_s": 42.6019, "spaet_ms": 1.9, "uhrzeit": 1794397528.0760198, "note": "gueltig", "telegramm": "%0.50427;1;427;1794397528.076025"}
+{"tick": 427, "soll_s": 42.7, "ist_s": 42.7002, "spaet_ms": 0.2, "uhrzeit": 1794397528.1743653, "note": "gueltig", "telegramm": "%0.50428;1;428;1794397528.174370"}
+{"tick": 428, "soll_s": 42.8, "ist_s": 42.8011, "spaet_ms": 1.1, "uhrzeit": 1794397528.2752116, "note": "gueltig", "telegramm": "%0.50429;1;429;1794397528.275216"}
+{"tick": 429, "soll_s": 42.9, "ist_s": 42.9005, "spaet_ms": 0.5, "uhrzeit": 1794397528.3746257, "note": "gueltig", "telegramm": "%0.50430;1;430;1794397528.374631"}
+{"tick": 430, "soll_s": 43.0, "ist_s": 43.0002, "spaet_ms": 0.2, "uhrzeit": 1794397528.474371, "note": "gueltig", "telegramm": "%0.50431;1;431;1794397528.474376"}
+{"tick": 431, "soll_s": 43.1, "ist_s": 43.1002, "spaet_ms": 0.2, "uhrzeit": 1794397528.574343, "note": "gueltig", "telegramm": "%0.50432;1;432;1794397528.574347"}
+{"tick": 432, "soll_s": 43.2, "ist_s": 43.2003, "spaet_ms": 0.3, "uhrzeit": 1794397528.6744547, "note": "gueltig", "telegramm": "%0.50433;1;433;1794397528.674459"}
+{"tick": 433, "soll_s": 43.3, "ist_s": 43.3005, "spaet_ms": 0.5, "uhrzeit": 1794397528.774625, "note": "gueltig", "telegramm": "%0.50434;1;434;1794397528.774630"}
+{"tick": 434, "soll_s": 43.4, "ist_s": 43.4003, "spaet_ms": 0.3, "uhrzeit": 1794397528.8744996, "note": "gueltig", "telegramm": "%0.50435;1;435;1794397528.874504"}
+{"tick": 435, "soll_s": 43.5, "ist_s": 43.5003, "spaet_ms": 0.3, "uhrzeit": 1794397528.9744575, "note": "gueltig", "telegramm": "%0.50436;1;436;1794397528.974462"}
+{"tick": 436, "soll_s": 43.6, "ist_s": 43.6003, "spaet_ms": 0.3, "uhrzeit": 1794397529.0744796, "note": "gueltig", "telegramm": "%0.50437;1;437;1794397529.074485"}
+{"tick": 437, "soll_s": 43.7, "ist_s": 43.7004, "spaet_ms": 0.4, "uhrzeit": 1794397529.1745775, "note": "gueltig", "telegramm": "%0.50438;1;438;1794397529.174583"}
+{"tick": 438, "soll_s": 43.8, "ist_s": 43.8003, "spaet_ms": 0.3, "uhrzeit": 1794397529.2744422, "note": "gueltig", "telegramm": "%0.50439;1;439;1794397529.274446"}
+{"tick": 439, "soll_s": 43.9, "ist_s": 43.9004, "spaet_ms": 0.4, "uhrzeit": 1794397529.3745632, "note": "gueltig", "telegramm": "%0.50440;1;440;1794397529.374568"}
+{"tick": 440, "soll_s": 44.0, "ist_s": 44.0003, "spaet_ms": 0.3, "uhrzeit": 1794397529.4745064, "note": "gueltig", "telegramm": "%0.50441;1;441;1794397529.474511"}
+{"tick": 441, "soll_s": 44.1, "ist_s": 44.1004, "spaet_ms": 0.4, "uhrzeit": 1794397529.5745962, "note": "gueltig", "telegramm": "%0.50442;1;442;1794397529.574600"}
+{"tick": 442, "soll_s": 44.2, "ist_s": 44.2004, "spaet_ms": 0.4, "uhrzeit": 1794397529.6745682, "note": "gueltig", "telegramm": "%0.50443;1;443;1794397529.674572"}
+{"tick": 443, "soll_s": 44.3, "ist_s": 44.3002, "spaet_ms": 0.2, "uhrzeit": 1794397529.7743816, "note": "gueltig", "telegramm": "%0.50444;1;444;1794397529.774386"}
+{"tick": 444, "soll_s": 44.4, "ist_s": 44.4006, "spaet_ms": 0.6, "uhrzeit": 1794397529.8747573, "note": "gueltig", "telegramm": "%0.50445;1;445;1794397529.874762"}
+{"tick": 445, "soll_s": 44.5, "ist_s": 44.5003, "spaet_ms": 0.3, "uhrzeit": 1794397529.9744349, "note": "gueltig", "telegramm": "%0.50446;1;446;1794397529.974439"}
+{"tick": 446, "soll_s": 44.6, "ist_s": 44.6005, "spaet_ms": 0.5, "uhrzeit": 1794397530.074684, "note": "gueltig", "telegramm": "%0.50447;1;447;1794397530.074689"}
+{"tick": 447, "soll_s": 44.7, "ist_s": 44.7003, "spaet_ms": 0.3, "uhrzeit": 1794397530.174499, "note": "gueltig", "telegramm": "%0.50448;1;448;1794397530.174503"}
+{"tick": 448, "soll_s": 44.8, "ist_s": 44.8001, "spaet_ms": 0.1, "uhrzeit": 1794397530.2742927, "note": "gueltig", "telegramm": "%0.50449;1;449;1794397530.274297"}
+{"tick": 449, "soll_s": 44.9, "ist_s": 44.9001, "spaet_ms": 0.1, "uhrzeit": 1794397530.3742762, "note": "gueltig", "telegramm": "%0.50450;1;450;1794397530.374280"}
+{"tick": 450, "soll_s": 45.0, "ist_s": 45.0005, "spaet_ms": 0.5, "uhrzeit": 1794397530.4746342, "note": "marker NaN", "telegramm": "%NaN;0;451;1794397530.474639"}
+{"tick": 451, "soll_s": 45.1, "ist_s": 45.1004, "spaet_ms": 0.4, "uhrzeit": 1794397530.5745947, "note": "marker NaN", "telegramm": "%NaN;0;452;1794397530.574600"}
+{"tick": 452, "soll_s": 45.2, "ist_s": 45.2004, "spaet_ms": 0.4, "uhrzeit": 1794397530.674588, "note": "marker NaN", "telegramm": "%NaN;0;453;1794397530.674593"}
+{"tick": 453, "soll_s": 45.3, "ist_s": 45.3004, "spaet_ms": 0.4, "uhrzeit": 1794397530.7745671, "note": "marker NaN", "telegramm": "%NaN;0;454;1794397530.774571"}
+{"tick": 454, "soll_s": 45.4, "ist_s": 45.4004, "spaet_ms": 0.4, "uhrzeit": 1794397530.8745747, "note": "marker NaN", "telegramm": "%NaN;0;455;1794397530.874579"}
+{"tick": 455, "soll_s": 45.5, "ist_s": 45.5004, "spaet_ms": 0.4, "uhrzeit": 1794397530.974513, "note": "marker NaN", "telegramm": "%NaN;0;456;1794397530.974518"}
+{"tick": 456, "soll_s": 45.6, "ist_s": 45.6005, "spaet_ms": 0.5, "uhrzeit": 1794397531.074631, "note": "marker NaN", "telegramm": "%NaN;0;457;1794397531.074635"}
+{"tick": 457, "soll_s": 45.7, "ist_s": 45.7002, "spaet_ms": 0.2, "uhrzeit": 1794397531.1743178, "note": "marker NaN", "telegramm": "%NaN;0;458;1794397531.174322"}
+{"tick": 458, "soll_s": 45.8, "ist_s": 45.8004, "spaet_ms": 0.4, "uhrzeit": 1794397531.2745245, "note": "marker NaN", "telegramm": "%NaN;0;459;1794397531.274529"}
+{"tick": 459, "soll_s": 45.9, "ist_s": 45.9006, "spaet_ms": 0.6, "uhrzeit": 1794397531.3747318, "note": "marker NaN", "telegramm": "%NaN;0;460;1794397531.374736"}
+{"tick": 460, "soll_s": 46.0, "ist_s": 46.0005, "spaet_ms": 0.5, "uhrzeit": 1794397531.474599, "note": "marker NaN", "telegramm": "%NaN;0;461;1794397531.474604"}
+{"tick": 461, "soll_s": 46.1, "ist_s": 46.1006, "spaet_ms": 0.6, "uhrzeit": 1794397531.5747643, "note": "marker NaN", "telegramm": "%NaN;0;462;1794397531.574769"}
+{"tick": 462, "soll_s": 46.2, "ist_s": 46.2005, "spaet_ms": 0.5, "uhrzeit": 1794397531.6746902, "note": "marker NaN", "telegramm": "%NaN;0;463;1794397531.674695"}
+{"tick": 463, "soll_s": 46.3, "ist_s": 46.3006, "spaet_ms": 0.6, "uhrzeit": 1794397531.774745, "note": "marker NaN", "telegramm": "%NaN;0;464;1794397531.774749"}
+{"tick": 464, "soll_s": 46.4, "ist_s": 46.4003, "spaet_ms": 0.3, "uhrzeit": 1794397531.8744576, "note": "marker NaN", "telegramm": "%NaN;0;465;1794397531.874462"}
+{"tick": 465, "soll_s": 46.5, "ist_s": 46.5005, "spaet_ms": 0.5, "uhrzeit": 1794397531.9747324, "note": "marker NaN", "telegramm": "%NaN;0;466;1794397531.974737"}
+{"tick": 466, "soll_s": 46.6, "ist_s": 46.6004, "spaet_ms": 0.4, "uhrzeit": 1794397532.0745358, "note": "marker NaN", "telegramm": "%NaN;0;467;1794397532.074541"}
+{"tick": 467, "soll_s": 46.7, "ist_s": 46.7003, "spaet_ms": 0.3, "uhrzeit": 1794397532.1744125, "note": "marker NaN", "telegramm": "%NaN;0;468;1794397532.174417"}
+{"tick": 468, "soll_s": 46.8, "ist_s": 46.8003, "spaet_ms": 0.3, "uhrzeit": 1794397532.2744246, "note": "marker NaN", "telegramm": "%NaN;0;469;1794397532.274429"}
+{"tick": 469, "soll_s": 46.9, "ist_s": 46.9003, "spaet_ms": 0.3, "uhrzeit": 1794397532.3744407, "note": "marker NaN", "telegramm": "%NaN;0;470;1794397532.374445"}
+{"tick": 470, "soll_s": 47.0, "ist_s": 47.0002, "spaet_ms": 0.2, "uhrzeit": 1794397532.4743185, "note": "marker NaN", "telegramm": "%NaN;0;471;1794397532.474323"}
+{"tick": 471, "soll_s": 47.1, "ist_s": 47.1005, "spaet_ms": 0.5, "uhrzeit": 1794397532.5746844, "note": "marker NaN", "telegramm": "%NaN;0;472;1794397532.574689"}
+{"tick": 472, "soll_s": 47.2, "ist_s": 47.2003, "spaet_ms": 0.3, "uhrzeit": 1794397532.6744027, "note": "marker NaN", "telegramm": "%NaN;0;473;1794397532.674408"}
+{"tick": 473, "soll_s": 47.3, "ist_s": 47.3002, "spaet_ms": 0.2, "uhrzeit": 1794397532.774392, "note": "marker NaN", "telegramm": "%NaN;0;474;1794397532.774396"}
+{"tick": 474, "soll_s": 47.4, "ist_s": 47.4003, "spaet_ms": 0.3, "uhrzeit": 1794397532.8744025, "note": "marker NaN", "telegramm": "%NaN;0;475;1794397532.874408"}
+{"tick": 475, "soll_s": 47.5, "ist_s": 47.5006, "spaet_ms": 0.6, "uhrzeit": 1794397532.9747708, "note": "marker NaN", "telegramm": "%NaN;0;476;1794397532.974775"}
+{"tick": 476, "soll_s": 47.6, "ist_s": 47.6003, "spaet_ms": 0.3, "uhrzeit": 1794397533.0744593, "note": "marker NaN", "telegramm": "%NaN;0;477;1794397533.074464"}
+{"tick": 477, "soll_s": 47.7, "ist_s": 47.7006, "spaet_ms": 0.6, "uhrzeit": 1794397533.1747355, "note": "marker NaN", "telegramm": "%NaN;0;478;1794397533.174740"}
+{"tick": 478, "soll_s": 47.8, "ist_s": 47.8006, "spaet_ms": 0.6, "uhrzeit": 1794397533.2747154, "note": "marker NaN", "telegramm": "%NaN;0;479;1794397533.274720"}
+{"tick": 479, "soll_s": 47.9, "ist_s": 47.9004, "spaet_ms": 0.4, "uhrzeit": 1794397533.3745756, "note": "marker NaN", "telegramm": "%NaN;0;480;1794397533.374581"}
+{"tick": 480, "soll_s": 48.0, "ist_s": 48.0004, "spaet_ms": 0.4, "uhrzeit": 1794397533.4745436, "note": "marker NaN", "telegramm": "%NaN;0;481;1794397533.474549"}
+{"tick": 481, "soll_s": 48.1, "ist_s": 48.1005, "spaet_ms": 0.5, "uhrzeit": 1794397533.5746462, "note": "marker NaN", "telegramm": "%NaN;0;482;1794397533.574651"}
+{"tick": 482, "soll_s": 48.2, "ist_s": 48.2005, "spaet_ms": 0.5, "uhrzeit": 1794397533.6746895, "note": "marker NaN", "telegramm": "%NaN;0;483;1794397533.674694"}
+{"tick": 483, "soll_s": 48.3, "ist_s": 48.3004, "spaet_ms": 0.4, "uhrzeit": 1794397533.774592, "note": "marker NaN", "telegramm": "%NaN;0;484;1794397533.774596"}
+{"tick": 484, "soll_s": 48.4, "ist_s": 48.4001, "spaet_ms": 0.1, "uhrzeit": 1794397533.874242, "note": "marker NaN", "telegramm": "%NaN;0;485;1794397533.874247"}
+{"tick": 485, "soll_s": 48.5, "ist_s": 48.5004, "spaet_ms": 0.4, "uhrzeit": 1794397533.974566, "note": "marker NaN", "telegramm": "%NaN;0;486;1794397533.974571"}
+{"tick": 486, "soll_s": 48.6, "ist_s": 48.6005, "spaet_ms": 0.5, "uhrzeit": 1794397534.0746884, "note": "marker NaN", "telegramm": "%NaN;0;487;1794397534.074693"}
+{"tick": 487, "soll_s": 48.7, "ist_s": 48.7002, "spaet_ms": 0.2, "uhrzeit": 1794397534.174361, "note": "marker NaN", "telegramm": "%NaN;0;488;1794397534.174365"}
+{"tick": 488, "soll_s": 48.8, "ist_s": 48.8004, "spaet_ms": 0.4, "uhrzeit": 1794397534.2745087, "note": "marker NaN", "telegramm": "%NaN;0;489;1794397534.274514"}
+{"tick": 489, "soll_s": 48.9, "ist_s": 48.9001, "spaet_ms": 0.1, "uhrzeit": 1794397534.374315, "note": "marker NaN", "telegramm": "%NaN;0;490;1794397534.374319"}
+{"tick": 490, "soll_s": 49.0, "ist_s": 49.0004, "spaet_ms": 0.4, "uhrzeit": 1794397534.474574, "note": "marker NaN", "telegramm": "%NaN;0;491;1794397534.474579"}
+{"tick": 491, "soll_s": 49.1, "ist_s": 49.1003, "spaet_ms": 0.3, "uhrzeit": 1794397534.574484, "note": "marker NaN", "telegramm": "%NaN;0;492;1794397534.574489"}
+{"tick": 492, "soll_s": 49.2, "ist_s": 49.2003, "spaet_ms": 0.3, "uhrzeit": 1794397534.6744125, "note": "marker NaN", "telegramm": "%NaN;0;493;1794397534.674417"}
+{"tick": 493, "soll_s": 49.3, "ist_s": 49.3005, "spaet_ms": 0.5, "uhrzeit": 1794397534.7746534, "note": "marker NaN", "telegramm": "%NaN;0;494;1794397534.774658"}
+{"tick": 494, "soll_s": 49.4, "ist_s": 49.4002, "spaet_ms": 0.2, "uhrzeit": 1794397534.874387, "note": "marker NaN", "telegramm": "%NaN;0;495;1794397534.874392"}
+{"tick": 495, "soll_s": 49.5, "ist_s": 49.5001, "spaet_ms": 0.1, "uhrzeit": 1794397534.9743192, "note": "marker NaN", "telegramm": "%NaN;0;496;1794397534.974324"}
+{"tick": 496, "soll_s": 49.6, "ist_s": 49.6003, "spaet_ms": 0.3, "uhrzeit": 1794397535.0744274, "note": "marker NaN", "telegramm": "%NaN;0;497;1794397535.074432"}
+{"tick": 497, "soll_s": 49.7, "ist_s": 49.7001, "spaet_ms": 0.1, "uhrzeit": 1794397535.174249, "note": "marker NaN", "telegramm": "%NaN;0;498;1794397535.174254"}
+{"tick": 498, "soll_s": 49.8, "ist_s": 49.8003, "spaet_ms": 0.3, "uhrzeit": 1794397535.2744284, "note": "marker NaN", "telegramm": "%NaN;0;499;1794397535.274432"}
+{"tick": 499, "soll_s": 49.9, "ist_s": 49.9004, "spaet_ms": 0.4, "uhrzeit": 1794397535.3745837, "note": "marker NaN", "telegramm": "%NaN;0;500;1794397535.374598"}
+{"tick": 500, "soll_s": 50.0, "ist_s": 50.0005, "spaet_ms": 0.5, "uhrzeit": 1794397535.4746728, "note": "gueltig", "telegramm": "%0.50501;1;501;1794397535.474677"}
+{"tick": 501, "soll_s": 50.1, "ist_s": 50.1002, "spaet_ms": 0.2, "uhrzeit": 1794397535.5743468, "note": "gueltig", "telegramm": "%0.50502;1;502;1794397535.574351"}
+{"tick": 502, "soll_s": 50.2, "ist_s": 50.2005, "spaet_ms": 0.5, "uhrzeit": 1794397535.6746712, "note": "gueltig", "telegramm": "%0.50503;1;503;1794397535.674676"}
+{"tick": 503, "soll_s": 50.3, "ist_s": 50.3005, "spaet_ms": 0.5, "uhrzeit": 1794397535.7746603, "note": "gueltig", "telegramm": "%0.50504;1;504;1794397535.774665"}
+{"tick": 504, "soll_s": 50.4, "ist_s": 50.4005, "spaet_ms": 0.5, "uhrzeit": 1794397535.874663, "note": "gueltig", "telegramm": "%0.50505;1;505;1794397535.874667"}
+{"tick": 505, "soll_s": 50.5, "ist_s": 50.5003, "spaet_ms": 0.3, "uhrzeit": 1794397535.974436, "note": "gueltig", "telegramm": "%0.50506;1;506;1794397535.974440"}
+{"tick": 506, "soll_s": 50.6, "ist_s": 50.6001, "spaet_ms": 0.1, "uhrzeit": 1794397536.0742269, "note": "gueltig", "telegramm": "%0.50507;1;507;1794397536.074231"}
+{"tick": 507, "soll_s": 50.7, "ist_s": 50.702, "spaet_ms": 2.0, "uhrzeit": 1794397536.1761518, "note": "gueltig", "telegramm": "%0.50508;1;508;1794397536.176157"}
+{"tick": 508, "soll_s": 50.8, "ist_s": 50.8005, "spaet_ms": 0.5, "uhrzeit": 1794397536.2746718, "note": "gueltig", "telegramm": "%0.50509;1;509;1794397536.274676"}
+{"tick": 509, "soll_s": 50.9, "ist_s": 50.9008, "spaet_ms": 0.8, "uhrzeit": 1794397536.3749018, "note": "gueltig", "telegramm": "%0.50510;1;510;1794397536.374906"}
+{"tick": 510, "soll_s": 51.0, "ist_s": 51.0005, "spaet_ms": 0.5, "uhrzeit": 1794397536.474602, "note": "gueltig", "telegramm": "%0.50511;1;511;1794397536.474606"}
+{"tick": 511, "soll_s": 51.1, "ist_s": 51.1003, "spaet_ms": 0.3, "uhrzeit": 1794397536.574431, "note": "gueltig", "telegramm": "%0.50512;1;512;1794397536.574447"}
+{"tick": 512, "soll_s": 51.2, "ist_s": 51.2008, "spaet_ms": 0.8, "uhrzeit": 1794397536.674992, "note": "gueltig", "telegramm": "%0.50513;1;513;1794397536.674996"}
+{"tick": 513, "soll_s": 51.3, "ist_s": 51.3003, "spaet_ms": 0.3, "uhrzeit": 1794397536.774459, "note": "gueltig", "telegramm": "%0.50514;1;514;1794397536.774463"}
+{"tick": 514, "soll_s": 51.4, "ist_s": 51.4003, "spaet_ms": 0.3, "uhrzeit": 1794397536.874463, "note": "gueltig", "telegramm": "%0.50515;1;515;1794397536.874467"}
+{"tick": 515, "soll_s": 51.5, "ist_s": 51.5013, "spaet_ms": 1.3, "uhrzeit": 1794397536.9754527, "note": "gueltig", "telegramm": "%0.50516;1;516;1794397536.975457"}
+{"tick": 516, "soll_s": 51.6, "ist_s": 51.6013, "spaet_ms": 1.3, "uhrzeit": 1794397537.0754776, "note": "gueltig", "telegramm": "%0.50517;1;517;1794397537.075482"}
+{"tick": 517, "soll_s": 51.7, "ist_s": 51.7009, "spaet_ms": 0.9, "uhrzeit": 1794397537.175029, "note": "gueltig", "telegramm": "%0.50518;1;518;1794397537.175033"}
+{"tick": 518, "soll_s": 51.8, "ist_s": 51.8003, "spaet_ms": 0.3, "uhrzeit": 1794397537.2744756, "note": "gueltig", "telegramm": "%0.50519;1;519;1794397537.274480"}
+{"tick": 519, "soll_s": 51.9, "ist_s": 51.9004, "spaet_ms": 0.4, "uhrzeit": 1794397537.3745468, "note": "gueltig", "telegramm": "%0.50520;1;520;1794397537.374551"}
+{"tick": 520, "soll_s": 52.0, "ist_s": 52.0001, "spaet_ms": 0.1, "uhrzeit": 1794397537.4742515, "note": "gueltig", "telegramm": "%0.50521;1;521;1794397537.474256"}
+{"tick": 521, "soll_s": 52.1, "ist_s": 52.1004, "spaet_ms": 0.4, "uhrzeit": 1794397537.5745876, "note": "gueltig", "telegramm": "%0.50522;1;522;1794397537.574606"}
+{"tick": 522, "soll_s": 52.2, "ist_s": 52.2003, "spaet_ms": 0.3, "uhrzeit": 1794397537.6744788, "note": "gueltig", "telegramm": "%0.50523;1;523;1794397537.674483"}
+{"tick": 523, "soll_s": 52.3, "ist_s": 52.3006, "spaet_ms": 0.6, "uhrzeit": 1794397537.7747486, "note": "gueltig", "telegramm": "%0.50524;1;524;1794397537.774753"}
+{"tick": 524, "soll_s": 52.4, "ist_s": 52.4004, "spaet_ms": 0.4, "uhrzeit": 1794397537.8745189, "note": "gueltig", "telegramm": "%0.50525;1;525;1794397537.874523"}
+{"tick": 525, "soll_s": 52.5, "ist_s": 52.5002, "spaet_ms": 0.2, "uhrzeit": 1794397537.9743702, "note": "gueltig", "telegramm": "%0.50526;1;526;1794397537.974375"}
+{"tick": 526, "soll_s": 52.6, "ist_s": 52.6004, "spaet_ms": 0.4, "uhrzeit": 1794397538.074513, "note": "gueltig", "telegramm": "%0.50527;1;527;1794397538.074529"}
+{"tick": 527, "soll_s": 52.7, "ist_s": 52.7005, "spaet_ms": 0.5, "uhrzeit": 1794397538.17467, "note": "gueltig", "telegramm": "%0.50528;1;528;1794397538.174675"}
+{"tick": 528, "soll_s": 52.8, "ist_s": 52.8004, "spaet_ms": 0.4, "uhrzeit": 1794397538.2745526, "note": "gueltig", "telegramm": "%0.50529;1;529;1794397538.274557"}
+{"tick": 529, "soll_s": 52.9, "ist_s": 52.9006, "spaet_ms": 0.6, "uhrzeit": 1794397538.374759, "note": "gueltig", "telegramm": "%0.50530;1;530;1794397538.374763"}
+{"tick": 530, "soll_s": 53.0, "ist_s": 53.001, "spaet_ms": 1.0, "uhrzeit": 1794397538.4751344, "note": "gueltig", "telegramm": "%0.50531;1;531;1794397538.475139"}
+{"tick": 531, "soll_s": 53.1, "ist_s": 53.1003, "spaet_ms": 0.3, "uhrzeit": 1794397538.5744019, "note": "gueltig", "telegramm": "%0.50532;1;532;1794397538.574406"}
+{"tick": 532, "soll_s": 53.2, "ist_s": 53.2008, "spaet_ms": 0.8, "uhrzeit": 1794397538.6749668, "note": "gueltig", "telegramm": "%0.50533;1;533;1794397538.674971"}
+{"tick": 533, "soll_s": 53.3, "ist_s": 53.3003, "spaet_ms": 0.3, "uhrzeit": 1794397538.7744284, "note": "gueltig", "telegramm": "%0.50534;1;534;1794397538.774433"}
+{"tick": 534, "soll_s": 53.4, "ist_s": 53.4004, "spaet_ms": 0.4, "uhrzeit": 1794397538.8745863, "note": "gueltig", "telegramm": "%0.50535;1;535;1794397538.874591"}
+{"tick": 535, "soll_s": 53.5, "ist_s": 53.5003, "spaet_ms": 0.3, "uhrzeit": 1794397538.9745064, "note": "gueltig", "telegramm": "%0.50536;1;536;1794397538.974510"}
+{"tick": 536, "soll_s": 53.6, "ist_s": 53.6004, "spaet_ms": 0.4, "uhrzeit": 1794397539.0745878, "note": "gueltig", "telegramm": "%0.50537;1;537;1794397539.074592"}
+{"tick": 537, "soll_s": 53.7, "ist_s": 53.7008, "spaet_ms": 0.8, "uhrzeit": 1794397539.1749582, "note": "gueltig", "telegramm": "%0.50538;1;538;1794397539.174963"}
+{"tick": 538, "soll_s": 53.8, "ist_s": 53.8005, "spaet_ms": 0.5, "uhrzeit": 1794397539.274612, "note": "gueltig", "telegramm": "%0.50539;1;539;1794397539.274617"}
+{"tick": 539, "soll_s": 53.9, "ist_s": 53.9005, "spaet_ms": 0.5, "uhrzeit": 1794397539.37467, "note": "gueltig", "telegramm": "%0.50540;1;540;1794397539.374674"}
+{"tick": 540, "soll_s": 54.0, "ist_s": 54.0003, "spaet_ms": 0.3, "uhrzeit": 1794397539.4744775, "note": "gueltig", "telegramm": "%0.50541;1;541;1794397539.474483"}
+{"tick": 541, "soll_s": 54.1, "ist_s": 54.1012, "spaet_ms": 1.2, "uhrzeit": 1794397539.575344, "note": "gueltig", "telegramm": "%0.50542;1;542;1794397539.575348"}
+{"tick": 542, "soll_s": 54.2, "ist_s": 54.2005, "spaet_ms": 0.5, "uhrzeit": 1794397539.6746233, "note": "gueltig", "telegramm": "%0.50543;1;543;1794397539.674628"}
+{"tick": 543, "soll_s": 54.3, "ist_s": 54.3006, "spaet_ms": 0.6, "uhrzeit": 1794397539.7747884, "note": "gueltig", "telegramm": "%0.50544;1;544;1794397539.774793"}
+{"tick": 544, "soll_s": 54.4, "ist_s": 54.4001, "spaet_ms": 0.1, "uhrzeit": 1794397539.8742507, "note": "gueltig", "telegramm": "%0.50545;1;545;1794397539.874539"}
+{"tick": 545, "soll_s": 54.5, "ist_s": 54.5011, "spaet_ms": 1.1, "uhrzeit": 1794397539.9752033, "note": "gueltig", "telegramm": "%0.50546;1;546;1794397539.975208"}
+{"tick": 546, "soll_s": 54.6, "ist_s": 54.6014, "spaet_ms": 1.4, "uhrzeit": 1794397540.0755963, "note": "gueltig", "telegramm": "%0.50547;1;547;1794397540.075601"}
+{"tick": 547, "soll_s": 54.7, "ist_s": 54.7012, "spaet_ms": 1.2, "uhrzeit": 1794397540.1753461, "note": "gueltig", "telegramm": "%0.50548;1;548;1794397540.175350"}
+{"tick": 548, "soll_s": 54.8, "ist_s": 54.8002, "spaet_ms": 0.2, "uhrzeit": 1794397540.2743194, "note": "gueltig", "telegramm": "%0.50549;1;549;1794397540.274324"}
+{"tick": 549, "soll_s": 54.9, "ist_s": 54.9005, "spaet_ms": 0.5, "uhrzeit": 1794397540.3746562, "note": "gueltig", "telegramm": "%0.50550;1;550;1794397540.374660"}
+{"tick": 550, "soll_s": 55.0, "ist_s": 55.0003, "spaet_ms": 0.3, "uhrzeit": 1794397540.4744513, "note": "marker +NaN", "telegramm": "%+NaN;0;551;1794397540.474455"}
+{"tick": 551, "soll_s": 55.1, "ist_s": 55.1006, "spaet_ms": 0.6, "uhrzeit": 1794397540.5747578, "note": "marker +NaN", "telegramm": "%+NaN;0;552;1794397540.574774"}
+{"tick": 552, "soll_s": 55.2, "ist_s": 55.2008, "spaet_ms": 0.8, "uhrzeit": 1794397540.674935, "note": "marker +NaN", "telegramm": "%+NaN;0;553;1794397540.674939"}
+{"tick": 553, "soll_s": 55.3, "ist_s": 55.3005, "spaet_ms": 0.5, "uhrzeit": 1794397540.7746897, "note": "marker +NaN", "telegramm": "%+NaN;0;554;1794397540.774694"}
+{"tick": 554, "soll_s": 55.4, "ist_s": 55.4002, "spaet_ms": 0.2, "uhrzeit": 1794397540.8743362, "note": "marker +NaN", "telegramm": "%+NaN;0;555;1794397540.874341"}
+{"tick": 555, "soll_s": 55.5, "ist_s": 55.5004, "spaet_ms": 0.4, "uhrzeit": 1794397540.9745362, "note": "marker +NaN", "telegramm": "%+NaN;0;556;1794397540.974540"}
+{"tick": 556, "soll_s": 55.6, "ist_s": 55.6005, "spaet_ms": 0.5, "uhrzeit": 1794397541.0746193, "note": "marker +NaN", "telegramm": "%+NaN;0;557;1794397541.074624"}
+{"tick": 557, "soll_s": 55.7, "ist_s": 55.7003, "spaet_ms": 0.3, "uhrzeit": 1794397541.174451, "note": "marker +NaN", "telegramm": "%+NaN;0;558;1794397541.174455"}
+{"tick": 558, "soll_s": 55.8, "ist_s": 55.8004, "spaet_ms": 0.4, "uhrzeit": 1794397541.2745607, "note": "marker +NaN", "telegramm": "%+NaN;0;559;1794397541.274565"}
+{"tick": 559, "soll_s": 55.9, "ist_s": 55.9005, "spaet_ms": 0.5, "uhrzeit": 1794397541.3746142, "note": "marker +NaN", "telegramm": "%+NaN;0;560;1794397541.374618"}
+{"tick": 560, "soll_s": 56.0, "ist_s": 56.0006, "spaet_ms": 0.6, "uhrzeit": 1794397541.4747744, "note": "marker +NaN", "telegramm": "%+NaN;0;561;1794397541.474779"}
+{"tick": 561, "soll_s": 56.1, "ist_s": 56.1009, "spaet_ms": 0.9, "uhrzeit": 1794397541.5750132, "note": "marker +NaN", "telegramm": "%+NaN;0;562;1794397541.575017"}
+{"tick": 562, "soll_s": 56.2, "ist_s": 56.2003, "spaet_ms": 0.3, "uhrzeit": 1794397541.6744418, "note": "marker +NaN", "telegramm": "%+NaN;0;563;1794397541.674446"}
+{"tick": 563, "soll_s": 56.3, "ist_s": 56.3007, "spaet_ms": 0.7, "uhrzeit": 1794397541.7748086, "note": "marker +NaN", "telegramm": "%+NaN;0;564;1794397541.774826"}
+{"tick": 564, "soll_s": 56.4, "ist_s": 56.4001, "spaet_ms": 0.1, "uhrzeit": 1794397541.8742228, "note": "marker +NaN", "telegramm": "%+NaN;0;565;1794397541.874228"}
+{"tick": 565, "soll_s": 56.5, "ist_s": 56.5005, "spaet_ms": 0.5, "uhrzeit": 1794397541.9746819, "note": "marker +NaN", "telegramm": "%+NaN;0;566;1794397541.974686"}
+{"tick": 566, "soll_s": 56.6, "ist_s": 56.6003, "spaet_ms": 0.3, "uhrzeit": 1794397542.074425, "note": "marker +NaN", "telegramm": "%+NaN;0;567;1794397542.074429"}
+{"tick": 567, "soll_s": 56.7, "ist_s": 56.7004, "spaet_ms": 0.4, "uhrzeit": 1794397542.1745512, "note": "marker +NaN", "telegramm": "%+NaN;0;568;1794397542.174556"}
+{"tick": 568, "soll_s": 56.8, "ist_s": 56.8004, "spaet_ms": 0.4, "uhrzeit": 1794397542.274582, "note": "marker +NaN", "telegramm": "%+NaN;0;569;1794397542.274599"}
+{"tick": 569, "soll_s": 56.9, "ist_s": 56.9005, "spaet_ms": 0.5, "uhrzeit": 1794397542.374624, "note": "marker +NaN", "telegramm": "%+NaN;0;570;1794397542.374628"}
+{"tick": 570, "soll_s": 57.0, "ist_s": 57.0002, "spaet_ms": 0.2, "uhrzeit": 1794397542.474396, "note": "marker +NaN", "telegramm": "%+NaN;0;571;1794397542.474400"}
+{"tick": 571, "soll_s": 57.1, "ist_s": 57.1005, "spaet_ms": 0.5, "uhrzeit": 1794397542.5746682, "note": "marker +NaN", "telegramm": "%+NaN;0;572;1794397542.574672"}
+{"tick": 572, "soll_s": 57.2, "ist_s": 57.2002, "spaet_ms": 0.2, "uhrzeit": 1794397542.6743011, "note": "marker +NaN", "telegramm": "%+NaN;0;573;1794397542.674306"}
+{"tick": 573, "soll_s": 57.3, "ist_s": 57.3007, "spaet_ms": 0.7, "uhrzeit": 1794397542.7748568, "note": "marker +NaN", "telegramm": "%+NaN;0;574;1794397542.774861"}
+{"tick": 574, "soll_s": 57.4, "ist_s": 57.4002, "spaet_ms": 0.2, "uhrzeit": 1794397542.8743236, "note": "marker +NaN", "telegramm": "%+NaN;0;575;1794397542.874329"}
+{"tick": 575, "soll_s": 57.5, "ist_s": 57.5008, "spaet_ms": 0.8, "uhrzeit": 1794397542.9749568, "note": "marker +NaN", "telegramm": "%+NaN;0;576;1794397542.974962"}
+{"tick": 576, "soll_s": 57.6, "ist_s": 57.6003, "spaet_ms": 0.3, "uhrzeit": 1794397543.074491, "note": "marker +NaN", "telegramm": "%+NaN;0;577;1794397543.074495"}
+{"tick": 577, "soll_s": 57.7, "ist_s": 57.7002, "spaet_ms": 0.2, "uhrzeit": 1794397543.1744087, "note": "marker +NaN", "telegramm": "%+NaN;0;578;1794397543.174413"}
+{"tick": 578, "soll_s": 57.8, "ist_s": 57.8005, "spaet_ms": 0.5, "uhrzeit": 1794397543.2746596, "note": "marker +NaN", "telegramm": "%+NaN;0;579;1794397543.274663"}
+{"tick": 579, "soll_s": 57.9, "ist_s": 57.9002, "spaet_ms": 0.2, "uhrzeit": 1794397543.374394, "note": "marker +NaN", "telegramm": "%+NaN;0;580;1794397543.374398"}
+{"tick": 580, "soll_s": 58.0, "ist_s": 58.0008, "spaet_ms": 0.8, "uhrzeit": 1794397543.4749348, "note": "marker +NaN", "telegramm": "%+NaN;0;581;1794397543.474939"}
+{"tick": 581, "soll_s": 58.1, "ist_s": 58.1002, "spaet_ms": 0.2, "uhrzeit": 1794397543.5743406, "note": "marker +NaN", "telegramm": "%+NaN;0;582;1794397543.574345"}
+{"tick": 582, "soll_s": 58.2, "ist_s": 58.2004, "spaet_ms": 0.4, "uhrzeit": 1794397543.6745353, "note": "marker +NaN", "telegramm": "%+NaN;0;583;1794397543.674540"}
+{"tick": 583, "soll_s": 58.3, "ist_s": 58.3006, "spaet_ms": 0.6, "uhrzeit": 1794397543.7747724, "note": "marker +NaN", "telegramm": "%+NaN;0;584;1794397543.774777"}
+{"tick": 584, "soll_s": 58.4, "ist_s": 58.4005, "spaet_ms": 0.5, "uhrzeit": 1794397543.874691, "note": "marker +NaN", "telegramm": "%+NaN;0;585;1794397543.874696"}
+{"tick": 585, "soll_s": 58.5, "ist_s": 58.5004, "spaet_ms": 0.4, "uhrzeit": 1794397543.9745305, "note": "marker +NaN", "telegramm": "%+NaN;0;586;1794397543.974535"}
+{"tick": 586, "soll_s": 58.6, "ist_s": 58.6002, "spaet_ms": 0.2, "uhrzeit": 1794397544.0744228, "note": "marker +NaN", "telegramm": "%+NaN;0;587;1794397544.074427"}
+{"tick": 587, "soll_s": 58.7, "ist_s": 58.7007, "spaet_ms": 0.7, "uhrzeit": 1794397544.1748118, "note": "marker +NaN", "telegramm": "%+NaN;0;588;1794397544.174817"}
+{"tick": 588, "soll_s": 58.8, "ist_s": 58.8015, "spaet_ms": 1.5, "uhrzeit": 1794397544.2757554, "note": "marker +NaN", "telegramm": "%+NaN;0;589;1794397544.275760"}
+{"tick": 589, "soll_s": 58.9, "ist_s": 58.9003, "spaet_ms": 0.3, "uhrzeit": 1794397544.3744361, "note": "marker +NaN", "telegramm": "%+NaN;0;590;1794397544.374440"}
+{"tick": 590, "soll_s": 59.0, "ist_s": 59.0007, "spaet_ms": 0.7, "uhrzeit": 1794397544.474836, "note": "marker +NaN", "telegramm": "%+NaN;0;591;1794397544.474841"}
+{"tick": 591, "soll_s": 59.1, "ist_s": 59.1005, "spaet_ms": 0.5, "uhrzeit": 1794397544.5746639, "note": "marker +NaN", "telegramm": "%+NaN;0;592;1794397544.574669"}
+{"tick": 592, "soll_s": 59.2, "ist_s": 59.2016, "spaet_ms": 1.6, "uhrzeit": 1794397544.6757288, "note": "marker +NaN", "telegramm": "%+NaN;0;593;1794397544.675733"}
+{"tick": 593, "soll_s": 59.3, "ist_s": 59.3011, "spaet_ms": 1.1, "uhrzeit": 1794397544.775276, "note": "marker +NaN", "telegramm": "%+NaN;0;594;1794397544.775280"}
+{"tick": 594, "soll_s": 59.4, "ist_s": 59.4004, "spaet_ms": 0.4, "uhrzeit": 1794397544.8745363, "note": "marker +NaN", "telegramm": "%+NaN;0;595;1794397544.874541"}
+{"tick": 595, "soll_s": 59.5, "ist_s": 59.5007, "spaet_ms": 0.7, "uhrzeit": 1794397544.9748652, "note": "marker +NaN", "telegramm": "%+NaN;0;596;1794397544.974870"}
+{"tick": 596, "soll_s": 59.6, "ist_s": 59.6016, "spaet_ms": 1.6, "uhrzeit": 1794397545.0757754, "note": "marker +NaN", "telegramm": "%+NaN;0;597;1794397545.075780"}
+{"tick": 597, "soll_s": 59.7, "ist_s": 59.7008, "spaet_ms": 0.8, "uhrzeit": 1794397545.1750147, "note": "marker +NaN", "telegramm": "%+NaN;0;598;1794397545.175030"}
+{"tick": 598, "soll_s": 59.8, "ist_s": 59.8005, "spaet_ms": 0.5, "uhrzeit": 1794397545.2746813, "note": "marker +NaN", "telegramm": "%+NaN;0;599;1794397545.274685"}
+{"tick": 599, "soll_s": 59.9, "ist_s": 59.9007, "spaet_ms": 0.7, "uhrzeit": 1794397545.3749635, "note": "marker +NaN", "telegramm": "%+NaN;0;600;1794397545.374995"}
+{"tick": 600, "soll_s": 60.0, "ist_s": 60.0005, "spaet_ms": 0.5, "uhrzeit": 1794397545.4746768, "note": "gueltig", "telegramm": "%0.50601;1;601;1794397545.474681"}
+{"tick": 601, "soll_s": 60.1, "ist_s": 60.1006, "spaet_ms": 0.6, "uhrzeit": 1794397545.5747705, "note": "gueltig", "telegramm": "%0.50602;1;602;1794397545.574775"}
+{"tick": 602, "soll_s": 60.2, "ist_s": 60.2004, "spaet_ms": 0.4, "uhrzeit": 1794397545.6745636, "note": "gueltig", "telegramm": "%0.50603;1;603;1794397545.674568"}
+{"tick": 603, "soll_s": 60.3, "ist_s": 60.3003, "spaet_ms": 0.3, "uhrzeit": 1794397545.774453, "note": "gueltig", "telegramm": "%0.50604;1;604;1794397545.774457"}
+{"tick": 604, "soll_s": 60.4, "ist_s": 60.4007, "spaet_ms": 0.7, "uhrzeit": 1794397545.8748276, "note": "gueltig", "telegramm": "%0.50605;1;605;1794397545.874832"}
+{"tick": 605, "soll_s": 60.5, "ist_s": 60.5007, "spaet_ms": 0.7, "uhrzeit": 1794397545.9748573, "note": "gueltig", "telegramm": "%0.50606;1;606;1794397545.974862"}
+{"tick": 606, "soll_s": 60.6, "ist_s": 60.601, "spaet_ms": 1.0, "uhrzeit": 1794397546.0751173, "note": "gueltig", "telegramm": "%0.50607;1;607;1794397546.075122"}
+{"tick": 607, "soll_s": 60.7, "ist_s": 60.7003, "spaet_ms": 0.3, "uhrzeit": 1794397546.174486, "note": "gueltig", "telegramm": "%0.50608;1;608;1794397546.174490"}
+{"tick": 608, "soll_s": 60.8, "ist_s": 60.8003, "spaet_ms": 0.3, "uhrzeit": 1794397546.2744682, "note": "gueltig", "telegramm": "%0.50609;1;609;1794397546.274472"}
+{"tick": 609, "soll_s": 60.9, "ist_s": 60.9005, "spaet_ms": 0.5, "uhrzeit": 1794397546.3746867, "note": "gueltig", "telegramm": "%0.50610;1;610;1794397546.374691"}
+{"tick": 610, "soll_s": 61.0, "ist_s": 61.0011, "spaet_ms": 1.1, "uhrzeit": 1794397546.4752202, "note": "gueltig", "telegramm": "%0.50611;1;611;1794397546.475224"}
+{"tick": 611, "soll_s": 61.1, "ist_s": 61.1006, "spaet_ms": 0.6, "uhrzeit": 1794397546.5747352, "note": "gueltig", "telegramm": "%0.50612;1;612;1794397546.574739"}
+{"tick": 612, "soll_s": 61.2, "ist_s": 61.2003, "spaet_ms": 0.3, "uhrzeit": 1794397546.6744576, "note": "gueltig", "telegramm": "%0.50613;1;613;1794397546.674461"}
+{"tick": 613, "soll_s": 61.3, "ist_s": 61.3003, "spaet_ms": 0.3, "uhrzeit": 1794397546.7744362, "note": "gueltig", "telegramm": "%0.50614;1;614;1794397546.774441"}
+{"tick": 614, "soll_s": 61.4, "ist_s": 61.4003, "spaet_ms": 0.3, "uhrzeit": 1794397546.8744874, "note": "gueltig", "telegramm": "%0.50615;1;615;1794397546.874492"}
+{"tick": 615, "soll_s": 61.5, "ist_s": 61.5015, "spaet_ms": 1.5, "uhrzeit": 1794397546.9758787, "note": "gueltig", "telegramm": "%0.50616;1;616;1794397546.975885"}
+{"tick": 616, "soll_s": 61.6, "ist_s": 61.6005, "spaet_ms": 0.5, "uhrzeit": 1794397547.0746975, "note": "gueltig", "telegramm": "%0.50617;1;617;1794397547.074702"}
+{"tick": 617, "soll_s": 61.7, "ist_s": 61.7005, "spaet_ms": 0.5, "uhrzeit": 1794397547.174651, "note": "gueltig", "telegramm": "%0.50618;1;618;1794397547.174655"}
+{"tick": 618, "soll_s": 61.8, "ist_s": 61.8006, "spaet_ms": 0.6, "uhrzeit": 1794397547.2747, "note": "gueltig", "telegramm": "%0.50619;1;619;1794397547.274704"}
+{"tick": 619, "soll_s": 61.9, "ist_s": 61.9008, "spaet_ms": 0.8, "uhrzeit": 1794397547.374936, "note": "gueltig", "telegramm": "%0.50620;1;620;1794397547.374940"}
+{"tick": 620, "soll_s": 62.0, "ist_s": 62.0009, "spaet_ms": 0.9, "uhrzeit": 1794397547.4750493, "note": "gueltig", "telegramm": "%0.50621;1;621;1794397547.475054"}
+{"tick": 621, "soll_s": 62.1, "ist_s": 62.1005, "spaet_ms": 0.5, "uhrzeit": 1794397547.5746908, "note": "gueltig", "telegramm": "%0.50622;1;622;1794397547.574695"}
+{"tick": 622, "soll_s": 62.2, "ist_s": 62.2005, "spaet_ms": 0.5, "uhrzeit": 1794397547.6746337, "note": "gueltig", "telegramm": "%0.50623;1;623;1794397547.674638"}
+{"tick": 623, "soll_s": 62.3, "ist_s": 62.3006, "spaet_ms": 0.6, "uhrzeit": 1794397547.7747912, "note": "gueltig", "telegramm": "%0.50624;1;624;1794397547.774796"}
+{"tick": 624, "soll_s": 62.4, "ist_s": 62.4005, "spaet_ms": 0.5, "uhrzeit": 1794397547.8746722, "note": "gueltig", "telegramm": "%0.50625;1;625;1794397547.874676"}
+{"tick": 625, "soll_s": 62.5, "ist_s": 62.5006, "spaet_ms": 0.6, "uhrzeit": 1794397547.9747155, "note": "gueltig", "telegramm": "%0.50626;1;626;1794397547.974719"}
+{"tick": 626, "soll_s": 62.6, "ist_s": 62.6008, "spaet_ms": 0.8, "uhrzeit": 1794397548.0750458, "note": "gueltig", "telegramm": "%0.50627;1;627;1794397548.075050"}
+{"tick": 627, "soll_s": 62.7, "ist_s": 62.7009, "spaet_ms": 0.9, "uhrzeit": 1794397548.1750097, "note": "gueltig", "telegramm": "%0.50628;1;628;1794397548.175014"}
+{"tick": 628, "soll_s": 62.8, "ist_s": 62.8009, "spaet_ms": 0.9, "uhrzeit": 1794397548.2750394, "note": "gueltig", "telegramm": "%0.50629;1;629;1794397548.275043"}
+{"tick": 629, "soll_s": 62.9, "ist_s": 62.9008, "spaet_ms": 0.8, "uhrzeit": 1794397548.3749347, "note": "gueltig", "telegramm": "%0.50630;1;630;1794397548.374939"}
+{"tick": 630, "soll_s": 63.0, "ist_s": 63.0005, "spaet_ms": 0.5, "uhrzeit": 1794397548.4746466, "note": "gueltig", "telegramm": "%0.50631;1;631;1794397548.474650"}
+{"tick": 631, "soll_s": 63.1, "ist_s": 63.1008, "spaet_ms": 0.8, "uhrzeit": 1794397548.5749662, "note": "gueltig", "telegramm": "%0.50632;1;632;1794397548.574971"}
+{"tick": 632, "soll_s": 63.2, "ist_s": 63.2035, "spaet_ms": 3.5, "uhrzeit": 1794397548.6776288, "note": "gueltig", "telegramm": "%0.50633;1;633;1794397548.677633"}
+{"tick": 633, "soll_s": 63.3, "ist_s": 63.3006, "spaet_ms": 0.6, "uhrzeit": 1794397548.7747436, "note": "gueltig", "telegramm": "%0.50634;1;634;1794397548.774760"}
+{"tick": 634, "soll_s": 63.4, "ist_s": 63.4008, "spaet_ms": 0.8, "uhrzeit": 1794397548.8751173, "note": "gueltig", "telegramm": "%0.50635;1;635;1794397548.875121"}
+{"tick": 635, "soll_s": 63.5, "ist_s": 63.5011, "spaet_ms": 1.1, "uhrzeit": 1794397548.9752629, "note": "gueltig", "telegramm": "%0.50636;1;636;1794397548.975267"}
+{"tick": 636, "soll_s": 63.6, "ist_s": 63.6007, "spaet_ms": 0.7, "uhrzeit": 1794397549.0748081, "note": "gueltig", "telegramm": "%0.50637;1;637;1794397549.074812"}
+{"tick": 637, "soll_s": 63.7, "ist_s": 63.701, "spaet_ms": 1.0, "uhrzeit": 1794397549.1751199, "note": "gueltig", "telegramm": "%0.50638;1;638;1794397549.175124"}
+{"tick": 638, "soll_s": 63.8, "ist_s": 63.8009, "spaet_ms": 0.9, "uhrzeit": 1794397549.275017, "note": "gueltig", "telegramm": "%0.50639;1;639;1794397549.275021"}
+{"tick": 639, "soll_s": 63.9, "ist_s": 63.9006, "spaet_ms": 0.6, "uhrzeit": 1794397549.3747792, "note": "gueltig", "telegramm": "%0.50640;1;640;1794397549.374783"}
+{"tick": 640, "soll_s": 64.0, "ist_s": 64.0007, "spaet_ms": 0.7, "uhrzeit": 1794397549.4748352, "note": "gueltig", "telegramm": "%0.50641;1;641;1794397549.474850"}
+{"tick": 641, "soll_s": 64.1, "ist_s": 64.1005, "spaet_ms": 0.5, "uhrzeit": 1794397549.574684, "note": "gueltig", "telegramm": "%0.50642;1;642;1794397549.574688"}
+{"tick": 642, "soll_s": 64.2, "ist_s": 64.2005, "spaet_ms": 0.5, "uhrzeit": 1794397549.6746285, "note": "gueltig", "telegramm": "%0.50643;1;643;1794397549.674633"}
+{"tick": 643, "soll_s": 64.3, "ist_s": 64.3016, "spaet_ms": 1.6, "uhrzeit": 1794397549.7757864, "note": "gueltig", "telegramm": "%0.50644;1;644;1794397549.775791"}
+{"tick": 644, "soll_s": 64.4, "ist_s": 64.4005, "spaet_ms": 0.5, "uhrzeit": 1794397549.8746495, "note": "gueltig", "telegramm": "%0.50645;1;645;1794397549.874654"}
+{"tick": 645, "soll_s": 64.5, "ist_s": 64.5008, "spaet_ms": 0.8, "uhrzeit": 1794397549.975082, "note": "gueltig", "telegramm": "%0.50646;1;646;1794397549.975098"}
+{"tick": 646, "soll_s": 64.6, "ist_s": 64.6009, "spaet_ms": 0.9, "uhrzeit": 1794397550.0750496, "note": "gueltig", "telegramm": "%0.50647;1;647;1794397550.075055"}
+{"tick": 647, "soll_s": 64.7, "ist_s": 64.7003, "spaet_ms": 0.3, "uhrzeit": 1794397550.1744409, "note": "gueltig", "telegramm": "%0.50648;1;648;1794397550.174457"}
+{"tick": 648, "soll_s": 64.8, "ist_s": 64.8001, "spaet_ms": 0.1, "uhrzeit": 1794397550.2742684, "note": "gueltig", "telegramm": "%0.50649;1;649;1794397550.274273"}
+{"tick": 649, "soll_s": 64.9, "ist_s": 64.9008, "spaet_ms": 0.8, "uhrzeit": 1794397550.3749833, "note": "gueltig", "telegramm": "%0.50650;1;650;1794397550.374988"}
+{"tick": 650, "soll_s": 65.0, "ist_s": 65.0013, "spaet_ms": 1.3, "uhrzeit": 1794397550.47567, "note": "marker Inf", "telegramm": "%Inf;0;651;1794397550.475674"}
+{"tick": 651, "soll_s": 65.1, "ist_s": 65.1011, "spaet_ms": 1.1, "uhrzeit": 1794397550.575247, "note": "marker Inf", "telegramm": "%Inf;0;652;1794397550.575253"}
+{"tick": 652, "soll_s": 65.2, "ist_s": 65.2009, "spaet_ms": 0.9, "uhrzeit": 1794397550.675281, "note": "marker Inf", "telegramm": "%Inf;0;653;1794397550.675286"}
+{"tick": 653, "soll_s": 65.3, "ist_s": 65.3006, "spaet_ms": 0.6, "uhrzeit": 1794397550.7747648, "note": "marker Inf", "telegramm": "%Inf;0;654;1794397550.774879"}
+{"tick": 654, "soll_s": 65.4, "ist_s": 65.4012, "spaet_ms": 1.2, "uhrzeit": 1794397550.8752997, "note": "marker Inf", "telegramm": "%Inf;0;655;1794397550.875304"}
+{"tick": 655, "soll_s": 65.5, "ist_s": 65.5009, "spaet_ms": 0.9, "uhrzeit": 1794397550.9750748, "note": "marker Inf", "telegramm": "%Inf;0;656;1794397550.975079"}
+{"tick": 656, "soll_s": 65.6, "ist_s": 65.6006, "spaet_ms": 0.6, "uhrzeit": 1794397551.0747845, "note": "marker Inf", "telegramm": "%Inf;0;657;1794397551.074789"}
+{"tick": 657, "soll_s": 65.7, "ist_s": 65.7007, "spaet_ms": 0.7, "uhrzeit": 1794397551.174833, "note": "marker Inf", "telegramm": "%Inf;0;658;1794397551.174838"}
+{"tick": 658, "soll_s": 65.8, "ist_s": 65.8007, "spaet_ms": 0.7, "uhrzeit": 1794397551.274827, "note": "marker Inf", "telegramm": "%Inf;0;659;1794397551.274831"}
+{"tick": 659, "soll_s": 65.9, "ist_s": 65.9011, "spaet_ms": 1.1, "uhrzeit": 1794397551.3752172, "note": "marker Inf", "telegramm": "%Inf;0;660;1794397551.375221"}
+{"tick": 660, "soll_s": 66.0, "ist_s": 66.0008, "spaet_ms": 0.8, "uhrzeit": 1794397551.4749713, "note": "marker Inf", "telegramm": "%Inf;0;661;1794397551.474977"}
+{"tick": 661, "soll_s": 66.1, "ist_s": 66.1009, "spaet_ms": 0.9, "uhrzeit": 1794397551.5750635, "note": "marker Inf", "telegramm": "%Inf;0;662;1794397551.575473"}
+{"tick": 662, "soll_s": 66.2, "ist_s": 66.2012, "spaet_ms": 1.2, "uhrzeit": 1794397551.675382, "note": "marker Inf", "telegramm": "%Inf;0;663;1794397551.675387"}
+{"tick": 663, "soll_s": 66.3, "ist_s": 66.3019, "spaet_ms": 1.9, "uhrzeit": 1794397551.7760332, "note": "marker Inf", "telegramm": "%Inf;0;664;1794397551.776037"}
+{"tick": 664, "soll_s": 66.4, "ist_s": 66.401, "spaet_ms": 1.0, "uhrzeit": 1794397551.8751063, "note": "marker Inf", "telegramm": "%Inf;0;665;1794397551.875110"}
+{"tick": 665, "soll_s": 66.5, "ist_s": 66.501, "spaet_ms": 1.0, "uhrzeit": 1794397551.9751222, "note": "marker Inf", "telegramm": "%Inf;0;666;1794397551.975127"}
+{"tick": 666, "soll_s": 66.6, "ist_s": 66.6007, "spaet_ms": 0.7, "uhrzeit": 1794397552.0748372, "note": "marker Inf", "telegramm": "%Inf;0;667;1794397552.074841"}
+{"tick": 667, "soll_s": 66.7, "ist_s": 66.7002, "spaet_ms": 0.2, "uhrzeit": 1794397552.1743562, "note": "marker Inf", "telegramm": "%Inf;0;668;1794397552.174361"}
+{"tick": 668, "soll_s": 66.8, "ist_s": 66.8004, "spaet_ms": 0.4, "uhrzeit": 1794397552.2745917, "note": "marker Inf", "telegramm": "%Inf;0;669;1794397552.274596"}
+{"tick": 669, "soll_s": 66.9, "ist_s": 66.9003, "spaet_ms": 0.3, "uhrzeit": 1794397552.3744884, "note": "marker Inf", "telegramm": "%Inf;0;670;1794397552.374493"}
+{"tick": 670, "soll_s": 67.0, "ist_s": 67.0005, "spaet_ms": 0.5, "uhrzeit": 1794397552.4746034, "note": "marker Inf", "telegramm": "%Inf;0;671;1794397552.474608"}
+{"tick": 671, "soll_s": 67.1, "ist_s": 67.1003, "spaet_ms": 0.3, "uhrzeit": 1794397552.5744562, "note": "marker Inf", "telegramm": "%Inf;0;672;1794397552.574461"}
+{"tick": 672, "soll_s": 67.2, "ist_s": 67.2102, "spaet_ms": 10.2, "uhrzeit": 1794397552.6843898, "note": "marker Inf", "telegramm": "%Inf;0;673;1794397552.684399"}
+{"tick": 673, "soll_s": 67.3, "ist_s": 67.3019, "spaet_ms": 1.9, "uhrzeit": 1794397552.7760875, "note": "marker Inf", "telegramm": "%Inf;0;674;1794397552.776092"}
+{"tick": 674, "soll_s": 67.4, "ist_s": 67.4009, "spaet_ms": 0.9, "uhrzeit": 1794397552.8750916, "note": "marker Inf", "telegramm": "%Inf;0;675;1794397552.875096"}
+{"tick": 675, "soll_s": 67.5, "ist_s": 67.5008, "spaet_ms": 0.8, "uhrzeit": 1794397552.9749956, "note": "marker Inf", "telegramm": "%Inf;0;676;1794397552.975000"}
+{"tick": 676, "soll_s": 67.6, "ist_s": 67.6005, "spaet_ms": 0.5, "uhrzeit": 1794397553.0746665, "note": "marker Inf", "telegramm": "%Inf;0;677;1794397553.074671"}
+{"tick": 677, "soll_s": 67.7, "ist_s": 67.7011, "spaet_ms": 1.1, "uhrzeit": 1794397553.1752071, "note": "marker Inf", "telegramm": "%Inf;0;678;1794397553.175211"}
+{"tick": 678, "soll_s": 67.8, "ist_s": 67.8013, "spaet_ms": 1.3, "uhrzeit": 1794397553.2754745, "note": "marker Inf", "telegramm": "%Inf;0;679;1794397553.275479"}
+{"tick": 679, "soll_s": 67.9, "ist_s": 67.901, "spaet_ms": 1.0, "uhrzeit": 1794397553.3751686, "note": "marker Inf", "telegramm": "%Inf;0;680;1794397553.375173"}
+{"tick": 680, "soll_s": 68.0, "ist_s": 68.0006, "spaet_ms": 0.6, "uhrzeit": 1794397553.4747472, "note": "marker Inf", "telegramm": "%Inf;0;681;1794397553.474752"}
+{"tick": 681, "soll_s": 68.1, "ist_s": 68.1008, "spaet_ms": 0.8, "uhrzeit": 1794397553.5749948, "note": "marker Inf", "telegramm": "%Inf;0;682;1794397553.575312"}
+{"tick": 682, "soll_s": 68.2, "ist_s": 68.2014, "spaet_ms": 1.4, "uhrzeit": 1794397553.6755354, "note": "marker Inf", "telegramm": "%Inf;0;683;1794397553.675539"}
+{"tick": 683, "soll_s": 68.3, "ist_s": 68.3009, "spaet_ms": 0.9, "uhrzeit": 1794397553.7750008, "note": "marker Inf", "telegramm": "%Inf;0;684;1794397553.775005"}
+{"tick": 684, "soll_s": 68.4, "ist_s": 68.4006, "spaet_ms": 0.6, "uhrzeit": 1794397553.8747861, "note": "marker Inf", "telegramm": "%Inf;0;685;1794397553.874790"}
+{"tick": 685, "soll_s": 68.5, "ist_s": 68.5015, "spaet_ms": 1.5, "uhrzeit": 1794397553.975669, "note": "marker Inf", "telegramm": "%Inf;0;686;1794397553.975673"}
+{"tick": 686, "soll_s": 68.6, "ist_s": 68.6012, "spaet_ms": 1.2, "uhrzeit": 1794397554.0753772, "note": "marker Inf", "telegramm": "%Inf;0;687;1794397554.075382"}
+{"tick": 687, "soll_s": 68.7, "ist_s": 68.7056, "spaet_ms": 5.6, "uhrzeit": 1794397554.1797514, "note": "marker Inf", "telegramm": "%Inf;0;688;1794397554.179756"}
+{"tick": 688, "soll_s": 68.8, "ist_s": 68.8111, "spaet_ms": 11.1, "uhrzeit": 1794397554.285261, "note": "marker Inf", "telegramm": "%Inf;0;689;1794397554.285265"}
+{"tick": 689, "soll_s": 68.9, "ist_s": 68.9071, "spaet_ms": 7.1, "uhrzeit": 1794397554.3812294, "note": "marker Inf", "telegramm": "%Inf;0;690;1794397554.381235"}
+{"tick": 690, "soll_s": 69.0, "ist_s": 69.0012, "spaet_ms": 1.2, "uhrzeit": 1794397554.475395, "note": "marker Inf", "telegramm": "%Inf;0;691;1794397554.475400"}
+{"tick": 691, "soll_s": 69.1, "ist_s": 69.1014, "spaet_ms": 1.4, "uhrzeit": 1794397554.5755887, "note": "marker Inf", "telegramm": "%Inf;0;692;1794397554.575593"}
+{"tick": 692, "soll_s": 69.2, "ist_s": 69.2015, "spaet_ms": 1.5, "uhrzeit": 1794397554.6756556, "note": "marker Inf", "telegramm": "%Inf;0;693;1794397554.675660"}
+{"tick": 693, "soll_s": 69.3, "ist_s": 69.3015, "spaet_ms": 1.5, "uhrzeit": 1794397554.7756605, "note": "marker Inf", "telegramm": "%Inf;0;694;1794397554.775666"}
+{"tick": 694, "soll_s": 69.4, "ist_s": 69.401, "spaet_ms": 1.0, "uhrzeit": 1794397554.8751733, "note": "marker Inf", "telegramm": "%Inf;0;695;1794397554.875177"}
+{"tick": 695, "soll_s": 69.5, "ist_s": 69.5012, "spaet_ms": 1.2, "uhrzeit": 1794397554.975384, "note": "marker Inf", "telegramm": "%Inf;0;696;1794397554.975388"}
+{"tick": 696, "soll_s": 69.6, "ist_s": 69.6007, "spaet_ms": 0.7, "uhrzeit": 1794397555.0753863, "note": "marker Inf", "telegramm": "%Inf;0;697;1794397555.075392"}
+{"tick": 697, "soll_s": 69.7, "ist_s": 69.7016, "spaet_ms": 1.6, "uhrzeit": 1794397555.1757097, "note": "marker Inf", "telegramm": "%Inf;0;698;1794397555.175714"}
+{"tick": 698, "soll_s": 69.8, "ist_s": 69.8011, "spaet_ms": 1.1, "uhrzeit": 1794397555.2752476, "note": "marker Inf", "telegramm": "%Inf;0;699;1794397555.275274"}
+{"tick": 699, "soll_s": 69.9, "ist_s": 69.9011, "spaet_ms": 1.1, "uhrzeit": 1794397555.3752713, "note": "marker Inf", "telegramm": "%Inf;0;700;1794397555.375288"}
+{"tick": 700, "soll_s": 70.0, "ist_s": 70.0015, "spaet_ms": 1.5, "uhrzeit": 1794397555.4757578, "note": "gueltig", "telegramm": "%0.50701;1;701;1794397555.475762"}
+{"tick": 701, "soll_s": 70.1, "ist_s": 70.1015, "spaet_ms": 1.5, "uhrzeit": 1794397555.575662, "note": "gueltig", "telegramm": "%0.50702;1;702;1794397555.575666"}
+{"tick": 702, "soll_s": 70.2, "ist_s": 70.2019, "spaet_ms": 1.9, "uhrzeit": 1794397555.6760821, "note": "gueltig", "telegramm": "%0.50703;1;703;1794397555.676086"}
+{"tick": 703, "soll_s": 70.3, "ist_s": 70.316, "spaet_ms": 16.0, "uhrzeit": 1794397555.7901828, "note": "gueltig", "telegramm": "%0.50704;1;704;1794397555.790188"}
+{"tick": 704, "soll_s": 70.4, "ist_s": 70.4038, "spaet_ms": 3.8, "uhrzeit": 1794397555.8779006, "note": "gueltig", "telegramm": "%0.50705;1;705;1794397555.877905"}
+{"tick": 705, "soll_s": 70.5, "ist_s": 70.5067, "spaet_ms": 6.7, "uhrzeit": 1794397555.980882, "note": "gueltig", "telegramm": "%0.50706;1;706;1794397555.980886"}
+{"tick": 706, "soll_s": 70.6, "ist_s": 70.6052, "spaet_ms": 5.2, "uhrzeit": 1794397556.079364, "note": "gueltig", "telegramm": "%0.50707;1;707;1794397556.079370"}
+{"tick": 707, "soll_s": 70.7, "ist_s": 70.7011, "spaet_ms": 1.1, "uhrzeit": 1794397556.1752279, "note": "gueltig", "telegramm": "%0.50708;1;708;1794397556.175232"}
+{"tick": 708, "soll_s": 70.8, "ist_s": 70.8011, "spaet_ms": 1.1, "uhrzeit": 1794397556.2752542, "note": "gueltig", "telegramm": "%0.50709;1;709;1794397556.275259"}
+{"tick": 709, "soll_s": 70.9, "ist_s": 70.9015, "spaet_ms": 1.5, "uhrzeit": 1794397556.3756435, "note": "gueltig", "telegramm": "%0.50710;1;710;1794397556.375647"}
+{"tick": 710, "soll_s": 71.0, "ist_s": 71.0019, "spaet_ms": 1.9, "uhrzeit": 1794397556.476086, "note": "gueltig", "telegramm": "%0.50711;1;711;1794397556.476090"}
+{"tick": 711, "soll_s": 71.1, "ist_s": 71.1014, "spaet_ms": 1.4, "uhrzeit": 1794397556.5755894, "note": "gueltig", "telegramm": "%0.50712;1;712;1794397556.575593"}
+{"tick": 712, "soll_s": 71.2, "ist_s": 71.2011, "spaet_ms": 1.1, "uhrzeit": 1794397556.6752179, "note": "gueltig", "telegramm": "%0.50713;1;713;1794397556.675222"}
+{"tick": 713, "soll_s": 71.3, "ist_s": 71.3011, "spaet_ms": 1.1, "uhrzeit": 1794397556.77524, "note": "gueltig", "telegramm": "%0.50714;1;714;1794397556.775244"}
+{"tick": 714, "soll_s": 71.4, "ist_s": 71.4014, "spaet_ms": 1.4, "uhrzeit": 1794397556.8755267, "note": "gueltig", "telegramm": "%0.50715;1;715;1794397556.875531"}
+{"tick": 715, "soll_s": 71.5, "ist_s": 71.5015, "spaet_ms": 1.5, "uhrzeit": 1794397556.9756415, "note": "gueltig", "telegramm": "%0.50716;1;716;1794397556.975680"}
+{"tick": 716, "soll_s": 71.6, "ist_s": 71.6016, "spaet_ms": 1.6, "uhrzeit": 1794397557.0757103, "note": "gueltig", "telegramm": "%0.50717;1;717;1794397557.075714"}
+{"tick": 717, "soll_s": 71.7, "ist_s": 71.7012, "spaet_ms": 1.2, "uhrzeit": 1794397557.1753263, "note": "gueltig", "telegramm": "%0.50718;1;718;1794397557.175331"}
+{"tick": 718, "soll_s": 71.8, "ist_s": 71.8013, "spaet_ms": 1.3, "uhrzeit": 1794397557.275477, "note": "gueltig", "telegramm": "%0.50719;1;719;1794397557.275481"}
+{"tick": 719, "soll_s": 71.9, "ist_s": 71.9015, "spaet_ms": 1.5, "uhrzeit": 1794397557.3756056, "note": "gueltig", "telegramm": "%0.50720;1;720;1794397557.375610"}
+{"tick": 720, "soll_s": 72.0, "ist_s": 72.0043, "spaet_ms": 4.3, "uhrzeit": 1794397557.4784737, "note": "gueltig", "telegramm": "%0.50721;1;721;1794397557.478479"}
+{"tick": 721, "soll_s": 72.1, "ist_s": 72.1022, "spaet_ms": 2.2, "uhrzeit": 1794397557.5765803, "note": "gueltig", "telegramm": "%0.50722;1;722;1794397557.576585"}
+{"tick": 722, "soll_s": 72.2, "ist_s": 72.2012, "spaet_ms": 1.2, "uhrzeit": 1794397557.675395, "note": "gueltig", "telegramm": "%0.50723;1;723;1794397557.675400"}
+{"tick": 723, "soll_s": 72.3, "ist_s": 72.3016, "spaet_ms": 1.6, "uhrzeit": 1794397557.7757387, "note": "gueltig", "telegramm": "%0.50724;1;724;1794397557.775742"}
+{"tick": 724, "soll_s": 72.4, "ist_s": 72.4011, "spaet_ms": 1.1, "uhrzeit": 1794397557.8752651, "note": "gueltig", "telegramm": "%0.50725;1;725;1794397557.875269"}
+{"tick": 725, "soll_s": 72.5, "ist_s": 72.5015, "spaet_ms": 1.5, "uhrzeit": 1794397557.9756277, "note": "gueltig", "telegramm": "%0.50726;1;726;1794397557.975632"}
+{"tick": 726, "soll_s": 72.6, "ist_s": 72.6019, "spaet_ms": 1.9, "uhrzeit": 1794397558.0760815, "note": "gueltig", "telegramm": "%0.50727;1;727;1794397558.076086"}
+{"tick": 727, "soll_s": 72.7, "ist_s": 72.7022, "spaet_ms": 2.2, "uhrzeit": 1794397558.1763813, "note": "gueltig", "telegramm": "%0.50728;1;728;1794397558.176385"}
+{"tick": 728, "soll_s": 72.8, "ist_s": 72.8011, "spaet_ms": 1.1, "uhrzeit": 1794397558.275253, "note": "gueltig", "telegramm": "%0.50729;1;729;1794397558.275257"}
+{"tick": 729, "soll_s": 72.9, "ist_s": 72.9017, "spaet_ms": 1.7, "uhrzeit": 1794397558.3758116, "note": "gueltig", "telegramm": "%0.50730;1;730;1794397558.375817"}
+{"tick": 730, "soll_s": 73.0, "ist_s": 73.0013, "spaet_ms": 1.3, "uhrzeit": 1794397558.475466, "note": "gueltig", "telegramm": "%0.50731;1;731;1794397558.475470"}
+{"tick": 731, "soll_s": 73.1, "ist_s": 73.1012, "spaet_ms": 1.2, "uhrzeit": 1794397558.5753565, "note": "gueltig", "telegramm": "%0.50732;1;732;1794397558.575362"}
+{"tick": 732, "soll_s": 73.2, "ist_s": 73.2022, "spaet_ms": 2.2, "uhrzeit": 1794397558.676299, "note": "gueltig", "telegramm": "%0.50733;1;733;1794397558.676304"}
+{"tick": 733, "soll_s": 73.3, "ist_s": 73.3013, "spaet_ms": 1.3, "uhrzeit": 1794397558.7754412, "note": "gueltig", "telegramm": "%0.50734;1;734;1794397558.775445"}
+{"tick": 734, "soll_s": 73.4, "ist_s": 73.4021, "spaet_ms": 2.1, "uhrzeit": 1794397558.8762999, "note": "gueltig", "telegramm": "%0.50735;1;735;1794397558.876305"}
+{"tick": 735, "soll_s": 73.5, "ist_s": 73.5014, "spaet_ms": 1.4, "uhrzeit": 1794397558.9755895, "note": "gueltig", "telegramm": "%0.50736;1;736;1794397558.975593"}
+{"tick": 736, "soll_s": 73.6, "ist_s": 73.6012, "spaet_ms": 1.2, "uhrzeit": 1794397559.0753694, "note": "gueltig", "telegramm": "%0.50737;1;737;1794397559.075374"}
+{"tick": 737, "soll_s": 73.7, "ist_s": 73.7011, "spaet_ms": 1.1, "uhrzeit": 1794397559.1753225, "note": "gueltig", "telegramm": "%0.50738;1;738;1794397559.175327"}
+{"tick": 738, "soll_s": 73.8, "ist_s": 73.8024, "spaet_ms": 2.4, "uhrzeit": 1794397559.276588, "note": "gueltig", "telegramm": "%0.50739;1;739;1794397559.276592"}
+{"tick": 739, "soll_s": 73.9, "ist_s": 73.903, "spaet_ms": 3.0, "uhrzeit": 1794397559.3771176, "note": "gueltig", "telegramm": "%0.50740;1;740;1794397559.377122"}
+{"tick": 740, "soll_s": 74.0, "ist_s": 74.0014, "spaet_ms": 1.4, "uhrzeit": 1794397559.4755294, "note": "gueltig", "telegramm": "%0.50741;1;741;1794397559.475534"}
+{"tick": 741, "soll_s": 74.1, "ist_s": 74.1029, "spaet_ms": 2.9, "uhrzeit": 1794397559.5770237, "note": "gueltig", "telegramm": "%0.50742;1;742;1794397559.577028"}
+{"tick": 742, "soll_s": 74.2, "ist_s": 74.2027, "spaet_ms": 2.7, "uhrzeit": 1794397559.6768718, "note": "gueltig", "telegramm": "%0.50743;1;743;1794397559.676876"}
+{"tick": 743, "soll_s": 74.3, "ist_s": 74.303, "spaet_ms": 3.0, "uhrzeit": 1794397559.7771952, "note": "gueltig", "telegramm": "%0.50744;1;744;1794397559.777200"}
+{"tick": 744, "soll_s": 74.4, "ist_s": 74.4015, "spaet_ms": 1.5, "uhrzeit": 1794397559.875615, "note": "gueltig", "telegramm": "%0.50745;1;745;1794397559.875620"}
+{"tick": 745, "soll_s": 74.5, "ist_s": 74.5015, "spaet_ms": 1.5, "uhrzeit": 1794397559.9756908, "note": "gueltig", "telegramm": "%0.50746;1;746;1794397559.975695"}
+{"tick": 746, "soll_s": 74.6, "ist_s": 74.601, "spaet_ms": 1.0, "uhrzeit": 1794397560.0751765, "note": "gueltig", "telegramm": "%0.50747;1;747;1794397560.075181"}
+{"tick": 747, "soll_s": 74.7, "ist_s": 74.701, "spaet_ms": 1.0, "uhrzeit": 1794397560.1751387, "note": "gueltig", "telegramm": "%0.50748;1;748;1794397560.175143"}
+{"tick": 748, "soll_s": 74.8, "ist_s": 74.8008, "spaet_ms": 0.8, "uhrzeit": 1794397560.2749455, "note": "gueltig", "telegramm": "%0.50749;1;749;1794397560.274950"}
+{"tick": 749, "soll_s": 74.9, "ist_s": 74.9014, "spaet_ms": 1.4, "uhrzeit": 1794397560.3755183, "note": "gueltig", "telegramm": "%0.50750;1;750;1794397560.375522"}
