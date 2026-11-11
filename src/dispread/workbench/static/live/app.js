@@ -19,7 +19,7 @@ import {mountConfirm} from './setup/confirm.js';
 import {drawSetupTimeline, setupTimelineModel} from './setup/timeline.js';
 import {referenceModel, renderResult} from './run/result.js';
 import {runDockHTML, runTitle} from './run/dock.js';
-import {RUN_TABS, createRecordLog, renderRunInspector, runBadges, trackingModeText} from './run/inspector.js';
+import {RUN_BADGE_TONE, RUN_TABS, createRecordLog, renderRunInspector, runBadges, trackingModeText} from './run/inspector.js';
 import {createTimeline} from './run/timeline.js';
 import {mountBridgeDialog} from './run/bridge-dialog.js';
 import {mountMarkPopover, mountStartPopover} from './run/start-popover.js';
@@ -256,7 +256,7 @@ function renderInspector(host, status, ui) {
     `<button type="button" role="tab" data-scope="${key}" data-tab="${esc(tab)}" aria-controls="inspector-panel" ` +
     `aria-selected="${tab === current}" tabindex="${tab === current ? 0 : -1}">${esc(tab)}` +
     `${tab === 'Prüfungen' && warnings ? ` <span class="cnt">${warnings}</span>` : ''}` +
-    `${badges[tab] ? ` <span class="cnt err-t">${badges[tab]}</span>` : ''}</button>`).join(''));
+    `${badges[tab] ? ` <span class="cnt ${RUN_BADGE_TONE[tab] || 'err-t'}">${badges[tab]}</span>` : ''}</button>`).join(''));
   const pane = (name) => host.querySelector(`[data-pane="${name}"]`);
   for (const el of host.querySelectorAll('[data-pane]')) {
     el.hidden = runPhase ? el.dataset.pane !== 'run' : el.dataset.pane !== current;

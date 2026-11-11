@@ -1002,3 +1002,169 @@ def test_js_bridge_note_matches_python():
     assert match
     parts = re.findall(r"'([^']*)'", match.group(1))
     assert "".join(parts) == BRIDGE_RELEASE_NOTE
+
+
+@pytest.mark.parametrize('options', [
+    {'format': '5ch'}, {'format': '4ch', 'rate_hz': 11}, {'format': '4ch', 'rate_hz': True},
+    {'format': '4ch', 'prefix': '#'}, {'format': '4ch', 'max_frame_age_ms': 0},
+])
+def test_four_channel_options_are_checked_before_port_access(options):
+    from dispread.live.output import validate_output
+
+    with pytest.raises(ValueError):
+        validate_output({'port': '/fake/output', **options})
+
+
+def test_four_channel_defaults_and_explicit_legacy_bytes(tmp_path, monkeypatch):
+    from test_userdefined_formatter import record
+
+    from dispread.live.output import LiveOutput, validate_output
+
+    config = validate_output({'port': '/fake/output', 'format': '4ch'})
+    assert config['rate_hz'] == 10
+    port = FakeSerial(write_timeout=1.0)
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: port)
+    out = LiveOutput({'port': '/fake/output', 'format': '1ch'}, tmp_path / 'tx.jsonl')
+    out.start()
+    try:
+        out.submit(record())
+        deadline = time.monotonic() + 3
+        while out.status()['sent'] < 1:
+            assert time.monotonic() < deadline
+            time.sleep(.005)
+    finally:
+        out.stop()
+    assert port.writes == [b'%+1.7643\r\n']
+
+
+def start_ticked_output(tmp_path, monkeypatch, port, *, rate=10):
+    from test_live_tick import Clocks
+
+    from dispread.live.clock import ClockLog
+    from dispread.live.output import LiveOutput
+    from dispread.live.tick import TickTimebase
+
+    clocks = Clocks()
+    log = ClockLog(measure=lambda: 1000, monotonic_ns=lambda: clocks.now)
+    log.sample()
+    timebase = TickTimebase(log, clock=clocks.read, ntp_status='no')
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: port)
+    out = LiveOutput({'port': '/fake/output', 'format': '4ch', 'rate_hz': rate}, tmp_path / 'tx.jsonl',
+                     clock_ns=lambda: clocks.now, timebase=timebase)
+    out.start(clock_log=log)
+    return out, clocks
+
+
+def wait_output_count(out, count):
+    deadline = time.monotonic() + 3
+    while out.status()['sent'] < count:
+        assert time.monotonic() < deadline
+        time.sleep(.005)
+
+
+def test_four_channel_sender_ticks_without_camera_and_never_catches_up(tmp_path, monkeypatch):
+    from test_live_tick import captured
+
+    port = FakeSerial(write_timeout=1.0)
+    out, clocks = start_ticked_output(tmp_path, monkeypatch, port)
+    try:
+        out.submit(captured(90_000_000))
+        assert port.writes == []
+        clocks.now = 100_000_000
+        out._wake.set()
+        wait_output_count(out, 1)
+        clocks.now = 455_000_000
+        out._wake.set()
+        wait_output_count(out, 2)
+        clocks.now = 500_000_000
+        out._wake.set()
+        wait_output_count(out, 3)
+    finally:
+        out.stop()
+    assert port.writes == [b'%+1.7643;1;1;1794397184.090000\r\n',
+                           b'%99999999.0;0;4;1794397184.400000\r\n',
+                           b'%99999999.0;0;5;1794397184.500000\r\n']
+    status = out.status()['tick']
+    assert (status['valid'], status['invalid'], status['missed']) == (1, 2, 2)
+    tx = [json.loads(line) for line in (tmp_path / 'tx.jsonl').read_text().splitlines()]
+    assert [r['tx_sequence'] for r in tx] == [1, 4, 5]
+    assert all(r['invalid_policy'] == 'mark_record' and r['provisional'] for r in tx)
+
+
+def test_four_channel_stop_mid_write_finishes_exactly_one_telegram(tmp_path, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+
+    class Partial(FakeSerial):
+        def write(self, data):
+            if not self.writes:
+                self.writes.append(data[:2])
+                entered.set()
+                assert release.wait(3)
+                return 2
+            return super().write(data)
+
+    port = Partial(write_timeout=1.0)
+    out, clocks = start_ticked_output(tmp_path, monkeypatch, port)
+    clocks.now = 100_000_000
+    out._wake.set()
+    assert entered.wait(3)
+    stopping = threading.Thread(target=out.stop)
+    stopping.start()
+    try:
+        clocks.now = 900_000_000
+        release.set()
+        stopping.join(3)
+        assert not stopping.is_alive()
+        assert b''.join(port.writes) == b'%99999999.0;0;1;1794397184.100000\r\n'
+        assert port.closed
+    finally:
+        release.set()
+        out.stop()
+
+
+@pytest.mark.parametrize('test_run,ack', [(None, False), ({'testlauf': True}, True)])
+def test_four_channel_release_refused_before_any_port_open(tmp_path, monkeypatch, test_run, ack):
+    from dispread.live.session import StartRefused
+
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Port ohne Freigabe'))
+    with pytest.raises(StartRefused):
+        _session(tmp_path, [], output={'port': '/fake/output', 'format': '4ch',
+                                      'acknowledge_unaccepted': ack}, test_run=test_run)
+
+
+# --- B2 (2026-11-11): Format und Takt auch fuer die Brueckenwege uart/tcp -------------
+
+@pytest.mark.parametrize('transport', ['uart', 'tcp'])
+def test_bridge_output_without_format_stays_exactly_single_channel(transport):
+    from dispread.live.output import bridge_config, normalize_output
+
+    config = normalize_output({'transport': transport, 'acknowledge_unaccepted': True})
+    assert config == {'transport': transport, 'serial_port': '/dev/ttyAMA0', 'baudrate': 115200,
+                      'tcp_host': '0.0.0.0', 'tcp_port': 5000, 'max_frame_age_ms': 1000,
+                      'acknowledge_unaccepted': True}
+    assert bridge_config(config).to_dict() == {k: v for k, v in config.items() if k != 'acknowledge_unaccepted'}
+
+
+@pytest.mark.parametrize('transport', ['uart', 'tcp'])
+def test_bridge_output_accepts_four_channel_tick(transport):
+    from dispread.live.output import bridge_config, bridge_tick_options, normalize_output
+
+    config = normalize_output({'transport': transport, 'format': '4ch', 'acknowledge_unaccepted': True})
+    assert config['format'] == '4ch' and config['rate_hz'] == 10
+    assert bridge_tick_options(config) == {'tick_rate_hz': 10, 'tick_max_frame_age_ns': 1_000_000_000}
+    assert 'format' not in bridge_config(config).to_dict()
+    slow = normalize_output({'transport': transport, 'format': '4ch', 'rate_hz': 2.5, 'max_frame_age_ms': 400})
+    assert bridge_tick_options(slow) == {'tick_rate_hz': 2.5, 'tick_max_frame_age_ns': 400_000_000}
+    one = normalize_output({'transport': transport, 'format': '1ch'})
+    assert one['format'] == '1ch' and 'rate_hz' not in one and bridge_tick_options(one) == {}
+
+
+@pytest.mark.parametrize('value', [
+    {'format': '2ch'}, {'format': '4ch', 'rate_hz': 0}, {'format': '4ch', 'rate_hz': 11},
+    {'format': '4ch', 'rate_hz': True}, {'format': '1ch', 'rate_hz': 10}, {'rate_hz': 10},
+])
+def test_bridge_tick_options_are_validated(value):
+    from dispread.live.output import normalize_output
+
+    with pytest.raises(ValueError):
+        normalize_output({'transport': 'uart', **value})

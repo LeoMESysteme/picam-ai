@@ -43,14 +43,18 @@ from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.output import (
+    BRIDGE_4CH_RELEASE_NOTE,
     BRIDGE_RELEASE_NOTE,
+    SERIAL_4CH_RELEASE_NOTE,
     SERIAL_RELEASE_NOTE,
     LiveOutput,
     bridge_config,
+    bridge_tick_options,
     normalize_output,
     require_output_acknowledgement,
 )
 from dispread.live.recent import RecentStrip
+from dispread.live.region_hint import RegionConsistency
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
 from dispread.ocr.dotmatrix import DotMatrixReader
@@ -58,6 +62,7 @@ from dispread.pipeline import Pipeline, PipelineConfig
 from dispread.records import ValueRecord, ValueStatus, to_boottime_ns
 from dispread.session_profile import SessionProfile, require_live_profile
 from dispread.sink.jsonl import JsonlSink
+from dispread.sink.protocol.userdefined_4ch import checked_value_text
 from dispread.timing_calibration import load_calibration
 from dispread.validate import ReleaseGate, default_gate_config
 
@@ -91,9 +96,17 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+#: Felder, die nur die Auswahl bei der Einrichtung steuern, nie den Lauf.
+_SETUP_ONLY_TRACKING_FIELDS = frozenset({
+    "proposal_stability_peak_margin",
+    # TB 2026-11-11: strengere Auswahl; aeltere Profile bleiben startbar.
+    "proposal_min_peak_curvature", "proposal_max_photometric_shift_px",
+})
+
+
 def _run_start_tracking_config(config: dict) -> dict:
-    # Diese Marge bewertet nur Einrichtungsbilder, nicht bestaetigte Bereiche im Lauf.
-    return {key: value for key, value in config.items() if key != "proposal_stability_peak_margin"}
+    # Diese Grenzen bewerten nur Einrichtungsbilder, nicht bestaetigte Bereiche im Lauf.
+    return {key: value for key, value in config.items() if key not in _SETUP_ONLY_TRACKING_FIELDS}
 
 
 def build_live_pipeline(
@@ -245,7 +258,8 @@ class LiveSession:
             # Testfreigabe nur aus der Laufbestaetigung des Pi-Bedieners (R1).
             self._bridge_acknowledged = self._output_config['acknowledge_unaccepted'] is True
             self._output = output_factory(bridge_config(self._output_config), self._out_dir,
-                                          **({'release': TEST_RELEASE} if self._bridge_acknowledged else {}))
+                                          **({'release': TEST_RELEASE} if self._bridge_acknowledged else {}),
+                                          **bridge_tick_options(self._output_config))
             if self._bridge_acknowledged and getattr(self._output, 'release', None) != TEST_RELEASE:
                 raise StartRefused('Ausgabe: Testfreigabe vom Brückenweg nicht übernommen')
         self._output_error_saved = False
@@ -282,6 +296,12 @@ class LiveSession:
         self._rejection_window = RejectionWindow()
         self._tracking_advice: TrackingAdvice | None = None
         self._tracking_advice_warned = False
+        # TC 2026-11-11: Bereichshinweis, reine Diagnose ohne Rueckweg in den Messpfad.
+        self._region_consistency: RegionConsistency | None = None
+        self._region_consistency_warned = False
+        # TB 2026-11-11: laufende Schutzprobe und Ergebnisse je (Satz, Bereich).
+        self._region_probe: dict | None = None
+        self._region_probe_cache: dict = {}
         self._frames_read = 0
         self._frames_skipped = 0
         self._frame_gaps_start = 0
@@ -360,9 +380,12 @@ class LiveSession:
         if self._output is not None:
             try:
                 if self._output_transport == 'serial':
-                    self._output.start(reference_port=getattr(self._reference_recorder, 'port', None))
+                    self._output.start(reference_port=getattr(self._reference_recorder, 'port', None),
+                                       **({'clock_log': self._clock}
+                                          if self._output_config.get('format') == '4ch' else {}))
                 else:
-                    self._output.start()
+                    self._output.start(**({'clock_log': self._clock}
+                                          if self._output_config.get('format') == '4ch' else {}))
             except Exception as exc:
                 self.stop(reason='start_failed')
                 raise StartRefused(f'Ausgabe nicht gestartet: {exc}') from exc
@@ -407,6 +430,12 @@ class LiveSession:
             self._seen = sequence
             self._frames_skipped += skipped
             record = self._pipeline.process(frame, dropped_frames=skipped)
+            if self._output_config.get('format') == '4ch' and record.status is ValueStatus.VALID:
+                try:
+                    checked_value_text(record.raw_text)
+                except ValueError:
+                    record = replace(record, status=ValueStatus.UNREADABLE, value=None,
+                                     reject_reasons=('reserved_output_value',))
             # Testlauf sperrt die Freigabe vor Audit und jeder weiteren Ausgabe.
             gate_record = record
             suppressed = self._test_run is not None and record.status is ValueStatus.VALID
@@ -500,7 +529,9 @@ class LiveSession:
                         _LOG.warning('Bewegungsdiagnose ausgefallen: %s', exc)
                         self._tracking_advice_warned = True
                     self._tracking_advice.failed(self.latest_monotonic)
-            self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'])
+            regions = self._observe_regions(record.frame_sequence)
+            self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'],
+                                      regions=regions)
             if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
                 self._clock.sample()
                 self._last_clock = self._monotonic()
@@ -521,10 +552,123 @@ class LiveSession:
                     self._frame_info_warned = True
             return record
 
+    def _observe_regions(self, frame_sequence=None) -> list | None:
+        """Residuen je Rahmenbereich ins Hinweisfenster; erst nach geschriebenem Record.
+
+        Der Hinweis ist reine Bedienhilfe. Die Stilllegung (TB 2026-11-11) wirkt
+        erst ab dem naechsten Bild und nur ueber FrameTracker.disable_region mit
+        dessen harten Grenzen. Jeder Fehler hier laesst alle Bereiche aktiv
+        (strengster Zustand) und bricht den Lauf nicht ab.
+        """
+        try:
+            tracker = getattr(self._pipeline.locator, '_tracker', None)
+            regions = getattr(tracker, 'last_regions', None)
+            if not regions:
+                return None
+            if self._region_consistency is None:
+                self._region_consistency = RegionConsistency(
+                    tracker.sources, limit_px=tracker.config.max_inlier_residual_px)
+            self._region_consistency.observe([region.get('res1') for region in regions],
+                                             [region.get('v1') for region in regions])
+            self._maybe_disable_region(tracker, frame_sequence)
+            disabled = getattr(tracker, 'disabled', None) or ()
+            if disabled:
+                # images.jsonl: stillgelegte Bereiche additiv kennzeichnen.
+                regions = [{**region, 'off': True} if index in disabled else region
+                           for index, region in enumerate(regions)]
+            return regions
+        except Exception as exc:  # noqa: BLE001 - Bedienhilfe darf keinen Lauf abbrechen
+            if not self._region_consistency_warned:
+                _LOG.warning('Bereichsdiagnose ausgefallen: %s', exc)
+                self._region_consistency_warned = True
+            return None
+
+    def _maybe_disable_region(self, tracker, frame_sequence) -> None:
+        """Vorschlag des Fensters pruefen; Schutzprobe im Hintergrund; erst auditieren, dann stilllegen.
+
+        Ablauf (TB 2026-11-11): Das Fenster schlaegt hoechstens einen Bereich vor.
+        disable_refusal prueft Hoechstzahl und Reserve. Danach laeuft die
+        Schutzprobe (FrameTracker.bias_probe, einige Sekunden) in einem
+        Hintergrundthread auf einem eigenen Tracker. Erst wenn sie bestanden ist
+        UND das Fenster denselben Bereich weiter vorschlaegt, wird das Ereignis
+        geschrieben und der Bereich stillgelegt. Jede Unsicherheit laesst alle
+        Bereiche aktiv.
+        """
+        window = self._region_consistency
+        if not callable(getattr(tracker, 'disable_region', None)):
+            return
+        pending = self._region_probe
+        if pending is not None:
+            if pending['thread'].is_alive():
+                return
+            self._region_probe = None
+            result = pending.get('result')
+            self._region_probe_cache[(pending['base'], pending['index'])] = result
+            if result is None:
+                window.note_refused(pending['index'], 'schutzprobe_fehler', frame_sequence,
+                                    detail=pending.get('error'))
+                return
+        candidate = window.deactivation_candidate()
+        if candidate is None:
+            return
+        index = candidate['index']
+        refusal = tracker.disable_refusal(index)
+        if refusal is not None:
+            window.note_refused(index, refusal, frame_sequence)
+            return
+        base = frozenset(tracker.disabled)
+        key = (base, index)
+        if key not in self._region_probe_cache:
+            self._start_region_probe(tracker, base, index)
+            return
+        probe = self._region_probe_cache[key]
+        if probe is None:
+            return  # Probe ist gescheitert; Grund steht schon in deactivation_refused
+        if not probe.get('ok'):
+            window.note_refused(index, 'schutzprobe_verletzt', frame_sequence, detail=probe)
+            return
+        event = {'event': 'rahmenbereich_stillgelegt', 'frame_sequence': frame_sequence,
+                 'utc': self._wall().isoformat(), **candidate,
+                 'disabled_count': len(base) + 1, 'disabled_limit': tracker.disable_limit(), 'probe': probe}
+        # Ohne geschriebenes Ereignis keine Stilllegung (Fehler -> alle Bereiche bleiben aktiv).
+        with (self._out_dir / 'tracking_events.jsonl').open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(event, ensure_ascii=False) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        if not tracker.disable_region(index, probe):
+            raise RuntimeError(f'Stilllegung von Bereich {index + 1} unerwartet verweigert')
+        window.note_deactivated(event)
+        _LOG.info('Rahmenbereich %d automatisch stillgelegt (%.0f %% unstimmig, Bild %s)',
+                  index + 1, 100 * candidate['share'], frame_sequence)
+
+    def _start_region_probe(self, tracker, base, index) -> None:
+        """Schutzprobe im Hintergrund, niedrige Prioritaet; das Messen laeuft weiter."""
+        pending = {'base': base, 'index': index, 'result': None, 'error': None}
+
+        def work():
+            try:
+                os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 19)
+            except (AttributeError, OSError):
+                pass
+            try:
+                pending['result'] = tracker.bias_probe(base | {index})
+            except Exception as exc:  # noqa: BLE001 - ohne Probe keine Stilllegung
+                pending['error'] = f'{type(exc).__name__}: {exc}'
+
+        pending['thread'] = threading.Thread(target=work, name='rahmen-schutzprobe', daemon=True)
+        self._region_probe = pending
+        pending['thread'].start()
+
+    def region_deactivations(self) -> list[dict]:
+        """Stilllegungen dieses Laufs fuer Status und Werkbank; leer ohne Rahmenbereiche."""
+        window = self._region_consistency
+        return [] if window is None else window.deactivated()
+
     def _build_frame_info(self, sequence, record, track, coarse) -> dict:
         pipeline = self._pipeline
         tracker = getattr(pipeline.locator, '_tracker', None)
         regions = getattr(tracker, 'last_regions', None) or []
+        disabled = getattr(tracker, 'disabled', None) or ()
         read = pipeline.last_read
         diagnostics = read.diagnostics if read is not None and read.backend_id == 'dotmatrix' else {}
         cells = diagnostics.get('cells')
@@ -549,9 +693,11 @@ class LiveSession:
                 'rotation_deg': None if track is None else float(track.rotation_deg),
                 'reason': None if track is None else track.reason,
                 'correcting': bool(coarse is not None and coarse.used),
+                # TB: 'off' nur an stillgelegten Bereichen (additiv, wenige Bytes im X-Hud).
                 'regions': [{'c': list(region['c']), 's': region['s'],
-                             'peak': float(region['peak']), 'ok': bool(region['ok'])}
-                            for region in regions],
+                             'peak': float(region['peak']), 'ok': bool(region['ok']),
+                             **({'off': True} if index in disabled else {})}
+                            for index, region in enumerate(regions)],
             },
             'cells': [{'i': i, 'best': cell['best'], 'margin': cell['margin'],
                        'uncertain': cell['margin'] < 0} for i, cell in enumerate(cells)],
@@ -580,6 +726,11 @@ class LiveSession:
     def tracking_hint(self) -> dict | None:
         """Bedienhilfe mit monotoner Verlustdauer; kein Freigabeentscheid."""
         return None if self._tracking_advice is None else self._tracking_advice.snapshot(self._monotonic())
+
+    def region_hint(self) -> dict | None:
+        """Bereich(e) dauerhaft unstimmig, letzte Auswertung; auch nach dem Stopp. Kein Freigabeentscheid."""
+        window = self._region_consistency
+        return None if window is None else window.snapshot()
 
     def latest_age_s(self) -> float | None:
         """Alter der letzten Ablesung fuer die STALE-Anzeige, ohne neuen Datensatz."""
@@ -719,8 +870,9 @@ class LiveSession:
         status = self._output.status()
         if self._output_transport == 'serial':
             return status
+        note = BRIDGE_4CH_RELEASE_NOTE if self._output_config.get('format') == '4ch' else BRIDGE_RELEASE_NOTE
         return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt',
-                **({'release_note': BRIDGE_RELEASE_NOTE} if self._bridge_acknowledged else {})}
+                **({'release_note': note} if self._bridge_acknowledged else {})}
 
     def unified_output_status(self) -> dict:
         """serial_ready: lokaler P4-3-Treiber bereit, kein GSVmulti-Empfang.
@@ -737,11 +889,12 @@ class LiveSession:
         return {
             'transport': 'serial',
             **self._output.delivery_status(),
+            **({'tick': status['tick']} if 'tick' in status else {}),
             'config': dict(self._output_config),
             'error': status['first_error'],
             'release_block': None,
             'acceptance': 'fehlt',
-            'release_note': SERIAL_RELEASE_NOTE,
+            'release_note': SERIAL_4CH_RELEASE_NOTE if 'tick' in status else SERIAL_RELEASE_NOTE,
         }
 
     def _write_session(self, *, ended: bool) -> None:
@@ -792,6 +945,9 @@ class LiveSession:
         data['last_mark'] = self.last_mark
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
+        if self._region_consistency is not None:
+            # Nur mit Rahmenbereich-Nachfuehrung; andere Modi behalten ihre bisherigen Bytes.
+            self.summary['tracking_region_hint'] = self._region_consistency.summary()
         if getattr(self._reference_recorder, 'reconfiguration_enabled', False):
             self.summary['reconfiguration_suppressed'] = self._reconfiguration_suppressed
         if self._test_run is not None:

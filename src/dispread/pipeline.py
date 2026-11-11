@@ -78,13 +78,19 @@ class Pipeline:
         self._frames_since_locate = 0
 
     def component_versions(self) -> dict[str, str]:
-        return {
+        versions = {
             "dispread": __version__,
             "locator": self.locator.locator_id,
             "reader": f"{self.reader.backend_id}",
             "gate": "1",
             "source": self.source.source_id,
         }
+        # Additiver Lokalisierungszustand (z. B. stillgelegte Rahmenbereiche);
+        # vorhandene Schluessel werden nie ueberschrieben.
+        extra = getattr(self.locator, "component_extra", None)
+        if callable(extra):
+            versions.update({str(key): str(value) for key, value in extra().items() if key not in versions})
+        return versions
 
     def process(self, frame: Frame, *, dropped_frames: int = 0) -> ValueRecord:
         """Einen Frame verarbeiten und den Datensatz erzeugen.

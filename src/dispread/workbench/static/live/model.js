@@ -94,6 +94,70 @@ export function trackingHintText(hint) {
   return '';
 }
 
+// TC 2026-11-11: Rahmenbereich dauerhaft unstimmig (status.run.region_hint,
+// dispread.live.region_hint). Reine Diagnose: kein Freigabeentscheid, Werte
+// bleiben geschuetzt. Nummern 1-basiert wie Lauf-HUD und Bereichsbearbeitung.
+function hintRegions(hint) {
+  const regions = Array.isArray(hint?.regions) ? hint.regions : [];
+  const valid = regions.every((r) => Number.isInteger(r?.number) && Number.isInteger(r?.index) && r.index >= 0
+    && Number.isFinite(r?.share));
+  return valid ? [...regions].sort((a, b) => a.number - b.number) : [];
+}
+
+const joinDe = (items) => (items.length < 2 ? items.join('')
+  : `${items.slice(0, -1).join(', ')} und ${items.at(-1)}`);
+
+export function regionHintIndices(hint) {
+  return hintRegions(hint).map((r) => r.index);
+}
+
+export function regionHintText(hint) {
+  const regions = hintRegions(hint);
+  if (!regions.length) return '';
+  const numbers = joinDe(regions.map((r) => String(r.number)));
+  const shares = joinDe(regions.map((r) => `${Math.round(100 * r.share)} %`));
+  const one = regions.length === 1;
+  return `${one ? 'Rahmenbereich' : 'Rahmenbereiche'} ${numbers} ${one ? 'ist' : 'sind'} dauerhaft unstimmig ` +
+    `(${shares} der Bilder). Werte bleiben geschützt; es gehen nur Werte verloren. ` +
+    `Nach dem Lauf neu einrichten und ${one ? 'Bereich' : 'Bereiche'} ${numbers} entfernen.`;
+}
+
+export function regionHintShort(hint) {
+  const regions = hintRegions(hint);
+  if (!regions.length) return '';
+  return `${regions.length === 1 ? 'Bereich' : 'Bereiche'} ${joinDe(regions.map((r) => String(r.number)))} unstimmig`;
+}
+
+// TB 2026-11-11: automatisch stillgelegte Rahmenbereiche (status.run.region_deactivated,
+// dispread.live.region_hint). Ruhiger Info-Ton: die Nachführung läuft mit den
+// übrigen Bereichen weiter, Prüfgrenzen unverändert; kein "bitte entfernen".
+function deactivatedRegions(list) {
+  const items = Array.isArray(list) ? list : [];
+  const valid = items.every((r) => Number.isInteger(r?.number) && Number.isInteger(r?.index) && r.index >= 0
+    && Number.isFinite(r?.share));
+  return valid ? [...items].sort((a, b) => a.number - b.number) : [];
+}
+
+export function regionDeactivatedIndices(list) {
+  return deactivatedRegions(list).map((r) => r.index);
+}
+
+export function regionDeactivatedText(list) {
+  const regions = deactivatedRegions(list);
+  if (!regions.length) return '';
+  const one = regions.length === 1;
+  return `${one ? 'Bereich' : 'Bereiche'} ${joinDe(regions.map((r) => String(r.number)))} automatisch stillgelegt ` +
+    `(${joinDe(regions.map((r) => `${Math.round(100 * r.share)} %`))} unstimmig)`;
+}
+
+// Hinweis ohne stillgelegte Bereiche: für sie entfällt "entfernen".
+export function activeRegionHint(hint, deactivated) {
+  const off = new Set(regionDeactivatedIndices(deactivated));
+  if (!off.size || !Array.isArray(hint?.regions)) return hint;
+  const regions = hint.regions.filter((r) => !off.has(r?.index));
+  return regions.length ? {...hint, regions} : null;
+}
+
 export function connectionLost(lastOkMs, nowMs, httpStatus) {
   return httpStatus === null || httpStatus < 200 || httpStatus >= 300 ||
     lastOkMs === null || nowMs - lastOkMs > 1500;

@@ -35,6 +35,106 @@ was ist die Konsequenz.
   Validierte Pi-Antworten zählen für die Aktivitätsanzeige; PnP-Inventur gecacht und
   Windows-Subprozesse ohne Konsolenfenster. Keine Windows-/Hardwareabnahme in dieser Session.
 
+* 2026-11-11: **Nachführung: Rahmenbereiche automatisch robust (TB, Freigabe Leonhard, Punkte 1 und 2).**
+  Problem: Glanz- und Fasenbereiche bewegen sich bei Lichtänderung nicht starr mit und kosten im Lauf bis
+  24 % der Bilder (`rahmen_unstimmig`); bisher half nur manuelles Entfernen nach dem Lauf.
+  * *Einrichtung:* Automatische Kandidaten mit flachem Autokorrelationsgipfel (Krümmung < 0,08) **und**
+    lichtabhängiger Lage (> 0,12 px unter Gamma-, Glanz- und Hellproben) werden nicht mehr gewählt
+    (`proposal_min_peak_curvature`, `proposal_max_photometric_shift_px`, `metrics.localisation_weak_candidates`).
+    Kalibriert an 55 Einrichtungen; alle 53 geeigneten bleiben geeignet. Offline auf den Diagnosebildern:
+    103604Z 221/222 statt 113/222, 122753Z 221/222 statt 112/222. Ältere Profile bleiben startbar.
+  * *Stilllegung im Lauf:* Dieselbe Fensterauswertung wie der TC-Hinweis schlägt einen Bereich vor, wenn er
+    über volle 300 Bilder in ≥ 50 % die Grenze reißt, der Rest im Median < 0,4 px liegt und er mit keinem
+    anderen Bereich gleichläuft. Harte Grenzen: höchstens 3 Bereiche bzw. 15 %; Mindestzahl, Streuung und
+    Reserve wie bei der Einrichtung; dazu eine Schutzprobe am Referenzbild (Raster des Tests
+    „koordinierter lokaler Bias“, kein angenommenes Quad > 1,0 px falsch), die im Hintergrund läuft. Ohne
+    Probe wäre es unsicher: Im Fixture setzt eine ganze Seite ohne Bereich 2 oder 11 eine 3,5 px falsche
+    Lage durch. Der Bereich wird ab dem nächsten Bild nicht mehr gesucht, wirkt also wie ein Vorschlag
+    ohne ihn. Prüfgrenze 0,65 px, RMS 0,35 px, RANSAC 1,5 px und alle übrigen Schwellen bleiben unverändert.
+  * *Audit:* Ereignis vor der Stilllegung in `tracking_events.jsonl` (Bild, Bereich, Anteil, Median,
+    Rest-Median, Gleichlaufmaß, Probe), `summary.tracking_region_hint.deactivated`, additiv
+    `component_versions.locator_regions_disabled` in jedem folgenden Datensatz und `off` je Bereich in
+    `diagnose/images.jsonl`. Schlägt das Schreiben fehl, bleibt der Bereich aktiv.
+  * *Werkbank:* Statusleiste und Inspektor (Nachführung) zeigen „Bereich N automatisch stillgelegt
+    (x % unstimmig)“ ohne Statusfarbe; der Hinweis „entfernen“ entfällt für stillgelegte Bereiche, das Bild
+    zeichnet sie nicht mehr als Verlust. Status: `run.region_deactivated`.
+  * *Konsequenz:* Neu eingerichtete Geräte wählen die bekannten Problemstellen nicht mehr; ältere Profile
+    verlieren sie nach etwa 10 s im Lauf. Die Lauf-Gültigquote unter aktiver Laständerung (122753Z: 59 %)
+    hängt danach vor allem an `anzeige_wechselt` (18 %); ≥ 75 % ist offline nicht belegt. Nachweis im echten
+    Lauf steht aus.
+* 2026-11-11: **GSVmulti-Vierkanal-Takt über die Brücke (B2, nicht abgenommen).** Problem: Über
+  UART-Brücke und Netzwerk gingen nur gültige Werte als volle `record`-Nachricht nach Windows, latest-only;
+  ungültige Abschnitte und verlorene Werte fehlten in GSVmulti ohne Lücke. Neu, additiv zu Protokoll v2:
+  `output.format: '4ch'` (und `rate_hz` 1–10, Vorgabe 10) gilt jetzt auch für `uart`/`tcp`; ohne
+  `format` bleibt der Einkanalweg bytegleich. Der Pi entscheidet jeden Takt mit demselben `Ticker` wie
+  UART direkt, auditiert ihn in `output.jsonl` **vor** dem Angebot und bietet die Takte der Reihe nach als
+  kompakte Nachricht `tick` an (`seq`, `valid`, `value_text`, `frame_sequence`, `time_unix_ns`,
+  `origin_unix_ns`, `rate_hz`, `release`; Quittung `tick_ack` mit `filled`). Höchstens 50 Takte warten;
+  ältere gelten als verloren und bleiben in der Taktnummer sichtbar. Takte gibt es nur bei bestätigter
+  Testfreigabe und nur an Clients mit Hello-Fähigkeit `tick: 1`; alte Clients bleiben gesperrt
+  (`TICK_CLIENT_BLOCK`). Windows formatiert mit dem `TickFormatter`, füllt einen Sprung von *n* auf *n+k*
+  mit *k−1* Fehlwertzeilen (`99999999.0`, gültig 0, Nominalzeit) auf, bei mehr als 50 nicht (Lücke im
+  Journal, `tick_disturbed`). Jede Zeile, auch jede Auffüllung, steht vor dem COM-Schreiben im
+  `DeliveryJournal` (neue Tabellen `ticks`, `tick_gaps`); eine offene Zeile sperrt die Ausgabe. Kein Takt
+  wird zweimal geschrieben, kein Wert nachgereicht. Status: Pi `output.tick` mit `offered`,
+  `acknowledged`, `unconfirmed`, `lost`, `queued`; Windows `WorkerStatus.ticks_written`,
+  `ticks_invalid`, `ticks_filled`, `tick_disturbed`.
+  Linux-E2E (pty und TLS, Fake-COM, kein Windows-/GSVmulti-Nachweis) über je 6000 Takte im Zeitraffer
+  mit virtueller Pi-Taktuhr und Gegendruck (lastunabhängig), unlesbaren und dunklen Phasen, drei
+  Pi-Aussetzern (11 verpasste Takte) und zwei Windows-Staus über das Fenster (20 verlorene Takte): auf
+  beiden Wegen 6000 Zeilen = 6000 Takte, Folge lückenlos, 31 Auffüllzeilen bytegenau mit Nominalzeit,
+  5479 gültige Zeilen, kein Bild doppelt, nur frische Bilder. Ein Stau über 120 Takte ergibt den Sprung
+  um 71 > 50: nicht aufgefüllt, Journal-Lücke, `tick_disturbed`. Echtzeit 10 Hz über 600 Takte ohne Staus:
+  Latenz Pi-Takt → COM-Zeile p50/p99 8,8/52 ms (pty) bzw. 10,0/83 ms (TLS), nichts verloren.
+  **UART-Kapazität:** Ein Takt kostet mit Poll, Quittung und Idle etwa 1,2 kB (Taktnachricht 410 Byte),
+  dazu kommen Leerlauf-Polls. Auf 115 200 Baud gedrosselt fällt die Brücke zurück (p50 ≈ 5 s, 97 von 600
+  Takten verloren, Laufende abgeschnitten); auf 460 800 Baud 600/600 Zeilen, p50/p99 22,6/44,5 ms. Der
+  Vierkanal-Takt über die UART-Brücke braucht deshalb die Baudrate aus `feat/bruecke-ux`.
+  `uart.py` bleibt hier unverändert; Windows-UI, Werkbank-Frontend und Abnahme sind
+  nicht Teil von B2. Doku: `docs/BRIDGE_PROTOCOL_V2.md`, Abschnitt Taktnachricht.
+* 2026-11-11: **Einrichtung: Hinweise zu Rahmenbereichen entrümpelt (T3).** Die Bereichsbearbeitung
+  zeigte je Stelle des letzten Laufs eine gelbe Zeile, auch „dort liegt kein Bereich“, das ist der gute
+  Fall. Jetzt erscheint ein Hinweis nur, wenn im neuen Vorschlag ein Bereich (Toleranz 8 px) an einer
+  dauerhaft unstimmigen Stelle liegt: Anteil ≥ 0,30 und mehrfach markiert, höchstens 3, stärkste zuerst.
+  Bei neuer Aufstellung (Anzeige-Viereck um mehr als 12 px verschoben) wird nichts verglichen. Der Dienst
+  reicht dafür nur dauerhaft Unstimmiges samt Zähler und Viereck in `previous_region_hint` weiter.
+  Messpfad, Tracker und `session.json` bleiben unverändert.
+* 2026-11-11: **GSVmulti-Vierkanal-Takt für UART direkt (B1, noch nicht abgenommen).**
+  Neues Format `gsvmulti_userdefined_4ch_v1` mit `MARK_RECORD`: pro Takt
+  `%wert;gültig;takt;zeit\r\n`, bei ungültigem Takt genau `99999999.0` und Gültigkeit 0.
+  `format: '4ch'` aktiviert 1–10 Hz (Vorgabe 10); das feste Monotonraster holt
+  verpasste Takte nicht nach. Nur frische Bilder aus dem aktuellen Rasterfenster
+  werden gültig gesendet; derselbe Rahmen nie zweimal, derselbe Zahlenwert aus
+  einem neuen Bild ist erlaubt. Reservierter Fehlwert-Anzeigetext wird vor dem
+  Audit als UNREADABLE abgelehnt. Erfassungszeit über `records.to_boottime_ns`
+  und den geklammert gemessenen REALTIME−MONOTONIC-Startversatz; spätere
+  Uhrsprünge ändern den Zeitkanal nicht und werden protokolliert. `session.json`
+  erhält `output.tick` mit Taktstatistik, Uhrversatz, NTP-Status und unbekannter
+  Zeitunsicherheit (`null`); Zeitsemantik bleibt wegen OQ-43 provisional.
+  Testfreigabe bleibt Pflicht, Testläufe erzeugen keine externe Ausgabe.
+  `format: '1ch'` und alte Konfigurationen ohne Format behalten die bisherigen
+  Einkanalbytes; U1 muss Vierkanal als neue Vorgabe explizit auswählen.
+  **Brückentransport und Windows-Auffüllen kommen erst in B2**, Werkbank-/EXE-UI
+  und Hardware-/GSVmulti-Abnahme sind nicht Teil von B1.
+* 2026-11-11: **Nachführung: Diagnose je Rahmenbereich und Hinweis „Rahmenbereich N dauerhaft unstimmig“ (TC, reine
+  Diagnose).** Anlass: Brückentest `live-20261111T103604Z/run-01` mit 24 % `tracking_lost:rahmen_unstimmig`. Ursache war
+  ein einzelner Bereich auf einer Glanzlinie der Fase (in der Werkbank Bereich 6), der sich nach einer Lichtänderung
+  nicht mehr starr mitbewegt. Das war im Lauf nicht zu sehen. Neu: `FrameTracker.last_regions` trägt je Bereich
+  `res1`/`res2` (Abstand zum Erst-/Zweitfit in px, auch für Ausreißer und abgelehnte Bilder); `diagnose/images.jsonl`
+  schreibt sie je Bild mit (`tracking.regions`, additiv). `dispread.live.region_hint` wertet die Erstfit-Residuen
+  über 300 Bilder aus: auffällig, wenn ein Bereich in ≥ 30 % seiner Bilder die Prüfgrenze
+  `max_inlier_residual_px` (0,65 px, aus der Tracker-Konfiguration) reißt und der Rest im Median < 0,40 px liegt,
+  frühestens nach 150 Bildern. Live-Status `run.region_hint`, nach dem Lauf `previous_region_hint` (für die
+  Neueinrichtung), `session.json` `summary.tracking_region_hint` (nur bei Rahmenbereich-Nachführung, sonst
+  bleibt die Datei byte-gleich). Werkbank `/live`: ruhiger Warnhinweis in Statusleiste und Inspektor
+  (Nachführung, mit Abzeichen) „Rahmenbereich 6 ist dauerhaft unstimmig (92 % der Bilder). Werte bleiben
+  geschützt; es gehen nur Werte verloren. Nach dem Lauf neu einrichten und Bereich 6 entfernen.“, der Bereich
+  ist im Bild in Warnfarbe mit Nummer markiert. In der Bereichsbearbeitung der Neueinrichtung wird er über die Lage
+  (≤ 8 px) wiedergefunden und mit alter und neuer Nummer benannt, da eine Neueinrichtung neu nummerieren kann.
+  **Freigabe, Schwellen, RANSAC, Akzeptanzentscheidung und ValueRecord bleiben bitgleich**: Tests mit und ohne
+  Residuenrechnung auf synthetischen Szenen und exakter Vergleich von Grund, Score, Lage und Quad gegen alle 222
+  Diagnosebilder des Laufs (`test_tc_echtlauf_20261111_…`, meldet dort genau Bereich 6). Die Einrichtungsregel,
+  solche Bereiche gar nicht erst zu wählen, ist nicht Teil davon (OQ-63).
 * 2026-11-11: **Brücke: Verbindungsabbruch bei jedem Wechsel gültig → ungültig behoben (Brückentest mit echten Werten).**
   Befund im Lauf `live-20261111T095426Z/run-01` (Netzwerk, Testfreigabe): 1 560 Werte an COM übergeben, aber alle 2–15 s
   ein Abbruch von ca. 2 s; jedes Mal beim ersten Übergangswert nach gültigen Werten (`offered` und `unconfirmed` in

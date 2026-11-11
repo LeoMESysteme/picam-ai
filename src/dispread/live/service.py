@@ -35,6 +35,7 @@ from dispread.live.output import normalize_output, require_output_acknowledgemen
 from dispread.live.preview import PreviewEncoder, PreviewFrame, RateGovernor
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.reference_eval import evaluate_records, validate_reference_session
+from dispread.live.region_hint import MIN_SHARE
 from dispread.live.session import LiveConfig, LiveSession
 from dispread.live.storage import cleanup_runs
 from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
@@ -187,6 +188,8 @@ class LiveService:
         self._error: str | None = None
         self._session_dir: Path | None = None
         self._proposal: dict | None = None
+        # TC 2026-11-11: auffaellige Bereiche des letzten Laufs fuer die Neueinrichtung, nur Anzeige.
+        self._previous_region_hint: dict | None = None
         self._setup_grid: dict | None = None
         self._stability_frames: tuple[np.ndarray, ...] = ()
         self._run_block: str | None = None
@@ -335,6 +338,11 @@ class LiveService:
                     "tracking": dict(getattr(self._session, "tracking", {})),
                     "tracking_hint": (self._session.tracking_hint()
                                       if hasattr(self._session, "tracking_hint") else None),
+                    "region_hint": (self._session.region_hint()
+                                    if hasattr(self._session, "region_hint") else None),
+                    # TB 2026-11-11: automatisch stillgelegte Rahmenbereiche, in Reihenfolge.
+                    "region_deactivated": (self._session.region_deactivations()
+                                           if hasattr(self._session, "region_deactivations") else []),
                 }
                 if hasattr(self._session, "rejection_causes"):
                     causes = self._session.rejection_causes()
@@ -360,6 +368,7 @@ class LiveService:
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
+                "previous_region_hint": deepcopy(self._previous_region_hint),
                 "output": (self._session.unified_output_status()
                            if self._session is not None and hasattr(self._session, 'unified_output_status')
                            else {"transport": "off", "state": "off"}),
@@ -895,10 +904,11 @@ class LiveService:
             from dispread.bridge.hub import BridgeOccupied
             from dispread.bridge.publisher import PairedOutputPublisher
 
-            def output_factory(config, out_dir, *, release=None):
-                # release kommt nur aus der Laufbestaetigung (LiveSession), R1.
+            def output_factory(config, out_dir, *, release=None, **tick):
+                # release kommt nur aus der Laufbestaetigung (LiveSession), R1;
+                # tick (B2) nur aus format=4ch der Laufkonfiguration.
                 return PairedOutputPublisher(config, out_dir, hub=self._bridge_hub, run_id=run_id,
-                                             release=release)
+                                             release=release, **tick)
 
             if output['transport'] in ('tcp', 'uart') and self._bridge_hub is None:
                 raise LiveError('paired bridge hub is not configured')
@@ -957,6 +967,7 @@ class LiveService:
                     self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
                                                if getattr(s, 'diagnose_kopie', False)]
                     self._session, self._run_stop, self._state, self._error = session, stop, "running", None
+                    self._previous_region_hint = None
                     self._run_dir = out_dir
                     self._test_run = test_run
                     self._run_reference = reference
@@ -999,6 +1010,19 @@ class LiveService:
         if self._bridge_hub is not None:
             self._bridge_hub.release_real_run(getattr(session, 'bridge_run_id', None))
         self._state, self._error = 'stopped', error
+        summary = getattr(session, 'summary', None)
+        hint = summary.get('tracking_region_hint') if isinstance(summary, dict) else None
+        # T3: nur dauerhaft Unstimmiges (Anteil und mehrfach markiert) wandert in die Einrichtung;
+        # einmal kurz Aufgefallenes ist Rauschen. Das Viereck erlaubt, neue Aufstellungen zu erkennen.
+        regions = [r for r in ((hint.get('regions') if isinstance(hint, dict) else None) or [])
+                   if r.get('max_share', 0) >= MIN_SHARE and r.get('flagged_evaluations', 0) >= 2]
+        grid = self._setup_grid
+        self._previous_region_hint = None if not regions else {
+            'session_id': None if self._session_dir is None else self._session_dir.name,
+            'run': None if self._run_dir is None else self._run_dir.name,
+            'quad': deepcopy(grid.get('quad')) if isinstance(grid, dict) else None,
+            'regions': [{'number': r['number'], 'centre': list(r['centre']), 'max_share': r['max_share'],
+                         'flagged_evaluations': r['flagged_evaluations']} for r in regions]}
         if self._run_reference:
             self._reference_eval = {'state': 'running'}
             threading.Thread(target=self._reference_eval_worker, args=(session, self._run_dir),
