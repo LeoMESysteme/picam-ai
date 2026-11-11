@@ -32,6 +32,11 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 - **Statuswörter:** Die ergänzten Wörter („Unbekannt“, „Keine Weitergabe“, „nicht verbunden“, „Testfreigabe“) in die Spec §10 übernehmen.
 - **Alter Controller (OQ-61):** S1, S2 und S4 sind umgesetzt; S3 und S5–S9 folgen erst nach dem Test. Der Datensatz-Sammelmodus bleibt, weil er für die invertierten GSV-Anzeigen gebraucht wird. Siehe Audit in `.superpowers/sdd/2026-11-06-bruecke-ui/oq61-audit.md`.
 - **Abnahmegates:** N1, N2 und N3 auf Windows (Paket, Treiber, Sessionexport) bleiben offen.
+- **Auslieferung der Windows-App vereinfachen (Leonhard, 2026-11-11):** Der Testbau ist zu umständlich und hat zu viele Bruchstellen (Branch in Forgejo wählen, ZIP laden und entpacken, Skriptordner suchen, ExecutionPolicy umgehen, 3–4 min Build, EXE suchen). Für Prod soll der Bediener nur noch einen Installer herunterladen. Ziel:
+  1. Ein Windows-Runner (Forgejo-Runner auf einem Labor-PC) baut `Setup.exe` bei Tag/Merge und legt sie als Release-Anhang ab.
+  2. Die Werkbank bietet im Brücken-Dialog Schritt 1 genau diesen zum Pi-Stand passenden Installer zum Download an.
+  3. Die App prüft beim Verbinden die Protokoll-/Versionspassung und sagt, wenn sie veraltet ist.
+  - Übergangslösung bis dahin: `build.cmd` als Doppelklick-Starter (ruft PowerShell mit `-ExecutionPolicy Bypass`, findet Python 3.13 selbst und öffnet am Ende den Ausgabeordner).
 
 ---
 
