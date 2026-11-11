@@ -104,3 +104,9 @@ Belege liegen in [`docs/quellen/gsvmulti-versuche-2026-11-11/`](../../docs/quell
 - Das passt zu den Läufen 13/14: Mit `Separator = 0` gab es dort auch bei gültigen Zahlen nur Timeout. Mit `Separator = 256` (Lauf 11, Versuch 1a) wurde angenommen.
 - **Arbeitshypothese, nicht belegt:** Das Rohfeld `Separator` kodiert Trennzeichen und Filter gemeinsam; der Wert 256 steht für „Filter an“. Der Filter muss an bleiben.
 - `NumChan` blieb bei 1; die Einstellung für 4 Werte ist nicht in der Session angekommen.
+
+**Session-Feld `Separator` (2026-11-11, aus drei Sessions abgeleitet):**
+- Der Wert ist `256 × Filter + ASCII des Trennzeichens`. Beim Wert 0 ist das Trennzeichen „unused“.
+- Belegt sind: `0` (Filter aus, unused), `256` (Filter an, unused), `315 = 256 + 59` (Filter an, `;`).
+- Für die Vierkanal-Session gilt: `NumChan = 4`, `Separator = 315`, Kanäle über „Open all input channels“.
+- Im Define-Dialog muss das Dropdown „Value Separator“ gewählt sein. Das Feld „Separator Char“ allein reicht nicht.
