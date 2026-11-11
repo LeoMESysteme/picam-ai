@@ -157,3 +157,7 @@ Belege liegen in [`docs/quellen/gsvmulti-versuche-2026-11-11/`](../../docs/quell
   - Diese muss der Bediener in jeder GSVmulti-Installation selbst setzen. Sonst fehlen Gültigkeit, Sequenz und Zeit still in der Aufnahme.
   - Laut Leonhard bleibt die Einstellung offenbar nicht in der Session erhalten. Ob GSVmulti sie programmweit speichert, ist offen.
   - App (Einrichtung Schritt 4) und Wiki müssen darauf ausdrücklich hinweisen.
+
+**Vorlage `vorlage-4kanal-mvv.ucf` (Leonhard, 2026-11-11):**
+- Vierkanal-Session für die Session-Erzeugung der EXE.
+- Sie entspricht `versuch2b-session-hidden.ucf`, nur Kanal 8_1 trägt zusätzlich `Unit = "mV/V"`. 8_2–8_4 sind ausgeblendet und ohne Einheit.
