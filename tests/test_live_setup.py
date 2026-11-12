@@ -347,7 +347,9 @@ def test_assist_retry_uses_successful_mean_text_hint_and_timestamp(monkeypatch, 
     np.testing.assert_array_equal(cv2.imread(str(tmp_path / "stability.png")), result.second)
     assert isinstance(result.stability_frames, tuple)
     assert [int(frame[0, 0, 0]) for frame in result.stability_frames] == [28, 36]
-    assert {path.name for path in tmp_path.glob('*.png')} == {'still.png', 'stability.png'}
+    # OQ-74: Das Mittelbild des abgelehnten ersten Versuchs bleibt erhalten.
+    assert {path.name for path in tmp_path.glob('*.png')} == {'still.png', 'stability.png', 'still-versuch-1.png'}
+    assert int(cv2.imread(str(tmp_path / 'still-versuch-1.png'))[0, 0, 0]) == 11
     assert result.first_text == result.second_text == "new"
     assert result.setup_attempt == 2
     assert checked[0][0] is result.first and checked[0][1] is fit
@@ -1041,3 +1043,237 @@ def test_focus_roi_pixels_equal_actual_measurement_crop(size, hint, expected):
     assert roi == expected
     x, y, w, h = roi
     np.testing.assert_array_equal(live_setup.measurement_roi(gray, hint), gray[y:y + h, x:x + w])
+
+
+# --- OQ-74: Fokus-ROI aus der LCD-Hinweisbox, Endpruefung nach Kameraneustart ---
+
+def _green_hint_frame(size=(600, 240), box=(50, 60, 500, 120)):
+    """Gruen leuchtende Punktmatrix wie bei ExposureCamera, Lage frei waehlbar."""
+    width, height = size
+    x, y, w, h = box
+    image = np.full((height, width, 3), 90, np.uint8)
+    green = (58, 175, 104)
+    image[y:y + h, x:x + w] = green
+    for cy in range(y + 25, y + h - 15, 15):
+        for cx in range(x + 30, x + w - 25, 20):
+            cv2.circle(image, (cx, cy), 3, tuple(round(c * .3) for c in green), -1)
+    return image
+
+
+def _covered(outer, inner):
+    """Anteil der Flaeche von `inner`, der in `outer` liegt (beide x,y,w,h)."""
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    dx = max(0.0, min(ox + ow, ix + iw) - max(ox, ix))
+    dy = max(0.0, min(oy + oh, iy + ih) - max(oy, iy))
+    return dx * dy / (iw * ih)
+
+
+def test_focus_hint_box_is_lcd_hint_with_small_margin_clipped_to_image():
+    image = _green_hint_frame()
+    hint = live_setup.find_green_hint_box(image)
+    box = live_setup.focus_hint_box(image)
+    assert hint is not None and box is not None
+    assert _covered(box, hint) == pytest.approx(1.0)
+    # Kleiner Rand: je Seite hoechstens FOCUS_ROI_MARGIN_FRACTION der Boxgroesse.
+    margin = live_setup.FOCUS_ROI_MARGIN_FRACTION
+    assert box[2] <= hint[2] * (1 + 2 * margin) + 1e-9
+    assert box[3] <= hint[3] * (1 + 2 * margin) + 1e-9
+    # Randnahe Box: der Rand wird auf das Bild begrenzt.
+    edge = live_setup.focus_hint_box(_green_hint_frame(box=(0, 0, 500, 120)))
+    assert edge is not None
+    assert edge[0] >= 0 and edge[1] >= 0
+    assert edge[0] + edge[2] <= 1 + 1e-9 and edge[1] + edge[3] <= 1 + 1e-9
+
+
+@pytest.mark.parametrize('image', [
+    np.full((240, 600, 3), 90, np.uint8),          # keine Gruenflaeche
+    np.full((12, 12), 128.0),                     # Graubild ohne Farbe (Fokus-Fakes)
+    None,                                         # noch kein Vorschaubild
+])
+def test_focus_hint_box_none_without_green_lcd(image):
+    assert live_setup.focus_hint_box(image) is None
+
+
+def test_focus_camera_records_roi_means_and_verify_frame(monkeypatch):
+    cam = HysteresisCamera(52)
+    monkeypatch.setattr(live_setup, "sharpness", lambda roi: float(roi[0, 0]))
+    _, measured = live_setup.focus_camera(cam, None, start_focus=42, settle_s=0, sleep=lambda _s: None)
+    assert set(measured.roi_means) == {focus for focus, _ in measured}
+    assert all(mean > 0 for mean in measured.roi_means.values())
+    assert measured.verify_frame is not None and measured.verify_frame.shape == (12, 12)
+    assert measured.verify_roi_mean == pytest.approx(float(measured.verify_frame.mean()))
+
+
+class RestartFocusCamera(FakeSetupCamera):
+    """Schaerfe haengt an der Lage; ein Neustart kann die Linse verlieren.
+
+    `lost` steht fuer eine Linse, die nach dem Kameraneustart nicht am Sollwert
+    steht, obwohl der Reglerwert stimmt. Erst ein echtes Anfahren von unten
+    stellt sie wieder her (`recover`), sonst bleibt sie verloren.
+    """
+
+    def __init__(self, *, best=600.0, mean=100.0, lost=False, recover=True, brightness=1.0):
+        super().__init__(None)
+        self.best, self.mean, self.lost, self.recover = best, mean, lost, recover
+        self.brightness = brightness
+        self.focus = 48
+        self.frames = 0
+
+    def set_controls(self, controls):
+        super().set_controls(controls)
+        for name, value in controls:
+            if name == "focus_absolute":
+                if value < self.focus and self.recover:
+                    self.lost = False
+                self.focus = value
+
+    def fresh_still(self, discard=10):
+        self.frames += 1
+        score = self.best * (0.05 if self.lost else 1.0) * self.brightness ** 2
+        image = np.full((90, 160), self.mean * self.brightness, dtype=float)
+        image[0, 0] = score  # Messwert fuer die gepatchte Schaerfe
+        return image
+
+
+def _end_check_sweep(best=600.0, mean=100.0, target=48):
+    from dispread.focus_sweep import FocusMeasurements
+
+    sweep = FocusMeasurements()
+    sweep.extend([(40, best * 0.4), (target, best), (56, best * 0.6)])
+    sweep.roi_means = {40: mean, target: mean, 56: mean}
+    sweep.focus_verify = {"target": target, "best_measured": best, "verified": best * 0.97, "attempts": 1,
+                          "approach": "from_below", "backlash_margin": 12}
+    return sweep
+
+
+@pytest.fixture
+def end_check_sharpness(monkeypatch):
+    monkeypatch.setattr(live_setup, "sharpness", lambda roi: float(roi[0, 0]))
+    monkeypatch.setattr(live_setup, "measurement_roi", lambda gray, hint: gray)
+
+
+def test_focus_end_check_ok_without_moving_lens(end_check_sharpness):
+    cam = RestartFocusCamera()
+    result, frames = live_setup.check_focus_after_restart(cam, None, _end_check_sweep(), settle_s=0,
+                                                          sleep=lambda _s: None)
+    assert result["status"] == "OK" and result["reapproach"] is None
+    assert result["after_restart"]["ratio"] == pytest.approx(1.0, rel=0.01)
+    assert result["threshold_ratio"] == live_setup.FOCUS_END_RATIO
+    assert cam.controls == []  # Linse nicht angefasst
+    assert set(frames) == {"nach_neustart"}
+
+
+def test_focus_end_check_resets_lens_from_below_after_restart_loss(end_check_sharpness):
+    cam = RestartFocusCamera(lost=True)
+    messages = []
+    result, frames = live_setup.check_focus_after_restart(cam, None, _end_check_sweep(), settle_s=0,
+                                                          sleep=lambda _s: None, info=messages.append)
+    # CLAUDE.md StreamCam: erst Automatik aus, dann Absolutwert (von unten).
+    assert cam.controls == [[("focus_automatic_continuous", 0)], [("focus_absolute", 36)],
+                            [("focus_absolute", 48)]]
+    assert result["status"] == "OK"
+    assert result["after_restart"]["ratio"] < live_setup.FOCUS_END_RATIO
+    assert result["reapproach"]["ratio"] == pytest.approx(1.0, rel=0.01)
+    # Gleiche Belichtung vor und nach dem Neusetzen: der Neustarteffekt ist direkt vergleichbar.
+    assert result["reapproach"]["restart_effect"] == pytest.approx(0.05, rel=0.01)
+    assert "neu gesetzt" in result["reason"]
+    assert set(frames) == {"nach_neustart", "nach_neusetzen"}
+    assert any("neu setzen" in message for message in messages)
+
+
+def test_focus_end_check_warns_when_reset_does_not_restore_sharpness(end_check_sharpness):
+    cam = RestartFocusCamera(lost=True, recover=False)
+    result, _ = live_setup.check_focus_after_restart(cam, None, _end_check_sweep(), settle_s=0,
+                                                     sleep=lambda _s: None)
+    assert result["status"] == "WARNUNG"
+    assert "Fokus nach Kameraneustart unscharf" in result["reason"]
+    assert "5 %" in result["reason"]
+    # Genau einmal neu gesetzt, kein stilles Weiter und keine Endlosschleife.
+    assert sum(1 for controls in cam.controls for name, _ in controls if name == "focus_absolute") == 2
+
+
+@pytest.mark.parametrize("brightness", [0.8, 1.25])
+def test_focus_end_check_normalizes_display_brightness(end_check_sharpness, brightness):
+    # Belichtung nach der Suche geaendert: Laplace-Varianz skaliert mit dem
+    # Quadrat der Helligkeit, die normierte Schaerfe bleibt gleich.
+    cam = RestartFocusCamera(brightness=brightness)
+    result, _ = live_setup.check_focus_after_restart(cam, None, _end_check_sweep(), settle_s=0,
+                                                     sleep=lambda _s: None)
+    assert result["status"] == "OK" and result["reapproach"] is None
+    assert result["after_restart"]["ratio"] == pytest.approx(1.0, rel=0.01)
+    assert result["after_restart"]["raw_ratio"] == pytest.approx(brightness ** 2, rel=0.01)
+
+
+def test_focus_end_check_skipped_without_search_verification():
+    from dispread.focus_sweep import FocusMeasurements
+
+    assert live_setup.check_focus_after_restart(FakeSetupCamera(None), None, FocusMeasurements()) is None
+
+
+@pytest.mark.parametrize("roi_source,end_status,status,needle", [
+    ("lcd_hinweis", "OK", "OK", None),
+    ("mittleres_drittel", "OK", "WARNUNG", "Fokus ohne LCD-Hinweis gemessen"),
+    ("lcd_hinweis", "WARNUNG", "WARNUNG", "Fokus nach Kameraneustart unscharf"),
+    ("lcd_hinweis", None, "OK", None),
+])
+def test_focus_check_reports_fallback_roi_and_end_check(roi_source, end_status, status, needle):
+    roi = {"pixels": [1, 2, 3, 4], "quelle": roi_source, "hint_box": None}
+    end = None if end_status is None else {
+        "status": end_status,
+        "reason": "Fokus nach Kameraneustart unscharf: 5 % ..." if end_status == "WARNUNG" else None,
+    }
+    check = live_setup.focus_check(roi, end)
+    assert check["status"] == status
+    assert check["metrics"]["roi"] == roi
+    assert check["metrics"]["endpruefung"] == end
+    if needle is None:
+        assert "reason" not in check or check["reason"] is None or "LCD" not in check["reason"]
+    else:
+        assert needle in check["reason"]
+
+
+def test_proposal_carries_focus_check_and_warning(tmp_path, monkeypatch):
+    checks = SetupChecks('OK', {'kanten': CheckResult('OK', {}), 'rasterversatz': CheckResult('OK', {})})
+    image, quad = reference_scene()
+    cv2.imwrite(str(tmp_path / 'still.png'), image)
+    monkeypatch.setattr(live_setup, 'write_overlays', lambda *a, **kw: [])
+    focus = live_setup.focus_check({"pixels": [640, 360, 640, 360], "quelle": "mittleres_drittel",
+                                    "hint_box": None}, None)
+    proposal = live_setup.propose_with_fit(
+        image, fit=SimpleNamespace(quad=quad), frame_path=tmp_path / 'still.png',
+        camera_settings=replace(_CAMERA, size=image.shape[1::-1]), device_id='test', session_id='test',
+        out_dir=tmp_path, final_checks=checks, offset_check=CheckResult('OK', {}),
+        reader_check=CheckResult('OK', {}), focus_check=focus,
+    )
+    assert list(proposal['setup_checks']['checks'])[0] == 'fokus'
+    assert proposal['setup_checks']['checks']['fokus']['status'] == 'WARNUNG'
+    assert proposal['setup_checks']['overall'] == 'WARNUNG'
+
+
+def test_focus_diagnostic_crop_is_small_and_contains_roi():
+    frame = np.arange(1080 * 1920 * 3, dtype=np.uint32).astype(np.uint8).reshape(1080, 1920, 3)
+    hint = (0.28, 0.13, 0.42, 0.10)
+    crop, rect = live_setup.focus_diagnostic_crop(frame, hint)
+    x, y, w, h = rect
+    roi = live_setup.measurement_roi_pixels((1920, 1080), hint)
+    assert _covered(rect, roi) == pytest.approx(1.0)
+    np.testing.assert_array_equal(crop, frame[y:y + h, x:x + w])
+    assert w * h < 0.25 * 1920 * 1080
+
+
+def test_assist_measure_keeps_rejected_attempt_stills(tmp_path, monkeypatch):
+    cam = SequenceSetupCamera([10, 20, 30, 40])
+    reasons = iter(["keine_startlage", SimpleNamespace(quad=None)])
+    monkeypatch.setattr(live_setup, "fit_lattice", lambda *_a, **_kw: next(reasons))
+    monkeypatch.setattr(live_setup, "check_setup", lambda *_a, **_kw: SetupChecks(
+        "FEHLER", {"kanten": CheckResult("FEHLER", {})}))
+    with pytest.raises(live_setup.SetupError, match="Vorpruefung"):
+        live_setup.assist_measure(
+            cam, cell_text=live_setup.offline_text_source("x"), expected_size=(3, 2), out_dir=tmp_path,
+            hint_box=(0.0, 0.0, 1.0, 1.0), fit_attempts=3,
+        )
+    # Versuch 1 abgelehnt: sein Mittelbild bleibt neben dem des verwendeten Versuchs.
+    assert {p.name for p in tmp_path.glob("*.png")} == {"still.png", "still-versuch-1.png"}
+    assert int(cv2.imread(str(tmp_path / "still-versuch-1.png"))[0, 0, 0]) == 10
+    assert int(cv2.imread(str(tmp_path / "still.png"))[0, 0, 0]) == 20

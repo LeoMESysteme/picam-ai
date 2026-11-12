@@ -302,7 +302,7 @@ test('glossary: short texts, all checks and status words, reasons from status, s
   const terms = entries.map((e) => e.term);
   for (const word of ['Freigegeben', 'Wechselt', 'Unlesbar', 'Veraltet']) assert.ok(terms.includes(word), word);
   const checks = entries.filter((e) => e.section === 'Prüfungen');
-  assert.deepEqual(checks.map((e) => e.code).sort(), ['aufloesung', 'belichtung', 'displayfehler', 'gegenlesen', 'glanz',
+  assert.deepEqual(checks.map((e) => e.code).sort(), ['aufloesung', 'belichtung', 'displayfehler', 'fokus', 'gegenlesen', 'glanz',
     'kanten', 'kontrast', 'nachfuehrung', 'rahmen', 'raster', 'rasterversatz', 'stabilitaet']);
   for (const entry of entries) {
     assert.ok(entry.text.length <= 260, `${entry.term}: kurz halten`);
