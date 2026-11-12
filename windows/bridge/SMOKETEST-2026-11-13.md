@@ -29,3 +29,21 @@
 * App: Symbolleiste „Protokolle exportieren“ (ZIP mit `summary.json` und `details.jsonl`, ohne Zugangsdaten).
 * GSVmulti: Session (`.ucf`) und Aufnahme (`.tdms` plus `.tdms_index`) sichern.
 * Zeitpunkt, Laufnummer und Bildschirmfoto der App notieren.
+
+## 6. Werkbank (Pi) vor dem Lauf
+* Der Pi-Dienst läuft auf dem gemeinsamen Stand `feat/integration`. Welcher Commit es ist, steht in der Übergabe in `docs/status.md`. Adresse und Kopplung bleiben gleich.
+* Neu einrichten, ohne Rahmenbereiche von Hand zu entfernen. Anzeige und „+“-Zelle sauber halten: Schmutz oder Kratzer in der Pluszelle führen jetzt eher zu „keine Startlage“.
+* Fokus: Die Suche misst jetzt auf der Anzeige. Prüfzeile „fokus“ ansehen. WARNUNG „Fokus ohne LCD-Hinweis“ oder „nach Neustart unschärfer“ notieren.
+* Bei FEHLER (Kanten, Startlage, einseitige Rahmenbereiche) zeigt die Einrichtung jetzt Zelle, Grund und Abhilfe. „Neu einrichten“ ist immer erreichbar, auch nach dem Bestätigen. Das Ergebnis jeder Einrichtung notieren (OK, WARNUNG, FEHLER und Grund).
+
+## 7. Werkbank im Lauf (mindestens 10 Minuten, dabei die Last aktiv ändern)
+* Laufstart: Format „Vierkanal-Takt“, Takt 10 Hz, Testfreigabe-Haken. Die Checkliste „In GSVmulti“ im Startfenster abhaken.
+* Nach dem Kamerastart prüft die Werkbank die Schärfe. Erscheint „Bild nach Kamerastart unschärfer …“, notieren.
+* Taktzeile im Lauf beobachten: gültig in %, verpasst. Ziel bei aktiver Laständerung: mindestens 75 % gültig.
+* Hinweise „Rahmenbereich N unstimmig“ oder „Bereich N automatisch stillgelegt“ notieren. Eine Stilllegung braucht nach etwa 10 s Unstimmigkeit rund 40 s Prüfung im Hintergrund.
+* Kurze Bildausfälle (OQ-75) oder träge Bedienung (OQ-73): Uhrzeit notieren.
+
+## 8. Was ich danach auswerte (Pi-Seite, kein Handgriff nötig)
+* Für den Lauf: `records.jsonl`, `output.jsonl`, `tracking_events.jsonl` und `session.json` mit `focus_check`, `tick` und `tracking_region_hint`.
+* Bildrate und `frame_gaps` während der Stilllegungsprüfung. Nach dem Laufende darf kein Prozess `region_probe` mehr laufen.
+* Die GSVmulti-TDMS gegen das Pi-Audit: Zeilen pro Takt, Fehlwerte, Zeitkanal.
