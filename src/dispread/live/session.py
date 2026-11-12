@@ -214,9 +214,18 @@ class ProbeProcess:
         self.base, self.index = frozenset(base), index
         self._outcome = None
         self._cancelled = False
+        import os
+        from pathlib import Path
+
+        import dispread
+        # Das Kind laedt genau den Code dieses Prozesses (nicht eine andere
+        # installierte dispread-Kopie, z. B. die editierbare Installation der .venv).
+        root = str(Path(dispread.__file__).resolve().parents[1])
+        env = dict(os.environ)
+        env['PYTHONPATH'] = os.pathsep.join(p for p in (root, env.get('PYTHONPATH', '')) if p)
         self._process = subprocess.Popen(command or [sys.executable, '-m', 'dispread.live.region_probe'],
                                          stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                         stderr=subprocess.DEVNULL)
+                                         stderr=subprocess.DEVNULL, env=env)
         job = pickle.dumps((payload, sorted(self.base), sorted(self.base | {index})))
 
         def talk():

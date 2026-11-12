@@ -2310,3 +2310,18 @@ def test_session_json_records_run_start_focus_check(tmp_path):
         assert json.loads(session.session_path.read_text())["focus_check"] == check
     finally:
         session.stop()
+
+
+def test_probenprozess_laedt_den_code_dieses_prozesses(monkeypatch):
+    """Ohne PYTHONPATH darf das Kind nicht auf eine andere dispread-Kopie ausweichen."""
+    import sys
+
+    import dispread
+    from dispread.live.session import ProbeProcess
+
+    monkeypatch.delenv('PYTHONPATH', raising=False)
+    code = ('import pickle,sys,dispread; sys.stdin.buffer.read(); '
+            'sys.stdout.buffer.write(pickle.dumps(("ok", dispread.__file__)))')
+    handle = ProbeProcess({}, set(), 1, command=[sys.executable, '-c', code])
+    handle._thread.join(20)
+    assert handle._outcome == ('ok', dispread.__file__)
