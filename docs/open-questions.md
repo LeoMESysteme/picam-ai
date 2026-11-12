@@ -3606,6 +3606,34 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 * **Zusatz 2026-11-11:** Neuester Fall `170836Z`: erster Rasterfit OK; Kanten-FEHLER in Leerzellen 14/15, keine Stabilitätsmessung. Anderer Zelltyp als Zelle 7; getrennt prüfen.
   [Originale und Rezept](quellen/setup-focus-failure-2026-11-11-170836.md).
+* **Befund und Teilbehebung 2026-11-12 (Branch `fix/blocker-oq72`):**
+  * **Was die Prüfung schützt:** `_edge_check` (`setup_checks.py`) misst Helligkeitsstufen des Glases über 8 px, in
+    Leerzellen auf einer Grauwert-Schließung, in belegten Zellen auf einer oberen Helligkeitshülle. Gemeint sind
+    Spiegelkanten wie `ab2` (2026-09-29): ein Reflex- oder Schattenrand in einer Zelle, an dem die Hintergrundschätzung
+    des Lesers kippen kann. In Leerzellen 13–15 droht dann `leerzelle_gestoert`, also Ablehnung, in Zahlzellen eine
+    falsch normierte Glyphe.
+  * **`161702Z`/`161955Z` Zelle 7: echter Reflex, Grund (a).** Im Bild liegen ein Glanzfleck rechts oben neben der
+    „1“ (Glas etwa 132 statt 107) und eine hellere Glasfläche ab der Grenze Zelle 7/8. Die Stufe 29,8 setzt sich aus
+    diesem Reflex und einem Strukturanteil zusammen. Der Strukturanteil entsteht, weil die Hülle einer Ziffer vor der
+    leeren Trennzelle ansteigt. Er erreicht auch bei guten Aufstellungen 14–15 (`164508Z`, `165234Z`, `165754Z`).
+    Glyphenrobuste Gegenmaße trennen schlechter, der Reflex wäre dort nur knapp über den positiven Fällen. Am
+    Standbild liest der Leser Zelle 7 noch mit üblichem Abstand (0,99). Ob der Reflex im Lauf über die Ziffer
+    wandert, ist offline nicht prüfbar.
+  * **`170836Z` Zellen 14/15: echte dunkle Spiegelung, Grund (a).** Ein gekrümmter dunkler Streifen liegt über den
+    rechten Leerzellen. Leerzelle 15 hat beim Leser den Abstand 1,35, bei allen anderen 11 Aufstellungen höchstens
+    0,96. Das Lesen verliert dort messbar Reserve.
+  * **Kanten-WARNUNG an Zelle 13/14 der positiven Fälle** (6,5–7,0 gegen 6): schwache Reflexe am rechten Glasrand,
+    Zellabstände des Lesers unauffällig.
+  * **Geändert:** Die Grenzen bleiben. `kanten` liefert `flagged_cells` und einen Bedienertext mit Zelle, Lage,
+    Stufe, Grenze und Abhilfe, z. B. „Reflex- oder Schattenkante über der Anzeige: Zelle 7 (Zahl) mit Stufe 29,8,
+    Fehlergrenze 20. Licht abschatten, spiegelnde Gegenstände entfernen oder Kamera leicht drehen …“. Die
+    Abbruchmeldung der Vorprüfung trägt ihn mit. Urteile auf 12 Aufstellungen und 6 historischen Kontrollen sind
+    bitgleich. Regression: `tests/test_setup_checks.py` (`test_oq72_*`).
+  * **Weiter offen:**
+    * Wandert der Reflex im Lauf über die Ziffern? Nur am echten Aufbau prüfbar.
+    * Strukturanteil der Belegtmessung an der letzten Ziffer: Eine Neukalibrierung braucht positive und negative
+      Laufbelege und wird hier nicht vorgezogen.
+    * Wirkung des OQ-74-Fokusfixes auf diese Fälle: nicht nachstellbar, die Bilder sind schon aufgenommen.
 
 <span id="oq-73"></span>
 
