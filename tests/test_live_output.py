@@ -1136,10 +1136,12 @@ def test_four_channel_release_refused_before_any_port_open(tmp_path, monkeypatch
 
 @pytest.mark.parametrize('transport', ['uart', 'tcp'])
 def test_bridge_output_without_format_stays_exactly_single_channel(transport):
+    from dispread.bridge.baud import UART_BAUD
     from dispread.live.output import bridge_config, normalize_output
 
     config = normalize_output({'transport': transport, 'acknowledge_unaccepted': True})
-    assert config == {'transport': transport, 'serial_port': '/dev/ttyAMA0', 'baudrate': 115200,
+    # Baudrate aus der einzigen Quelle bridge/baud.py (feat/bruecke-ux), nicht mehr 115200.
+    assert config == {'transport': transport, 'serial_port': '/dev/ttyAMA0', 'baudrate': UART_BAUD,
                       'tcp_host': '0.0.0.0', 'tcp_port': 5000, 'max_frame_age_ms': 1000,
                       'acknowledge_unaccepted': True}
     assert bridge_config(config).to_dict() == {k: v for k, v in config.items() if k != 'acknowledge_unaccepted'}
