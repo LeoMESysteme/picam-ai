@@ -43,6 +43,7 @@ SCENES = (
     "running_valid", "running_transition", "running_rahmen_verdeckt", "running_stalled",
     "running_anzeige_bewegt", "stopped", "running_bereich_unstimmig", "setup_ready_nach_lauf",
     "setup_ready_nach_lauf_rauschen", "setup_ready_nach_lauf_neu", "running_bereich_stillgelegt",
+    "setup_ready_fehler",
 )
 # Aus live-20261030T133635Z/setup; keine Laufzeitabhaengigkeit von var/.
 FOCUS_SAMPLES = [[48, 630.3558194010419], [56, 273.53271242939513], [40, 201.1113182858314],
@@ -100,6 +101,13 @@ def scene_state(name):
     if name == "running_bereich_stillgelegt":
         state = scene_state("running_valid")
         state["run"]["region_deactivated"] = copy.deepcopy(REGION_DEACTIVATED)
+        return state
+    if name == "setup_ready_fehler":
+        # OQ-71: Vorschlag mit Gesamturteil FEHLER (Gegenlesen), Bestaetigen muss gesperrt sein.
+        state = scene_state("setup_ready_warnung")
+        state["setup"]["checks"]["gegenlesen"] = "FEHLER"
+        state["setup"]["check_reasons"] = {"gegenlesen": "Zelle 3: gelesen 7, Referenz 1"}
+        state["setup"]["overall"] = "FEHLER"
         return state
     if name == "setup_ready_nach_lauf":
         state = scene_state("setup_ready_warnung")
@@ -336,6 +344,14 @@ class FakeLiveService:
             return data
 
     def start_setup(self, *, cell_text=None):
+        from dispread.live.service import LiveError
+
+        with self._lock:
+            state = self._status.get("state")
+        if state == "running":
+            raise LiveError("Lauf zuerst beenden")
+        if state == "setup_running":
+            raise LiveError("Einrichtung laeuft bereits")
         self.set_scene("setup_focus")
 
     def cancel_setup(self):
@@ -401,6 +417,8 @@ class FakeLiveService:
             if (session_id != self._status["session_id"]
                     or ("proposal_revision" in kwargs and kwargs["proposal_revision"] != setup.get("proposal_revision"))):
                 raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
+            if setup.get("overall") == "FEHLER":
+                raise LiveError("Einrichtung meldet FEHLER - nicht bestaetigbar")
             self._status["state"] = "confirmed"
 
     def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False, output=None):

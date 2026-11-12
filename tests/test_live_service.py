@@ -3287,3 +3287,87 @@ def test_tc_bereichshinweis_im_status_und_fuer_die_neueinrichtung(tmp_path):
     with service._lock:
         service._finish_run(quiet, None)
     assert service.status()['previous_region_hint'] is None
+
+
+# --- OQ-71: Neu einrichten aus Vorschlag und Bestaetigung, Belege bleiben ---
+
+def _runner_with_evidence(proposal):
+    def runner(*, session_dir, **kwargs):
+        (session_dir / "setup").mkdir(parents=True, exist_ok=True)
+        (session_dir / "setup" / "overlay_source.png").write_bytes(b"png")
+        return proposal
+    return runner
+
+
+def _snapshot(directory):
+    return {str(p.relative_to(directory)): p.read_bytes() for p in sorted(directory.rglob("*")) if p.is_file()}
+
+
+@pytest.mark.parametrize("overall", ["OK", "WARNUNG", "FEHLER"])
+def test_oq71_new_setup_from_ready_keeps_previous_evidence(tmp_path, proposal, overall):
+    proposal["setup_checks"]["overall"] = overall
+    service = ready_service(tmp_path, proposal)
+    first = service.status()["session_id"]
+    before = _snapshot(tmp_path / first)
+    assert before
+    service.start_setup()
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    second = service.status()["session_id"]
+    assert second != first
+    assert _snapshot(tmp_path / first) == before
+
+
+def test_oq71_new_setup_from_confirmed_keeps_profile_and_evidence(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    first = service.status()["session_id"]
+    service.confirm(session_id=first, confirmed_by="Leonhard Hentschke", format_checked=True)
+    assert service.status()["state"] == "confirmed"
+    before = _snapshot(tmp_path / first)
+    assert "profile.json" in before
+    service.start_setup()
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    assert service.status()["session_id"] != first
+    assert service.status()["state"] == "setup_ready"
+    assert _snapshot(tmp_path / first) == before
+
+
+def test_oq71_confirm_refused_on_fehler_server_side(tmp_path, proposal):
+    proposal["setup_checks"]["overall"] = "FEHLER"
+    service = ready_service(tmp_path, proposal)
+    with pytest.raises(LiveError, match="FEHLER"):
+        service.confirm(session_id=service.status()["session_id"], confirmed_by="L", format_checked=True,
+                        acknowledge_warning=True)
+    assert service.status()["state"] == "setup_ready"
+    assert not (tmp_path / service.status()["session_id"] / "profile.json").exists()
+
+
+def test_oq71_new_setup_refused_while_running(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    service._state = "running"
+    with pytest.raises(LiveError, match="Lauf zuerst beenden"):
+        service.start_setup()
+    assert service.status()["state"] == "running"
+
+
+def test_oq71_cancel_then_immediate_new_setup_without_restart(tmp_path, proposal):
+    release = threading.Event()
+    calls = []
+
+    def runner(*, session_dir, cell_text, report):
+        calls.append(session_dir)
+        report("fokus")
+        if len(calls) == 1:
+            release.wait(5)
+            report("kamera")  # wirft nach dem Abbruch
+        (session_dir / "setup").mkdir(parents=True, exist_ok=True)
+        return proposal
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    service.start_setup()
+    assert _wait_state(service, {"setup_running"}) == "setup_running"
+    service.cancel_setup()
+    release.set()
+    assert _wait_state(service, {"setup_failed"}) == "setup_failed"
+    service.start_setup()
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    assert len(calls) == 2

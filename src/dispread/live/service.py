@@ -521,7 +521,14 @@ class LiveService:
                     text = validate_offline_cell_text(cell_text)
                 except ValueError as exc:
                     raise LiveError(f"Zellentext: {exc}") from exc
-            session_dir = self._data_dir / ("live-" + self._wall().strftime("%Y%m%dT%H%M%SZ"))
+            stem = "live-" + self._wall().strftime("%Y%m%dT%H%M%SZ")
+            session_dir = self._data_dir / stem
+            # Nie in einen vorhandenen Setup-Ordner schreiben: Belege verworfener
+            # Vorschlaege und Bestaetigungen (OQ-71) bleiben unveraendert erhalten.
+            for suffix in range(2, 1000):
+                if not session_dir.exists():
+                    break
+                session_dir = self._data_dir / f"{stem}-{suffix}"
             self._require_storage()
             with self._lock:
                 self._state, self._step, self._error = "setup_running", "start", None

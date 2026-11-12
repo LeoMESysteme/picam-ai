@@ -5,6 +5,18 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-12: **Werkbank /live: Bediensackgasse der Einrichtung (OQ-71).** Problem: Bei Gesamturteil FEHLER blieb
+  Bestätigen für Knopf und Enter freigegeben (nur der Server lehnte ab), und „Neu einrichten“ gab es nur bei idle,
+  fehlgeschlagen und gestoppt; nach einem Vorschlag oder einer Bestätigung blieb nur Lauf starten und stoppen.
+  Neu: Bei FEHLER ist Bestätigen gesperrt (Titelleiste und Inspektor, Text „Bestätigen nicht möglich: Prüfung FEHLER
+  – neu einrichten“) und „Neu einrichten“ der Primärknopf. In `setup_ready` und `confirmed` ist „Neu einrichten“
+  immer erreichbar; bei `confirmed` fragt ein Dialog „Bestätigte Einrichtung verwerfen und neu einrichten?“; im Lauf
+  steht der Knopf gesperrt mit Grund. Backend: `start_setup` legt nie in einen vorhandenen Setup-Ordner an (bei gleicher
+  Sekunde Suffix `-2`), damit Bilder, Vorschlag, Prüfergebnisse und `profile.json` einer verworfenen Einrichtung
+  unverändert bleiben; die Server-Ablehnung von FEHLER bleibt zweite Sicherung. Tests: Backend (Belege bleiben,
+  FEHLER, Lauf, Abbruch und sofortiger Neustart ohne Dienstneustart), Node, fünf Playwright-Szenen. Konsequenz: keine
+  Schranke gelockert; offen bleibt der Nachweis am echten Aufbau.
+
 * 2026-11-11: **Werkbank /live: Vierkanal-Takt am Laufstart und im Lauf (U1).** Problem: Format und Takt der
   Ausgabe waren in der Oberfläche nicht wählbar, die Einkanal-Warnung (F3) fehlte. Neu: Laufoptionen mit „Format“
   (Vierkanal-Takt empfohlen, Vorgabe; Einkanal mit wörtlicher F3-Warnung), Takt 1–10 Hz (Vorgabe 10), Checkliste

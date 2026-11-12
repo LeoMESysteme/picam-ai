@@ -2494,3 +2494,139 @@ test('Stilllegung: Statusleiste und Inspektor zeigen den Bereich ruhig, ohne "en
   await page.screenshot({ path: `${TB_SHOTS}/tb-lauf-bereich-stillgelegt.png` });
   expect(errors).toEqual([]);
 });
+
+// OQ-71: Bediensackgasse der Einrichtung
+async function fillConfirm(page: Page, { ack = false } = {}) {
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  // Erst den Vorschlag abwarten: eine neue Revision setzt die Felder zurück.
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('.lead h2')).toHaveText('Vorschlag prüfen und bestätigen');
+  await inspector.getByLabel('Name').fill('Operator');
+  await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
+  if (ack && await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).isVisible()) {
+    await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
+  }
+  return inspector;
+}
+
+test('OQ-71: Vorschlag mit FEHLER sperrt Bestätigen für Knopf und Enter, Neu einrichten ist der Weg', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_fehler' });
+  const title = page.getByRole('banner');
+  const confirm = title.getByRole('button', { name: 'Bestätigen', exact: true });
+  const resetup = title.getByRole('button', { name: 'Neu einrichten', exact: true });
+  await expect(confirm).toBeDisabled();
+  await expect(title).toContainText('Bestätigen nicht möglich: Prüfung FEHLER – neu einrichten');
+  await expect(resetup).toBeEnabled();
+  await expect(resetup).toHaveClass(/primary/);
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/live\//.test(new URL(r.url()).pathname)) posts.push(new URL(r.url()).pathname); });
+  const inspector = await fillConfirm(page, { ack: true });
+  await expect(inspector).toContainText('Bestätigen nicht möglich: Prüfung FEHLER – neu einrichten');
+  await expect(inspector.locator('[data-part="submit"]')).toBeDisabled();
+  await expect(confirm).toBeDisabled();
+  await inspector.getByLabel('Name').press('Enter');
+  await page.waitForTimeout(300);
+  expect(posts).toEqual([]);
+  await fits(page, 'Titelleiste, Vorschlag FEHLER');
+  await page.screenshot({ path: SHOTS + 'oq71-fehler.png' });
+  const request = page.waitForRequest('**/live/setup');
+  await resetup.click();
+  expect((await request).method()).toBe('POST');
+  await expect(title.getByRole('button', { name: 'Einrichtung abbrechen' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('OQ-71: Vorschlag OK und WARNUNG zeigen Neu einrichten neben Bestätigen, Bestätigen bleibt möglich', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const title = page.getByRole('banner');
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  await expect(title.getByRole('button', { name: 'Neu einrichten', exact: true })).toBeEnabled();
+  await expect(title.getByRole('button', { name: 'Neu einrichten', exact: true })).not.toHaveClass(/primary/);
+  await expect(title).not.toContainText('Bestätigen nicht möglich');
+  await fillConfirm(page, { ack: true });
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeEnabled();
+  await page.screenshot({ path: SHOTS + 'oq71-warnung.png' });
+  await hook(page, '/__test__/state', { state: 'setup_ready', setup: { overall: 'OK', checks: { raster: 'OK' },
+    overlays: ['overlay_source'], step: 'vorschlag', elapsed_s: 15.0, proposal_revision: 'ok-1' } });
+  await expect(title.getByRole('button', { name: 'Neu einrichten', exact: true })).toBeEnabled();
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeVisible();
+  await page.screenshot({ path: SHOTS + 'oq71-ok.png' });
+  expect(errors).toEqual([]);
+});
+
+test('OQ-71: Kippt der Vorschlag auf FEHLER, wird ein bereit gemachtes Bestätigen nachträglich gesperrt', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const inspector = await fillConfirm(page, { ack: true });
+  const title = page.getByRole('banner');
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeEnabled();
+  // Der Vorschlag kippt auf FEHLER, ohne dass die Seite es schon weiss: zweite Sicherung des Servers.
+  await hook(page, '/__test__/state', { state: 'setup_ready', setup: { overall: 'FEHLER', proposal_revision: 'b358259f721241f0b9e6af42d4fdb390' } });
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeDisabled();
+  expect(errors.filter((e) => !/status of 4\d\d/.test(e))).toEqual([]);
+  await expect(inspector.locator('[data-part="submit"]')).toBeDisabled();
+});
+
+test('OQ-71: Bestätigt – Neu einrichten fragt nach, Abbrechen ändert nichts, Verwerfen startet die Einrichtung', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  const resetup = title.getByRole('button', { name: 'Neu einrichten', exact: true });
+  // Erst den bestätigten Zustand abwarten, sonst klickt der Test noch im Vorschlag.
+  await expect(title).toContainText('Einrichtung bestätigt');
+  await expect(resetup).toBeEnabled();
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/live\//.test(new URL(r.url()).pathname)) posts.push(new URL(r.url()).pathname); });
+  await resetup.click();
+  const dialog = page.getByRole('dialog', { name: 'Neu einrichten' });
+  await expect(dialog).toContainText('Bestätigte Einrichtung verwerfen und neu einrichten?');
+  await page.screenshot({ path: SHOTS + 'oq71-bestaetigt-rueckfrage.png' });
+  await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts).toEqual([]);
+  await expect(title.getByRole('button', { name: 'Lauf starten', exact: true })).toBeVisible();
+  // Esc ist ebenfalls Abbrechen.
+  await resetup.click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  expect(posts).toEqual([]);
+  await resetup.click();
+  const request = page.waitForRequest('**/live/setup');
+  await dialog.getByRole('button', { name: 'Verwerfen und neu einrichten' }).click();
+  expect((await request).headers()['x-csrf-token']).toBeTruthy();
+  await expect(title.getByRole('button', { name: 'Einrichtung abbrechen' })).toBeVisible();
+  await page.screenshot({ path: SHOTS + 'oq71-neu-eingerichtet.png' });
+  expect(errors).toEqual([]);
+});
+
+test('OQ-71: Während der Einrichtung Abbrechen, danach sofort neu einrichten; im Lauf gesperrt mit Grund', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const title = page.getByRole('banner');
+  await hook(page, '/test/scene', { name: 'setup_focus' });
+  await expect(title.getByRole('button', { name: 'Neu einrichten', exact: true })).toHaveCount(0);
+  await title.getByRole('button', { name: 'Einrichtung abbrechen' }).click();
+  const start = title.getByRole('button', { name: 'Einrichtung starten', exact: true });
+  await expect(start).toBeEnabled();
+  const request = page.waitForRequest('**/live/setup');
+  await start.click();
+  await request;
+  await expect(title.getByRole('button', { name: 'Einrichtung abbrechen' })).toBeVisible();
+  await page.screenshot({ path: SHOTS + 'oq71-abbruch-neustart.png' });
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  const locked = title.getByRole('button', { name: 'Neu einrichten', exact: true });
+  await expect(locked).toBeDisabled();
+  await expect(locked).toHaveAttribute('title', /Nicht während eines Laufs/);
+  await fits(page, 'Titelleiste im Lauf');
+  await page.screenshot({ path: SHOTS + 'oq71-lauf.png' });
+  expect(errors).toEqual([]);
+});
