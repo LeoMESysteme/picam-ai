@@ -1,4 +1,4 @@
-# TODO — Stand 2026-11-09
+# TODO — Stand 2026-11-12
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -7,21 +7,18 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
-## Zuerst: Test mit echten Werten am Mittwoch, 2026-11-11
+## Zuerst: Smoketest Freitag, 2026-11-13 (Workbench-Blocker)
 
-- **Zweig und Stand:** `feat/bruecke-ui` (Worktree `.worktrees/bruecke-ui`), gepusht und nicht gemergt. Darin stecken Codex' Brückenkern und Claudes Oberflächen für Werkbank und Windows-App.
-- **Dienst auf dem Pi:** `dispread-werkbank-bruecke` (systemd-run, `--user`) läuft aus `.worktrees/bruecke-run`, einem detached Stand auf c5cb924.
-  - Der Worktree braucht einen `var`-Link, sonst bricht die Einrichtung ab.
-  - Pi-ID `565e3468-…`, Zertifikat `f87b34f0…`, Adresse `https://100.122.154.35:8082`.
-- **Ablauf:** [windows/bridge/TESTLAUF.md](windows/bridge/TESTLAUF.md); F2 beschreibt die echten Werte.
-  - Der Bediener setzt beim Laufstart den Haken „Testfreigabe – nicht abgenommen“. Das ist eine Nutzerentscheidung vom 2026-11-09 und keine Abnahme.
-  - Netzwerk ist der Hauptweg.
-  - Für „UART über Brücke“ in GSVmulti höchstens 4 Hz einstellen. Bei 115 200 Baud trägt dieser Weg nur 3–4 Werte/s, weil jeder Datensatz rund 1,2 kB JSON umfasst.
-  - Der Adapter ist USB-TTL mit 3,3 V. Pin 10 für RXD0 ist vor Ort zu prüfen.
-- **Vorher erledigen:** Die EXE muss aus dem aktuellen Stand gebaut werden (`build-test.ps1`). Ältere EXE geben keine Werte aus.
-  - Beim Laufstart darf in der App keine Demo laufen.
-  - GSVmulti-Werte nach einem Abbruch, einer Ungültig-Phase oder dem Laufende sind nicht verwertbar. Ein Wert kann bis etwa 2 s plus OCR-Zeit alt sein.
-- **Nachweise bisher:** Linux mit pty-UART und lokalem TLS sowie ein unabhängiges Review („freigebbar“). Dazu kommt der erste echte Windows-Test vom 2026-11-06 mit Demo-Werten in GSVmulti, siehe [Belege](docs/quellen/bruecke-testlauf-2026-11-06/README.md).
+- **Ablauf:** [windows/bridge/SMOKETEST-2026-11-13.md](windows/bridge/SMOKETEST-2026-11-13.md), Abschnitte 1–8.
+- **Stand:** Branch `feat/integration`. Der Pi-Dienst läuft darauf (29359e3). Die EXE baut Leonhard aus demselben Branch.
+- **Was getestet wird:**
+  - Einrichtung ohne Handarbeit
+  - Fokus auf der Anzeige
+  - kein Sackgassen-Zustand
+  - Vierkanal-Takt über Netzwerk
+  - mindestens 75 % gültig bei aktiver Laständerung
+- **Hintergrund:** [docs/status.md](docs/status.md) und [docs/WORKBENCH_BLOCKER.md](docs/WORKBENCH_BLOCKER.md).
+- **Danach:** Den Lauf auswerten (Abschnitt 8) und den Blocker schließen oder nachbessern.
 
 ## Danach offen (Brücke)
 

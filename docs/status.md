@@ -1,56 +1,45 @@
-# Status und Übergabe — 2026-11-11
+# Status und Übergabe — 2026-11-12
 
-Auftrag `.superpowers/sdd/2026-11-11-bruecke-ux2/codex-session-format.md`
-im vorhandenen Worktree `bruecke-merge` umgesetzt. Änderungen bleiben
-uncommittet. Unter `windows/bridge/src/dispread_bridge_app/ui/` wurde nur
-`port.py` um die beauftragten Felder und den Formatparameter ergänzt.
+## Kurzfassung
 
-`DEFAULT_SESSION_FORMAT = 'single'` in `session_templates.py:35` ist die einzige
-Formatvorgabe. Der Kommentar nennt die Umstellung auf `4ch` nach dem Einspielen
-von U1 auf dem Pi. `ACTIVE_SESSION_TEMPLATE` entfällt. Beide Formate sind regulär
-exportierbar; `vorlage-4kanal-mvv.ucf` ist mit SHA-256
-`6bc26b61323e054bfea2dd32c375617ec46725e8eb56f455daf45454b3d8ec43` paketiert,
-Versuch 2b bleibt im Quellenordner als Beleg. COM8 bleibt bytegleich zum
-jeweiligen Original, COM4 ändert ausschließlich die erlaubten Portzeilen.
+- **Workbench-Blocker:** Alle offline behebbaren Punkte sind bearbeitet und im gemeinsamen Stand `feat/integration`. Der Pi-Dienst läuft darauf.
+- **Leonhards Test am Freitag 2026-11-13:** [windows/bridge/SMOKETEST-2026-11-13.md](../windows/bridge/SMOKETEST-2026-11-13.md).
+- **Keine Abnahme:** Die echte Hardware-Bestätigung der Fixes steht aus.
 
-Sessionpfad und -format werden je Weg/Port gespeichert (`sessions` und
-`session_formats`). Alte Zustände ohne Formatmetadaten werden als Einkanal
-übernommen. `SessionExport.fmt`, `UiContext.session_format`, `run_format` und
-`default_session_format` stehen bereit; `session_channels` folgt der erzeugten
-Session oder, wenn keine vorliegt, der Vorgabe. Paketmetadaten werden für
-`context()` gecacht; dort gibt es keine zusätzlichen Dateizugriffe.
+## Laufender Stand
 
-Die bestehende validierte Verbindung erkennt `tick` als `4ch`, `record` als
-`single`. Unter der Metadatensperre werden Laufwechsel/kein Lauf/Ende auf
-unbekannt zurückgesetzt; das vorhandene Aktivitätsereignis trägt Format,
-Lauf-ID und Verbindungsgeneration zum Controller. Der Controller übernimmt dies
-unter seiner Sperre; bei Verbindungsverlust oder unpassender Lauf-/Generations-ID
-liefert der Kontext unbekannt. Die markierte Stelle in `connection.py` kann ein
-später im Protokoll validiertes `output_format` aus Hello/Idle mit einem Einzeiler
-vorrangig übernehmen. Keine Protokollfelder vorweggenommen.
+- **Dienst:** `dispread-werkbank-bruecke` (systemd-run `--user`) aus `.worktrees/bruecke-run`, detached auf `feat/integration` 29359e3, seit 2026-11-12 15:52. Adresse `https://100.122.154.35:8082`, Pi-Identität und Kopplung unverändert. Neustartbefehl siehe Projekt-Memory bzw. `systemctl --user show`.
+- **Gemeinsamer Branch:** `feat/integration` = EXE-Stand `feat/bruecke-merge` (Session picam-ai-65, UX2) + `feat/bruecke-ui` (Werkbank, Brückentakt, Blocker-Fixes). Weitere EXE-Arbeit baut darauf auf.
+- **EXE:** muss Leonhard aus `feat/integration` bauen (`build-test.ps1`). Eine ältere EXE spricht weder Takt noch 460 800 Baud.
 
-Prüfstand:
+## Workbench-Blocker ([WORKBENCH_BLOCKER.md](WORKBENCH_BLOCKER.md))
 
-- TDD: neue Format-/Persistenz-/Lauferkennungstests zunächst rot, dann grün.
-- Angeforderte sieben Testdateien ohne zusätzliches `PYTHONPATH`: 236 bestanden,
-  einer übersprungen, der im Auftrag bekannte Unterprozesstest fehlgeschlagen
-  (`test_real_process_exit_after_fake_com_preserves_unknown_intent`, Paket nicht
-  im Importpfad). Danach ein zusätzlicher Cachetest ergänzt.
-- Abschlusslauf derselben sieben Dateien mit `PYTHONPATH=src:../../src`:
-  **238 bestanden, einer übersprungen**, einschließlich des Unterprozesstests.
-- Ruff der betroffenen Python-Dateien, `git diff --check`, OQ-Index, Tour-Fakten
-  und Wiki-Check bestanden.
-- `./scripts/docs-site.sh build -s` ausgeführt: scheitert an zwei vorhandenen
-  Links auf nicht ins Doku-Site eingebundene Windows-Dateien, in `TODO.md:16`
-  und `docs/superpowers/specs/2026-11-11-gsvmulti-takt-vierkanal-design.md:7`.
-- Playwright-Dokuprüfung ausgeführt: Webserverstart scheitert an der
-  Socket-Sperre (`PermissionError: [Errno 1] Operation not permitted`).
-  Logs: `/tmp/bruecke-session-format-docs-build.log` und
-  `/tmp/bruecke-session-format-docs-playwright.log`.
+Triage (`.superpowers/sdd/2026-11-11-gsvmulti-takt/blocker-triage.md`): **keine Regression**. Die Einrichtungsmodule waren in allen Ständen byte-identisch; die Fehler sind alte Lücken, die erst die neuen Aufstellungen sichtbar machten.
 
-U1-Einspielung und Windows-/GSVmulti-Empfangsabnahme stehen weiterhin aus.
-Der UI-Hinweis bei abweichenden Formaten gehört zur separaten Oberflächenarbeit.
-„Record Hidden Channels“ bleibt bei der Vierkanalvorlage erforderlich.
-Kein Merge, Push, Deployment, Hardwareeingriff oder neue Abhängigkeit.
-Dateiliste und Abschlussbericht:
-`.superpowers/sdd/2026-11-11-bruecke-ux2/codex-session-format-abschluss.txt`.
+| OQ | Stand | Nachweis |
+| --- | --- | --- |
+| OQ-71 Sackgasse | behoben: FEHLER sperrt Bestätigen, „Neu einrichten“ immer erreichbar, Belege bleiben | Backend-, Node- und Playwright-Tests |
+| OQ-74 Fokus | Teilbehebung: ROI aus der LCD-Hinweisbox, Endprüfung nach Neustart (Einrichtung **und** Laufstart), Diagnosebilder | Regressionen auf 7 Paketbildern; Motorverhalten nur am Aufbau prüfbar |
+| OQ-70 einseitige Rahmenbereiche | behoben: Rahmen trotz Kerbe erkannt, sonst klare Meldung | 60/63 Vorschläge identisch, 3 besser |
+| OQ-72 Kantenprüfung | geklärt: echte Reflexe, Grenzen bleiben; Meldung nennt Zelle, Lage und Abhilfe | alle Urteile bitgleich |
+| OQ-69 Startlage | behoben: Schein-Plus an Glaskanten und Einzelartefakte in Leerzellen; unabhängiges Review mit Auflagen, erfüllt | 4 Fehlerbilder lösbar (2 danach berechtigt Kanten-FEHLER), 77/77 alte Fits erhalten |
+| OQ-73 Trägheit, OQ-75 Ausfall 7 s | offen, nur am Aufbau messbar | Smoketest notiert Uhrzeiten |
+
+## Weitere Arbeit seit 11.11.
+
+- **GSVmulti-Vierkanal-Takt:** Telegramm `%wert;gültig;takt;zeit` mit festem Takt bis 10 Hz und Fehlwert `99999999.0`. Spec und Plan unter `docs/superpowers/{specs,plans}/2026-11-11-gsvmulti-takt-vierkanal*`.
+  - Pi und alle drei Wege umgesetzt (B1, B2), Werkbank mit Formatwahl (U1), EXE-Vorgabe Vierkanal.
+  - Brücken-UART auf 460 800 Baud.
+  - Belegt sind nur die GSVmulti-Versuche vom 11.11.; ein Ende-zu-Ende-Lauf mit EXE steht aus.
+- **Nachführung:** strengere Auswahl der Rahmenbereiche und automatische Stilllegung dauerhaft unstimmiger Bereiche mit Schutzprobe (TB). Zweifach reviewt, Testfreigabe.
+
+## Prüfstand 2026-11-12 (`feat/integration` vor dem Smoketest-Commit)
+
+- **Pi** mit `DISPREAD_DEV_DATA`: 4151 bestanden. 2 Brückentests wackelten unter Volllast, einzeln dreimal grün.
+- **Windows** 641, **Node** 273, **Playwright** 64/65. Der eine Fehlschlag ist der bekannte Wackler „UART direkt ohne Haken“, einzeln grün. **ruff** sauber.
+
+## Offen
+
+- Hardware-Bestätigung aller Fixes, Fokusverhalten beim Kameraneustart, OQ-73 und OQ-75.
+- EXE-Oberfläche für Taktzähler und Format-Abgleich (picam-ai-65).
+- Merge nach `master` erst mit Leonhards OK.
