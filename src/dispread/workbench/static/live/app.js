@@ -25,6 +25,7 @@ import {mountBridgeDialog} from './run/bridge-dialog.js';
 import {mountMarkPopover, mountStartPopover} from './run/start-popover.js';
 import {mountEffects} from './viewer/effects.js';
 import {closeToast, mountToasts, toast} from './ui/toasts.js';
+import {openModal} from './ui/modal.js';
 import {watchAlerts} from './run/alerts.js';
 import {createScenario} from './practice/scenario.js';
 import {createFrameComposer} from './practice/frames.js';
@@ -375,6 +376,17 @@ if (typeof document !== 'undefined') {
     setup: (cellText) => act('/live/setup', {cell_text: cellText || null}),
     // Im Uebungslauf beantwortet das Szenario den Abbruch (client.useSource), nie der Server.
     cancelSetup: () => act('/live/setup/cancel'),
+    // Neu einrichten aus Vorschlag und Bestaetigung (OQ-71); eine Bestaetigung wird erst nach Rueckfrage verworfen.
+    // Der Server behaelt Bilder, Vorschlag und Pruefergebnisse im bisherigen Ordner.
+    resetup: async () => {
+      if (status?.state === 'confirmed') {
+        const answer = await openModal({title: 'Neu einrichten', tone: 'warn',
+          text: 'Bestätigte Einrichtung verwerfen und neu einrichten?\n\nDie bisherigen Bilder und Prüfergebnisse bleiben im Ordner der Einrichtung erhalten.',
+          actions: [{label: 'Abbrechen', value: false, escape: true}, {label: 'Verwerfen und neu einrichten', value: true, primary: true, cls: 'danger', icon: 'redo'}]});
+        if (!answer) return null;
+      }
+      return act('/live/setup', {cell_text: null});
+    },
     confirm: () => confirmUi?.submit(),
     // Optionen und Bestaetigungen im Pop-up (Referenz, Diagnosebilder, Werteplan, Testmodus).
     runStart: () => startPop.start(),
