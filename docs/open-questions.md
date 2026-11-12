@@ -63,6 +63,13 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
 | [OQ-67](#oq-67) | — | offen | Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test? |
 | [OQ-68](#oq-68) | — | offen | Auf welchem Windows-Rechner wird der Installer der Brücke automatisch gebaut? |
+| [OQ-69](#oq-69) | — | offen | Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage? |
+| [OQ-70](#oq-70) | — | offen | Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen? |
+| [OQ-71](#oq-71) | — | offen | Wie kann ein fehlerhafter Einrichtungsvorschlag abgebrochen oder neu gestartet werden? |
+| [OQ-72](#oq-72) | — | offen | Warum lehnt die Kantenprüfung die letzte Ziffer der neuen Aufstellung ab? |
+| [OQ-73](#oq-73) | — | offen | Warum aktualisiert die Werkbank während der Einrichtung verzögert? |
+| [OQ-74](#oq-74) | — | offen | Warum wird das Bild nach erfolgreich geprüfter Fokussuche wieder unscharf? |
+| [OQ-75](#oq-75) | — | offen | Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -75,6 +82,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-46](#oq-46) | — | geklärt | Warum scheitert der Live-Rahmenfit trotz korrekter Grobverschiebung? |
 | [OQ-54](#oq-54) | — | geklärt | Welche GSV-Bibliotheksversionen lädt die getestete Windows-Installation? |
 | [OQ-66](#oq-66) | — | geklärt | Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag? |
+| [OQ-76](#oq-76) | — | geklärt | Warum verliert ein Lauf nach bestätigter Einrichtung sämtliche Rahmenmerkmale? |
 
 <!-- OQ-INDEX:END -->
 
@@ -3432,3 +3440,253 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Doppelklick-Starter. Signatur und Updatekanal: [OQ-65](#oq-65).
 * **Antwort landet in:** `TODO.md` (Abschnitt „Danach offen (Brücke)“),
   `windows/bridge/README.md`.
+
+---
+
+<span id="oq-69"></span>
+
+## OQ-69 — Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Befund:** Einrichtung `live-20261111T154459Z` im laufenden Worktree
+  `bruecke-run` auf `08ac9b9`: Fokus und Belichtung abgeschlossen, danach
+  alle drei Startversuche `keine_startlage`. Das gespeicherte Bild zeigt
+  eine scharfe, ausreichend große, leicht gedrehte GSV-2AS-Anzeige mit Plus.
+  `fit_lattice` reproduziert den Fehler offline mit der automatisch gefundenen
+  grünen Hinweisbox. Es entsteht kein Einrichtungsvorschlag.
+* **Offen:** Welche Startkandidaten oder nachfolgenden Prüfungen verwerfen
+  diese Geometrie? Die pauschale Empfehlung „näher heran“ ist durch das Bild
+  nicht belegt. Ein Zusammenhang mit der Windows-EXE ist nicht erkennbar;
+  der Abbruch liegt vor der Ausgabe.
+* **Belege:** lokal `var/live/live-20261111T154459Z/setup/` mit `still.png`,
+  `failure.json`, `cell-text.json` und `camera-settings.json`.
+* **Eingrenzung 2026-11-11:** Erster Suchdurchgang erzeugt 1.274 Punktkandidaten,
+  wählt einen Plus-Anker bei (484,89; 553,56) außerhalb der grünen Anzeige und
+  verwirft alle 32 verfeinerten Kandidaten (7 `plus_nicht_gefunden`,
+  23 `leerzelle_belegt`, 2 `zu_wenige_punkte`). Engere Hinweisbox sowie
+  reine Offline-Versuche mit auf die Grünkontur begrenzten Plus-Ankern
+  reichen nicht zur Behebung. Kein Beleg für eine einzelne bereits gefundene
+  Korrektur; keine Schranke geändert oder Rastersicherheit umgangen.
+  Diagnosekopie: `var/diagnostics/raster-20261111-live-154459Z/`.
+* **Sicherung 2026-11-11:** [Belegpaket mit Quellcode und Offline-Rezept](quellen/setup-failures-2026-11-11.md).
+  Zusätzlich `live-20261111T154403Z` (drei Mal `startlage_mehrdeutig`) und
+  `live-20261111T155404Z` (erster Fit `keine_startlage`, danach Abbruch)
+  gesichert. Alle drei erhaltenen Fehlerbilder liefern auf dem archivierten
+  Quellstand erneut ihre protokollierten Ablehnungen. Der Rastererfolg in der
+  anderen Aufstellung ist ein gesonderter Vergleichsfall; sein Nachführfehler
+  steht unter [OQ-70](#oq-70). Frühere Einzelbilder und Rohstapel fehlen;
+  Grenzen der Reproduzierbarkeit sind im Belegpaket ausdrücklich beschrieben.
+* **Weitere Aufstellung 2026-11-11:** `live-20261111T162902Z` ebenfalls drei
+  Mal `keine_startlage`; [eigenes Standalone-Paket und Claude-Übergabe](quellen/setup-new-position-2026-11-11-162902.md).
+  Letztes Originalbild, alle vorhandenen Einstellungen/Texte/Fehler,
+  Quellstand und Offline-Rezept gesichert. Fokusfenster und grüne
+  Hinweisbox überschneiden sich im gespeicherten Bild nicht (OQ-74).
+* **Antwort landet in:** `src/dispread/dotlattice.py`, zugehörigen
+  Regressionstests und [Validierung](VALIDATION.md).
+
+<span id="oq-70"></span>
+
+## OQ-70 — Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Befund:** Nutzer meldet nach anderer Aufstellung erneut eine gescheiterte
+  Einrichtung. `live-20261111T155557Z` hat einen Vorschlag mit Raster,
+  Rasterversatz und Gegenlesen jeweils `OK`, aber `nachfuehrung=FEHLER`:
+  „rahmenbereiche nicht ausreichend verteilt“. Der gesicherte Vorschlag ist
+  bereits manuell bearbeitet; die ursprüngliche automatische Auswahl ist
+  nicht als eigene Vorschlagsrevision gespeichert.
+* **Offen:** Liegt die unzureichende Verteilung an fehlender nutzbarer
+  Bildstruktur, Bandermittlung, Auswahlstrategie oder Bedienung? Gültiges
+  Raster und erfolgreiche einzelne Bereichsprüfungen ersetzen die räumliche
+  Verteilung und Reserve nicht. Keine Grenzen allein zum Durchlassen ändern.
+* **Belege:** vollständige vorhandene Setup-Dateien, Bereichsänderungsliste,
+  Kameraregler und Live-Status im [Belegpaket](quellen/setup-failures-2026-11-11.md).
+  Acht ursprüngliche Stabilitäts-Einzelbilder wurden nicht auf Platte
+  gespeichert; Zweitmittelbild und ursprüngliche Prüfkennzahlen sind vorhanden.
+* **Antwort landet in:** `src/dispread/live/frame_tracking.py`,
+  `src/dispread/live/setup.py`, Regressionstests und [Validierung](VALIDATION.md).
+
+<span id="oq-71"></span>
+
+## OQ-71 — Wie kann ein fehlerhafter Einrichtungsvorschlag abgebrochen oder neu gestartet werden?
+
+* **Status:** offen (2026-11-11) · **Priorität:** hoch, Bedienablauf blockiert · **Priorität:** kritisch, Workbench-Blocker
+* **Bedienermeldung:** Bei der aktuellen Einrichtung wird Bestätigen angeboten,
+  der Server lehnt den fehlerhaften Vorschlag korrekt ab. Danach fehlen
+  Abbrechen und Neu einrichten. Die Meldung gehört zum Zustand
+  `setup_ready` mit `setup.overall=FEHLER`, nicht zu `setup_failed`.
+* **Codebefund auf `08ac9b9`:** `live/shell.js:titleActions` bietet in
+  `setup_ready` nur Bestätigen. `setup/confirm.js:fieldsReady` berücksichtigt
+  das Fehlerurteil nicht. `LiveService.confirm` lehnt `FEHLER` ab;
+  `cancel_setup` akzeptiert ausschließlich `setup_running`. Ein zusätzlicher
+  Abbrechen-Knopf allein würde deshalb noch keinen vollständigen Ausweg bieten.
+* **Erforderliche Korrektur:** Fehlerhafte Vorschläge im Browser nicht als
+  bestätigbar darstellen; Vorschlag verwerfen und Neueinrichtung erreichbar
+  machen, mit passender Zustandsbehandlung im Backend. Dabei Diagnosebelege
+  erhalten, laufende Einrichtung/Laufzustände korrekt sperren und die
+  Ablehnung fehlerhafter Messfreigaben beibehalten. Regressionsprüfung mit
+  `setup_ready + FEHLER` vor und nach abgelehnter Bestätigung sowie mit
+  `OK`/`WARNUNG` und laufender Einrichtung.
+* **Beleg und Einstieg:** [Belegpaket](quellen/setup-failures-2026-11-11.md),
+  gesicherter Vorschlag `live-20261111T155557Z`, Nutzerbeobachtung dieser Session.
+  Offline mit tatsächlichen UI-Funktionen und Service-Vorbedingungen
+  reproduziert (`replay.py --ui`): nur Bestätigen aktiv, beide Aktionen
+  abgelehnt, Zustand bleibt `setup_ready`. Kein Browser-/Hardwarelauf.
+* **Antwort landet in:** `src/dispread/workbench/static/live/shell.js`,
+  `setup/confirm.js`, `src/dispread/live/service.py` und UI-/API-Regressionstests.
+
+* **Ergänzung nach Nutzerklärung 2026-11-11:** Auch nach erfolgreicher
+  Bestätigung fehlt direktes „Neu einrichten“. Nutzer musste erst einen
+  Lauf starten und stoppen, um eine neue Aufstellung einrichten zu können
+  (`165234Z/run-01`). Das ist der Bedien-Umweg, kein zusätzlicher bewiesener
+  Lauf-/Trackingfehler (OQ-76 geklärt). Abbruch bei fehlerhaftem Vorschlag
+  und direkter Neueinstieg nach Bestätigung müssen beide funktionieren.
+* **Umgesetzt 2026-11-12 (Branch `fix/blocker-oq71`, gemergt in `feat/bruecke-ui`):**
+  * Bei FEHLER ist Bestätigen gesperrt, für Knopf und Enter; der Grund steht sichtbar daneben.
+  * „Neu einrichten“ ist aus dem Vorschlag und nach der Bestätigung erreichbar, nach der Bestätigung mit Rückfrage.
+  * Die Belege der verworfenen Einrichtung bleiben erhalten; der Setup-Ordner ist bei Starts in derselben Sekunde eindeutig.
+  * Am echten Aufbau ist das noch nicht erprobt.
+
+<span id="oq-72"></span>
+
+## OQ-72 — Warum lehnt die Kantenprüfung die letzte Ziffer der neuen Aufstellung ab?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Befund:** Nach dem ausdrücklich beauftragten Workbench-Neustart scheitert
+  `live-20261111T161702Z` in der Vorprüfung: `kanten (Zelle 7)`; Stabilitätsprüfung
+  nicht gestartet. Fokus und Belichtung abgeschlossen. Erster Rasterversuch
+  `keine_startlage`, zweiter `ok`. Die Kantenprüfung untersucht Helligkeitsstufen,
+  nicht ausschließlich Fokus oder Bildschärfe. Der Zellindex 7 bezeichnet
+  die letzte Zahlzelle des angezeigten Texts `+0.69551`.
+* **Offen:** Tatsächliche Reflex-/Helligkeitskante, Geometrie-/Entzerrungseffekt
+  oder Fehlalarm der Vorprüfung? Die Rastererfolge ersetzen die Vorprüfung
+  nicht; deren Grenzen nicht ohne positiven und negativen Beleg lockern.
+* **Belege:** Standbild, Kameraregler, Zellentexte, Fehler und Status unter
+  `var/diagnostics/setup-followup-20261111/live-20261111T161702Z/`.
+  Wiederholung `live-20261111T161955Z` mit demselben Abbruch ebenfalls
+  gesichert. [Zusatzarchiv und Offline-Rezept](quellen/setup-followup-2026-11-11.md).
+  Erster Fall offline reproduziert: Raster `ok`, belegte Zelle 7 mit
+  Helligkeitsschritt 29,8053 gegenüber Fehlergrenze 20.
+* **Antwort landet in:** `src/dispread/setup_checks.py`, Regressionstests
+  und [Validierung](VALIDATION.md).
+
+* **Zusatz 2026-11-11:** Neuester Fall `170836Z`: erster Rasterfit OK; Kanten-FEHLER in Leerzellen 14/15, keine Stabilitätsmessung. Anderer Zelltyp als Zelle 7; getrennt prüfen.
+  [Originale und Rezept](quellen/setup-focus-failure-2026-11-11-170836.md).
+
+<span id="oq-73"></span>
+
+## OQ-73 — Warum aktualisiert die Werkbank während der Einrichtung verzögert?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Bedienermeldung:** Einrichtung etwas langsamer als sonst; Aktualisierung
+  der Oberfläche verzögert, Kamerafeed ausdrücklich nicht betroffen.
+* **Bisher geprüft:** Nach dem Abbruch `live-20261111T161702Z` antworten warme
+  lokale Unix-Socket-Abfragen in etwa 1,7–6,6 ms. Erster Aufruf inklusive
+  Clientinitialisierung etwa 172,8 ms. Intervalle auf derselben Host-Uhr
+  `HOST_MONOTONIC`, Unsicherheit unbekannt. Dies misst weder HTTP-/Browser-
+  Reaktion unter Setup-Last noch Kamera-/Frame-Latenz.
+* **Offen:** Statusabruf, Browser-Rendering und CPU-/Lock-/Eventloop-Verhalten
+  während einer tatsächlichen Einrichtung getrennt beobachten. Keine neue
+  Einrichtung allein für diese erste Diagnose gestartet. Ein Zusammenhang
+  mit dem Kantenabbruch ist nicht belegt.
+* **Belege:** `status-and-local-response-times.json` im selben Diagnoseordner
+  wie OQ-72; Quellprüfung des 500-ms-Pollings und des Service-Statuslocks.
+  [Zusatzarchiv](quellen/setup-followup-2026-11-11.md) mit den Herkunftsgrenzen
+  der Messung; während der betroffenen Einrichtung keine Browsermessung.
+* **Antwort landet in:** Live-Client/-Service, gezielter Lastprüfung und
+  [Validierung](VALIDATION.md).
+
+<span id="oq-74"></span>
+
+## OQ-74 — Warum wird das Bild nach erfolgreich geprüfter Fokussuche wieder unscharf?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Bedienermeldung:** Werkbank findet den richtigen scharfen Fokus und
+  wechselt danach sichtbar wieder auf eine unscharfe Lage. Nutzer fragt
+  zugleich nach dem tatsächlich verwendeten Worktree.
+* **Belegter Stand:** Dienst auf `bruecke-run`, Commit `08ac9b9`; kein
+  automatisches Update beim Neustart. Neuere Workbench-Änderungen in
+  `feat/bruecke-ui` fehlen dort. Die vier Fokus-/Kameramodule sind im
+  laufenden Quellbaum und den geprüften Zweigen `bruecke-ui`, `bruecke-takt`
+  und `bruecke-ux` jedoch byte-identisch. Die alten Fokuskorrekturen R13-9
+  und R13-12 sind Vorfahren des laufenden Commits.
+* **Jüngster Versuch:** `live-20261111T161955Z`, Zielwert 60, beste Schärfe
+  734,45, Endprüfung 727,41; Anfahrt von unten protokolliert. Spätere Regler-
+  Rückmeldung weiterhin 60, Autofokus aus. Ein zurückgesprungener numerischer
+  Fokuswert ist damit nicht belegt; optische Unschärfe ist die Nutzerbeobachtung.
+* **Offen:** Nach der Fokus-Endprüfung startet `_run_setup` die Kamera neu
+  und setzt den Fokus erneut über die UVC-Quelle. Ob diese Grenze die
+  verifizierte optische Endlage verliert (z. B. Motorhysterese), muss mit
+  Bildern und Reglerereignissen vor/nach Neustart geprüft werden. Keine
+  alleinige Ursache aus dem älteren Worktree ableiten; kein Wechsel allein
+  auf Basis des Commit-Datums.
+* **Belege:** Worktree-/Dateihashvergleich und aktuelle Reglerrückmeldungen
+  unter `var/diagnostics/setup-followup-20261111/`, dort zusätzlich
+  Setup-Dateien der beiden neuen Versuche.
+  [Zusatzarchiv](quellen/setup-followup-2026-11-11.md). Passender Interpreter,
+  Prozessumgebung und Arbeitsordner lösen `service`, `setup` und
+  `focus_sweep` tatsächlich unter `bruecke-run/src` auf (`PYTHONPATH=src`).
+* **Zusatzbefund `162902Z`:** Im erhaltenen Bild liegt die LCD-Hinweisbox
+  bei ungefähr (538,3; 144,6; 800,4; 110,0) px, Fokusfenster bei
+  (640; 360; 640; 360) px, Schnittfläche 0. Ziel 46, Endprüfung als
+  erfolgreich protokolliert. Fokuszeitpunkt selbst hat kein Bild;
+  optische Schärfe und unveränderte Aufstellung über den Kameraneustart
+  sind damit nicht unabhängig nachgewiesen. Originale und Geometrieauswertung
+  im [neuen Paket](quellen/setup-new-position-2026-11-11-162902.md).
+* **Antwort landet in:** Kamera-/Fokus-/Setup-Übergang, Regressionstests,
+  [Validierung](VALIDATION.md) und dokumentierter Betriebs-Quellstand.
+
+* **Zusatz 2026-11-11:** Neuester Fall `170836Z`: Nutzer sieht erneut schlechteren Fokus als möglich. Ziel/Rückmeldung 56; beste protokollierte Schärfe 522,219448, Endprüfung 517,933823. Keine Fokus-Bildfolge, numerischer Rücksprung nicht belegt.
+  [Originale und Rezept](quellen/setup-focus-failure-2026-11-11-170836.md).
+* **Teilbehebung 2026-11-12 (Branch `fix/blocker-oq74`, gemergt in `feat/bruecke-ui`):**
+  * **Fokus-ROI:** aus der grünen LCD-Hinweisbox, vorab auf dem neuesten Vorschaubild gesucht, mit 5 % Rand. Ohne Box gilt das mittlere Drittel, und `fokus` meldet WARNUNG. Auf allen sieben Paketbildern überdeckt die ROI die Box zu ≥ 90 %, vorher 0 bzw. 45–53 %.
+  * **Endprüfung nach dem letzten Kameraneustart** gegen die beste Suchprobe, helligkeitsnormiert. Unter 0,6 (Vorabwert) wird der Fokus einmal von unten neu gesetzt, sonst gibt es eine WARNUNG.
+  * **Laufstart:** dieselbe Prüfung gegen die Einrichtungsreferenz. Bleibt die Schärfe zu gering, erscheint eine sichtbare WARNUNG, der Lauf startet trotzdem. Das Ergebnis steht in `session.json`.
+  * **Neue Diagnose:** `still-versuch-N.png`, Fokusausschnitte vor und nach dem Neustart, `focus_end_check`.
+  * **Weiter offen:**
+    * optisches Motorverhalten beim Neustart: erste echte Einrichtung, `restart_effect`
+    * Kalibrierung der Schwelle
+
+<span id="oq-75"></span>
+
+## OQ-75 — Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Teil des Workbench-Blockers
+* **Bedienermeldung:** Kamerabild und Verbindung zur Workbench gleichzeitig
+  ungefähr sieben Sekunden weg. Dauer vom Nutzer geschätzt, nicht gemessen;
+  exakter Beginn und Ende unbekannt. Erste Agent-Prüfung 17:41:15 MEZ.
+* **Logs/Status:** PID 3321848, Start 17:16:36 MEZ, `NRestarts=0`, weiterhin
+  active/running. Keine zugeordnete neue Kamera-/Dienststartmeldung im
+  Anwendungsjournal beim berichteten Ausfall. Kamera später laufend,
+  nicht als stalled markiert. Dies widerlegt einen vorübergehenden Ausfall nicht.
+* **Weitere Belege:** Kernel meldet USB-U1-/xHCI-Warnungen um 17:29 bei den
+  protokollierten früheren Setup-Kameraneustarts. Tailscale-Journal enthält
+  Peer-/DERP-/Endpunktwechsel im erfassten Zeitraum. Keine dieser Meldungen
+  ist ohne genaues Ereignisfenster als Ursache nachgewiesen. CPU-/IO-/
+  Speicherdruckdateien fehlen auf diesem System; Firmware-Abfrage scheiterte,
+  Fehlerausgaben sind erhalten.
+* **Belege:** `var/diagnostics/workbench-outage-20261111/` mit ursprünglichem
+  Anwendungs-/Kerneljournal in Text und JSON, Netzwerkjournal, Service-/
+  Kamera-/Speicherstatus, Befehlen, Exitcodes und Quellen der Zeitangaben.
+  [Logpaket](quellen/workbench-outage-2026-11-11.md).
+* **Antwort landet in:** Dienst-/Kamera-/Verbindungsdiagnose, Fehlerbehebung,
+  Regressionen und [Validierung](VALIDATION.md). Nicht allein durch Neustart
+  oder einen inzwischen wieder funktionierenden Status als geklärt markieren.
+
+
+<span id="oq-76"></span>
+
+## OQ-76 — Warum verliert ein Lauf nach bestätigter Einrichtung sämtliche Rahmenmerkmale?
+
+* **Status:** geklärt (2026-11-11)
+* **Befund:** `live-20261111T165234Z/run-01` enthält 28 UNREADABLE,
+  28 Trackingverluste (`zu_wenig_rahmenmerkmale`), 0 VALID. Originale erhalten.
+* **Antwort:** Der Nutzer erklärt am 2026-11-11 ausdrücklich: Der kurze
+  Start-/Stopp-Lauf war sein Umweg, um nach bestätigter Einrichtung für
+  eine neue Aufstellung wieder einrichten zu können. Dafür fehlte ein
+  direkter Knopf. Dieser absichtlich gestartete Lauf bei Aufstellungswechsel
+  ist kein unabhängiger Beleg eines Trackingfehlers am eingerichteten Aufbau.
+  Die Einordnung als eigenständiger Trackingblocker wird zurückgenommen.
+* **Verweis:** [OQ-71](#oq-71) umfasst auch fehlendes Neu einrichten nach
+  Bestätigung. [Originale und Bedienerkontext](quellen/workbench-positive-regression-2026-11-11.md).
+* **Antwort landet in:** OQ-71, Claude-Übergabe, Validierung und Laborjournal.
