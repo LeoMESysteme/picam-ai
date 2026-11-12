@@ -840,6 +840,10 @@ def assist_measure(
             if cells:
                 label = "Zelle" if len(cells) == 1 else "Zellen"
                 name += f" ({label} {', '.join(str(cell) for cell in cells)})"
+            # OQ-72: Messwert und Abhilfe gleich in der Abbruchmeldung nennen.
+            reason = getattr(result, "reason", None)
+            if reason:
+                name += f" - {reason}"
             precheck_failures.append(name)
     if precheck_failures:
         raise SetupError(f"Vorpruefung meldet FEHLER: {', '.join(precheck_failures)}; "

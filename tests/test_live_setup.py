@@ -432,6 +432,9 @@ def test_assist_measure_reports_phases_in_order(tmp_path, monkeypatch, assist_pr
     ({'kanten': CheckResult('FEHLER', {}, (8,)), 'kontrast': CheckResult('FEHLER', {})},
      'kanten (Zelle 8), kontrast'),
     ({'kanten': CheckResult('FEHLER', {}, (8, 13))}, 'kanten (Zellen 8, 13)'),
+    # OQ-72: Bedienertext der Pruefung steht mit in der Abbruchmeldung.
+    ({'kanten': CheckResult('FEHLER', {}, (7,), 'Reflex über Zelle 7, Licht abschatten')},
+     'kanten (Zelle 7) - Reflex über Zelle 7, Licht abschatten'),
 ])
 def test_assist_precheck_error_names_checks_and_cells(monkeypatch, tmp_path, failures, details):
     cam = SequenceSetupCamera([10])

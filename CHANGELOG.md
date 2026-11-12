@@ -5,6 +5,22 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-12: **Einrichtung: Kantenprüfung erklärt ihren FEHLER (OQ-72).** Problem: `161702Z`/`161955Z` scheiterten
+  mit „kanten (Zelle 7)“ (Stufe 29,8, Fehlergrenze 20), `170836Z` mit „kanten (Zellen 14, 15)“ (11,0 bzw. 7,0,
+  Grenzen 8/6). Ohne Messwert und Abhilfe. Offline-Befund: Beide Muster sind echte Reflexe, kein Fehlalarm. Bei
+  `161702Z` liegt ein Glanzfleck rechts oben an der letzten Ziffer und eine hellere Glasfläche ab Zelle 7/8. Bei
+  `170836Z` liegt eine dunkle Spiegelung über den Leerzellen rechts. Der Leser muss die Leerzelle 15 dort sicher
+  leer erkennen, sein Abstand ist 1,35, bei allen anderen 11 Aufstellungen höchstens 0,96.
+  Neu: Grenzen und Messwert bleiben unverändert. `kanten` liefert `flagged_cells` (Zelle, belegt/leer, Stufe, Grenze)
+  und einen Bedienertext mit Zelle, Lage (Zahl, Trennzelle, Einheit, rechts der Einheit), Stufe, Grenze und
+  Abhilfe. Die Abbruchmeldung der Vorprüfung hängt diesen Text an. Tests: synthetischer Glanzfleck an der letzten
+  Ziffer, schwacher Fleck (WARNUNG), dunkle Spiegelung rechts, sauberes Display; 12 echte Aufstellungen über
+  `DISPREAD_DEV_DATA` (`initial-fit-oq72.json` neben den Originalen).
+  Konsequenz: Alle Urteile sind bitgleich, 3 Fehlerfälle, 9 positive Aufstellungen und 6 historische Kontrollen.
+  Der Bediener sieht nun, was er ändern soll. Offen bleibt der Strukturanteil der Belegtmessung: Die letzte Ziffer
+  vor der leeren Trennzelle erreicht auch in guten Aufstellungen 14–15 von 16. Ob der Reflex im Lauf wandert, ist
+  am echten Aufbau zu prüfen.
+
 * 2026-11-12: **Einrichtung: dunkler Rahmen trotz beleuchteter Fase (OQ-70).** Problem: Bei `155557Z` war schon der
   automatische Vorschlag einseitig. −x hatte nur 2 Bereiche, Seiten `[[2,7],[12,7]]`, keine Reserve. Das Raumlicht
   hellte die untere rechte Fase auf, sie fiel aus der dunklen Rahmenkomponente heraus, und die Solidität sank auf
