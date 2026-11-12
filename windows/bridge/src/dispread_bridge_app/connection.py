@@ -52,6 +52,8 @@ class _DataLink:
         self.valid = False
         self._peer_state, self._peer_release_block = 'unknown', None
         self._peer_release = None  # R1: nur der Pi-Marker dieser Generation/Run-ID
+        #: Nachtrag B2: '1ch'/'4ch' des gebundenen Pi-Laufs aus hello/idle, sonst None.
+        self.peer_output_format = None
         self.output, self.output_reason = 'unavailable', None
         self._operation = threading.Lock()
         self._local = threading.local()
@@ -109,9 +111,11 @@ class _DataLink:
                     self._peer_state = reply['state']
                     self._peer_release_block = reply['release_block']
                     self._peer_release = reply.get('release')
+                    self.peer_output_format = reply.get('output_format')
                 elif reply['type'] == 'idle':
                     self._peer_release_block = reply['release_block']
                     self._peer_release = reply.get('release')
+                    self.peer_output_format = reply.get('output_format')
                 elif reply['type'] == 'record':
                     # Ein echter Wert ist nur zulaessig, wenn der Pi die
                     # Testfreigabe fuer genau diesen Lauf vorher gemeldet hat.
@@ -132,8 +136,9 @@ class _DataLink:
                 if previous_run != self.run_id or self.run_id is None or reply['type'] == 'ended':
                     self.run_format = self._declared_run_format = None
                 if self.run_id is not None and reply['type'] != 'ended':
-                    # Sobald Hello/Idle output_format validiert: Vorrang per Einzeiler:
-                    # self._declared_run_format = reply.get('output_format', self._declared_run_format)
+                    # Hello/Idle melden output_format des gebundenen Laufs (Vorrang vor dem
+                    # Schluss aus tick/record); so warnt die App vor dem ersten Wert.
+                    self._declared_run_format = reply.get('output_format', self._declared_run_format)
                     self.run_format = self._declared_run_format or {
                         'tick': '4ch', 'record': '1ch'}.get(reply['type'], self.run_format)
                 event_run_id, event_format = self.run_id, self.run_format

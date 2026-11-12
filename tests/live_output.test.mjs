@@ -96,3 +96,38 @@ test('Testfreigabe: POST-Koerper nur mit Haken', () => {
   assert.deepEqual(outputBody('uart', {ack: false}), {transport: 'uart'});
   assert.deepEqual(outputBody('off', {ack: true}), {transport: 'off'});
 });
+
+// --- U1: Vierkanal-Takt ---
+import {FORMAT_WARNING, ONE_CH_SHORT, RATE_NOTE, FORMAT_DEFAULTS, rateValid, tickLine, tickShort, formatLabel, outputBody as ob}
+  from '../src/dispread/workbench/static/live/run/output.js';
+
+test('Format: Vorgaben, Warnung woertlich, Takt 1-10 ganzzahlig', () => {
+  assert.deepEqual(FORMAT_DEFAULTS, {format: '4ch', rateHz: 10});
+  assert.match(FORMAT_WARNING, /^Einkanal-Ausgabe: Bei Übergang \(TRANSITION\) und unlesbarer Anzeige \(UNREADABLE\) werden keine Zeilen gesendet\. GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der Aufnahme sind deshalb nicht genau\.$/);
+  assert.equal(RATE_NOTE, 'In GSVmulti dieselbe Frequenz einstellen (Data Frequency).');
+  for (const ok of [1, 4, 10, '7']) assert.equal(rateValid(ok), true);
+  for (const bad of [0, 11, 2.5, '', 'x', null, NaN]) assert.equal(rateValid(bad), false);
+});
+
+test('outputBody: Format und Takt je Weg', () => {
+  assert.deepEqual(ob('tcp', {tcpPort: 5000, format: '4ch', rateHz: '5'}), {transport: 'tcp', tcp_port: 5000, format: '4ch', rate_hz: 5});
+  assert.deepEqual(ob('uart', {format: '1ch', rateHz: 5, ack: true}), {transport: 'uart', acknowledge_unaccepted: true, format: '1ch'});
+  assert.deepEqual(ob('serial', {port: '/dev/ttyAMA0', baudrate: 115200, prefix: 'x', ack: true, format: '4ch', rateHz: 10}),
+    {transport: 'serial', port: '/dev/ttyAMA0', baudrate: 115200, prefix: '%', acknowledge_unaccepted: true, format: '4ch', rate_hz: 10});
+  assert.deepEqual(ob('off', {format: '4ch', rateHz: 10}), {transport: 'off'});
+});
+
+test('Taktzeile im Lauf', () => {
+  const out = (tick, format = '4ch') => ({transport: 'serial', state: 'serial_ready', config: {format, rate_hz: 10}, tick});
+  assert.equal(tickLine(out({rate_hz: 10, total: 200, valid: 150, missed: 3})), 'Vierkanal-Takt 10 Hz · gültig 75 % · verpasst 3');
+  assert.equal(tickLine(out({rate_hz: 10, total: 0, valid: 0, missed: 0})), 'Vierkanal-Takt 10 Hz · gültig – · verpasst 0');
+  assert.equal(tickLine(out({rate_hz: 10, total: 100, valid: 99, missed: 0, lost: 4, unconfirmed: 2})),
+    'Vierkanal-Takt 10 Hz · gültig 99 % · verpasst 0 · verloren 4 · unbestätigt 2');
+  assert.equal(tickLine(out(undefined)), 'Vierkanal-Takt 10 Hz · gültig – · verpasst 0');
+  assert.equal(tickLine(out(null, '1ch')), ONE_CH_SHORT);
+  assert.equal(tickLine({transport: 'tcp', state: 'waiting', config: {}}), ONE_CH_SHORT);
+  assert.equal(tickLine({transport: 'off', state: 'off'}), null);
+  assert.equal(tickShort(out({total: 200, valid: 150, missed: 3})), '10 Hz · 75 % gültig');
+  assert.equal(formatLabel(out(null)), 'Vierkanal-Takt 10 Hz');
+  assert.equal(formatLabel(out(null, '1ch')), 'Einkanal (nur gültige Werte)');
+});

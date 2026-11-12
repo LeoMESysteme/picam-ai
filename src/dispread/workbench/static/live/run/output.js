@@ -16,11 +16,31 @@ export const BRIDGE_NOTE = 'Testfreigabe über die Brücke – nicht abgenommen,
   'ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
 export const BRIDGE_ACK = 'Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe';
 export const BRIDGE_NO_ACK = 'Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.';
-export const UART_RATE_NOTE = 'UART über Brücke trägt bei 115 200 Baud nur etwa 3–4 Werte/s: in GSVmulti höchstens 4 Hz einstellen; 10 Hz nur über Netzwerk.';
+export const UART_RATE_NOTE = 'UART über Brücke läuft mit 460 800 Baud und trägt den Vierkanal-Takt bis 10 Hz. Eine ältere Windows-App mit 115 200 Baud schafft nur etwa 3–4 Werte/s; dann neue App installieren oder Netzwerk verwenden.';
 export const RELEASE_TAG = 'Testfreigabe – nicht abgenommen';
 export const TEST_BLOCK = 'Testlauf erlaubt keine externe Ausgabe. Verbindungsweg auf Aus stellen.';
 export const UNCONFIRMED = 'GSVmulti-Empfang unbestätigt.';
 export const MARKER = 'nicht abgenommen';
+// Format und Takt (Spec 2026-11-11 §3.5/§6 F3). Warnung wortgleich aus der Spec.
+export const FORMAT_WARNING = 'Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden keine Zeilen gesendet. ' +
+  'GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der Aufnahme sind deshalb nicht genau.';
+export const ONE_CH_SHORT = 'Einkanal: Lücken werden in GSVmulti nicht aufgezeichnet';
+export const RATE_NOTE = 'In GSVmulti dieselbe Frequenz einstellen (Data Frequency).';
+export const FORMATS = [['4ch', 'Vierkanal-Takt (empfohlen)'], ['1ch', 'Einkanal (nur gültige Werte)']];
+export const FORMAT_DEFAULTS = {format: '4ch', rateHz: 10};
+export const RATE_ERROR = 'Takt: ganze Zahl von 1 bis 10 Hz.';
+export const CHECKLIST_TITLE = 'In GSVmulti';
+export const CHECKLIST = [
+  'Vierkanal-Session aus der Windows-App, Kanäle 8_2–8_4 ausgeblendet',
+  'Configure Recording → Advanced → „Record Hidden Channels“ einschalten (Pflicht, wird nicht in der Session gespeichert)',
+  'Für 8_1 Autoscale Y aus, Min/Max fest einstellen',
+];
+export const rateValid = (value) => {
+  if (value === null || value === '' || typeof value === 'boolean') return false;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= 10;
+};
+
 export const CHOICE_KEY = 'werkbank.ausgabe-weg';
 export const TOAST_DOWN = 'Verbindung zur GSVmulti-Brücke unterbrochen – lokaler Lauf läuft weiter';
 
@@ -72,18 +92,43 @@ export function configText(output) {
   return '';
 }
 
-// POST-Koerper `output`. fields = {port, baudrate, prefix, tcpPort, ack}.
+// Format/Takt-Teil des Koerpers; ohne fields.format bleibt der Koerper wie vor dem Vierkanal-Takt.
+const formatPart = (fields) => !fields.format ? {}
+  : fields.format === '4ch' ? {format: '4ch', rate_hz: Number(fields.rateHz)} : {format: '1ch'};
+
+// POST-Koerper `output`. fields = {port, baudrate, prefix, tcpPort, ack, format, rateHz}.
 export function outputBody(choice, fields = {}) {
   if (choice === 'serial') {
-    return {transport: 'serial', port: fields.port, baudrate: Number(fields.baudrate), prefix: fields.prefix,
-      acknowledge_unaccepted: fields.ack === true};
+    // Vierkanal verlangt Praefix % (Server lehnt anderes ab).
+    const prefix = fields.format === '4ch' ? '%' : fields.prefix;
+    return {transport: 'serial', port: fields.port, baudrate: Number(fields.baudrate), prefix,
+      acknowledge_unaccepted: fields.ack === true, ...formatPart(fields)};
   }
   // Brueckenwege: Testfreigabe nur mit gesetztem Haken, sonst bleibt das Feld weg (Ausgabe gesperrt).
   const release = fields.ack === true ? {acknowledge_unaccepted: true} : {};
-  if (choice === 'tcp') return {transport: 'tcp', tcp_port: Number(fields.tcpPort), ...release};
-  if (choice === 'uart') return {transport: 'uart', ...release};
+  if (choice === 'tcp') return {transport: 'tcp', tcp_port: Number(fields.tcpPort), ...release, ...formatPart(fields)};
+  if (choice === 'uart') return {transport: 'uart', ...release, ...formatPart(fields)};
   return {transport: 'off'};
 }
+
+// Vierkanal-Lauf? Alles ohne format=4ch ist Einkanal (alter Vertrag).
+export const isFourChannel = (output) => !isOff(output) && output?.config?.format === '4ch';
+const pct = (tick) => (Number.isFinite(tick?.total) && tick.total > 0 && Number.isFinite(tick?.valid)
+  ? `${Math.round((100 * tick.valid) / tick.total)} %` : '–');
+const rateOf = (output) => output?.tick?.rate_hz ?? output?.config?.rate_hz ?? '–';
+
+// Zeile im Lauf: Vierkanal-Takt mit Anteil gueltig und verpassten Takten, sonst die Einkanal-Warnung (kurz).
+export function tickLine(output) {
+  if (isOff(output)) return null;
+  if (!isFourChannel(output)) return ONE_CH_SHORT;
+  const t = output.tick || {};
+  const extra = [['lost', 'verloren'], ['unconfirmed', 'unbestätigt']].filter(([k]) => t[k] > 0).map(([k, w]) => ` · ${w} ${t[k]}`).join('');
+  return `Vierkanal-Takt ${rateOf(output)} Hz · gültig ${pct(t)} · verpasst ${Number.isFinite(t.missed) ? t.missed : 0}${extra}`;
+}
+// Statusleiste, nur Vierkanal.
+export const tickShort = (output) => `${rateOf(output)} Hz · ${pct(output?.tick)} gültig`;
+// Bridge-Dialog, Zeile "Format".
+export const formatLabel = (output) => isFourChannel(output) ? `Vierkanal-Takt ${rateOf(output)} Hz` : 'Einkanal (nur gültige Werte)';
 
 export function loadChoice(storage = globalThis.localStorage) {
   try {
@@ -104,6 +149,8 @@ export function outputItem(output, esc = String) {
     : ` <span class="tag" title="${esc(LOCK_NOTICE)}">gesperrt</span>`;
   // Testfreigabe: Marker zuerst, damit die Kuerzung der Leiste ihn nie abschneidet.
   const lead = isReleased(output) ? `${mark.trim()} ` : '';
-  return {hidden: false, cls: outputTone(output), html: `${lead}<span class="tx">${esc(way)}<b>${esc(shortState(output))}</b></span>${lead ? '' : mark}`,
-    title: outputView(output)};
+  const fmt = isFourChannel(output) ? ` <span class="tx">· ${esc(tickShort(output))}</span>`
+    : ` <span class="tag warn" data-part="one-ch" title="${esc(FORMAT_WARNING)}">Einkanal</span>`;
+  return {hidden: false, cls: outputTone(output), html: `${lead}<span class="tx">${esc(way)}<b>${esc(shortState(output))}</b></span>${lead ? '' : mark}${fmt}`,
+    title: [outputView(output), tickLine(output)].join('\n')};
 }

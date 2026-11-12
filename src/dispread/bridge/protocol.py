@@ -33,10 +33,13 @@ TICK_ACK_OUTCOMES = ("written", "expired", "failed", "unconfirmed")
 #: Faehigkeit im Client-Hello; ohne sie bietet der Pi nie einen Takt an.
 TICK_CAPABILITY = "tick"
 TICK_CAPABILITY_VERSION = 1
+#: Additiv (Nachtrag B2): Format des gebundenen Laufs in hello/idle, damit die
+#: Windows-App vor dem ersten Wert vor einer unpassenden GSVmulti-Session warnt.
+OUTPUT_FORMATS = ("1ch", "4ch")
 _FIELDS = {
     "hello": (
         {"protocol_version", "transport", "run_id", "state", "release_block", "capabilities", "permissions"},
-        {"lease_id", "nonce", "signature", "release"},
+        {"lease_id", "nonce", "signature", "release", "output_format"},
     ),
     "demo_request": ({"transport", "run_id", "count", "rate_hz"}, set()),
     "poll": (_BOUND, set()),
@@ -46,7 +49,7 @@ _FIELDS = {
     "uart_auth": ({"nonce", "mode", "credential"}, set()),
     "uart_authenticated": ({"token"}, set()),
     "record": (_BOUND | {"demo", "record", "frame_age_ns", "barrier_id"}, {"release"}),
-    "idle": (_BOUND | {"release_block"}, {"release"}),
+    "idle": (_BOUND | {"release_block"}, {"release", "output_format"}),
     "ended": (_BOUND, set()),
     "ack": (_BOUND | {"frame_sequence", "barrier_id", "outcome"}, set()),
     "tick": (_BOUND | {"seq", "valid", "value_text", "frame_sequence", "time_unix_ns", "origin_unix_ns",
@@ -357,6 +360,8 @@ def _validate_v2(message):
         _identifier(message["lease_id"], nullable=kind in ("hello", "error"))
     if "release_block" in message:
         _text(message["release_block"], nullable=True)
+    if "output_format" in message and message["output_format"] not in (None, *OUTPUT_FORMATS):
+        raise ValueError("invalid output format")
     if "release" in message:
         # Nur der exakte Testfreigabe-Marker, nie zusammen mit einer Sperre.
         if message["release"] != TEST_RELEASE or message.get("release_block") is not None:

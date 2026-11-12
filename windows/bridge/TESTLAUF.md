@@ -124,6 +124,31 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
     06.11.2026, nur Port anpassen). Trennzeichen/Filter nennt die App nicht (OQ-53 offen). Legen Sie eine **eigene Testsession** an, keine produktive
     Session überschreiben. Haken in der App: „In GSVmulti eingestellt …“ („Weiter“ bleibt bis dahin grau, mit Grund).
 
+## D2. Vierkanal-Takt (Laufstart und GSVmulti)
+
+Der Vierkanal-Takt ist die empfohlene Ausgabe (Spec 2026-11-11). Der Pi sendet in festem Raster ein Telegramm je
+Takt, auch bei Übergang und unlesbarer Anzeige (dann mit Fehlwert), damit GSVmulti die Lücken aufzeichnet.
+
+**Laufstart (Werkbank, Laufoptionen):**
+
+1. Ausgabeweg wählen (nicht „Aus“). Darunter erscheint „Format“.
+2. „Vierkanal-Takt (empfohlen)“ ist vorgewählt. **Takt** 1–10 Hz (Vorgabe 10); in GSVmulti **dieselbe Frequenz**
+   einstellen (Data Frequency).
+3. „Einkanal (nur gültige Werte)“ bleibt wählbar und zeigt die Warnung: Bei Übergang und unlesbarer Anzeige werden
+   keine Zeilen gesendet, GSVmulti zeichnet die Lücken nicht auf, Laufzeit und Zeitachse sind nicht genau.
+4. Testlauf und Übungslauf: keine Ausgabe, Format und Takt sind gesperrt.
+
+**In GSVmulti (Checkliste, steht auch im Start-Popover):**
+
+- Vierkanal-Session aus der Windows-App verwenden (8_2–8_4 ausgeblendet).
+- **Configure Recording → Advanced → „Record Hidden Channels“ einschalten.** Pflicht; die Einstellung steht nicht
+  in der Session und muss bei jeder Aufnahme geprüft werden.
+- Für 8_1 Autoscale Y aus, Min/Max fest einstellen (Fehlwerte gehen über den Rand).
+
+**Im Lauf:** Dock und Statusleiste zeigen „Vierkanal-Takt 10 Hz · gültig x % · verpasst n“ (bei Brückenwegen
+zusätzlich „verloren“/„unbestätigt“, wenn > 0). Bei Einkanal steht dauerhaft „Einkanal: Lücken werden in GSVmulti
+nicht aufgezeichnet“. Der Brücken-Dialog zeigt im Schritt „Bereitschaft“ die Zeile „Format“.
+
 ## E. Empfangstest (synthetische Demo)
 
 16. App Schritt 5: „Ich verwende eine getrennte GSVmulti-Testsession.“ setzen,
@@ -185,8 +210,7 @@ Die EXE muss aus dem Stand ab R1 gebaut sein (ältere Stände lehnen die Testfre
     Keine Abnahme. **Während des Laufstarts keine Demo (Empfangstest) in der App laufen lassen**; die Werkbank
     meldet sonst, dass die Brücke belegt ist.
 19c. Lauf stoppen: App „Ausgabe wieder gesperrt“ bzw. „Lauf beendet“.
-19d. **UART-Rate:** „UART über Brücke“ trägt bei 115 200 Baud nur etwa 3–4 Werte/s (Messung R1: gut jeder zweite
-    Wert bei 10 Hz, Latenz ≈ 150 ms). **In GSVmulti höchstens 4 Hz einstellen; 10 Hz nur über Netzwerk.** Das Netzwerk ist der Hauptweg. Die Baudrate bleibt unverändert.
+19d. **UART-Rate:** Die Brücke läuft mit 460 800 Baud (`src/dispread/bridge/baud.py`, das Profil meldet `uart_baud`) und trägt den Vierkanal-Takt bis 10 Hz; gemessen auf Linux 600/600 Takte, p50/p99 22,6/44,5 ms. Eine ältere EXE (115 200 Baud, ohne `uart_baud`) schafft nur etwa 3–4 Werte/s (Messung R1); dann die neue EXE bauen bzw. das Netzwerk verwenden.
 19e. **UART-Adapter und Verdrahtung** (nur Weg „UART über Brücke“; Quelle: `docs/HARDWARE_PROFILE.md`, Abschnitt
     zum Pi-UART-Demotest): Der Adapter ist ein **USB-TTL-Adapter mit 3,3 V** (kein RS-232, kein Pegelwandler),
     **nur 3,3-V-Adapter, nie 5 V**. **VCC wird nicht verbunden.** GND gemeinsam. TX und RX werden gekreuzt (Pi-TX an Adapter-RXD, Pi-RX an

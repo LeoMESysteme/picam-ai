@@ -719,7 +719,7 @@ def test_tick_claiming_release_without_prior_pi_marker_revokes_link(setup):
         state.stop()
 
 
-def test_controller_run_format_from_validated_messages_and_run_changes(setup, tmp_path):
+def test_controller_run_format_from_hello_and_messages_and_run_changes(setup, tmp_path):
     from test_app_controller import make
 
     manager, factory, hub, events = setup
@@ -730,7 +730,8 @@ def test_controller_run_format_from_validated_messages_and_run_changes(setup, tm
     state, advance = _bind_ticks(hub, 'format-ticks')
     try:
         link = connected(manager)
-        assert controller.context().run_format is None
+        # output_format aus Hello/Idle: Format schon vor dem ersten Wert bekannt.
+        assert controller.context().run_format == '4ch'
         advance()
         link.send(dict(version=1, type='poll', request_id='format-p1'))
         assert link.receive()['type'] == 'tick'
@@ -746,9 +747,9 @@ def test_controller_run_format_from_validated_messages_and_run_changes(setup, tm
         state.stop()
     state = _bind(hub, 'format-records', release='test_unaccepted')
     try:
-        link.heartbeat()  # new run, no value yet
+        link.heartbeat()  # new run, no value yet: Format kommt aus dem Hello des neuen Laufs
         assert controller.context().run_id == 'format-records'
-        assert controller.context().run_format is None
+        assert controller.context().run_format == '1ch'
         state.publish(_real(1))
         link.send(dict(version=1, type='poll', request_id='format-p2'))
         assert link.receive()['type'] == 'record'
@@ -764,3 +765,18 @@ def test_controller_run_format_from_validated_messages_and_run_changes(setup, tm
     manager.disconnect()
     assert controller.context().run_format is None
     controller.request_exit(confirmed=True)
+
+
+def test_link_exposes_pi_output_format_before_first_value(setup):
+    manager, factory, hub, events = setup
+    link = connected(manager)
+    assert link.peer_output_format is None                  # kein Lauf gebunden
+    state, advance = _bind_ticks(hub, 'format-run')
+    try:
+        link.send(dict(version=1, type='poll', request_id='p1'))   # Laufwechsel -> hello
+        link.receive()
+        assert link.peer_output_format == '4ch'
+    finally:
+        hub.release_real_run('format-run')
+        state.drain_timeout_s = 0
+        state.stop()

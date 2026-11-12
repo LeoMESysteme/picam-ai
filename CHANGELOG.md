@@ -42,6 +42,101 @@ was ist die Konsequenz.
   Validierte Pi-Antworten zählen für die Aktivitätsanzeige; PnP-Inventur gecacht und
   Windows-Subprozesse ohne Konsolenfenster. Keine Windows-/Hardwareabnahme in dieser Session.
 
+* 2026-11-12: **Einrichtung: dunkler Rahmen trotz beleuchteter Fase (OQ-70).** Problem: Bei `155557Z` war schon der
+  automatische Vorschlag einseitig. −x hatte nur 2 Bereiche, Seiten `[[2,7],[12,7]]`, keine Reserve. Das Raumlicht
+  hellte die untere rechte Fase auf, sie fiel aus der dunklen Rahmenkomponente heraus, und die Solidität sank auf
+  0,9605 < 0,97. Die Bandermittlung fiel deshalb auf das feste Band zurück. Bei kleinem Quad erreicht dieses die
+  linke Fase nicht.
+  Neu: Die Grenze 0,97 bleibt. Darunter misst `_notched_frame` die Rahmenkontur je Quadseite aus Strahlen,
+  0,75-Quantil der Austritte (`bezel_notch_quantile`, nur Einrichtung, bindet keinen Laufstart). Trägt die Fläche
+  außerhalb dieser Kontur ein ganzes Suchfenster, etwa bei Balken, Kabel oder Schatten, bleibt es beim Rückfall
+  `rahmenform_unplausibel`. Sonst gilt die Komponente innerhalb der Kontur als Rahmen, ohne die Kerbe.
+  Einseitige Vorschläge nennen jetzt „Kamera leicht drehen oder verschieben und neu einrichten“. Tests:
+  synthetische Kerbe, Balken mit und ohne Kerbe, Konfiguration; `155557Z` und acht positive Aufstellungen über
+  `DISPREAD_DEV_DATA`.
+  Konsequenz: `155557Z` hat `[[9,10],[10,10]]` mit Reserve. Von 63 Einrichtungsbildern ändern sich nur die drei
+  bisherigen Kerben-Rückfälle, alle besser. Die übrigen 60 bleiben bitgleich, auch die vier Review-Balken. Die
+  Laufprüfung ist unverändert. Am echten Aufbau ist das noch nicht erprobt.
+
+* 2026-11-12: **Werkbank /live: Bediensackgasse der Einrichtung (OQ-71).** Problem: Bei Gesamturteil FEHLER blieb
+  Bestätigen für Knopf und Enter freigegeben (nur der Server lehnte ab), und „Neu einrichten“ gab es nur bei idle,
+  fehlgeschlagen und gestoppt; nach einem Vorschlag oder einer Bestätigung blieb nur Lauf starten und stoppen.
+  Neu: Bei FEHLER ist Bestätigen gesperrt (Titelleiste und Inspektor, Text „Bestätigen nicht möglich: Prüfung FEHLER
+  – neu einrichten“) und „Neu einrichten“ der Primärknopf. In `setup_ready` und `confirmed` ist „Neu einrichten“
+  immer erreichbar; bei `confirmed` fragt ein Dialog „Bestätigte Einrichtung verwerfen und neu einrichten?“; im Lauf
+  steht der Knopf gesperrt mit Grund. Backend: `start_setup` legt nie in einen vorhandenen Setup-Ordner an (bei gleicher
+  Sekunde Suffix `-2`), damit Bilder, Vorschlag, Prüfergebnisse und `profile.json` einer verworfenen Einrichtung
+  unverändert bleiben; die Server-Ablehnung von FEHLER bleibt zweite Sicherung. Tests: Backend (Belege bleiben,
+  FEHLER, Lauf, Abbruch und sofortiger Neustart ohne Dienstneustart), Node, fünf Playwright-Szenen. Konsequenz: keine
+  Schranke gelockert; offen bleibt der Nachweis am echten Aufbau.
+
+* 2026-11-12: **Einrichtung: Fokus misst auf der LCD-Hinweisbox, Endprüfung nach dem Kameraneustart (OQ-74).**
+  Problem: Die Fokussuche maß fest im mittleren Bilddrittel. Bei `162902Z` lag die LCD-Hinweisbox zu 0 % darin,
+  dort wurde das Gehäuse scharf gestellt; bei fünf weiteren Aufstellungen lagen nur 45–53 % der Box darin. Nach
+  der Suche startet die Kamera neu (Regler, Belichtung). Ob die Linse dabei ihre Lage verliert, war ungeprüft,
+  und Bilder davor und danach fehlten. Neu:
+  * Vor der Suche läuft `find_green_hint_box` einmal auf dem neuesten Vorschaubild, Kosten etwa 10–55 ms. Die
+    Fokus-ROI ist diese Box mit 5 % Rand. Ohne Box gilt das mittlere Drittel, und die neue Prüfzeile `fokus`
+    meldet WARNUNG „Fokus ohne LCD-Hinweis gemessen“.
+  * Nach dem letzten Kameraneustart misst `check_focus_after_restart` auf derselben ROI. Verglichen wird die
+    helligkeitsnormierte Schärfe (Laplace-Varianz / ROI-Mittel²) mit der besten Suchprobe. Liegt sie unter
+    0,6, wird der Absolutwert einmal neu gesetzt: erst Automatik aus, dann von unten. Bleibt die Schärfe
+    darunter, meldet `fokus` WARNUNG, und die Bestätigung braucht eine Kenntnisnahme.
+  * Diagnose im Setup-Ordner: Abgelehnte Versuche behalten ihr Mittelbild als `still-versuch-N.png`
+    (umbenannt, nicht neu kodiert). Dazu kommen die ROI-Ausschnitte `fokus-vor-neustart.png`,
+    `fokus-nach-neustart.png` und gegebenenfalls `fokus-nach-neusetzen.png`. `camera-settings.json` trägt
+    `focus_roi`, `focus_sweep_roi_mean`, `focus_end_check` und `focus_diagnostic_crop`. Zusatz im
+    ungünstigsten Fall: etwa 6 MB.
+  * Laufstart: Nach dem Kameraneustart `laufstart` misst `check_focus_at_run_start` die Schärfe auf dem
+    Begrenzungsrechteck des bestätigten Anzeige-Vierecks. Referenz ist der Median der Einzelbilder der
+    Stabilitätsaufnahme (`proposal.json` → `focus_reference`), normiert wie in der Einrichtung. Unter 0,6
+    wird der Fokus einmal von unten neu gesetzt. Bleibt die Schärfe darunter, erscheint im Laufstatus
+    (`run.focus_check`) und als stehender Hinweis die Warnung „Bild nach Kamerastart unschärfer als bei der
+    Einrichtung (x %) – Fokus prüfen“. Der Lauf startet trotzdem, die Freigabe bleibt unberührt. Das
+    Ergebnis steht in `session.json` (`focus_check`), die Ausschnitte als `fokus-laufstart-*.png` im
+    Laufordner. Ein Kamerafehler bei der Prüfung wird als WARNUNG gemeldet; ohne Referenz steht
+    `NICHT_GEPRUEFT` im Audit.
+
+  Konsequenz: Auf allen sieben Paketbildern überdeckt die ROI die Hinweisbox zu ≥ 90 %, auch nach einer
+  Gauss-Unschärfe mit sigma 3. Grundlage sind die Regressionsbilder unter
+  `$DISPREAD_DEV_DATA/regression/2026-11-11/`. Die Schwelle 0,6 ist ein Vorabwert und an den Paketen nicht
+  kalibrierbar. Offline nicht nachgewiesen: das optische Verhalten des Fokusmotors beim Kameraneustart, in der
+  Einrichtung wie am Laufstart. Die neuen Audit-Felder (`restart_effect`) liefern den Beleg beim nächsten
+  echten Lauf.
+* 2026-11-11: **Werkbank /live: Vierkanal-Takt am Laufstart und im Lauf (U1).** Problem: Format und Takt der
+  Ausgabe waren in der Oberfläche nicht wählbar, die Einkanal-Warnung (F3) fehlte. Neu: Laufoptionen mit „Format“
+  (Vierkanal-Takt empfohlen, Vorgabe; Einkanal mit wörtlicher F3-Warnung), Takt 1–10 Hz (Vorgabe 10), Checkliste
+  „In GSVmulti“ inkl. „Record Hidden Channels“; POST sendet `format`/`rate_hz` (Vierkanal) bzw. `format: '1ch'`;
+  Testlauf sperrt die Felder. Im Lauf zeigen Dock und Statusleiste Takt, Anteil gültig, verpasst (verloren/
+  unbestätigt bei > 0) aus `run.output.tick`, bei Einkanal die Kurzwarnung; Brücken-Dialog „Bereitschaft“ mit Zeile
+  „Format“. Laufoptionen scrollen in niedrigen Fenstern. Konsequenz: neue Läufe gehen standardmäßig im Vierkanal-Takt
+  hinaus; Tests (Node, Playwright mit Fake-Server-Szenen) decken Körper, Warnung, Sperre und Statuszeile ab.
+* 2026-11-11: **Brücke: Ausgabeformat des Laufs in `hello`/`idle` (Nachtrag B2, additiv).** Problem: Die
+  Windows-App erfuhr das Format des Laufs erst am ersten Wert und konnte nicht vorher warnen, wenn die erzeugte
+  GSVmulti-Session nicht passt. Neu: `hello` und `idle` tragen `output_format: "4ch"|"1ch"` des gebundenen
+  Laufs (`4ch` bei Taktbetrieb, sonst `1ch`, also auch ohne `format` im Start-POST). Ohne gebundenen Lauf fehlt
+  das Feld. Der Codec akzeptiert nur diese Werte oder `null`, nur in `hello`/`idle`. Gesendet wird es nur an
+  Clients mit Hello-Fähigkeit `tick: 1`; ältere Codecs lehnen unbekannte Felder ab und bekommen es nie. Die
+  Windows-Verbindung legt den Wert als `peer_output_format` ab (sonst `None`).
+* 2026-11-11: **Nachführung: Stilllegung nach Review nachgeschärft (TB, W1/W2/G3–G5).**
+  * *W1:* Die Schutzprobe vergleicht jetzt den Schritt vom bisherigen zum neuen Satz, auch mit einem weiteren
+    ausfallenden Bereich. Stillgelegt wird nur, wenn ein Zusatzausfall dadurch weder häufiger noch um mehr als
+    0,05 px schwerer gefährlich (> 1,0 px) wird und der neue Satz selbst höchstens 0,05 px schlechter ist.
+    Beleg: Der frühere Testsatz {0, 5, 15} bestand die alte Probe (0,957 px), wird jetzt aber abgelehnt
+    (Zusatzausfall 8/16/17/19: 1,46 px statt < 1,0 px). Die Entscheidung je Probenbild ist genau `update()`
+    (Treffer werden je Bild einmal gesucht; `_match`/`_decide` bitgleich aus `_fine_update` ausgelagert).
+  * *G4:* Die Probe läuft als eigener Prozess (`python -m dispread.live.region_probe`, nice 19) und wird bei
+    Laufende abgebrochen. An 1080p: 31 s CPU, 41 s bis zur Entscheidung; `update()` im Messprozess dabei
+    13,1 statt 12,0 ms je Bild.
+  * *G3:* `off` erst ab dem Bild nach der Stilllegung; je Satz und Bereich höchstens ein Audit-Versuch (kein
+    doppeltes Ereignis), Verzeichnis-fsync, eigener Fehlerzähler `deactivation_errors`. *G5:* Die Obergrenze
+    zählt nur nutzbare Bereiche.
+  * *W2:* Der Echtdatentest misst neu akzeptierte Quads gegen einen unabhängigen Glasbezug (Lage allein aus den
+    LCD-Kanten). Sie liegen nicht weiter davon weg als die bisher guten Quads desselben Laufs. Eine absolute
+    Grenze von 0,35 px lässt sich so nicht belegen, weil der Glasbezug selbst bis 0,8 px streut.
+  * *OQ-70-Gegenprobe:* Mit der strengeren Auswahl wählen die drei positiven Aufstellungen
+    (`164508Z`, `165234Z`, `165754Z`, Paket per SHA-256 geprüft) genau ihre gespeicherten 20 Bereiche mit Reserve.
+    Der Fehlfall `155557Z` bleibt gleich einseitig ([[2, 7], [12, 7]]): nicht verschlimmert, nicht behoben.
 * 2026-11-11: **Nachführung: Rahmenbereiche automatisch robust (TB, Freigabe Leonhard, Punkte 1 und 2).**
   Problem: Glanz- und Fasenbereiche bewegen sich bei Lichtänderung nicht starr mit und kosten im Lauf bis
   24 % der Bilder (`rahmen_unstimmig`); bisher half nur manuelles Entfernen nach dem Lauf.

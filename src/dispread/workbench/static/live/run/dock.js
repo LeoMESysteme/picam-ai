@@ -3,7 +3,7 @@
 // dem Stopp die Zusammenfassung mit Endgrund und Ablage. Fehllesungen gegen
 // die Referenz erst nach Laufende (Spec OP-1), vorher "Abgleich nach Laufende".
 import {dec, esc, grp} from '../shell.js';
-import {configText, markerText, isOff, outputLines, outputTone} from './output.js';
+import {FORMAT_WARNING, configText, isFourChannel, markerText, isOff, outputLines, outputTone, tickLine} from './output.js';
 
 export const STATUS_ROWS = [
   ['valid', 'ok', 'Freigegeben', 'VALID'], ['transition', 'warn', 'Wechselt', 'TRANSITION'],
@@ -83,6 +83,8 @@ export function outputDockHTML(output) {
     `${markerText(output) && output.transport === 'serial' ? `<span class="pa"><span class="tag">${esc(markerText(output))}</span></span>` : ''}</div>` +
     (output.transport !== 'serial' && markerText(output) ? `<p><span class="tag">${esc(markerText(output))}</span></p>` : '') +
     `<p class="${tone ? `${tone}-t ` : ''}wrap"><b>${esc(lines[0])}</b></p>` +
+    (isFourChannel(output) ? `<p class="wrap" data-part="tick">${esc(tickLine(output))}</p>`
+      : `<p class="warn-t wrap" data-part="one-ch" title="${esc(FORMAT_WARNING)}">${esc(tickLine(output))}</p>`) +
     lines.slice(1).map((line) => `<p class="note wrap">${esc(line)}</p>`).join('') +
     (cfg ? `<p class="note mono">${esc(cfg)}</p>` : '') +
     (['uart', 'tcp'].includes(output.transport) ? '<p class="brow"><button type="button" class="ghost" data-act="bridge-setup">Brücke anzeigen…</button></p>' : '') + '</div>';

@@ -22,8 +22,8 @@ export function mountBridgeDialog(client, {fetchImpl, doc = globalThis.document}
     return view;
   };
 
-  function build({choice, running}) {
-    const state = {choice, running: Boolean(running), hubDown: false, deadline: null, expired: false, profile: null,
+  function build({choice, running, output}) {
+    const state = {choice, output, running: Boolean(running), hubDown: false, deadline: null, expired: false, profile: null,
       uart: null, status: null, closed: false, polls: 0};
     const uart = () => bridgeTransport(state.choice) === 'uart';
     const back = doc.createElement('div');
@@ -87,7 +87,7 @@ export function mountBridgeDialog(client, {fetchImpl, doc = globalThis.document}
         const u = uartView(state.status);
         setStep('uart', u.tone, u.word);
         showErr('uart-err', state.uartAction || u.error);
-        const rows = readinessRows(state.status);
+        const rows = readinessRows(state.status, state.output);
         part('rows').innerHTML = rows.map((r) => `<dt>${esc(r.label)}</dt><dd class="${r.mono ? 'mono' : ''}${r.tone === 'warn' ? ' warn-t' : ''}">` +
           `${esc(r.value)}</dd>`).join('');
         const connected = Boolean(state.status.connected);
@@ -242,6 +242,7 @@ export function mountBridgeDialog(client, {fetchImpl, doc = globalThis.document}
         // Ein Code gilt nur fuer den Transport, fuer den er erzeugt wurde.
         if (bridgeTransport(state.choice) !== before) { clearCode(); state.expired = false; }
         state.running = Boolean(next.running);
+        if ('output' in next) state.output = next.output;
         if (!state.closed) render();
       },
     };

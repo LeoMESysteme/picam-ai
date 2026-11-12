@@ -7,8 +7,12 @@ REASONS = {
     "bildgroesse_abweichend": "bildgroesse weicht von der Referenz ab",
     "vorschlag_ungeeignet": "rahmenvorschlag ungeeignet",
     "zu_wenig_rahmenbereiche": "zu wenige geeignete Rahmenbereiche",
-    "rahmenbereiche_einseitig": "rahmenbereiche nicht ausreichend verteilt",
-    "rahmenbereiche_ohne_reserve": "rahmenbereiche ohne Reserve fuer zwei Ausfaelle",
+    # OQ-70: Bedienhilfe schon bei der Einrichtung, nicht erst als spaeteres Laufproblem.
+    "rahmenbereiche_einseitig": (
+        "nachfuehrbereiche zu einseitig verteilt; Kamera leicht drehen oder verschieben und neu einrichten"),
+    "rahmenbereiche_ohne_reserve": (
+        "nachfuehrbereiche ohne Reserve fuer zwei Ausfaelle; Kamera leicht drehen oder verschieben "
+        "und neu einrichten"),
     "rahmenbereiche_zweitbild_instabil": (
         "rahmenbereiche im Zweitbild nicht stabil genug wiedergefunden; "
         "mehr Licht auf den Rahmen geben oder anderen Blickwinkel waehlen und neu einrichten"),
