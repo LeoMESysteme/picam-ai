@@ -493,47 +493,114 @@ def check_focus_after_restart(
     verify = getattr(sweep, "focus_verify", None)
     if not verify or not len(sweep):
         return None
-    sleep = sleep or time.sleep
     best_focus, best_score = max(sweep, key=lambda pair: pair[1])
     best_mean = getattr(sweep, "roi_means", {}).get(best_focus)
-    target = int(verify["target"])
-    probe = _FocusProbe(cam, hint_box, settle_s=settle_s, sleep=sleep, should_stop=should_stop,
-                        label="Fokus-Endpruefung")
     if info is not None:
         info("Fokus nach Kameraneustart pruefen")
+    result, frames = _check_lens_after_restart(
+        cam, hint_box, int(verify["target"]), best_score, best_mean, settle_s=settle_s, sleep=sleep,
+        should_stop=should_stop, info=info, label="Fokus-Endpruefung",
+    )
+    result.update(best_focus=best_focus, best_measured=best_score, best_roi_mean=best_mean)
+    if result["status"] == "WARNUNG":
+        result["reason"] = (
+            f"Fokus nach Kameraneustart unscharf: {100 * result['reapproach']['ratio']:.0f} % der besten "
+            f"Suchschärfe (Grenze {100 * FOCUS_END_RATIO:.0f} %), auch nach Neusetzen von unten. "
+            "Bild auf Schärfe prüfen und gegebenenfalls neu einrichten")
+    elif result["reapproach"] is not None:
+        result["reason"] = (f"Fokus nach Kameraneustart neu gesetzt (vorher "
+                            f"{100 * result['after_restart']['ratio']:.0f} %, danach "
+                            f"{100 * result['reapproach']['ratio']:.0f} % der besten Suchschärfe)")
+    return result, frames
+
+
+def _check_lens_after_restart(
+    cam: SetupCamera, roi_box: HintBox | None, target: int, ref_score: float, ref_mean: float | None, *,
+    settle_s: float, sleep: Callable[[float], None] | None, should_stop: Callable[[], bool] | None,
+    info: Callable[[str], None] | None, label: str,
+) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
+    """Gemeinsamer Kern: ohne Bewegung messen, unter der Schwelle einmal von unten neu setzen."""
+    probe = _FocusProbe(cam, roi_box, settle_s=settle_s, sleep=sleep or time.sleep, should_stop=should_stop,
+                        label=label)
     after = probe.measure_here()
     frames = {"nach_neustart": probe.frame}
+    ratio = _focus_ratio(after, probe.mean, ref_score, ref_mean)
     result: dict[str, Any] = {
-        "target": target, "best_focus": best_focus, "best_measured": best_score, "best_roi_mean": best_mean,
-        "threshold_ratio": FOCUS_END_RATIO, "normierung": "laplace_varianz_durch_roi_mittel_quadrat",
-        "after_restart": {"score": after, "roi_mean": probe.mean, "raw_ratio": after / best_score if best_score else 0.0,
-                          "ratio": _focus_ratio(after, probe.mean, best_score, best_mean)},
+        "target": target, "threshold_ratio": FOCUS_END_RATIO,
+        "normierung": "laplace_varianz_durch_roi_mittel_quadrat",
+        "after_restart": {"score": after, "roi_mean": probe.mean,
+                          "raw_ratio": after / ref_score if ref_score else 0.0, "ratio": ratio},
         "reapproach": None, "status": "OK", "reason": None,
     }
-    ratio = result["after_restart"]["ratio"]
-    if ratio < FOCUS_END_RATIO:
-        if info is not None:
-            info(f"Fokus nach Kameraneustart {100 * ratio:.0f} % - Absolutwert von unten neu setzen")
-        # CLAUDE.md StreamCam: Automatik zuerst aus, dann Absolutwert.
-        cam.set_controls([("focus_automatic_continuous", 0)])
-        again = probe.measure(target)
-        frames["nach_neusetzen"] = probe.frame
-        again_ratio = _focus_ratio(again, probe.mean, best_score, best_mean)
-        result["reapproach"] = {
-            "score": again, "roi_mean": probe.mean, "raw_ratio": again / best_score if best_score else 0.0,
-            "ratio": again_ratio,
-            # Gleiche Belichtung wie direkt nach dem Neustart: Wirkung des Neustarts selbst.
-            "restart_effect": after / again if again > 0 else None,
-        }
-        if again_ratio < FOCUS_END_RATIO:
-            result["status"] = "WARNUNG"
-            result["reason"] = (
-                f"Fokus nach Kameraneustart unscharf: {100 * again_ratio:.0f} % der besten Suchschärfe "
-                f"(Grenze {100 * FOCUS_END_RATIO:.0f} %), auch nach Neusetzen von unten. "
-                "Bild auf Schärfe prüfen und gegebenenfalls neu einrichten")
-        else:
-            result["reason"] = (f"Fokus nach Kameraneustart neu gesetzt (vorher {100 * ratio:.0f} %, "
-                                f"danach {100 * again_ratio:.0f} % der besten Suchschärfe)")
+    if ratio >= FOCUS_END_RATIO:
+        return result, frames
+    if info is not None:
+        info(f"Fokus nach Kameraneustart {100 * ratio:.0f} % - Absolutwert von unten neu setzen")
+    # CLAUDE.md StreamCam: Automatik zuerst aus, dann Absolutwert.
+    cam.set_controls([("focus_automatic_continuous", 0)])
+    again = probe.measure(target)
+    frames["nach_neusetzen"] = probe.frame
+    again_ratio = _focus_ratio(again, probe.mean, ref_score, ref_mean)
+    result["reapproach"] = {
+        "score": again, "roi_mean": probe.mean, "raw_ratio": again / ref_score if ref_score else 0.0,
+        "ratio": again_ratio,
+        # Gleiche Belichtung wie direkt nach dem Neustart: Wirkung des Neustarts selbst.
+        "restart_effect": after / again if again > 0 else None,
+    }
+    if again_ratio < FOCUS_END_RATIO:
+        result["status"] = "WARNUNG"
+    return result, frames
+
+
+def quad_focus_reference(images: Any, quad: Any, size: tuple[int, int], *, source: str) -> dict[str, Any] | None:
+    """Schaerfereferenz fuer den Laufstart: Median ueber Bilder, ROI = Begrenzungsrechteck des Quads.
+
+    Am besten Einzelbilder (die Stabilitaetsaufnahme der Einrichtung), weil der
+    Laufstart Einzelbilder misst. Ein Mittelbild hat weniger Rauschen und damit
+    eine kleinere Laplace-Varianz; es kann nur zu milde, nie zu strenge Urteile geben.
+    """
+    width, height = size
+    points = np.asarray(quad, dtype=float).reshape(-1, 2)
+    x0, y0 = max(0, int(np.floor(points[:, 0].min()))), max(0, int(np.floor(points[:, 1].min())))
+    x1, y1 = min(width, int(np.ceil(points[:, 0].max()))), min(height, int(np.ceil(points[:, 1].max())))
+    if x1 <= x0 or y1 <= y0 or not len(images):
+        return None
+    scores, means = [], []
+    for image in images:
+        gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        roi = gray[y0:y1, x0:x1]
+        scores.append(sharpness(roi))
+        means.append(float(np.mean(roi)))
+    return {"roi_pixels": [x0, y0, x1 - x0, y1 - y0],
+            "roi_box": [x0 / width, y0 / height, (x1 - x0) / width, (y1 - y0) / height],
+            "score": float(np.median(scores)), "roi_mean": float(np.median(means)),
+            "frames": len(scores), "quelle": source}
+
+
+def check_focus_at_run_start(
+    cam: SetupCamera, reference: dict[str, Any] | None, *, target: int, settle_s: float = 1.0,
+    sleep: Callable[[float], None] | None = None,
+) -> tuple[dict[str, Any], dict[str, np.ndarray]] | None:
+    """OQ-74: Nach dem Kameraneustart am Laufstart die Schaerfe gegen die Einrichtung pruefen.
+
+    ROI ist das bestaetigte Anzeige-Viereck (`quad_focus_reference`), Normierung
+    wie in der Einrichtung. Unter der Schwelle einmal von unten neu setzen;
+    bleibt sie darunter: WARNUNG mit sichtbarem Text. Der Lauf startet trotzdem,
+    die Freigabe bleibt unberuehrt. `None` ohne Referenz.
+    """
+    if not reference:
+        return None
+    result, frames = _check_lens_after_restart(
+        cam, tuple(reference["roi_box"]), int(target), float(reference["score"]), reference.get("roi_mean"),
+        settle_s=settle_s, sleep=sleep, should_stop=None, info=None, label="Fokuspruefung Laufstart",
+    )
+    result.update(reference=deepcopy(reference), text=None)
+    if result["status"] == "WARNUNG":
+        result["text"] = (f"Bild nach Kamerastart unschärfer als bei der Einrichtung "
+                          f"({100 * result['reapproach']['ratio']:.0f} %) – Fokus prüfen")
+    elif result["reapproach"] is not None:
+        result["text"] = (f"Fokus nach Kamerastart neu gesetzt (vorher {100 * result['after_restart']['ratio']:.0f} %, "
+                          f"danach {100 * result['reapproach']['ratio']:.0f} % der Einrichtungsschärfe)")
     return result, frames
 
 
@@ -1027,6 +1094,14 @@ def propose_with_fit(
             checks_dict["overall"] = "FEHLER"
         elif checks_dict["checks"]["nachfuehrung"]["status"] == "WARNUNG" and checks_dict["overall"] == "OK":
             checks_dict["overall"] = "WARNUNG"
+    # OQ-74: Schaerfereferenz fuer die Pruefung nach dem Kameraneustart am Laufstart.
+    if stability_images:
+        focus_reference = quad_focus_reference(stability_images, quad, (width, height),
+                                               source="stabilitaet_einzelbilder")
+    else:
+        focus_reference = quad_focus_reference(
+            [image if stability_image_bgr is None else stability_image_bgr], quad, (width, height),
+            source="mittelbild")
     proposal = {
         "frame": str(frame_path),
         "device_id": device_id,
@@ -1042,6 +1117,8 @@ def propose_with_fit(
         "camera": camera_settings.to_dict(),
         "setup_checks": checks_dict,
     }
+    if focus_reference is not None:
+        proposal["focus_reference"] = focus_reference
     if tracking_proposal is not None:
         proposal["overlay_evidence"] = {
             "quad": quad, "assigned_points": fit.assigned_points, "rejected_points": fit.rejected_points,

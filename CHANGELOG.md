@@ -22,12 +22,22 @@ was ist die Konsequenz.
     `fokus-nach-neustart.png` und gegebenenfalls `fokus-nach-neusetzen.png`. `camera-settings.json` trägt
     `focus_roi`, `focus_sweep_roi_mean`, `focus_end_check` und `focus_diagnostic_crop`. Zusatz im
     ungünstigsten Fall: etwa 6 MB.
+  * Laufstart: Nach dem Kameraneustart `laufstart` misst `check_focus_at_run_start` die Schärfe auf dem
+    Begrenzungsrechteck des bestätigten Anzeige-Vierecks. Referenz ist der Median der Einzelbilder der
+    Stabilitätsaufnahme (`proposal.json` → `focus_reference`), normiert wie in der Einrichtung. Unter 0,6
+    wird der Fokus einmal von unten neu gesetzt. Bleibt die Schärfe darunter, erscheint im Laufstatus
+    (`run.focus_check`) und als stehender Hinweis die Warnung „Bild nach Kamerastart unschärfer als bei der
+    Einrichtung (x %) – Fokus prüfen“. Der Lauf startet trotzdem, die Freigabe bleibt unberührt. Das
+    Ergebnis steht in `session.json` (`focus_check`), die Ausschnitte als `fokus-laufstart-*.png` im
+    Laufordner. Ein Kamerafehler bei der Prüfung wird als WARNUNG gemeldet; ohne Referenz steht
+    `NICHT_GEPRUEFT` im Audit.
 
   Konsequenz: Auf allen sieben Paketbildern überdeckt die ROI die Hinweisbox zu ≥ 90 %, auch nach einer
   Gauss-Unschärfe mit sigma 3. Grundlage sind die Regressionsbilder unter
   `$DISPREAD_DEV_DATA/regression/2026-11-11/`. Die Schwelle 0,6 ist ein Vorabwert und an den Paketen nicht
-  kalibrierbar. Offline nicht nachgewiesen: das optische Verhalten des Fokusmotors beim Kameraneustart. Ebenso
-  offen ist, ob der Neustart am Laufstart (`laufstart`) die Linse verliert.
+  kalibrierbar. Offline nicht nachgewiesen: das optische Verhalten des Fokusmotors beim Kameraneustart, in der
+  Einrichtung wie am Laufstart. Die neuen Audit-Felder (`restart_effect`) liefern den Beleg beim nächsten
+  echten Lauf.
 * 2026-11-11: **Werkbank /live: Vierkanal-Takt am Laufstart und im Lauf (U1).** Problem: Format und Takt der
   Ausgabe waren in der Oberfläche nicht wählbar, die Einkanal-Warnung (F3) fehlte. Neu: Laufoptionen mit „Format“
   (Vierkanal-Takt empfohlen, Vorgabe; Einkanal mit wörtlicher F3-Warnung), Takt 1–10 Hz (Vorgabe 10), Checkliste

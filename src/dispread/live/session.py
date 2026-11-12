@@ -1028,6 +1028,9 @@ class LiveSession:
         data = dict(self._meta)
         if hasattr(self, "bridge_run_id"):
             data["run_id"] = self.bridge_run_id
+        if getattr(self, "focus_check", None) is not None:
+            # OQ-74: Fokuspruefung nach dem Kameraneustart am Laufstart (Audit).
+            data["focus_check"] = self.focus_check
         if self._output_transport == 'serial':
             data['output'] = {**self.output_status(), 'acceptance': 'fehlt', 'acknowledged_unaccepted': True}
         elif self._output is not None:

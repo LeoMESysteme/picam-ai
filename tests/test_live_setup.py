@@ -1277,3 +1277,76 @@ def test_assist_measure_keeps_rejected_attempt_stills(tmp_path, monkeypatch):
     assert {p.name for p in tmp_path.glob("*.png")} == {"still.png", "still-versuch-1.png"}
     assert int(cv2.imread(str(tmp_path / "still-versuch-1.png"))[0, 0, 0]) == 10
     assert int(cv2.imread(str(tmp_path / "still.png"))[0, 0, 0]) == 20
+
+
+# --- OQ-74: Fokuspruefung nach dem Kameraneustart beim Laufstart ---
+
+def test_quad_focus_reference_uses_single_stability_frames_on_quad_bbox():
+    rng = np.random.default_rng(1)
+    frames = [rng.integers(0, 255, (120, 200, 3), dtype=np.uint8) for _ in range(5)]
+    quad = [[40.4, 30.0], [160.0, 32.0], [158.0, 90.6], [42.0, 88.0]]
+    ref = live_setup.quad_focus_reference(frames, quad, (200, 120), source="einzelbilder")
+    assert ref["roi_pixels"] == [40, 30, 120, 61]
+    x, y, w, h = ref["roi_pixels"]
+    assert ref["roi_box"] == pytest.approx([x / 200, y / 120, w / 200, h / 120])
+    scores = [live_setup.sharpness(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)[y:y + h, x:x + w]) for f in frames]
+    assert ref["score"] == pytest.approx(float(np.median(scores)))
+    assert ref["frames"] == 5 and ref["quelle"] == "einzelbilder"
+    assert ref["roi_mean"] > 0
+
+
+def test_proposal_stores_focus_reference_from_stability_frames(tmp_path):
+    from test_live_setup_tracking import _propose
+
+    _, quad, proposal = _propose(tmp_path)
+    ref = proposal["focus_reference"]
+    assert ref["quelle"] == "stabilitaet_einzelbilder" and ref["frames"] > 1
+    xs, ys = [p[0] for p in quad], [p[1] for p in quad]
+    x, y, w, h = ref["roi_pixels"]
+    assert x <= min(xs) + 1 and y <= min(ys) + 1 and x + w >= max(xs) - 1 and y + h >= max(ys) - 1
+
+
+def _run_reference(score=600.0, mean=100.0):
+    return {"roi_pixels": [0, 0, 160, 90], "roi_box": [0.0, 0.0, 1.0, 1.0], "score": score,
+            "roi_mean": mean, "frames": 8, "quelle": "stabilitaet_einzelbilder"}
+
+
+def test_run_start_focus_check_ok_without_moving_lens(end_check_sharpness):
+    cam = RestartFocusCamera()
+    result, frames = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
+                                                         sleep=lambda _s: None)
+    assert result["status"] == "OK" and result["reapproach"] is None and result["text"] is None
+    assert cam.controls == []
+    assert set(frames) == {"nach_neustart"}
+
+
+def test_run_start_focus_check_resets_from_below_once(end_check_sharpness):
+    cam = RestartFocusCamera(lost=True)
+    result, _ = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
+                                                    sleep=lambda _s: None)
+    assert cam.controls == [[("focus_automatic_continuous", 0)], [("focus_absolute", 36)],
+                            [("focus_absolute", 48)]]
+    assert result["status"] == "OK"
+    assert result["reapproach"]["restart_effect"] == pytest.approx(0.05, rel=0.01)
+    assert "neu gesetzt" in result["text"]
+
+
+def test_run_start_focus_check_warns_visibly_with_value(end_check_sharpness):
+    cam = RestartFocusCamera(lost=True, recover=False)
+    result, _ = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
+                                                    sleep=lambda _s: None)
+    assert result["status"] == "WARNUNG"
+    assert result["text"] == "Bild nach Kamerastart unschärfer als bei der Einrichtung (5 %) – Fokus prüfen"
+    assert sum(1 for controls in cam.controls for name, _ in controls if name == "focus_absolute") == 2
+
+
+def test_run_start_focus_check_normalizes_brightness(end_check_sharpness):
+    cam = RestartFocusCamera(brightness=1.25)
+    result, _ = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
+                                                    sleep=lambda _s: None)
+    assert result["status"] == "OK"
+    assert result["after_restart"]["ratio"] == pytest.approx(1.0, rel=0.01)
+
+
+def test_run_start_focus_check_skipped_without_reference():
+    assert live_setup.check_focus_at_run_start(FakeSetupCamera(None), None, target=48) is None

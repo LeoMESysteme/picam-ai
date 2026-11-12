@@ -3401,3 +3401,92 @@ def test_setup_focus_roi_from_lcd_hint_and_end_check_after_last_restart(tmp_path
     assert before.shape[0] * before.shape[1] < 0.5 * 1920 * 1080
     assert saved["focus_diagnostic_crop"] == live_setup.focus_diagnostic_crop(
         np.zeros((1080, 1920, 3), np.uint8), expected_hint)[1]
+
+
+@pytest.mark.parametrize("outcome", ["WARNUNG", "fehlt", "kamerafehler"])
+def test_run_start_checks_focus_after_restart_and_records_it(tmp_path, monkeypatch, outcome):
+    import numpy as np
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.frames.uvc_source import UvcError
+    from dispread.live import setup as live_setup
+
+    events, sessions = [], []
+    camera = CameraSettings("logitech_streamcam", "046d:0893", (1920, 1080), "YUYV", 30,
+                            {"focus_absolute": 52, "exposure_time_absolute": 300, "gain": 10,
+                             "white_balance_temperature": 4600})
+    reference = None if outcome == "fehlt" else {"roi_pixels": [0, 0, 10, 10], "roi_box": [0, 0, 0.1, 0.1],
+                                                "score": 500.0, "roi_mean": 100.0, "frames": 8,
+                                                "quelle": "stabilitaet_einzelbilder"}
+    text = "Bild nach Kamerastart unschärfer als bei der Einrichtung (31 %) – Fokus prüfen"
+
+    class Owner(FakeOwner):
+        def restart(self, factory=None, reason=None):
+            events.append(f"restart:{reason}")
+
+    def check(cam, ref, *, target):
+        events.append("focus_check")
+        assert ref == reference and target == 52
+        if outcome == "kamerafehler":
+            raise UvcError("kein frisches Bild")
+        return ({"status": "WARNUNG", "text": text, "after_restart": {"ratio": 0.2},
+                 "reapproach": {"ratio": 0.31}}, {"nach_neustart": np.zeros((100, 100, 3), np.uint8)})
+
+    class FakeSession:
+        def __init__(self, *a, **kw):
+            self.latest, self.summary, self.end_reason = None, {}, None
+            self.session_path = tmp_path / "s.json"
+            sessions.append(self)
+
+        def latest_age_s(self):
+            return None
+
+        def start(self):
+            events.append("session_start")
+            self.started_with = getattr(self, "focus_check", "unset")
+
+        def run(self, stop):
+            stop.wait()
+
+        def stop(self, reason="bediener"):
+            return {"end_reason": reason}
+
+    monkeypatch.setattr("dispread.live.service.LiveSession", FakeSession)
+    monkeypatch.setattr(live_setup, "check_focus_at_run_start", check)
+    service = LiveService(Owner(), tmp_path)
+    service._state, service._profile_path = "confirmed", tmp_path / "profile.json"
+    service._profile_camera, service._focus_reference = camera, reference
+    service.start_run(reference=False)
+    try:
+        if outcome == "fehlt":
+            assert events == ["restart:laufstart", "session_start"]
+            assert sessions[0].started_with == {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz"}
+            assert service.status()["run"]["focus_check"] is None
+            return
+        assert events == ["restart:laufstart", "focus_check", "session_start"]
+        # Der Lauf startet trotzdem; die Warnung steht im Laufstatus und in session.json.
+        assert service.status()["state"] == "running"
+        audit = sessions[0].started_with
+        shown = service.status()["run"]["focus_check"]
+        if outcome == "WARNUNG":
+            assert audit["status"] == "WARNUNG" and audit["text"] == text
+            assert shown == {"status": "WARNUNG", "text": text}
+            # Diagnoseausschnitt im Laufordner (profile_path.parent / run-01).
+            assert (tmp_path / "run-01" / "fokus-laufstart-nach-neustart.png").exists()
+        else:
+            assert audit["status"] == "WARNUNG" and "kein frisches Bild" in audit["text"]
+            assert shown["status"] == "WARNUNG" and "Fokus beim Laufstart nicht geprüft" in shown["text"]
+    finally:
+        service.stop_run()
+
+
+def test_confirm_keeps_focus_reference_for_run_start(tmp_path, proposal):
+    reference = {"roi_pixels": [1, 2, 3, 4], "score": 9.0}
+    proposal["focus_reference"] = reference
+    service = ready_service(tmp_path, proposal)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Test", format_checked=True,
+                    acknowledge_warning=True)
+    assert service._focus_reference == reference
+    service.start_setup()
+    assert service._focus_reference is None
+    service._setup_thread.join(2)
