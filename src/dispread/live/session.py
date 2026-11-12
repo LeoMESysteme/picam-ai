@@ -101,6 +101,8 @@ _SETUP_ONLY_TRACKING_FIELDS = frozenset({
     "proposal_stability_peak_margin",
     # TB 2026-11-11: strengere Auswahl; aeltere Profile bleiben startbar.
     "proposal_min_peak_curvature", "proposal_max_photometric_shift_px",
+    # OQ-70: Rahmenkontur gekerbter Komponenten, nur Bandermittlung im Vorschlag.
+    "bezel_notch_quantile",
 })
 
 

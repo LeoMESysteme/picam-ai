@@ -5,6 +5,22 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-12: **Einrichtung: dunkler Rahmen trotz beleuchteter Fase (OQ-70).** Problem: Bei `155557Z` war schon der
+  automatische Vorschlag einseitig. −x hatte nur 2 Bereiche, Seiten `[[2,7],[12,7]]`, keine Reserve. Das Raumlicht
+  hellte die untere rechte Fase auf, sie fiel aus der dunklen Rahmenkomponente heraus, und die Solidität sank auf
+  0,9605 < 0,97. Die Bandermittlung fiel deshalb auf das feste Band zurück. Bei kleinem Quad erreicht dieses die
+  linke Fase nicht.
+  Neu: Die Grenze 0,97 bleibt. Darunter misst `_notched_frame` die Rahmenkontur je Quadseite aus Strahlen,
+  0,75-Quantil der Austritte (`bezel_notch_quantile`, nur Einrichtung, bindet keinen Laufstart). Trägt die Fläche
+  außerhalb dieser Kontur ein ganzes Suchfenster, etwa bei Balken, Kabel oder Schatten, bleibt es beim Rückfall
+  `rahmenform_unplausibel`. Sonst gilt die Komponente innerhalb der Kontur als Rahmen, ohne die Kerbe.
+  Einseitige Vorschläge nennen jetzt „Kamera leicht drehen oder verschieben und neu einrichten“. Tests:
+  synthetische Kerbe, Balken mit und ohne Kerbe, Konfiguration; `155557Z` und acht positive Aufstellungen über
+  `DISPREAD_DEV_DATA`.
+  Konsequenz: `155557Z` hat `[[9,10],[10,10]]` mit Reserve. Von 63 Einrichtungsbildern ändern sich nur die drei
+  bisherigen Kerben-Rückfälle, alle besser. Die übrigen 60 bleiben bitgleich, auch die vier Review-Balken. Die
+  Laufprüfung ist unverändert. Am echten Aufbau ist das noch nicht erprobt.
+
 * 2026-11-12: **Werkbank /live: Bediensackgasse der Einrichtung (OQ-71).** Problem: Bei Gesamturteil FEHLER blieb
   Bestätigen für Knopf und Enter freigegeben (nur der Server lehnte ab), und „Neu einrichten“ gab es nur bei idle,
   fehlgeschlagen und gestoppt; nach einem Vorschlag oder einer Bestätigung blieb nur Lauf starten und stoppen.

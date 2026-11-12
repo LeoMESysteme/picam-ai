@@ -277,6 +277,9 @@ class FrameTrackingConfig:
     bezel_min_area_ratio: float = 2.0
     bezel_max_area_ratio: float = 12.0
     bezel_min_solidity: float = 0.97
+    # Nur Einrichtung (OQ-70): Quantil der Strahlaustritte je Seite fuer die
+    # Rahmenkontur einer gekerbten Komponente (Soliditaet < bezel_min_solidity).
+    bezel_notch_quantile: float = 0.75
     proposal_lever_arm_fraction: float = 0.35
     min_spread_px: float = 20.0
     min_inliers_per_side: int = 3
@@ -316,7 +319,8 @@ class FrameTrackingConfig:
     def from_dict(cls, data: dict) -> FrameTrackingConfig:
         # Neue Einrichtungs-/Grobfelder ergaenzen; alte Feinpruefgrenzen bleiben Pflicht.
         optional = {"coarse_min_response", "coarse_max_scale_deviation", "proposal_stability_peak_margin",
-                    "proposal_min_peak_curvature", "proposal_max_photometric_shift_px"}
+                    "proposal_min_peak_curvature", "proposal_max_photometric_shift_px",
+                    "bezel_notch_quantile"}
         if isinstance(data, dict) and "coarse_min_shift_px" in data:
             data = dict(data)
             legacy_shift = data.pop("coarse_min_shift_px")
@@ -353,6 +357,7 @@ class FrameTrackingConfig:
                 or self.bezel_opening_px < 3 or self.bezel_opening_px % 2 != 1
                 or self.bezel_erosion_px < 1 or not 0 < self.bezel_threshold_margin < 255
                 or not 0 < self.bezel_min_solidity <= 1
+                or not 0.5 <= self.bezel_notch_quantile < 1
                 or not 0 < self.proposal_lever_arm_fraction < 1
                 or not 1 < self.bezel_min_area_ratio < self.bezel_max_area_ratio):
             raise ValueError("Ungueltige Vorschlagsgrenzen")
@@ -553,26 +558,84 @@ def _bezel_band(gray, quad, config):
         if not config.bezel_min_area_ratio <= ratio <= config.bezel_max_area_ratio:
             metrics["band_rueckfallgrund"] = "rahmenflaeche_unplausibel"
             continue
-        if solidity < config.bezel_min_solidity:
-            metrics["band_rueckfallgrund"] = "rahmenform_unplausibel"
-            continue
         filled = np.zeros_like(gray)
         cv2.drawContours(filled, [contour], -1, 255, cv2.FILLED)
+        notch = None
+        if solidity < config.bezel_min_solidity:
+            # OQ-70: Fehlflaeche nach innen (beleuchtete Fase) ist zulaessig,
+            # Ueberstand nach aussen (Balken, Kabel, Schatten) nicht.
+            filled, notch = _notched_frame(filled, quad, config)
+            if filled is None:
+                metrics["band_rueckfallgrund"] = "rahmenform_unplausibel"
+                continue
         edge_pixels = np.rint(points).astype(int)
         if (not np.all(filled[quad_mask != 0])
                 or not np.all(filled[edge_pixels[:, 1], edge_pixels[:, 0]])):
             continue
-        plausible.append((ratio, solidity, filled))
+        plausible.append((ratio, solidity, filled, notch))
     if len(plausible) != 1:
         if len(plausible) > 1:
             metrics["band_rueckfallgrund"] = "rahmen_mehrdeutig"
         return None, metrics
-    ratio, solidity, filled = plausible[0]
+    ratio, solidity, filled, notch = plausible[0]
     radius = config.bezel_erosion_px
     bezel = cv2.erode(filled, np.ones((2*radius+1,)*2, np.uint8))
     metrics.update(band_quelle="dunkler_rahmen", band_rueckfallgrund=None,
                    band_flaeche_quad=ratio, band_soliditaet=solidity)
+    if notch is not None:
+        metrics["band_kerbe_kontur_px"] = notch
     return bezel, metrics
+
+
+_SIDE_NAMES = ("oben", "rechts", "unten", "links")
+
+
+def _notched_frame(filled, quad, config):
+    """Rahmen mit Kerbe von Rahmen mit Ueberstand trennen (OQ-70, nur Einrichtung).
+
+    Eine beleuchtete Fase faellt aus der dunklen Komponente heraus und senkt
+    die Soliditaet, ohne dass etwas Fremdes zum Rahmen gehoert. Ein aussen
+    anliegender Balken senkt sie ebenfalls. Unterschieden wird an der
+    Rahmenkontur: Je Quadseite laufen Strahlen im Abstand von hoechstens 4 px
+    entlang der Normalen nach aussen; der Austritt aus der gefuellten Kontur
+    ist dort die Rahmenbreite. Das ``bezel_notch_quantile`` je Seite ergibt
+    eine quadparallele Kontur, die eine Kerbe auf bis zu diesem Anteil einer
+    Seite uebersteht und die von Vorspruengen auf weniger als dem Rest nicht
+    verschoben wird. Liegt ausserhalb dieser Kontur noch eine Flaeche, die ein
+    ganzes Such-/Patchfenster samt Interpolationsrand traegt, ist die Form
+    unplausibel (bisheriger Rueckfall). Sonst gilt die Komponente innerhalb der
+    Kontur als Rahmen; die Kerbe selbst bleibt ausserhalb des Bandes.
+    """
+    height, width = filled.shape
+    distances = np.arange(max(height, width))
+    caps = []
+    for side in range(4):
+        start, end = quad[side], quad[(side+1) % 4]
+        length = float(np.linalg.norm(end-start))
+        tangent = (end-start) / length
+        normal = np.array([tangent[1], -tangent[0]])
+        bases = start + np.linspace(0, 1, int(length // 4) + 2)[:, None] * (end-start)
+        points = np.rint(bases[:, None] + distances[None, :, None] * normal).astype(int)
+        inside = ((points >= 0) & (points < (width, height))).all(axis=2)
+        ray = np.zeros(inside.shape, bool)
+        ray[inside] = filled[points[inside][:, 1], points[inside][:, 0]] != 0
+        # Die gefuellte Kontur enthaelt das LCD: erster Austritt = Aussenkante.
+        exits = np.argmin(ray, axis=1)
+        if not np.all(exits > 0):
+            return None, None
+        caps.append(float(np.quantile(exits, config.bezel_notch_quantile)))
+    sides = np.roll(quad, -1, axis=0) - quad
+    normals = np.column_stack((sides[:, 1], -sides[:, 0]))
+    normals /= np.linalg.norm(normals, axis=1)[:, None]
+    offsets = np.sum(normals * quad, axis=1) + np.array(caps)
+    contour = np.array([np.linalg.solve(normals[[i-1, i]], offsets[[i-1, i]]) for i in range(4)])
+    inner = np.zeros_like(filled)
+    cv2.fillConvexPoly(inner, np.rint(contour).astype(np.int32), 255)
+    outside = cv2.bitwise_and(filled, cv2.bitwise_not(inner))
+    radius = config.patch_size // 2 + config.search_radius_px + config.interpolation_guard_px
+    if np.any(cv2.erode(outside, np.ones((2*radius+1,)*2, np.uint8))):
+        return None, None
+    return cv2.bitwise_and(filled, inner), dict(zip(_SIDE_NAMES, (round(cap, 1) for cap in caps), strict=True))
 
 
 def _proposal_match(response, config):
