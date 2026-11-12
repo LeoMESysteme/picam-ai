@@ -185,8 +185,8 @@ Achse < proposal_min_peak_curvature = 0.08) UND seine Lage unter festen
 nichtlinearen Lichtproben wandert (_photometric_variants: Gamma 0.7/1.4,
 Glanzanteil ueber dem 75-%-Quantil -60 %, Anteil ueber dem Median halbiert;
 groesster Versatz > proposal_max_photometric_shift_px = 0.12 px oder kein
-eindeutiger Treffer). Kalibriert an 55 Einrichtungen (var/live und
-DISPREAD_DEV_DATA): die belegt unstimmigen Glanz- und Fasenbereiche der Laeufe
+eindeutiger Treffer). Kalibriert an 55 Einrichtungen (Produktdaten und
+Entwicklungsaufnahmen): die belegt unstimmigen Glanz- und Fasenbereiche der Laeufe
 live-20261111T103604Z/122753Z/095426Z liegen bei Kruemmung 0.037..0.063 und
 Versatz 0.139..0.279 px; alle zuvor geeigneten Einrichtungen bleiben geeignet,
 mindestens sechs Bereiche je Achsenseite (gefordert fuenf). Ausgeschlossene
