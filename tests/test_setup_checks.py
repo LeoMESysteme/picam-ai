@@ -526,6 +526,111 @@ def test_dark_monitor_reflection_on_right_blank_cells_is_reported():
     assert 14 in check.cells
 
 
+def _glint_at_last_digit(boundary=20, glint=30):
+    """Wie live-20261111T161702Z: hellere Glasflaeche ab der letzten Ziffer
+    plus kleiner Glanzfleck rechts oben in Zelle 7."""
+    image = display().astype(int)
+    image[:, 192:] += boundary
+    image[30:65, 189:200] += glint
+    return np.clip(image, 0, 255).astype(np.uint8)
+
+
+def test_glint_at_last_digit_fails_with_operator_hint():
+    # OQ-72: FEHLER bleibt, der Bediener bekommt Zelle, Lage, Messwert,
+    # Grenze und Abhilfe statt nur "kanten (Zelle 7)".
+    check = check_setup(_glint_at_last_digit(), fit()).checks['kanten']
+    assert check.status == 'FEHLER'
+    assert check.cells == (7,)
+    detail = check.metrics['flagged_cells'][0]
+    assert detail['cell'] == 7 and detail['art'] == 'belegt' and detail['status'] == 'FEHLER'
+    assert detail['grenze'] == 20 and detail['stufe'] > 20
+    assert 'Zelle 7 (Zahl)' in check.reason
+    assert 'Fehlergrenze 20' in check.reason
+    assert f"{detail['stufe']:.1f}".replace('.', ',') in check.reason
+    assert 'Licht abschatten' in check.reason and 'neu einrichten' in check.reason
+
+
+def test_weak_glint_warns_with_warning_limit():
+    check = check_setup(_glint_at_last_digit(boundary=0), fit()).checks['kanten']
+    assert check.status == 'WARNUNG'
+    assert check.cells == (7,)
+    assert 'Warngrenze 16' in check.reason and 'Fehlergrenze' not in check.reason
+
+
+def test_shadow_on_right_blank_cells_names_position_and_blank_limit():
+    # Wie live-20261111T170836Z: dunkle Spiegelung ueber den Leerzellen rechts.
+    image = display()
+    image[:, 365:] = np.clip(image[:, 365:].astype(int) - 20, 0, 255)
+    check = check_setup(image, fit()).checks['kanten']
+    assert check.status == 'FEHLER'
+    assert 14 in check.cells
+    detail = next(d for d in check.metrics['flagged_cells'] if d['cell'] == 14)
+    assert detail['art'] == 'leer' and detail['grenze'] == 8
+    assert 'Zelle 14 (rechts der Einheit)' in check.reason
+    assert 'Fehlergrenze 8' in check.reason
+
+
+def test_clean_display_has_no_edge_reason():
+    check = check_setup(display(), fit()).checks['kanten']
+    assert check.status == 'OK'
+    assert check.reason is None
+    assert check.metrics['flagged_cells'] == []
+    assert 'reason' not in check.to_dict()
+
+
+# OQ-72: Initialfit der Vorpruefung, offline gespeichert neben den Originalen
+# (initial-fit-oq72.json aus find_green_hint_box + fit_lattice). Urteile vor
+# und nach dem Fix identisch; nur der Bedienertext ist neu.
+OQ72_CASES = [
+    ('161702Z', 'FEHLER', (7,), {7: 29.8}),
+    ('161955Z', 'FEHLER', (7,), {7: 29.8}),
+    ('170836Z', 'FEHLER', (14, 15), {14: 11.0, 15: 7.0}),
+    ('164508Z', 'OK', (), {}),
+    ('165234Z', 'OK', (), {}),
+    ('165754Z', 'WARNUNG', (14,), {14: 6.5}),
+    ('095426Z', 'OK', (), {}),
+    ('103604Z', 'WARNUNG', (13,), {13: 7.0}),
+    ('111008Z', 'WARNUNG', (13,), {13: 7.0}),
+    ('122753Z', 'WARNUNG', (13,), {13: 7.0}),
+    ('124851Z', 'OK', (), {}),
+    ('155557Z', 'OK', (), {}),
+]
+
+
+@pytest.mark.parametrize('session,status,cells,steps', OQ72_CASES)
+def test_oq72_real_setups_keep_edge_verdict_and_explain_it(session, status, cells, steps):
+    import os
+    from pathlib import Path
+
+    root = os.environ.get('DISPREAD_DEV_DATA')
+    folder = Path(root or '/nonexistent') / 'regression' / '2026-11-11' / f'live-20261111T{session}'
+    if not root or not (folder / 'initial-fit-oq72.json').exists():
+        pytest.skip(f'Regressionsdaten fehlen: {folder} (DISPREAD_DEV_DATA setzen)')
+    data = json.loads((folder / 'initial-fit-oq72.json').read_text())
+    lattice = LatticeFit(data['quad'], data['n_dots'], data['n_assigned'], data['rms_cols'], data['rms_rows'],
+                         tuple(data['cells']), tuple(data['row_bias']), tuple(data['cell_bias']))
+    still = cv2.imread(str(folder / 'still.png'))
+    assert still is not None
+
+    result = check_setup(still, lattice)
+    edges = result.checks['kanten']
+    assert edges.status == status
+    assert edges.cells == cells
+    measured = {d['cell']: d['stufe'] for d in edges.metrics['flagged_cells']}
+    assert measured == pytest.approx(steps, abs=0.15)
+    if status == 'OK':
+        assert edges.reason is None
+    else:
+        for cell in cells:
+            assert f'Zelle {cell} (' in edges.reason
+    if status == 'FEHLER':
+        assert result.overall == 'FEHLER'
+        assert 'neu einrichten' in edges.reason
+    else:
+        # Positive Aufstellungen: Vorpruefung ohne FEHLER, wie vor dem Fix.
+        assert all(check.status != 'FEHLER' for check in result.checks.values())
+
+
 def test_workbench_stability_minimum_keeps_cli_default():
     image = np.full((160, 400), 180, np.uint8)
     default = check_setup(image, fit(), stability_image_bgr=image, stability_elapsed_s=15)
