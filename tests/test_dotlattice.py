@@ -134,6 +134,55 @@ def test_candidate_in_format_empty_cell_is_rejected(column):
                        empty_cells=EMPTY_CELLS) == "leerzelle_belegt"
 
 
+def _faint_spots(cells: tuple[int, ...], contrast: int):
+    """Flache Einzelminima wie Glanzrand oder Kratzer (OQ-69) in Leerzellen."""
+    quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
+    image, h = _synthetic(quad, "+1234567 9012   ")
+    for cell in cells:
+        target = np.float32([[[cell * 25 + 2.5 * 25 / 6, 160 / 9 + 3.5 * 160 / 9]]])
+        x, y = cv2.perspectiveTransform(target, h)[0, 0]
+        cv2.circle(image, (round(float(x)), round(float(y))), 1, (210 - contrast,) * 3, -1)
+    return image, h, quad
+
+
+@pytest.mark.parametrize("cell", (8, 13, 14))
+def test_single_faint_minimum_in_empty_cell_is_tolerated(cell):
+    image, h, quad = _faint_spots((cell,), 25)
+    # Der Fleck muss wirklich Kandidat sein, sonst prueft der Test nichts.
+    candidates = dotlattice._source_candidates(image, quad)
+    assert len(candidates) > 0
+    result = fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h), empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+
+
+def test_two_faint_minima_in_empty_cells_stay_occupied():
+    image, h, quad = _faint_spots((14, 15), 25)
+    assert fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h),
+                       empty_cells=EMPTY_CELLS) == "leerzelle_belegt"
+
+
+def test_single_dot_deep_minimum_in_empty_cell_stays_occupied():
+    image, h, quad = _faint_spots((14,), 80)
+    assert fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h),
+                       empty_cells=EMPTY_CELLS) == "leerzelle_belegt"
+
+
+def _dot_block(center, pitch, cells):
+    return [(center[0] + c * pitch, center[1] + r * pitch) for c, r in cells]
+
+
+def test_plus_anchor_ignores_filled_glyph_block():
+    # Schein-Plus an Gehaeusekanten (154403Z, ab4): die 26 Leerpositionen des
+    # 5x7-Plus sind dort belegt. Ein voller Block enthaelt ein Plus, ist aber keins.
+    pitch = 1000 / (1.2 * 96)
+    plus = {(0, -2), (0, -1), (0, 1), (0, 2)} | {(i, 0) for i in range(-2, 3)}
+    block = {(c, r) for c in range(-2, 3) for r in range(-3, 4)}
+    src = np.float32(_dot_block((80, 100), pitch, plus) + _dot_block((80, 300), pitch, block))
+    anchors = dotlattice._plus_anchors(src, 0, 1000)
+    assert anchors
+    assert all(abs(float(item[1][1]) - 100) < pitch for item in anchors)
+
+
 def test_cell_bias_over_limit_rejects_locally_displaced_dots():
     quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
     display = render("+1234567 9012   ", GRID, bg=210, ink=30)
@@ -335,6 +384,37 @@ def test_uncertain_real_still_start_is_rejected(name, frame, reason):
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
     assert isinstance(result, str), result
     assert result in reason
+
+
+@pytest.mark.parametrize("name,frame,text,max_corner_px", [
+    # ab4 war bis OQ-69 `startlage_mehrdeutig` wegen Schein-Plus-Ankern an der
+    # Glasecke. Das jetzt gefundene Quad weicht vom urspruenglichen ab4-Profil
+    # (2j FEHLER) um 9,14 px ab, vom korrigierten regrid1-Profil um <= 3,0 px.
+    ("ab4", 16, "+0.46780 ", 3.5),
+    # ab6 (25-30 Grad schraeg): Startfit nur 2j-WARNUNG, die Nachfuehrung der
+    # Einrichtung bringt 2j auf OK (OQ-69, VALIDATION 2026-11-12).
+    ("ab6", 20, "+0.46789 ", 8.0),
+])
+def test_bezel_anchor_no_longer_blocks_text_confirmed_start(name, frame, text, max_corner_px):
+    from dispread.lattice_offsets import refine_quad
+    from dispread.live.setup import DEFAULT_TARGET_SIZE, LATTICE_GRID
+    from dispread.setup_checks import raster_offset_check
+
+    still = local_recording(f"diagnostics/{name}-still/frames/frame_{frame:06d}.png")
+    profile = local_recording(
+        Path("diagnostics") / ("ab4-profile-regrid1.json" if name == "ab4" else f"{name}-profile"))
+    image = cv2.imread(str(still))
+    hint = find_green_hint_box(image)
+    assert hint is not None
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+    reference = np.asarray(json.loads(profile.read_text())["quad"])
+    assert np.max(np.linalg.norm(np.asarray(result.quad) - reference, axis=1)) <= max_corner_px
+    # Kein Zellen- oder Spaltenversatz: 2j unter der Fehlergrenze, nach der
+    # Nachfuehrung wie im Einrichtungsablauf OK.
+    assert raster_offset_check([(image, text)], result.quad).status != "FEHLER"
+    refined, _ = refine_quad([(image, text)], result.quad, LATTICE_GRID, DEFAULT_TARGET_SIZE)
+    assert raster_offset_check([(image, text)], refined).status == "OK"
 
 
 def test_moderate_left_view_finds_lattice_beyond_first_sixteen_starts():

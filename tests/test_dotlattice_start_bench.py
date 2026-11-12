@@ -77,6 +77,21 @@ def test_sc7_stability_still_remains_rejected():
     assert isinstance(fit_lattice(image, hint, empty_cells=EMPTY_CELLS), str)
 
 
+def test_sc7_stability_still_matches_lattice_of_first_still():
+    # Bis OQ-69 `startlage_mehrdeutig`: ein Schein-Plus an der oberen Glasecke
+    # (457,9/438,9) stand gleich stark neben dem echten Plus. Das Zweitbild
+    # liegt 33 s nach dem ersten (gemessene Stabilitaet 0,03 px); beide Fits
+    # muessen deckungsgleich sein. Text: Leser mit bestaetigtem Vorschlags-Quad.
+    still, still_hint = _load("diagnostics/sc7-assist/still.png")
+    image, hint = _load("diagnostics/sc7-assist/stability.png")
+    first = fit_lattice(still, still_hint, empty_cells=EMPTY_CELLS)
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(first, LatticeFit), first
+    assert isinstance(result, LatticeFit), result
+    assert np.max(np.linalg.norm(np.asarray(result.quad) - np.asarray(first.quad), axis=1)) <= 1.0
+    assert raster_offset_check([(image, "+0.46792 ")], result.quad).status != "FEHLER"
+
+
 @pytest.mark.parametrize("path,text", STILLS)
 @pytest.mark.parametrize("perturbation", ["noise", "brightness"])
 def test_perturbed_bench_still_never_accepts_wrong_lattice(path, text, perturbation):

@@ -31,6 +31,21 @@ _MIN_CURSOR_DEPTH_FRACTION = 0.6  # Vorabwert, aus sc7a vom 2026-10-01.
 _DOT_SIGMA_FRACTION = 0.2  # Vorabwert, aus den Standbildern vom 2026-10-14.
 # Startsuche: zuerst wie bisher (feste 0,7 px), dann punktgross geglaettet.
 _START_SIGMA_FRACTIONS = (None, 0.15, 0.18)  # Vorabwerte, 2026-10-14.
+# Leerpositionen der Pluszelle relativ zur Plusmitte (Spalte 2, Zeile 3):
+# 26 der 35 Punkte des 5x7-Plus sind unbeleuchtet.
+_PLUS_DOTS = {(2, 1), (2, 2), (2, 4), (2, 5)} | {(i, 3) for i in range(5)}
+_PLUS_BLANK_OFFSETS = np.float32(
+    [(c - 2, r - 3) for c in range(5) for r in range(7) if (c, r) not in _PLUS_DOTS]
+)
+# Vorabwert, Standbilder vom 2026-11-11 und ab4: echte Plus-Anker treffen
+# 0..1 Leerpositionen, Schein-Anker an Gehaeuse-/Glaskanten 3..18 (OQ-69).
+_MAX_PLUS_BLANK_HITS = 2
+# Vorabwerte, Standbilder vom 2026-11-11 (OQ-69): Ein Glanzfleck oder Kratzer
+# erzeugt in einer Leerzelle hoechstens ein einzelnes flaches Minimum (0,14
+# bis 0,21 der typischen Punkttiefe). Jede Glyphe hat mehrere Punkte; falsch
+# gelegte Raster hatten mehrere Leerzellenkandidaten oder einen mit >= 0,8.
+_MAX_EMPTY_CELL_ARTIFACTS = 1
+_MAX_EMPTY_CELL_ARTIFACT_DEPTH = 0.4
 
 
 @dataclass(frozen=True)
@@ -137,6 +152,17 @@ def _plus_anchors(
                     hit = distances[np.arange(9), nearest] <= stem_tolerance2
                     design = np.column_stack((np.ones(hit.sum()), offsets[hit]))
                     fitted = np.linalg.lstsq(design, src[nearest[hit]], rcond=None)[0]
+                    # Das Plus belegt nur 9 der 35 Punkte seiner 5x7-Zelle.
+                    # Gehaeuse- und Glaskanten liefern dort durchgehende
+                    # Minima und damit Schein-Plus-Anker (OQ-69).
+                    blank = _PLUS_BLANK_OFFSETS
+                    predicted_blank = fitted[0] + blank[:, :1] * fitted[1] + blank[:, 1:] * fitted[2]
+                    blank_hits = np.count_nonzero(
+                        np.min(np.sum((predicted_blank[:, None] - src[None]) ** 2, axis=2), axis=1)
+                        <= stem_tolerance2
+                    )
+                    if blank_hits > _MAX_PLUS_BLANK_HITS:
+                        continue
                     anchors.append((score, fitted[0], fitted[1], fitted[2]))
     anchors.sort(key=lambda item: item[0], reverse=True)
     distinct = []
@@ -331,6 +357,28 @@ def refine(
     return _evaluate_fit(image_bgr, h, src, quad, empty_cells=empty_cells)
 
 
+def _relative_depths(image_bgr: np.ndarray, source_dots: np.ndarray, source_ok: np.ndarray) -> np.ndarray:
+    """Kandidatentiefe relativ zur typischen Tiefe der zugeordneten Rasterpunkte.
+
+    Die 20-px-Randzone deckt die 6-px-Hintergrundglaettung an den
+    aeussersten Kandidaten ab.
+    """
+    x0 = max(0, int(np.min(source_dots[:, 0])) - 20)
+    y0 = max(0, int(np.min(source_dots[:, 1])) - 20)
+    x1 = min(image_bgr.shape[1], int(np.max(source_dots[:, 0])) + 21)
+    y1 = min(image_bgr.shape[0], int(np.max(source_dots[:, 1])) + 21)
+    gray = cv2.cvtColor(image_bgr[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY).astype(np.float32)
+    smooth = cv2.GaussianBlur(gray, (0, 0), 0.7)
+    depth = cv2.GaussianBlur(gray, (0, 0), 6) - smooth
+    xy = source_dots.astype(int)
+    candidate_depth = depth[xy[:, 1] - y0, xy[:, 0] - x0]
+    typical_depth = float(np.median(candidate_depth[source_ok])) if np.any(source_ok) else 0.0
+    if not typical_depth > 0:
+        # Ohne belastbare Vergleichstiefe gilt jeder Kandidat als punkttief.
+        return np.full(len(source_dots), np.inf)
+    return candidate_depth / typical_depth
+
+
 def _evaluate_fit(
     image_bgr: np.ndarray,
     h: np.ndarray,
@@ -352,6 +400,7 @@ def _evaluate_fit(
     if not _plus_shape(source_ok, source_c, source_r):
         return "plus_nicht_gefunden"
     target_all = _warp_points(source_dots, h)
+    relative_depth: np.ndarray | None = None
     if empty_cells:
         candidate_cell = np.floor(target_all[:, 0] / _PITCH).astype(int)
         local_x = target_all[:, 0] - candidate_cell * _PITCH
@@ -362,8 +411,14 @@ def _evaluate_fit(
             & (target_all[:, 1] >= _TOP)
             & (target_all[:, 1] <= _TOP + 7 * _PV)
         )
-        if np.any(candidate_in_cell) or np.any(source_ok & np.isin(source_c // 6, empty_cells)):
-            return "leerzelle_belegt"
+        occupied = candidate_in_cell | (source_ok & np.isin(source_c // 6, empty_cells))
+        if np.any(occupied):
+            # Nur ein einzelnes, flaches Minimum gilt als Glanz-/Kratzer-
+            # artefakt; schon zwei Kandidaten oder ein punkttiefer bleiben belegt.
+            relative_depth = _relative_depths(image_bgr, source_dots, source_ok)
+            if (np.count_nonzero(occupied) > _MAX_EMPTY_CELL_ARTIFACTS
+                    or np.any(relative_depth[occupied] >= _MAX_EMPTY_CELL_ARTIFACT_DEPTH)):
+                return "leerzelle_belegt"
     cursor_col = target_all[:, 0] / _PH - 0.5
     cursor_row = (target_all[:, 1] - _TOP) / _PV - 0.5
     cursor_c = np.rint(cursor_col)
@@ -378,19 +433,10 @@ def _evaluate_fit(
         # Die flachen Schatten direkt unter den untersten LCD-Punkten koennen
         # die absolute Kandidatengrenze (>8) ueberschreiten. Ein echter
         # Cursorpunkt muss auch relativ zu den zugeordneten Rasterpunkten
-        # ausreichend dunkel sein. Die 20-px-Randzone deckt die 6-px-
-        # Hintergrundglaettung an den aeussersten Kandidaten ab.
-        x0 = max(0, int(np.min(source_dots[:, 0])) - 20)
-        y0 = max(0, int(np.min(source_dots[:, 1])) - 20)
-        x1 = min(image_bgr.shape[1], int(np.max(source_dots[:, 0])) + 21)
-        y1 = min(image_bgr.shape[0], int(np.max(source_dots[:, 1])) + 21)
-        gray = cv2.cvtColor(image_bgr[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY).astype(np.float32)
-        smooth = cv2.GaussianBlur(gray, (0, 0), 0.7)
-        depth = cv2.GaussianBlur(gray, (0, 0), 6) - smooth
-        xy = source_dots.astype(int)
-        candidate_depth = depth[xy[:, 1] - y0, xy[:, 0] - x0]
-        typical_depth = float(np.median(candidate_depth[source_ok]))
-        if np.any(cursor & (candidate_depth >= _MIN_CURSOR_DEPTH_FRACTION * typical_depth)):
+        # ausreichend dunkel sein.
+        if relative_depth is None:
+            relative_depth = _relative_depths(image_bgr, source_dots, source_ok)
+        if np.any(cursor & (relative_depth >= _MIN_CURSOR_DEPTH_FRACTION)):
             return "cursorzeile_belegt"
     cells = tuple(sorted(set((c[ok] // 6).tolist())))
     if 0 not in cells or set(r[ok]) != set(range(7)):

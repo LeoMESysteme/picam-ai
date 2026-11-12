@@ -5,6 +5,24 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-12: **Rasterstart: Schein-Plus an Gehäusekanten und Einzelartefakte in Leerzellen (OQ-69).** Problem:
+  Vier Einrichtungen vom 11.11. scheiterten vor jedem Vorschlag, `154403Z` mit `startlage_mehrdeutig`,
+  `154459Z`/`155404Z`/`162902Z` mit `keine_startlage`. Ursachen, am Bild belegt: (1) Die obere linke Glas-/
+  Gehäuseecke lieferte gleich starke Schein-Plus-Anker (`dotlattice._plus_anchors`), die die Ankervorprüfung als
+  zweite Lage wertete. (2) Das richtige Raster wurde gefunden (152/159/153 Punkte), aber von `leerzelle_belegt`
+  verworfen: ein einziges flaches Minimum am Rand eines Glanzflecks bzw. an einem Kratzer (0,14–0,21 der typischen
+  Punkttiefe). Neu: Ein Plus-Anker zählt nur, wenn höchstens 2 der 26 unbeleuchteten Positionen seiner 5×7-Zelle
+  Kandidaten tragen (echte Anker 0–1, Schein-Anker 3–18). Leerzellen bleiben belegt, sobald sie zusammen zwei
+  Kandidaten oder einen mit mindestens 0,4 der typischen Punkttiefe enthalten; nur ein einzelnes flaches Minimum gilt
+  als Artefakt. Die Tiefenmessung teilt sich eine Hilfsfunktion mit der unveränderten Cursorzeilenregel.
+  Konsequenz: Alle vier Fehlerbilder liefern ein Raster mit 2j OK gegen den seriellen Zellentext und ohne
+  Widerspruch beim Gegenlesen; `154403Z` liegt ≤ 0,3 px auf dem Raster der gleichen Aufstellung `124851Z`.
+  `154459Z`/`155404Z` stoppen danach an der Vorprüfung „Kanten FEHLER“ (Glanzfleck, OQ-72). Über 88 Einrichtungs-
+  bilder behalten alle 77 bisherigen Fits ihr Raster (≤ 1,22 px, 2j-Ampel unverändert). Dieselbe Ankerursache
+  hatte `ab4`/16, `ab6`/20+22 und `sc7-assist/stability` als mehrdeutig gesperrt; sie liefern jetzt Fits, die per
+  2j bzw. gegen das Erstbild der Aufstellung belegt sind. Die drei alten Ablehnungstests dafür
+  (`test_uncertain_real_still_start_is_rejected`, `test_sc7_stability_still_remains_rejected`) sind deshalb rot und
+  bleiben bis zur Entscheidung unverändert; Begründung und Ersatztests in OQ-69/VALIDATION.
 * 2026-11-11: **Werkbank /live: Vierkanal-Takt am Laufstart und im Lauf (U1).** Problem: Format und Takt der
   Ausgabe waren in der Oberfläche nicht wählbar, die Einkanal-Warnung (F3) fehlte. Neu: Laufoptionen mit „Format“
   (Vierkanal-Takt empfohlen, Vorgabe; Einkanal mit wörtlicher F3-Warnung), Takt 1–10 Hz (Vorgabe 10), Checkliste
