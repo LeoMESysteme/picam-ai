@@ -145,7 +145,7 @@ def scene_state(name):
     setup = {
         "grid": None,
         "step": step, "elapsed_s": 5.0 if focus else 36.4,
-        "focus": {"method": "climb", "roi": [640, 360, 640, 360],
+        "focus": {"method": "climb", "roi": [640, 360, 640, 360], "roi_source": None, "end_check": None,
                   "samples": copy.deepcopy(FOCUS_SAMPLES[:3] if name == "setup_focus" else FOCUS_SAMPLES),
                   "verify": None if name == "setup_focus" else {
                       "score": 624.465370104453, "threshold": 0.85 * FOCUS_SAMPLES[0][1]}},
@@ -338,6 +338,7 @@ class FakeLiveService:
                 data["run"].setdefault("tracking_hint", None)
                 data["run"].setdefault("region_hint", None)
                 data["run"].setdefault("region_deactivated", [])
+                data["run"].setdefault("focus_check", None)
                 window = data["run"].setdefault("rejection_causes",
                     {"window_s": 10.0, "frames": 0, "limited": False, "causes": []})
                 window["causes"] = [live_cause(c) for c in window["causes"]]

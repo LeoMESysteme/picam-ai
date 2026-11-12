@@ -1,0 +1,418 @@
+{
+  "state": "setup_ready",
+  "error": null,
+  "setup": {
+    "grid": {
+      "target_size": [
+        400,
+        160
+      ],
+      "cell_boxes": [
+        [
+          0.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          25.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          50.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          75.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          100.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          125.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          150.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          175.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          200.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          225.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          250.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          275.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          300.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          325.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          350.0,
+          18.0,
+          25.0,
+          142.0
+        ],
+        [
+          375.0,
+          18.0,
+          25.0,
+          142.0
+        ]
+      ],
+      "quad": [
+        [
+          810.0,
+          511.0
+        ],
+        [
+          1369.0,
+          511.0
+        ],
+        [
+          1377.0,
+          580.0
+        ],
+        [
+          814.0,
+          591.0
+        ]
+      ],
+      "source": "dot_lattice"
+    },
+    "step": "vorschlag",
+    "elapsed_s": 36.4,
+    "focus": {
+      "method": "climb",
+      "roi": [
+        640,
+        360,
+        640,
+        360
+      ],
+      "roi_source": null,
+      "end_check": null,
+      "samples": [
+        [
+          48,
+          630.3558194010419
+        ],
+        [
+          56,
+          273.53271242939513
+        ],
+        [
+          40,
+          201.1113182858314
+        ],
+        [
+          42,
+          301.5480297000838
+        ],
+        [
+          44,
+          442.0887939597047
+        ],
+        [
+          46,
+          542.9752734088474
+        ],
+        [
+          50,
+          607.4170064667126
+        ],
+        [
+          52,
+          525.0128897387846
+        ],
+        [
+          54,
+          391.07734162279286
+        ]
+      ],
+      "verify": {
+        "score": 624.465370104453,
+        "threshold": 535.8024464908856
+      }
+    },
+    "exposure": {
+      "target": 130,
+      "band": [
+        115,
+        150
+      ],
+      "rounds": [
+        {
+          "level": 124.0,
+          "controls": {
+            "focus_absolute": 48,
+            "exposure_time_absolute": 300,
+            "white_balance_temperature": 4742,
+            "gain": 10
+          }
+        }
+      ]
+    },
+    "progress": {
+      "steps": [
+        {
+          "key": "fokus",
+          "state": "done",
+          "elapsed_s": 21.3
+        },
+        {
+          "key": "kamera",
+          "state": "done",
+          "elapsed_s": 2.0
+        },
+        {
+          "key": "belichtung",
+          "state": "done",
+          "elapsed_s": 4.1
+        },
+        {
+          "key": "standbilder",
+          "state": "done",
+          "elapsed_s": 9.0
+        },
+        {
+          "key": "vorschlag",
+          "state": "done",
+          "elapsed_s": 1.0
+        }
+      ],
+      "attempt": 1,
+      "attempts_max": 3,
+      "phase": null,
+      "wait": null
+    },
+    "checks_live": {
+      "kontrast": {
+        "status": "OK",
+        "reason": null
+      }
+    },
+    "overall": "FEHLER",
+    "checks": {
+      "kontrast": "OK",
+      "kanten": "OK",
+      "rahmen": "OK",
+      "glanz": "OK",
+      "belichtung": "OK",
+      "aufloesung": "OK",
+      "stabilitaet": "OK",
+      "rasterversatz": "OK",
+      "gegenlesen": "FEHLER",
+      "displayfehler": "OK",
+      "nachfuehrung": "OK",
+      "raster": "WARNUNG"
+    },
+    "overlays": [
+      "still",
+      "stability",
+      "overlay_source",
+      "overlay_sampling",
+      "overlay_rectified"
+    ],
+    "proposal_revision": "b358259f721241f0b9e6af42d4fdb390",
+    "regions": [
+      {
+        "centre": [
+          873,
+          385
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          915,
+          737
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1256,
+          422
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1485,
+          658
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          829,
+          411
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          822,
+          737
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1310,
+          437
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1457,
+          635
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          877,
+          459
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          858,
+          742
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1291,
+          391
+        ],
+        "size": 15
+      },
+      {
+        "centre": [
+          1321,
+          707
+        ],
+        "size": 15
+      }
+    ],
+    "auswahl": "automatisch",
+    "centre_results": [],
+    "check_reasons": {
+      "gegenlesen": "Zelle 3: gelesen 7, Referenz 1"
+    }
+  },
+  "run": null,
+  "reader_tolerance": null,
+  "session_id": "test-session",
+  "release_notice": "Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.",
+  "camera": {
+    "running": true,
+    "stalled": false,
+    "error": null,
+    "frames": 1,
+    "gaps": 0,
+    "source": {
+      "model": "logitech_streamcam",
+      "usb_id": "046d:0893",
+      "size": [
+        1920,
+        1080
+      ],
+      "fourcc": "YUYV",
+      "fps": 30,
+      "device": "/dev/video0",
+      "controls": {
+        "focus_absolute": 48,
+        "exposure_time_absolute": 300,
+        "white_balance_temperature": 4742,
+        "gain": 10
+      }
+    },
+    "last_start": null
+  },
+  "diagnostic_leftovers": [],
+  "storage": {
+    "free_bytes": 4200000000,
+    "reserve_bytes": 2000000000,
+    "level": "warn",
+    "message": "4.20 GB frei"
+  },
+  "system": {
+    "cpu_percent": 37.5,
+    "cpu_window_s": 1.0
+  },
+  "step": null,
+  "simulate": false,
+  "profile": null,
+  "run_block": null,
+  "test_run": null,
+  "diagnostics": {
+    "enabled": false,
+    "reason": "kein Diagnoselauf"
+  },
+  "diagnose_kopie": false,
+  "last_mark": null,
+  "previous_region_hint": null,
+  "output": {
+    "transport": "off",
+    "state": "off"
+  },
+  "reference": {
+    "enabled": false,
+    "reason": "kein Referenzlauf",
+    "latest": null,
+    "schedule_step": null
+  },
+  "reference_eval": null
+}

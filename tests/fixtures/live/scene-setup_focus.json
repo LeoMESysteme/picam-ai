@@ -13,6 +13,8 @@
         640,
         360
       ],
+      "roi_source": null,
+      "end_check": null,
       "samples": [
         [
           48,
