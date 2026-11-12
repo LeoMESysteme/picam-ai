@@ -30,9 +30,9 @@ class SessionTemplateSpec:
     fmt: Literal['1ch', '4ch']
 
 
-# Auf '4ch' umstellen, sobald U1 – Werkbank startet Läufe mit Vierkanal-Takt –
-# auf dem Pi eingespielt ist. Einzige Stelle für die Vorgabe.
-DEFAULT_SESSION_FORMAT = '1ch'
+# Vierkanal seit dem gemeinsamen Stand feat/integration (2026-11-12): Die Werkbank
+# startet Läufe mit Vierkanal-Takt als Vorgabe (U1). Einzige Stelle für die Vorgabe.
+DEFAULT_SESSION_FORMAT = '4ch'
 SESSION_TEMPLATES = (
     SessionTemplateSpec(
         template_id='bruecke-session-com8-20261106',

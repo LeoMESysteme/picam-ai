@@ -6,10 +6,19 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.fixture
+def single_channel_default(monkeypatch):
+    """Diese Tests prüfen die Einkanal-Vorlage; die Vorgabe ist seit 2026-11-12 Vierkanal."""
+    from dispread_bridge_app import session_templates
+    monkeypatch.setattr(session_templates, 'DEFAULT_SESSION_FORMAT', '1ch')
+
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT / "docs/quellen/bruecke-testlauf-2026-11-06/Session-COM8.ucf"
 
 
+
+@pytest.mark.usefixtures('single_channel_default')
 def test_com8_is_the_exact_reviewed_original():
     from dispread_bridge_app.session_export import GSVMULTI_BAUD, generate_session
 
@@ -19,6 +28,7 @@ def test_com8_is_the_exact_reviewed_original():
     assert GSVMULTI_BAUD == 115200
 
 
+@pytest.mark.usefixtures('single_channel_default')
 def test_com4_preserves_bytes_and_matches_independent_receiver_fixture():
     from dispread_bridge_app.session_export import generate_session
 
@@ -117,6 +127,7 @@ def test_unknown_format_is_rejected_before_writing(tmp_path, fmt):
     assert not destination.exists()
 
 
+@pytest.mark.usefixtures('single_channel_default')
 def test_public_export_reports_active_metadata_and_refuses_template_selection(tmp_path):
     from dispread_bridge_app.app_controller import AppError
     from test_app_controller import make
@@ -140,8 +151,9 @@ def test_single_default_switch_updates_export_and_unexported_context(tmp_path, m
     from dispread_bridge_app.session_export import generate_session
     from test_app_controller import make
 
-    assert templates.DEFAULT_SESSION_FORMAT == '1ch'
+    assert templates.DEFAULT_SESSION_FORMAT == '4ch'
     assert not hasattr(templates, 'ACTIVE_SESSION_TEMPLATE')
+    monkeypatch.setattr(templates, 'DEFAULT_SESSION_FORMAT', '1ch')
     controller = make(tmp_path)
     assert controller.context().default_session_format == '1ch'
     assert controller.context().session_format is None
