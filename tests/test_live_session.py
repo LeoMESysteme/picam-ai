@@ -2299,3 +2299,14 @@ def test_four_channel_session_records_tick_origin(tmp_path, monkeypatch):
         assert session.unified_output_status()['tick']['start_monotonic_ns'] == 0
     finally:
         session.stop()
+
+
+def test_session_json_records_run_start_focus_check(tmp_path):
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2)
+    check = {"status": "WARNUNG", "text": "Bild nach Kamerastart unschärfer als bei der Einrichtung (31 %) – Fokus prüfen"}
+    session.focus_check = check
+    session.start()
+    try:
+        assert json.loads(session.session_path.read_text())["focus_check"] == check
+    finally:
+        session.stop()

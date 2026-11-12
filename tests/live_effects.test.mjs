@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createCorrectionChip, createEffects, mountEffects, TEXT_MS} from '../src/dispread/workbench/static/live/viewer/effects.js';
-import {createAlerts, LOST_TITLE, STALL_TITLE, watchAlerts} from '../src/dispread/workbench/static/live/run/alerts.js';
+import {createAlerts, FOCUS_RUN_TITLE, LOST_TITLE, STALL_TITLE, watchAlerts} from '../src/dispread/workbench/static/live/run/alerts.js';
 import {effectState} from '../src/dispread/workbench/static/live/model.js';
 
 const scene = (name) => JSON.parse(readFileSync(new URL(`./fixtures/live/scene-${name}.json`, import.meta.url), 'utf8'));
@@ -478,4 +478,25 @@ test('correction chip shows after the animation and hides 2 s after correcting e
   assert.equal(chip.update(false, 9500), true);
   assert.equal(chip.update(false, 11100), false);
   assert.equal(chip.update(true, 11200), false);
+});
+
+test('alerts: Fokuspruefung am Laufstart zeigt die Warnung stehend, einmal je Lauf', () => {
+  const h = harness();
+  const alerts = createAlerts(h.deps);
+  const text = 'Bild nach Kamerastart unschärfer als bei der Einrichtung (31 %) – Fokus prüfen';
+  const running = {state: 'running', session_id: 's1', run: {dir: 'run-01', focus_check: {status: 'WARNUNG', text}}};
+  alerts.update(running);
+  const shown = h.toasts.get('fokus-lauf');
+  assert.equal(shown.level, 'warn');
+  assert.equal(shown.title, FOCUS_RUN_TITLE);
+  assert.equal(shown.text, text);
+  assert.equal(shown.sticky, true);
+  h.toasts.delete('fokus-lauf');
+  alerts.update(running);
+  assert.equal(h.toasts.has('fokus-lauf'), false, 'nicht bei jedem Abruf neu');
+  // Neu gesetzt und wieder scharf: nur ein kurzer Hinweis.
+  alerts.update({state: 'running', session_id: 's1', run: {dir: 'run-02',
+    focus_check: {status: 'OK', text: 'Fokus nach Kamerastart neu gesetzt (vorher 5 %, danach 98 % der Einrichtungsschärfe)'}}});
+  assert.equal(h.toasts.get('fokus-lauf').level, 'info');
+  assert.notEqual(h.toasts.get('fokus-lauf').sticky, true);
 });

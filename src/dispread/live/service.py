@@ -44,7 +44,6 @@ from dispread.setup_checks import RESOLUTION_ERROR_PX
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 SETUP_STEPS = ("fokus", "kamera", "belichtung", "standbilder", "vorschlag")
-SETUP_FOCUS_HINT: live_setup.HintBox | None = None
 DEVICE_ID = "gsv-sensor-161a"
 DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
 STORAGE_RESERVE_BYTES = 2_000_000_000
@@ -198,6 +197,9 @@ class LiveService:
         self._profile_path: Path | None = None
         self._profile_camera: CameraSettings | None = None
         self._last_confirmed_focus: int = DEFAULT_FOCUS_START
+        # OQ-74: Schaerfereferenz der bestaetigten Einrichtung und Pruefung am Laufstart.
+        self._focus_reference: dict | None = None
+        self._run_focus_check: dict | None = None
         self._profile_info: dict | None = None
         self._run_dir: Path | None = None
         self._session: LiveSession | None = None
@@ -333,6 +335,7 @@ class LiveService:
                     "recent": recent,
                     "recent_now_ms": recent_now_ms,
                     "dir": self._run_dir.name,
+                    "focus_check": deepcopy(self._run_focus_check),
                     "latest_age_s": self._session.latest_age_s(),
                     "guess": self._session.latest_guess if self._test_run is not None else None,
                     "tracking": dict(getattr(self._session, "tracking", {})),
@@ -441,7 +444,8 @@ class LiveService:
 
     def _reset_setup_live(self) -> None:
         """Live-Verlaeufe nur beim Erzeugen oder unter self._lock leeren."""
-        self._setup_focus: dict = {"method": "climb", "samples": [], "verify": None, "roi": None}
+        self._setup_focus: dict = {"method": "climb", "samples": [], "verify": None, "roi": None,
+                                   "roi_source": None, "end_check": None}
         self._setup_exposure: dict = {
             "target": live_setup.EXPOSURE_TARGET, "band": list(live_setup.EXPOSURE_BAND), "rounds": [],
         }
@@ -543,6 +547,7 @@ class LiveService:
                 self._stability_frames = ()
                 self._run_block = self._test_run = self._reader_tolerance = None
                 self._profile_path = self._profile_camera = self._profile_info = None
+                self._focus_reference = None
                 self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
                                            if getattr(s, 'diagnose_kopie', False)]
                 self._session = None
@@ -562,10 +567,6 @@ class LiveService:
                 if step in self._step_times:
                     self._step_times[step] = [now, None]
                 self._setup_phase = self._setup_wait = None
-            if step == "fokus":
-                self._setup_focus["roi"] = live_setup.measurement_roi_pixels(
-                    live_setup.FOCUS_SOURCE_SIZE, SETUP_FOCUS_HINT,
-                )
             self._step = self._setup_step = step
             self._setup_message = self._setup_message_base = None
 
@@ -587,6 +588,51 @@ class LiveService:
         except (OSError, TypeError, ValueError) as exc:
             with self._lock:
                 self._diagnostics_error = f"{path.name}: {type(exc).__name__}: {str(exc)[:160]}"
+
+    def _write_setup_image(self, path: Path, image: Any) -> None:
+        """Diagnosebild schreiben; Fehler aendern den Einrichtungsausgang nicht."""
+        try:
+            if image is None or getattr(image, "dtype", None) != np.uint8 or not image.size:
+                return
+            import cv2
+
+            if not cv2.imwrite(str(path), image):
+                raise OSError("cv2.imwrite meldet Fehler")
+        except Exception as exc:  # noqa: BLE001 - Diagnose darf die Einrichtung nicht abbrechen
+            with self._lock:
+                self._diagnostics_error = f"{path.name}: {type(exc).__name__}: {str(exc)[:160]}"
+
+    def _check_run_start_focus(self, camera: CameraSettings, out_dir: Path) -> dict:
+        """OQ-74: Schaerfe nach dem Kameraneustart am Laufstart; der Lauf startet in jedem Fall.
+
+        Ergebnis geht nach session.json; eine WARNUNG mit Text erscheint im Laufstatus.
+        Ein Kamerafehler bei der Pruefung wird als WARNUNG gemeldet, nicht verschwiegen.
+        """
+        reference = self._focus_reference
+        if not reference:
+            return {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz"}
+        try:
+            checked = live_setup.check_focus_at_run_start(
+                OwnerSetupCamera(self._owner), reference, target=camera.controls["focus_absolute"],
+            )
+        except Exception as exc:  # noqa: BLE001 - Lauf startet trotzdem, Befund sichtbar
+            _LOG.warning("Fokuspruefung Laufstart fehlgeschlagen: %s", exc)
+            return {"status": "WARNUNG", "text": f"Fokus beim Laufstart nicht geprüft: {str(exc)[:160]}",
+                    "reference": deepcopy(reference)}
+        if checked is None:
+            return {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz"}
+        result, frames = checked
+        box = tuple(reference.get("roi_box") or ()) or None
+        for name, frame in frames.items():
+            crop, rect = live_setup.focus_diagnostic_crop(frame, box)
+            result.setdefault("diagnostic_crop", rect)
+            self._write_setup_image(out_dir / f"fokus-laufstart-{name.replace('_', '-')}.png", crop)
+        return result
+
+    def _focus_preview_image(self) -> Any:
+        """Neuestes Vorschaubild fuer die Hinweisbox vor der Fokussuche (OQ-74)."""
+        latest = self._owner.latest()
+        return None if not latest else getattr(latest[1], "image", None)
 
     def _setup_worker(self, session_dir: Path, text: str | None) -> None:
         try:
@@ -660,10 +706,23 @@ class LiveService:
                 self._setup_exposure["rounds"].append(deepcopy(entry))
 
         report("fokus")
+        # OQ-74: Fokus auf der LCD-Hinweisbox messen. Die Box der Einrichtung
+        # entsteht erst nach der Fokussuche; deshalb eine billige Vorabsuche
+        # (eine Konturensuche, etwa 10-55 ms) auf dem neuesten Vorschaubild.
+        focus_hint = live_setup.focus_hint_box(self._focus_preview_image())
+        focus_roi = {
+            "pixels": live_setup.measurement_roi_pixels(live_setup.FOCUS_SOURCE_SIZE, focus_hint),
+            "quelle": "lcd_hinweis" if focus_hint is not None else "mittleres_drittel",
+            "hint_box": list(focus_hint) if focus_hint is not None else None,
+        }
         with self._lock:
             start_focus = self._last_confirmed_focus
+            self._setup_focus["roi"] = list(focus_roi["pixels"])
+            self._setup_focus["roi_source"] = focus_roi["quelle"]
+        if focus_hint is None:
+            self._setup_progress("Fokus: kein LCD-Hinweis im Vorschaubild - mittleres Bilddrittel")
         settings, sweep = live_setup.focus_camera(
-            OwnerSetupCamera(self._owner), SETUP_FOCUS_HINT, start_focus=start_focus, info=self._setup_progress,
+            OwnerSetupCamera(self._owner), focus_hint, start_focus=start_focus, info=self._setup_progress,
             on_sample=focus_sample, on_fallback=focus_fallback, should_stop=self._setup_cancel.is_set,
         )
         with self._lock:
@@ -678,8 +737,15 @@ class LiveService:
             "camera": settings.to_dict(), "focus_sweep": [[f, s] for f, s in sweep],
             "focus_method": getattr(sweep, "focus_method", "sweep"),
             "focus_verify": getattr(sweep, "focus_verify", None),
+            "focus_roi": focus_roi,
+            "focus_sweep_roi_mean": [[f, m] for f, m in getattr(sweep, "roi_means", {}).items()],
             "created_at_utc": self._wall().isoformat(),
         }
+        verify_frame = getattr(sweep, "verify_frame", None)
+        if verify_frame is not None:
+            crop, rect = live_setup.focus_diagnostic_crop(verify_frame, focus_hint)
+            camera_record["focus_diagnostic_crop"] = rect
+            self._write_setup_image(setup_dir / "fokus-vor-neustart.png", crop)
         (setup_dir / "camera-settings.json").write_text(
             json.dumps(camera_record, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -700,6 +766,27 @@ class LiveService:
         (setup_dir / "camera-settings.json").write_text(
             json.dumps(camera_record, indent=2, ensure_ascii=False), encoding="utf-8",
         )
+        # OQ-74: Nach dem letzten Kameraneustart auf derselben ROI pruefen, ob
+        # die Linse noch am Suchergebnis steht; sonst einmal von unten neu setzen.
+        checked = live_setup.check_focus_after_restart(
+            OwnerSetupCamera(self._owner), focus_hint, sweep,
+            should_stop=self._setup_cancel.is_set, info=self._setup_progress,
+        )
+        end_check, end_frames = checked if checked is not None else (None, {})
+        for name, frame in end_frames.items():
+            crop, rect = live_setup.focus_diagnostic_crop(frame, focus_hint)
+            camera_record.setdefault("focus_diagnostic_crop", rect)
+            self._write_setup_image(setup_dir / f"fokus-{name.replace('_', '-')}.png", crop)
+        camera_record["focus_end_check"] = end_check
+        (setup_dir / "camera-settings.json").write_text(
+            json.dumps(camera_record, indent=2, ensure_ascii=False), encoding="utf-8",
+        )
+        with self._lock:
+            self._setup_focus["end_check"] = None if end_check is None else {
+                "status": end_check["status"], "ratio": end_check["after_restart"]["ratio"],
+                "reapproach_ratio": (end_check.get("reapproach") or {}).get("ratio"),
+            }
+        focus_check = live_setup.focus_check(focus_roi, end_check)
         port = None
         try:
             if cell_text is None:
@@ -762,6 +849,7 @@ class LiveService:
             reader_check=result.reader_check,
             live_tracking=True,
             exposure_adjust=exposure_adjust,
+            focus_check=focus_check,
         )
 
     def edit_regions(self, *, proposal_revision, add, remove) -> dict:
@@ -857,6 +945,7 @@ class LiveService:
                                         "grid_source": proposal.get("grid_source"), "quad": profile.quad})
                 self._profile_path, self._profile_camera = path, profile.camera
                 self._last_confirmed_focus = profile.camera.controls["focus_absolute"]
+                self._focus_reference = deepcopy(proposal.get("focus_reference"))
                 self._profile_info = {"confirmed_by": profile.confirmed_by,
                                       "confirmed_at_utc": profile.confirmed_at_utc,
                                       "warning_acknowledged": overall == "WARNUNG",
@@ -952,6 +1041,9 @@ class LiveService:
                         self._owner.restart(lambda: self._source_for(camera), reason="laufstart")
                     except RuntimeError as exc:
                         raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
+                    focus_check = self._check_run_start_focus(camera, out_dir)
+                else:
+                    focus_check = None
                 try:
                     recorder = (ReferenceRecorder(self._serial_opener, out_dir / "reference.jsonl",
                                                   norm_schedule=schedule, port=live_setup.SERIAL_PORT) if reference else None)
@@ -966,6 +1058,8 @@ class LiveService:
                     )
                     session.bridge_run_id = run_id
                     session.bridge_acknowledged_by = confirmed_by
+                    if focus_check is not None:
+                        session.focus_check = focus_check  # Audit in session.json
                     session.start()
                 except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
                     raise LiveError(f"Lauf nicht gestartet: {exc}") from exc
@@ -974,6 +1068,8 @@ class LiveService:
                     self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
                                                if getattr(s, 'diagnose_kopie', False)]
                     self._session, self._run_stop, self._state, self._error = session, stop, "running", None
+                    self._run_focus_check = (None if focus_check is None or focus_check.get("text") is None
+                                             else {"status": focus_check["status"], "text": focus_check["text"]})
                     self._previous_region_hint = None
                     self._run_dir = out_dir
                     self._test_run = test_run
