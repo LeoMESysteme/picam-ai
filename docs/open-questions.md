@@ -64,7 +64,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-67](#oq-67) | — | offen | Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test? |
 | [OQ-68](#oq-68) | — | offen | Auf welchem Windows-Rechner wird der Installer der Brücke automatisch gebaut? |
 | [OQ-69](#oq-69) | — | offen | Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage? |
-| [OQ-70](#oq-70) | — | offen | Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen? |
+| [OQ-70](#oq-70) | — | teilweise geklärt | Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen? |
 | [OQ-71](#oq-71) | — | offen | Wie kann ein fehlerhafter Einrichtungsvorschlag abgebrochen oder neu gestartet werden? |
 | [OQ-72](#oq-72) | — | offen | Warum lehnt die Kantenprüfung die letzte Ziffer der neuen Aufstellung ab? |
 | [OQ-73](#oq-73) | — | offen | Warum aktualisiert die Werkbank während der Einrichtung verzögert? |
@@ -3488,7 +3488,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-70 — Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen?
 
-* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Status:** teilweise geklärt (2026-11-12) · **Priorität:** kritisch, Workbench-Blocker
 * **Befund:** Nutzer meldet nach anderer Aufstellung erneut eine gescheiterte
   Einrichtung. `live-20261111T155557Z` hat einen Vorschlag mit Raster,
   Rasterversatz und Gegenlesen jeweils `OK`, aber `nachfuehrung=FEHLER`:
@@ -3505,6 +3505,40 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   gespeichert; Zweitmittelbild und ursprüngliche Prüfkennzahlen sind vorhanden.
 * **Antwort landet in:** `src/dispread/live/frame_tracking.py`,
   `src/dispread/live/setup.py`, Regressionstests und [Validierung](VALIDATION.md).
+* **Ursache (2026-11-12, offline belegt):** Schon der automatische Vorschlag ist einseitig,
+  `[[2,7],[12,7]]` (Seiten −x, −y / +x, +y), keine Reserve. Die Bedienung ist nicht die Ursache.
+  Das Raumlicht hellt die untere rechte Fase auf. Sie fällt aus der dunklen Rahmenkomponente
+  heraus und hinterlässt eine Kerbe (Tiefe 46 px bei (954,690)). Die Solidität sinkt dadurch
+  auf 0,9605 < 0,97, und die Bandermittlung fällt auf das feste Band zurück. Bei diesem kleinen
+  Quad (548 px) reicht das feste Band links nur von x ≈ 600 bis 654. Dort liegen nur die
+  Glasecken; die Fasenstruktur bei x ≈ 575 liegt außerhalb. Die Eckenschwelle im festen Band
+  (2 % des Maximums der Glaskanten) lässt die schwache Fasentextur ohnehin nicht zu. Ein
+  breiteres festes Band hilft nachweislich nicht (Endrand 140 statt 100 px: −x bleibt 2).
+* **Umgesetzt 2026-11-12 (Branch `fix/blocker-oq70`):**
+  * Die Soliditätsgrenze 0,97 bleibt. Unterschreitet eine Komponente sie, wird die
+    Rahmenkontur je Quadseite aus Strahlen gemessen: alle ≤ 4 px eine Normale nach außen,
+    Austritt aus der gefüllten Kontur. Das 0,75-Quantil je Seite (`bezel_notch_quantile`, nur
+    Einrichtung) ergibt eine quadparallele Kontur.
+  * Liegt außerhalb dieser Kontur eine Fläche, die ein ganzes Such- und Patchfenster
+    (41 × 41 px) trägt, bleibt es beim Rückfall `rahmenform_unplausibel`. Das betrifft
+    Balken, Kabel und Schatten. Sonst gilt die Komponente innerhalb der Kontur als Rahmen,
+    und die Kerbe bleibt außerhalb des Bandes. Kennzahl: `band_kerbe_kontur_px`.
+  * `155557Z` ergibt jetzt `[[9,10],[10,10]]` mit Reserve.
+  * Auf 63 Einrichtungsbildern ändert sich das Urteil nur bei den drei bisherigen
+    Rückfällen mit Kerbe: `155557Z`, `124851Z` (vorher `[[6,12],[10,7]]`, jetzt
+    `[[10,10],[10,10]]`) und `20261028T150539Z`. Alle übrigen 60 Vorschläge bleiben
+    bitgleich, auch die vier Review-Balken (60/90 px an `124226Z`/`172340Z`). Diese
+    fallen weiter zurück, ohne Bereich auf dem Balken.
+  * Die Laufprüfung ist unverändert, und das neue Feld bindet keinen Laufstart.
+  * Bleibt ein Vorschlag einseitig, nennt die Einrichtung jetzt „nachfuehrbereiche zu
+    einseitig verteilt; Kamera leicht drehen oder verschieben und neu einrichten“.
+* **Offen:**
+  * Am echten Aufbau ist das nicht erprobt.
+  * Die Stabilität ist nur mit dem gespeicherten Zweitmittelbild nachgerechnet, nicht mit
+    acht Einzelbildern.
+  * Ein dunkler Gegenstand, der mehr als ein Viertel einer Rahmenseite außen anliegt,
+    verschiebt das Quantil und zählt dann als Rahmen. Das entspricht der bisherigen
+    Annahme für Komponenten mit Solidität ≥ 0,97.
 
 <span id="oq-71"></span>
 

@@ -6588,3 +6588,33 @@ p95 148,4 %. Keine bestätigte Seite-geschlossen-Phase, kein X-Hud-fps-Nachweis,
 keine isolierte Controllerlast, weniger als 30 Minuten: T13 bleibt offen.
 Zeitbasen V4L2_MONOTONIC, gespeicherte BOOTTIME-Versätze und HOST_MONOTONIC;
 keine physische Latenzaussage. [Vollständige Auswertung und Belege](quellen/werkbank-t13-2026-11-06.md).
+
+## 2026-11-12 — OQ-70: Rahmenband bei beleuchteter Fase, offline { #oq70-kerbenrahmen-20261112 }
+
+Geändert ist nur die Bandermittlung des Vorschlags (`_bezel_band`/`_notched_frame`). Update, Matching,
+RANSAC, Residualgrenzen und Laufstartbindung sind unverändert.
+
+**Neue Regel:** Bei Solidität < 0,97 wird die Rahmenkontur je Quadseite gemessen. Dazu laufen Strahlen
+nach außen; maßgeblich ist das 0,75-Quantil der Austrittsabstände. Eine Fläche außerhalb dieser Kontur
+darf kein Fenster von 41 × 41 px tragen, sonst gilt wie bisher `rahmenform_unplausibel`.
+
+Nachgerechnet wurde auf allen gespeicherten Einrichtungsbildern mit Quad (SD `var/live` und SSD
+`live`) sowie auf den Regressionsfällen vom 11.11. mit gespeichertem Zweitmittelbild. Die Review-Balken
+(60/90 px) wurden wie im R13-11-Test eingezeichnet. Die Seiten sind `[[−x, −y], [+x, +y]]`, gefordert
+sind 3 Bereiche je Seite, mit Reserve 5.
+
+| Fall | Basis `2ceb115` | Fix |
+| --- | --- | --- |
+| `155557Z` (OQ-70) | festes Band, `[[2,7],[12,7]]`, einseitig, keine Reserve | dunkler Rahmen, `[[9,10],[10,10]]`, Reserve |
+| `124851Z` (positiv) | festes Band, `[[6,12],[10,7]]`, Reserve | dunkler Rahmen, `[[10,10],[10,10]]`, Reserve |
+| `20261028T150539Z` | festes Band, `[[10,7],[10,11]]`, Reserve | dunkler Rahmen, `[[10,10],[10,10]]`, Reserve |
+| 7 weitere positive Aufstellungen vom 11.11. | ok, Reserve | bitgleich |
+| `124226Z`/`172340Z` + Balken 60/90 px | festes Band, `rahmenform_unplausibel`, 0 Bereiche auf dem Balken | bitgleich |
+| übrige Einrichtungsbilder | – | bitgleich (60 von 63 insgesamt) |
+
+**Grenzen:**
+
+* Die Stabilität ist mit einem Zweitmittelbild statt acht Einzelbildern nachgerechnet.
+* Am echten Aufbau ist nichts erprobt.
+* Ein dunkler Gegenstand, der außen an mehr als einem Viertel einer Rahmenseite anliegt, zählt als
+  Rahmen. Dieselbe Annahme gilt schon bisher für Komponenten mit Solidität ≥ 0,97.
