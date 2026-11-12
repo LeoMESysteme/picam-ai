@@ -20,9 +20,13 @@ was ist die Konsequenz.
   `154459Z`/`155404Z` stoppen danach an der Vorprüfung „Kanten FEHLER“ (Glanzfleck, OQ-72). Über 88 Einrichtungs-
   bilder behalten alle 77 bisherigen Fits ihr Raster (≤ 1,22 px, 2j-Ampel unverändert). Dieselbe Ankerursache
   hatte `ab4`/16, `ab6`/20+22 und `sc7-assist/stability` als mehrdeutig gesperrt; sie liefern jetzt Fits, die per
-  2j bzw. gegen das Erstbild der Aufstellung belegt sind. Die drei alten Ablehnungstests dafür
-  (`test_uncertain_real_still_start_is_rejected`, `test_sc7_stability_still_remains_rejected`) sind deshalb rot und
-  bleiben bis zur Entscheidung unverändert; Begründung und Ersatztests in OQ-69/VALIDATION.
+  2j bzw. gegen das Erstbild der Aufstellung belegt sind. Nach unabhängigem Review (`oq69-review.md`, 0 falsche Fits
+  auf echten, gestörten und synthetischen Bildern) ersetzen Ersatztests die drei alten Ablehnungstests
+  (`test_uncertain_real_still_start_is_rejected`, `test_sc7_stability_still_remains_rejected`); der ab6-Test prüft
+  Bild 22 in Punktspalten. Die alte Aussage „ab4 um 9,14 px falsch“ trägt im Laborjournal und in der
+  Projekthistorie einen Korrekturvermerk. Neue mögliche Ablehnung: Liegen drei oder mehr dunkle Störstellen
+  (Schmutz, Kratzer) auf den Leerpositionen der Pluszelle, wird auch der echte Anker verworfen und es kommt
+  `keine_startlage`, wo der alte Code gefittet hätte – sicher, aber am Aufbau möglich.
 * 2026-11-11: **Werkbank /live: Vierkanal-Takt am Laufstart und im Lauf (U1).** Problem: Format und Takt der
   Ausgabe waren in der Oberfläche nicht wählbar, die Einkanal-Warnung (F3) fehlte. Neu: Laufoptionen mit „Format“
   (Vierkanal-Takt empfohlen, Vorgabe; Einkanal mit wörtlicher F3-Warnung), Takt 1–10 Hz (Vorgabe 10), Checkliste

@@ -1226,6 +1226,9 @@ ungeprüftes Raster still passieren könnte. Die automatische Startsuche
 für `ab4`/`ab6` wurde nicht durch bloßes Lockern der Ankerwahl
 erweitert: Eine probeweise Lockerung lieferte für `ab4` ein um 9,14 px
 falsches Quad.
+*Korrekturvermerk 2026-11-12 (OQ-69):* Gemessen wurde gegen das um etwa
+0,9 Punktspalten versetzte alte `ab4-profile`; gegen das korrigierte
+`ab4-profile-regrid1.json` sind es 0,08 Punktspalten (2j OK). Siehe OQ-69.
 
 ## Konsequenz
 

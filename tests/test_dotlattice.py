@@ -371,50 +371,60 @@ def test_evaluate_quad_agrees_with_fit_on_sc6_still():
     assert check_setup(image, evaluated).to_dict()["overall"] in {"OK", "WARNUNG"}
 
 
-@pytest.mark.parametrize("name,frame,reason", [
-    ("ab4", 16, {"startlage_mehrdeutig"}),
-    ("ab6", 22, {"keine_startlage", "startlage_mehrdeutig"}),
+def _max_column_offset(quad, reference, cells=range(8)) -> float:
+    """Groesster Versatz der Rasterpunkte in Punktspalten zwischen zwei Quads.
+
+    Ein Spaltenversatz sieht in Ecken-px je nach Perspektive verschieden gross
+    aus (5,7..10 px je Spalte); in Punktspalten ist er direkt erkennbar.
+    """
+    cs = np.array([(cell * 6 + c, r) for cell in cells for c in range(5) for r in range(7)])
+    lat = dotlattice._lat(cs[:, 0], cs[:, 1])
+    corners = dotlattice._CORNERS[0]
+    to_image = np.linalg.inv(cv2.getPerspectiveTransform(np.float32(quad), corners))
+    to_reference = cv2.getPerspectiveTransform(np.float32(reference), corners)
+    moved = dotlattice._warp_points(dotlattice._warp_points(lat, to_image), to_reference)
+    return float(np.max(np.abs(moved[:, 0] - lat[:, 0])) / dotlattice._PH)
+
+
+# Ersetzt `test_uncertain_real_still_start_is_rejected` (ab4/16 mehrdeutig,
+# ab6/22 keine/mehrdeutig). Beide Ablehnungen kamen von Schein-Plus-Ankern an der
+# Glasecke, wie bei 154403Z (OQ-69); sie haben kein falsches Raster abgewehrt.
+# ab4: die alte Einstufung "9,14 px falsch" mass gegen das um ~0,9 Punktspalten
+# versetzte Original-ab4-profile. Unabhaengiges Review:
+# .superpowers/sdd/2026-11-11-gsvmulti-takt/oq69-review.md (Abschnitt 1).
+@pytest.mark.parametrize("name,frame,text,reference_name,reference_quad", [
+    # Bestaetigtes, korrigiertes Profil; gemessen 0,08 Spalten.
+    ("ab4", 16, "+0.46780 ", "ab4-profile-regrid1.json", None),
+    # 25-30 Grad schraeg. Bild 22 statt 20 (Bild 20 zeigt einen Ziffernwechsel).
+    # Referenzfit = Startfit vom 2026-11-12, im Review auf Zellen, Lese- und
+    # 2j-Ergebnis geprueft; Profilabstand der Wertzellen 0,31 Spalten.
+    ("ab6", 22, "+0.46789 ", "ab6-profile",
+     [[1037.4, 511.6], [1623.4, 342.4], [1643.7, 415.3], [1061.4, 590.4]]),
 ])
-def test_uncertain_real_still_start_is_rejected(name, frame, reason):
-    still = local_recording(f"diagnostics/{name}-still/frames/frame_{frame:06d}.png")
-
-    image = cv2.imread(str(still))
-    hint = find_green_hint_box(image)
-    assert hint is not None
-    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
-    assert isinstance(result, str), result
-    assert result in reason
-
-
-@pytest.mark.parametrize("name,frame,text,max_corner_px", [
-    # ab4 war bis OQ-69 `startlage_mehrdeutig` wegen Schein-Plus-Ankern an der
-    # Glasecke. Das jetzt gefundene Quad weicht vom urspruenglichen ab4-Profil
-    # (2j FEHLER) um 9,14 px ab, vom korrigierten regrid1-Profil um <= 3,0 px.
-    ("ab4", 16, "+0.46780 ", 3.5),
-    # ab6 (25-30 Grad schraeg): Startfit nur 2j-WARNUNG, die Nachfuehrung der
-    # Einrichtung bringt 2j auf OK (OQ-69, VALIDATION 2026-11-12).
-    ("ab6", 20, "+0.46789 ", 8.0),
-])
-def test_bezel_anchor_no_longer_blocks_text_confirmed_start(name, frame, text, max_corner_px):
+def test_bezel_anchor_no_longer_blocks_text_confirmed_start(name, frame, text, reference_name, reference_quad):
     from dispread.lattice_offsets import refine_quad
+    from dispread.live import DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256
     from dispread.live.setup import DEFAULT_TARGET_SIZE, LATTICE_GRID
-    from dispread.setup_checks import raster_offset_check
+    from dispread.setup_checks import diagnose_reader, raster_offset_check
 
     still = local_recording(f"diagnostics/{name}-still/frames/frame_{frame:06d}.png")
-    profile = local_recording(
-        Path("diagnostics") / ("ab4-profile-regrid1.json" if name == "ab4" else f"{name}-profile"))
+    profile = local_recording(Path("diagnostics") / reference_name)
     image = cv2.imread(str(still))
     hint = find_green_hint_box(image)
     assert hint is not None
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
     assert isinstance(result, LatticeFit), result
-    reference = np.asarray(json.loads(profile.read_text())["quad"])
-    assert np.max(np.linalg.norm(np.asarray(result.quad) - reference, axis=1)) <= max_corner_px
-    # Kein Zellen- oder Spaltenversatz: 2j unter der Fehlergrenze, nach der
-    # Nachfuehrung wie im Einrichtungsablauf OK.
+    reference = reference_quad or json.loads(profile.read_text())["quad"]
+    assert _max_column_offset(result.quad, reference) < 0.25
+    # Wertzellen gegen das bestaetigte Profil: kein Spaltenversatz.
+    assert _max_column_offset(result.quad, json.loads(profile.read_text())["quad"]) <= 0.35
+    # 2j unter der Fehlergrenze, nach der Nachfuehrung wie in der Einrichtung OK.
     assert raster_offset_check([(image, text)], result.quad).status != "FEHLER"
     refined, _ = refine_quad([(image, text)], result.quad, LATTICE_GRID, DEFAULT_TARGET_SIZE)
     assert raster_offset_check([(image, text)], refined).status == "OK"
+    if DEFAULT_TEMPLATES.is_file():
+        reader = diagnose_reader([(image, text)], result.quad, DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256)
+        assert reader.metrics["contradictions"] == []
 
 
 def test_moderate_left_view_finds_lattice_beyond_first_sixteen_starts():

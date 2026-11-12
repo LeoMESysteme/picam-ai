@@ -72,12 +72,10 @@ def test_one_row_skewed_bench_quad_exceeds_row_limit_and_fails_offset():
     assert raster_offset_check([(image, STILLS[0][1])], quad).status == "FEHLER"
 
 
-def test_sc7_stability_still_remains_rejected():
-    image, hint = _load("diagnostics/sc7-assist/stability.png")
-    assert isinstance(fit_lattice(image, hint, empty_cells=EMPTY_CELLS), str)
-
-
 def test_sc7_stability_still_matches_lattice_of_first_still():
+    # Ersetzt `test_sc7_stability_still_remains_rejected` (OQ-69). Die alte
+    # Ablehnung schrieb nur eine Verfuegbarkeitsgrenze fest (N7), kein falsches
+    # Raster; Review: .superpowers/sdd/2026-11-11-gsvmulti-takt/oq69-review.md.
     # Bis OQ-69 `startlage_mehrdeutig`: ein Schein-Plus an der oberen Glasecke
     # (457,9/438,9) stand gleich stark neben dem echten Plus. Das Zweitbild
     # liegt 33 s nach dem ersten (gemessene Stabilitaet 0,03 px); beide Fits

@@ -6651,11 +6651,20 @@ Hinweisbox über das ganze Glas) wechselt von `keine_startlage` zu
   gelesener Text, 2j WARNUNG 0,079/0,15. Mehrdeutig war es durch einen
   Schein-Anker an der oberen Glasecke (457,9/438,9).
 
-Die Tests `test_uncertain_real_still_start_is_rejected` (ab4, ab6) und
-`test_sc7_stability_still_remains_rejected` erwarten weiter eine Ablehnung und
-sind mit dem Fix rot; sie bleiben bis zur Entscheidung unverändert. Die
-Ersatztests `test_bezel_anchor_no_longer_blocks_text_confirmed_start` und
-`test_sc7_stability_still_matches_lattice_of_first_still` sind beigelegt.
+Nach unabhängigem Review (`.superpowers/sdd/2026-11-11-gsvmulti-takt/oq69-review.md`)
+sind `test_uncertain_real_still_start_is_rejected` (ab4, ab6) und
+`test_sc7_stability_still_remains_rejected` ersetzt durch
+`test_bezel_anchor_no_longer_blocks_text_confirmed_start` und
+`test_sc7_stability_still_matches_lattice_of_first_still`. Der ab6-Fall prüft
+Bild 22 (Bild 20 zeigt einen Ziffernwechsel) mit dem Versatz der Wertzellen in
+Punktspalten: < 0,25 zum Referenzfit, ≤ 0,35 zum bestätigten Profil.
+
+**Neue mögliche Ablehnung:** Liegen drei oder mehr dunkle Störstellen auf den
+Leerpositionen der Pluszelle, wird auch der echte Plus-Anker verworfen. Dann kommt
+`keine_startlage`, wo der alte Code gefittet hätte. Das ist sicher, kann am Aufbau
+aber auftreten; bei neuen `keine_startlage`-Fällen ist das der erste Verdacht.
+Den Schutz gegen einen übrig gebliebenen Schein-Anker tragen dann `_evaluate_fit`
+(Plusform, Leerzellen, 7 Zeilen, RMS, Bias), 2j und das Gegenlesen.
 
 **Grenzen:** Nur Einzelstandbilder. Ob die Fits auch im Lauf über die Zeit
 stabil bleiben und ob die Glanzfälle am echten Aufbau durch Licht/Winkel lösbar
