@@ -6589,6 +6589,88 @@ keine isolierte Controllerlast, weniger als 30 Minuten: T13 bleibt offen.
 Zeitbasen V4L2_MONOTONIC, gespeicherte BOOTTIME-Versätze und HOST_MONOTONIC;
 keine physische Latenzaussage. [Vollständige Auswertung und Belege](quellen/werkbank-t13-2026-11-06.md).
 
+## 2026-11-12 — OQ-69: Rasterstart nach Ankerfilter und Leerzellen-Artefaktregel {#oq69-rasterstart-20261112}
+
+**Aufbau:** Offline, keine Kamera, kein serieller Port, Werkbankdienst nicht
+angefasst. Originalbilder (PNG, unverändert) der Belegpakete vom 11.11. liegen
+unter `$DISPREAD_DEV_DATA/regression/2026-11-11/live-20261111T<Zeit>/`
+(Prüfsummen `SHA256SUMS.oq69`). Vergleich Stand `070d69f` („alt“) gegen den
+Fix („neu“) mit `find_green_hint_box` → `fit_lattice(empty_cells=(8,13,14,15))`,
+danach 2j (`raster_offset_check`) gegen den seriellen Zellentext des
+gespeicherten Standbilds und Gegenlesen (`diagnose_reader`, `stufe2c`).
+Läufe mit `nice -n 19` unter wechselnder Fremdlast; Zeiten nur Hinweise.
+
+**Ursachen (am Bild):**
+
+| Fall | alt | Ursache |
+| --- | --- | --- |
+| `154403Z` | `startlage_mehrdeutig` | Plus-Anker (294,1/560,1) und Schein-Anker (237,9/508,1) an der Glasecke, Abstand 52 px > 0,3 × Boxhöhe; Abbruch vor jeder Rasterprüfung. 26 Leerpositionen der Pluszelle: echt 0, Schein 9 |
+| `154459Z`, `155404Z` | `keine_startlage` | Richtiges Raster (TL 599/538, 152 bzw. 159 Punkte, RMS 0,09/0,05) 14-mal gefunden, verworfen nur von einem Kandidaten (1231/634) am Glanzfleck in Zelle 14, Tiefe 0,14 bzw. 0,16 der typischen Punkttiefe |
+| `162902Z` | `keine_startlage` | Richtiges Raster (TL 642/174, 153 Punkte) verworfen nur von einem Kandidaten (1166/242) an einem Kratzer in Zelle 13, Tiefe 0,21 |
+
+Anker über alle untersuchten Bilder: echte Plus-Anker treffen 0–1 der 26
+Leerpositionen, Schein-Anker an Glas-/Gehäusekanten 3–18. Leerzellenkandidaten
+bei richtigen Rastern ≤ 0,21 (einzeln); bei falsch gelegten Rastern stets mehrere
+Kandidaten oder einer ≥ 0,8. Ausnahmen, die die Regel absichern: ein 15 px zu
+breites `sc6`-Raster hatte zwei Kandidaten (0,56/0,50), ein 15 px zu breites
+`162902Z`-Raster drei (≤ 0,27); beide bleiben `leerzelle_belegt`.
+
+**Ergebnis Fehlerfälle (neu):**
+
+| Fall | Ergebnis | Punkte | 2j x/y | Gegenlesen | Vorprüfung |
+| --- | --- | ---: | --- | --- | --- |
+| `154403Z` | Fit, ≤ 0,26 px zum Fit von `124851Z` | 150 | OK 0,079/0,064 | OK, 0 Widersprüche | OK |
+| `154459Z` | Fit | 152 | OK 0,097/0,057 | OK | Kanten FEHLER (Glanz, OQ-72) |
+| `155404Z` | Fit | 159 | OK 0,111/0,059 | OK | Kanten FEHLER (Glanz, OQ-72) |
+| `162902Z` | Fit | 153 | OK 0,113/0,117 | WARNUNG (0 gelesen, 0 Widersprüche) | Kanten WARNUNG |
+
+**Breite Regression (88 Bilder:** alle `var/live/*/setup/still.png`, alle
+`$DISPREAD_DEV_DATA/live/*/setup/still.png`, `sc7`/`sc7a`-Assist, R13-Winkel
+links10/links18, `ab3`/15, `ab5`/7, `ab6`/20**):** 77 bisherige Fits bleiben
+Fits, größte Eckabweichung 1,219 px (`155557Z`), 2j-Ampel 61 × OK→OK,
+8 × WARNUNG→WARNUNG, keine Verschlechterung. Kein Fit geht verloren. Vier
+`keine_startlage` bleiben, `live-20261023T123623Z` (starke Perspektive,
+Hinweisbox über das ganze Glas) wechselt von `keine_startlage` zu
+`startlage_mehrdeutig` und bleibt abgelehnt. Neu gefittet: die vier Fehlerfälle,
+`sc7-assist/stability` und `ab6`/20. Sechs historische Kontrollen
+(`sc3`, `sc4`, `sc5`, `ab1`, `ab2`, `sc6`): Quad unverändert (0,0 px).
+
+**Bisherige Ablehnungen, die jetzt Fits liefern:**
+
+* `ab4`/16: neu 9,14 px vom ursprünglichen `ab4-profile` entfernt — genau der
+  Wert, mit dem am 2026-09-30 eine lockerere Ankerwahl als „falsch“ verworfen
+  wurde. Dieses Profil besteht 2j aber selbst nicht (0,935 Punktspalten,
+  FEHLER); das korrigierte `ab4-profile-regrid1.json` liegt ≤ 3,0 px vom neuen
+  Fit, beide 2j OK (neu 0,086/0,077, regrid1 0,047/0,046, Text `+0.46780 `).
+* `ab6`/20 und /22 (25–30° schräg): Startfit 2j WARNUNG (0,249/0,116 bzw.
+  0,195/0,107), nach der Nachführung der Einrichtung (`refine_quad`) OK
+  (0,064/0,068 bzw. 0,041/0,081) auf beiden Bildern; das bestätigte Profil hat
+  0,139/0,075. Abstand zum Profil bis 7,3 px rechts unten.
+* `sc7-assist/stability`: ≤ 0,55 px vom Fit des ersten Standbilds derselben
+  Aufstellung (33 s Abstand, gemessene Stabilität damals 0,03 px), gleicher
+  gelesener Text, 2j WARNUNG 0,079/0,15. Mehrdeutig war es durch einen
+  Schein-Anker an der oberen Glasecke (457,9/438,9).
+
+Nach unabhängigem Review (`.superpowers/sdd/2026-11-11-gsvmulti-takt/oq69-review.md`)
+sind `test_uncertain_real_still_start_is_rejected` (ab4, ab6) und
+`test_sc7_stability_still_remains_rejected` ersetzt durch
+`test_bezel_anchor_no_longer_blocks_text_confirmed_start` und
+`test_sc7_stability_still_matches_lattice_of_first_still`. Der ab6-Fall prüft
+Bild 22 (Bild 20 zeigt einen Ziffernwechsel) mit dem Versatz der Wertzellen in
+Punktspalten: < 0,25 zum Referenzfit, ≤ 0,35 zum bestätigten Profil.
+
+**Neue mögliche Ablehnung:** Liegen drei oder mehr dunkle Störstellen auf den
+Leerpositionen der Pluszelle, wird auch der echte Plus-Anker verworfen. Dann kommt
+`keine_startlage`, wo der alte Code gefittet hätte. Das ist sicher, kann am Aufbau
+aber auftreten; bei neuen `keine_startlage`-Fällen ist das der erste Verdacht.
+Den Schutz gegen einen übrig gebliebenen Schein-Anker tragen dann `_evaluate_fit`
+(Plusform, Leerzellen, 7 Zeilen, RMS, Bias), 2j und das Gegenlesen.
+
+**Grenzen:** Nur Einzelstandbilder. Ob die Fits auch im Lauf über die Zeit
+stabil bleiben und ob die Glanzfälle am echten Aufbau durch Licht/Winkel lösbar
+sind, ist offline nicht prüfbar. Die Grenzwerte (2 Leerpositionen, ein
+Artefakt, 0,4 Tiefe) sind Vorabwerte aus diesen Bildern.
+
 ## 2026-11-12 — OQ-70: Rahmenband bei beleuchteter Fase, offline { #oq70-kerbenrahmen-20261112 }
 
 Geändert ist nur die Bandermittlung des Vorschlags (`_bezel_band`/`_notched_frame`). Update, Matching,

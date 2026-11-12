@@ -5,6 +5,29 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-12: **Rasterstart: Schein-Plus an Gehäusekanten und Einzelartefakte in Leerzellen (OQ-69).** Problem:
+  Vier Einrichtungen vom 11.11. scheiterten vor jedem Vorschlag, `154403Z` mit `startlage_mehrdeutig`,
+  `154459Z`/`155404Z`/`162902Z` mit `keine_startlage`. Ursachen, am Bild belegt: (1) Die obere linke Glas-/
+  Gehäuseecke lieferte gleich starke Schein-Plus-Anker (`dotlattice._plus_anchors`), die die Ankervorprüfung als
+  zweite Lage wertete. (2) Das richtige Raster wurde gefunden (152/159/153 Punkte), aber von `leerzelle_belegt`
+  verworfen: ein einziges flaches Minimum am Rand eines Glanzflecks bzw. an einem Kratzer (0,14–0,21 der typischen
+  Punkttiefe). Neu: Ein Plus-Anker zählt nur, wenn höchstens 2 der 26 unbeleuchteten Positionen seiner 5×7-Zelle
+  Kandidaten tragen (echte Anker 0–1, Schein-Anker 3–18). Leerzellen bleiben belegt, sobald sie zusammen zwei
+  Kandidaten oder einen mit mindestens 0,4 der typischen Punkttiefe enthalten; nur ein einzelnes flaches Minimum gilt
+  als Artefakt. Die Tiefenmessung teilt sich eine Hilfsfunktion mit der unveränderten Cursorzeilenregel.
+  Konsequenz: Alle vier Fehlerbilder liefern ein Raster mit 2j OK gegen den seriellen Zellentext und ohne
+  Widerspruch beim Gegenlesen; `154403Z` liegt ≤ 0,3 px auf dem Raster der gleichen Aufstellung `124851Z`.
+  `154459Z`/`155404Z` stoppen danach an der Vorprüfung „Kanten FEHLER“ (Glanzfleck, OQ-72). Über 88 Einrichtungs-
+  bilder behalten alle 77 bisherigen Fits ihr Raster (≤ 1,22 px, 2j-Ampel unverändert). Dieselbe Ankerursache
+  hatte `ab4`/16, `ab6`/20+22 und `sc7-assist/stability` als mehrdeutig gesperrt; sie liefern jetzt Fits, die per
+  2j bzw. gegen das Erstbild der Aufstellung belegt sind. Nach unabhängigem Review (`oq69-review.md`, 0 falsche Fits
+  auf echten, gestörten und synthetischen Bildern) ersetzen Ersatztests die drei alten Ablehnungstests
+  (`test_uncertain_real_still_start_is_rejected`, `test_sc7_stability_still_remains_rejected`); der ab6-Test prüft
+  Bild 22 in Punktspalten. Die alte Aussage „ab4 um 9,14 px falsch“ trägt im Laborjournal und in der
+  Projekthistorie einen Korrekturvermerk. Neue mögliche Ablehnung: Liegen drei oder mehr dunkle Störstellen
+  (Schmutz, Kratzer) auf den Leerpositionen der Pluszelle, wird auch der echte Anker verworfen und es kommt
+  `keine_startlage`, wo der alte Code gefittet hätte – sicher, aber am Aufbau möglich.
+
 * 2026-11-12: **Einrichtung: Kantenprüfung erklärt ihren FEHLER (OQ-72).** Problem: `161702Z`/`161955Z` scheiterten
   mit „kanten (Zelle 7)“ (Stufe 29,8, Fehlergrenze 20), `170836Z` mit „kanten (Zellen 14, 15)“ (11,0 bzw. 7,0,
   Grenzen 8/6). Ohne Messwert und Abhilfe. Offline-Befund: Beide Muster sind echte Reflexe, kein Fehlalarm. Bei

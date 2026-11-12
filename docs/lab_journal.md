@@ -1701,6 +1701,11 @@ WARNUNG. Beide echten Offline-Abläufe schrieben einen Vorschlag.
 `ab4` blieb als `startlage_mehrdeutig`, `ab6` als `keine_startlage`
 abgelehnt. Eine versuchsweise lockerere Ankerwahl bei `ab4` lieferte
 eine um 9,14 px falsche Lage und wurde verworfen.
+*Korrekturvermerk 2026-11-12 (OQ-69):* Die 9,14 px waren gegen das
+ursprüngliche `ab4-profile` gemessen, das selbst um etwa 0,9 Punktspalten
+versetzt ist (2j FEHLER, am selben Tag durch `regrid1` ersetzt). Gegen
+`ab4-profile-regrid1.json` liegt diese Lage nur 0,08 Punktspalten daneben,
+2j OK. Siehe OQ-69 und VALIDATION 2026-11-12.
 
 **Deutung:** Die gemeinsame entzerrte Punktsuche beseitigt den
 Kandidatenbruch zwischen Fit und Schlussbewertung. Die von 2j
