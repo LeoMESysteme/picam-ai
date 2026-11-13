@@ -45,6 +45,7 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
   - Warnung, wenn die Session nicht zum Port passt.
   - Puls langsamer.
   - Taktzähler und Format-Hinweis sichtbar.
+  - UART direkt: Kachel „Komponenten“ zeigt ein altes Portpaar (COM7 ↔ COM6); dort gehört nur der Adapter hin.
 - **Nachprüfen unter Windows:** C-04 (LAN ziehen ohne Lauf, 53fbbd6) und „UART über Brücke“ koppeln (eef2991).
 
 ## Danach offen (Brücke)
