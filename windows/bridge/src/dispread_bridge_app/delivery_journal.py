@@ -334,7 +334,7 @@ _PUBLIC_VALUES = frozenset({
     'lease_unavailable', 'network_unavailable', 'no_pending_poll', 'not_connected', 'pairing_refused',
     'pairing_required', 'peer_invalid', 'redirect_refused', 'run_changed', 'run_conflict',
     'selection_required', 'stale_ack', 'transport_unsupported', 'transport_write_uncertain',
-    'uart_peer_unavailable',
+    'uart_peer_unavailable', 'uart_timeout', 'uart_frame_invalid', 'uart_port_failed', 'uart_closed',
 })
 
 

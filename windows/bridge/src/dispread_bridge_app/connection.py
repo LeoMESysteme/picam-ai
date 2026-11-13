@@ -159,6 +159,11 @@ class _DataLink:
         except Exception as error:
             self.failed.set()
             self.manager._revoke(self)
+            code = getattr(error, 'code', None)
+            if not isinstance(error, ConnectionError) and isinstance(code, str):
+                # Transportcode (z. B. uart_frame_invalid) ins Diagnoseprotokoll; nur
+                # freigegebene Bezeichner erscheinen dort ungeschwaerzt.
+                self.manager._event(code)
             if isinstance(error, ConnectionError):
                 raise
             raise ConnectionError('peer_invalid' if isinstance(error, (ValueError, KeyError, TypeError))

@@ -497,3 +497,29 @@ def test_uart_receive_reads_available_bytes_instead_of_waiting_for_full_timeout(
     SerialTransport(profile, 'client', 'a' * 43, device, threading.Event(),
                     opener=lambda **kw: PySerialLike()).close()
     assert time.monotonic() - started < .15
+
+
+def test_uart_receive_reports_distinct_causes():
+    """13.11.2026: UART-Abbruch im Empfangstest war im Export nicht zu unterscheiden."""
+    from dispread_bridge_app.transports import SerialTransport, TransportError, V2LineReader
+
+    class Stream:
+        def __init__(self, data=b'', fail=False):
+            self.data, self.fail, self.in_waiting = data, fail, len(data)
+        def read(self, n):
+            if self.fail:
+                raise OSError('weg')
+            chunk, self.data = self.data[:n], self.data[n:]
+            self.in_waiting = len(self.data)
+            return chunk
+
+    def transport(stream):
+        t = SerialTransport.__new__(SerialTransport)
+        import threading
+        t._closed, t._messages, t._reader, t._stream = threading.Event(), [], V2LineReader(), stream
+        return t
+
+    for stream, code in ((Stream(b'{"kaputt\n'), 'uart_frame_invalid'), (Stream(fail=True), 'uart_port_failed')):
+        with pytest.raises(TransportError) as caught:
+            transport(stream).receive()
+        assert caught.value.code == code
