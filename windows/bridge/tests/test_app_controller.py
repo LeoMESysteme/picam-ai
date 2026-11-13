@@ -304,6 +304,141 @@ def test_events_reach_subscribers_and_journal_and_unsubscribe(tmp_path):
     assert len(got) == 1
 
 
+def test_diagnostic_zip_splits_starts_and_captures_route_before_async_write(tmp_path, monkeypatch):
+    from dispread_bridge_app import delivery_journal as module
+
+    monkeypatch.setattr(module, '_APP_START', 'a' * 32)
+    old = module.DiagnosticStore(tmp_path / 'app' / 'diagnostics')
+    old.append(dict(type='connected', route='network'))
+    monkeypatch.setattr(module, '_APP_START', 'b' * 32)
+    c = make(tmp_path)
+    try:
+        c.select_route('network')
+        c.set_port_pair('COM4', 'COM5')
+        c._emit(_ev('written'))
+        c._emit(_ev('idle'))
+        c.select_route('uart')
+        c._adapter_port = 'COM9'
+        c._emit(_ev('written'))
+        c._emit(_ev('failed'))
+        out = c.export_diagnostics(tmp_path / 'diag.zip')
+        with zipfile.ZipFile(out) as z:
+            assert set(z.namelist()) == {'summary.json', 'details.jsonl', 'details-previous.jsonl'}
+            current = list(map(json.loads, z.read('details.jsonl').splitlines()))
+            previous = list(map(json.loads, z.read('details-previous.jsonl').splitlines()))
+        assert {r['app_start'] for r in current} == {'b' * 32}
+        assert {r['app_start'] for r in previous} == {'a' * 32}
+        assert {r['route'] for r in current} == {'network', 'uart'}
+        for row in current:
+            assert (row['bridge_port'], row['gsv_port']) == ('COM4', 'COM5')
+            if row['route'] == 'uart':
+                assert row['port'] == 'COM9'
+        summaries = [r for r in current if r['code'] == 'written_summary']
+        assert sum(r['detail']['count'] for r in summaries) == 2
+        assert {r['route'] for r in summaries} == {'network', 'uart'}
+    finally:
+        c.request_exit(True)
+
+
+@pytest.mark.parametrize('mode', ['uart_bridge', 'uart_direct'])
+def test_adapter_selection_change_disappearance_return_are_exported_without_serial(tmp_path, mode):
+    from types import SimpleNamespace
+
+    now = [0]
+    def usb(port, vid, pid):
+        return SimpleNamespace(device=port, vid=vid, pid=pid, serial_number='PRIVATE-SERIAL',
+                               description='PRIVATE-DESCRIPTION', hwid='SER=PRIVATE-SERIAL')
+    ports = [usb('COM6', 0x0403, 0x6001), usb('COM9', 0x10c4, 0xea60)]
+    c = make(tmp_path, list_ports=lambda: ports, clock=lambda: now[0])
+    try:
+        c.select_mode(mode)
+        c.select_adapter('COM6')
+        c.select_adapter('COM9')
+        c.select_adapter('COM9')  # repeated selection is not a change
+        ports.clear()
+        now[0] += 3
+        c.list_ports()
+        now[0] += 3
+        c.list_ports()  # still absent, no duplicate disappearance
+        ports.append(usb('COM9', 0x10c4, 0xea60))
+        now[0] += 3
+        c.list_ports()
+        c._diag_flush()
+        exported = c._diag.export()
+        rows = [r for r in map(json.loads, exported.splitlines()) if r.get('kind') == 'adapter']
+        assert [r['code'] for r in rows] == [
+            'adapter_selected', 'adapter_changed', 'adapter_disappeared', 'adapter_returned']
+        assert [r['port'] for r in rows] == ['COM6', 'COM9', 'COM9', 'COM9']
+        assert [r['detail']['usb_vid_pid'] for r in rows] == ['0403:6001'] + ['10c4:ea60'] * 3
+        assert all(r['route'] == 'uart' for r in rows)
+        assert 'PRIVATE' not in exported
+    finally:
+        c.request_exit(True)
+
+
+def test_selected_virtual_port_disappears_and_returns_without_duplicate_events(tmp_path):
+    now, ports = [0], ['COM4', 'COM5', 'COM6']
+    c = make(tmp_path, list_ports=lambda: ports, clock=lambda: now[0])
+    try:
+        c.select_route('network')
+        c.set_port_pair('COM4', 'COM5')
+        c.set_port_pair('COM4', 'COM6')
+        ports.remove('COM4')
+        now[0] += 3
+        c.list_ports()
+        now[0] += 3
+        c.list_ports()
+        ports.append('COM4')
+        now[0] += 3
+        c.list_ports()
+        c._diag_flush()
+        rows = list(map(json.loads, c._diag.export().splitlines()))
+        assert [r['code'] for r in rows] == ['port_pair_selected', 'port_pair_changed',
+                                             'port_disappeared', 'port_returned']
+        assert rows[-1]['port'] == rows[-2]['port'] == 'COM4'
+        assert all(r['route'] == 'network' for r in rows)
+    finally:
+        c.request_exit(True)
+
+
+def test_cancelled_adapter_probe_cannot_overwrite_new_selection(tmp_path, identity):
+    from dispread_bridge_app.devices import WindowsDevices
+    from dispread_bridge_app.ui.port import PortChoice
+
+    entered, release = threading.Event(), threading.Event()
+
+    class Devices(WindowsDevices):
+        def select_supported(self, identity=None):
+            entered.set()
+            assert release.wait(5)
+            return DeviceInfo('old', 'COM6', 0x403, 0x6001, 'private', None, 0)
+
+    ports = ['COM4', 'COM5', PortChoice('COM6', 'COM6', 'usb_serial'),
+             PortChoice('COM9', 'COM9', 'usb_serial')]
+    c = make(tmp_path, devices=Devices(), list_ports=lambda: ports)
+    try:
+        c.set_port_pair('COM4', 'COM5')
+        c.load_profile(profile_bytes(identity))
+        c.connect('uart')
+        assert entered.wait(3)
+        old = c._manager
+        c.select_mode('uart_direct')
+        c.select_adapter('COM9')
+        release.set()
+        old._thread.join(3)
+        assert not old._thread.is_alive()
+        assert c._adapter_port == 'COM9'
+        # Also cover an event already emitted just before cancellation but
+        # delivered late: cancelling in the manager alone cannot close this race.
+        from dispread.bridge.types import BridgeEvent
+        old._emit(BridgeEvent('connection', 'adapter_opening', None, None,
+                              dict(route='uart', port='COM6', usb_vid_pid='0403:6001')))
+        assert c._adapter_port == 'COM9'
+    finally:
+        release.set()
+        c.request_exit(True)
+
+
 def test_build_info_fields_shape_footer_and_channel(tmp_path):
     import types
     info = types.SimpleNamespace(version='0.1.0', commit='0123456789abcdef0123', build_time_utc='2026-11-06T10:00:00Z',

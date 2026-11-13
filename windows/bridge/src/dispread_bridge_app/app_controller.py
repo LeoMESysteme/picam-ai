@@ -34,7 +34,7 @@ from .connection import ConnectionManager
 from .credentials import CredentialStore
 from .delivery_journal import DeliveryJournal, DiagnosticStore
 from .input_checks import InputChecks
-from .port_inventory import PortInventory, serial_ports
+from .port_inventory import PortInventory, serial_ports, usb_vid_pid
 from .readiness import Readiness
 from .session_export import GSVMULTI_BAUD, generate_session
 from .session_templates import SessionTemplateError, load_session_catalog, session_template
@@ -149,12 +149,12 @@ class AppController:
         self._last_exchange = None
         # Diagnose: Schreiben nie im Workerthread (Datei-I/O, fsync).
         self._diag_queue: queue.Queue = queue.Queue(maxsize=DIAG_QUEUE_MAX)
-        self._diag_written_pending = 0
+        self._diag_written_pending = {}
         self._diag_dropped = 0
         self._diag_stop = threading.Event()
         self._diag_thread = threading.Thread(target=self._diag_loop, name='bridge-diag-writer', daemon=True)
-        self._diag_thread.start()
         self._manager = self._worker = None
+        self._adapter_epoch = 0
         self._starter_cancel = threading.Event()
         # nur im Speicher
         self._offer: str | None = None
@@ -190,6 +190,8 @@ class AppController:
         self._route_mode: str | None = None
         self._configured_modes: set[str] = set()
         self._adapter_port: str | None = None
+        self._adapter_presence = None
+        self._adapter_usb_id = None
         self._session_path: str | None = None
         self._session_port: str | None = None
         self._session_format: str | None = None
@@ -198,6 +200,7 @@ class AppController:
         self._endpoint: str | None = None
         self._adapter_id: str | None = None
         self._pair: PortPair | None = None
+        self._pair_presence = {}
         self._session_confirmed = False
         self._setup_done = False
         self._overview = False
@@ -206,6 +209,7 @@ class AppController:
         self.client_id = ''
         self._load_state()
         self._refresh_pairing()
+        self._diag_thread.start()  # route/port metadata is now initialized
         threading.Thread(target=self._presence_loop, name='bridge-adapter-presence', daemon=True).start()
 
     # ------------------------------------------------------------ UX2
@@ -273,15 +277,44 @@ class AppController:
             self._save_state()
 
     def list_ports(self):
-        return self._ports.refresh()
+        items = self._ports.refresh()
+        events = []
+        with self._lock:
+            port = self._adapter_port
+            present = self._ports.present(port)
+            if port is not None and present is not None:
+                previous = self._adapter_presence
+                self._adapter_presence = present
+                self._adapter_usb_id = self._ports.usb_id(port) or self._adapter_usb_id
+                if previous is not None and present != previous:
+                    events.append(self._adapter_event('adapter_returned' if present else 'adapter_disappeared'))
+            if self._pair is not None and self._route_mode != 'uart_direct':
+                for port in (self._pair.bridge_port, self._pair.gsv_port):
+                    present = self._ports.present(port, usb_only=False)
+                    if present is not None:
+                        previous = self._pair_presence.get(port)
+                        self._pair_presence[port] = present
+                        if previous is not None and present != previous:
+                            detail = {**self._diag_context(), 'port': port,
+                                      'usb_vid_pid': self._ports.usb_id(port)}
+                            events.append(BridgeEvent('adapter', 'port_returned' if present else 'port_disappeared',
+                                                      None, None, detail))
+        for event in events:
+            self._emit(event)
+        return items
+
+    def _adapter_event(self, code):
+        return BridgeEvent('adapter', code, None, None,
+                           {**self._diag_context(), 'route': 'uart', 'port': self._adapter_port,
+                            'usb_vid_pid': self._adapter_usb_id})
 
     def list_adapters(self):
         return tuple(p for p in self.list_ports() if p.kind == 'usb_serial')
 
     def _presence_loop(self):
         while not self._presence_stop.wait(2):
-            if self._adapter_port is not None:
-                self._ports.refresh()
+            if self._adapter_port is not None or self._pair is not None:
+                self.list_ports()
 
     def check_endpoint(self, text: str) -> CheckResult:
         with self._lock:
@@ -450,10 +483,18 @@ class AppController:
                     self._subs.remove(callback)
         return unsubscribe
 
-    def _emit(self, event: BridgeEvent) -> None:
+    def _emit(self, event: BridgeEvent, *, adapter_epoch=None) -> None:
         """Nie werfen, nie blockieren: ein Fehler hier darf den Worker nicht in audit_failed treiben."""
         if event.kind == 'connection' and event.code == 'authenticated':
             self._refresh_pairing()
+        if event.kind == 'connection' and event.code == 'adapter_opening':
+            # Reconnect can follow the same USB adapter to a new COM number.
+            with self._lock:
+                if adapter_epoch != self._adapter_epoch:
+                    return  # late device query from a cancelled/replaced connection
+                self._adapter_port = event.detail['port']
+                self._adapter_usb_id = event.detail.get('usb_vid_pid')
+                self._adapter_presence = self._ports.present(self._adapter_port)
         try:
             if event.kind != 'activity':
                 self._diag_enqueue(event)
@@ -485,10 +526,21 @@ class AppController:
                 pass
 
     # ------------------------------------------------------------ Diagnose-Schreiber
+    def _diag_context(self):
+        route = 'uart' if self._route_mode in ('uart_direct', 'uart_bridge') else self._route
+        pair = self._pair if self._route_mode != 'uart_direct' else None
+        return dict(route=route, port=self._adapter_port if route == 'uart' else None,
+                    bridge_port=pair.bridge_port if pair else None,
+                    gsv_port=self._adapter_port if self._route_mode == 'uart_direct' else
+                    pair.gsv_port if pair else None)
+
     def _diag_enqueue(self, event: BridgeEvent) -> None:
         with self._lock:
+            context = self._diag_context()
+            event = replace(event, detail={**context, **(event.detail or {})})
             if event.kind == 'exchange' and (event.detail or {}).get('outcome') == 'written':
-                self._diag_written_pending += 1          # gebuendelt: Zaehler statt Zeile je Wert
+                key = tuple(context.items())
+                self._diag_written_pending[key] = self._diag_written_pending.get(key, 0) + 1
                 return
         self._diag_put(event)
 
@@ -502,13 +554,14 @@ class AppController:
     def _diag_collect(self) -> list[BridgeEvent]:
         extra: list[BridgeEvent] = []
         with self._lock:
-            n, self._diag_written_pending = self._diag_written_pending, 0
+            pending, self._diag_written_pending = self._diag_written_pending, {}
             dropped, self._diag_dropped = self._diag_dropped, 0
-        if n:
+            context = self._diag_context()
+        for key, n in pending.items():
             extra.append(BridgeEvent('exchange', 'written_summary', None, None,
-                                     dict(outcome='written', count=n)))
+                                     dict(outcome='written', count=n, **dict(key))))
         if dropped:
-            extra.append(BridgeEvent('diagnostics', 'dropped', None, None, dict(count=dropped)))
+            extra.append(BridgeEvent('diagnostics', 'dropped', None, None, dict(count=dropped, **context)))
         return extra
 
     def _diag_write(self, events) -> None:
@@ -709,8 +762,10 @@ class AppController:
         if not {bridge_port, gsv_port} <= {p.port for p in self.list_ports()}:
             raise AppError('portpair_invalid')
         with self._lock:
+            previous_pair = self._pair
             self._setup_revision += 1
             self._pair = pair
+            self._pair_presence = {p: self._ports.present(p, usb_only=False) for p in (bridge_port, gsv_port)}
             self._configured_modes.difference_update(('network', 'uart_bridge'))
             if self._route_mode != 'uart_direct':
                 self._setup_done = False
@@ -718,6 +773,10 @@ class AppController:
             self._session_confirmed = False
             self._editing_pair = False
             self._save_state()
+            event = BridgeEvent('adapter', 'port_pair_changed' if previous_pair else 'port_pair_selected',
+                                None, None, self._diag_context()) if previous_pair != pair else None
+        if event is not None:
+            self._emit(event)
 
     # ------------------------------------------------------------ Weg
     def select_route(self, mode: str) -> None:
@@ -726,6 +785,7 @@ class AppController:
         if self._worker is not None and self._worker.is_active():
             raise AppError('transmission_active')
         with self._lock:
+            self._adapter_epoch += 1
             self._route = mode
             self._route_mode = 'uart_bridge' if mode == 'uart' else 'network'
             self._refresh_mode_state()
@@ -744,6 +804,7 @@ class AppController:
         except (TransportError, ValueError):
             raise AppError('endpoint_unsupported') from None
         with self._lock:
+            self._adapter_epoch += 1
             previous = self._route_mode
             if endpoint != self._endpoint:
                 self._configured_modes.discard('network')
@@ -772,17 +833,26 @@ class AppController:
             device_id = matches[0].instance_id
         with self._lock:
             changed = self._adapter_port != port or self._adapter_id != device_id
+            was_selected = self._adapter_id is not None
             previous = self._route_mode
             if changed:
+                self._adapter_epoch += 1
                 self._configured_modes.difference_update(('uart_direct', 'uart_bridge'))
                 if previous == 'uart_direct':
                     self._step = 1
             self._adapter_id, self._adapter_port = device_id, port
+            if changed:
+                self._adapter_presence = self._ports.present(port)
+                self._adapter_usb_id = self._ports.usb_id(port) or usb_vid_pid(legacy)
             if self._route_mode != 'uart_direct':
                 self._route, self._route_mode = 'uart', 'uart_bridge'
             self._refresh_mode_state()
             self._connect_attempted = False
             self._save_state()
+
+            event = self._adapter_event('adapter_changed' if was_selected else 'adapter_selected') if changed else None
+        if event is not None:
+            self._emit(event)
 
     def rescan(self) -> None:
         """Adapter, COM-Ports und Netzkandidaten neu lesen (blockiert)."""
@@ -850,8 +920,10 @@ class AppController:
                 kwargs['transport_factory'] = self._transport_factory
             if self._network_diagnostics is not None:
                 kwargs['network_diagnostics'] = self._network_diagnostics
+            epoch = self._adapter_epoch
             manager = self._manager_factory(self._profile_for_connect(mode), self.client_id, self._credentials,
-                                            self._devices, emit=self._emit, **kwargs)
+                                            self._devices, emit=lambda event: self._emit(event, adapter_epoch=epoch),
+                                            **kwargs)
             worker = self._worker_factory(manager, self._com_open, self._journal_open(), self._emit)
             if hasattr(worker, 'demo_format'):
                 # Empfangstest im Format der Session, die GSVmulti fuer diesen Weg/Port hat.
@@ -878,6 +950,8 @@ class AppController:
                 return                                    # terminal; keine Selbstwiederholung
 
     def _stop_all(self) -> None:
+        with self._lock:
+            self._adapter_epoch += 1
         self._starter_cancel.set()
         worker, manager = self._worker, self._manager
         if worker is not None:
@@ -1257,7 +1331,9 @@ class AppController:
         with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED) as z:
             z.writestr('summary.json', json.dumps(summary, indent=2))
             self._diag_flush()
-            z.writestr('details.jsonl', self._diag.export())
+            current, previous = self._diag.export_parts()
+            z.writestr('details.jsonl', current)
+            z.writestr('details-previous.jsonl', previous)
         return destination
 
     @_reports

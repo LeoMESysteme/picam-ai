@@ -5,6 +5,34 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-13: **Empfangstest zählt den dauerhaften COM-Beleg (Backend-Aufgabe 1).**
+  Bisher fehlte der letzte Wert in der App, wenn nach dem COM-Schreiben die
+  ACK-Antwort ausblieb; der Pi konnte die Quittung bereits verbucht haben.
+  `BridgeSession` meldet neue Schreibbelege vor dem ACK-Austausch an den Worker.
+  Wiederholte Quittungen zählen nicht erneut. Abbruchtests mit und ohne beim Pi
+  angekommenes ACK belegen die Korrektur; ein COM-Beleg bleibt kein GSVmulti-Empfangsnachweis.
+
+* 2026-11-13: **Diagnoseexport nach App-Start und Weg (Backend-Aufgabe 2).**
+  Jede neue Detailzeile trägt eine zufällige Prozesskennung, Weg/Portkontext und
+  die Zeitbasis ihrer Unix-Zeit. `details.jsonl` enthält den aktuellen Start,
+  `details-previous.jsonl` ältere und nicht zuordenbare Altbestände. Gleiche
+  unmittelbar aufeinanderfolgende Leerlaufereignisse werden erst beim Export
+  mit `count`, `first_ts`, `last_ts` verdichtet; Fehler und Zustandswechsel bleiben
+  einzeln. Aufbewahrung und Exporte sind begrenzt; Zugangsdaten/Lauf-IDs bleiben geschwärzt.
+
+* 2026-11-13: **Portwechsel im Diagnosejournal (Backend-Aufgabe 3).**
+  Auswahl, Wechsel, Verschwinden und Wiederkehren ausgewählter Adapter/Ports
+  werden mit Weg, COM-Port und verfügbarer USB-VID:PID erfasst. Die Anmeldung
+  meldet zusätzlich den tatsächlich geöffneten Adapterport, auch nach
+  COM-Umnummerierung. Seriennummern, PnP-IDs und Beschreibungen bleiben privat.
+  Neue Ereigniscodes sind geliefert; die Oberflächentexte bleiben dem UI-Review vorbehalten.
+
+* 2026-11-13: **UART-Anmeldehypothesen geprüft (Backend-Aufgabe 4).**
+  Sechs Tests mit Byte-Attrappe unterscheiden fehlende Bereitschaft, Pufferreste
+  und alte Sitzungen. Keine Änderung am Verbindungsablauf oder Rahmenformat auf
+  Verdacht: Die dreifache Verzögerung am Aufbau bleibt ohne zeitgleiche
+  Pi-/Windows-Belege offen; Messauftrag in [OQ-77](docs/open-questions.md#oq-77).
+
 * 2026-11-13: **Fokus- und Rasterbelege präzisiert.** Der Hinweis zum Mittelbild beschreibt die mögliche Ablehnung am zweiseitigen Fokusband; Rastervergleich und Korpusdateien sind zeitlich und namentlich korrekt zugeordnet.
 
 * 2026-11-13: **Dokumentationsseite: Windows-Brückenbelege erreichbar.** Der Build nimmt die verlinkten Seiten zum Smoketest und zu den GSVmulti-Versuchen auf; ein nicht vorhandener Recherchepfad bleibt als Quellenhinweis erhalten.

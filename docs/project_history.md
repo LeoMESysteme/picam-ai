@@ -9,6 +9,46 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-13 — COM-Zähler und Diagnoseexport der Windows-Brücke
+
+**Problem:** Beim UART-Abbruch standen 123 Werte in der App gegen 124 Pi-Quittungen.
+Der Worker zählte erst nach der ACK-Antwort, obwohl COM und dauerhaftes Journal
+schon erfolgreich waren. Der kumulative Diagnoseexport enthielt weder einen
+Startbezug noch den historischen Portkontext.
+
+**Entscheidung:** Neue dauerhafte COM-Belege lösen vor dem ACK-Austausch eine
+Worker-Meldung aus; Re-ACKs zählen nicht. Der Diagnosekontext wird beim Einreihen
+des Ereignisses festgehalten, auch bei den vorhandenen Schreibsummen je Weg und
+Portpaar. Eine zufällige Kennung wird einmal je Prozess erzeugt. Der ZIP-Export
+trennt aktuellen Start und ältere/legacy Starts und verdichtet ausschließlich
+aufeinanderfolgende gleiche Leerlaufereignisse bei der Ausgabe.
+
+**Begründung:** Ein abgebrochener Rückweg darf einen lokal belegten Schreibvorgang
+nicht unsichtbar machen. Kontext beim späteren Dateischreiben könnte bereits zu
+einem anderen Port gehören. Verdichtung beim Export bewahrt die vorhandenen
+Einzelereignisse auf der Platte; Fehler und Zustandswechsel bleiben einzeln.
+Portnamen sind strikt `COM1` bis `COM9999`, USB-Metadaten ausschließlich VID:PID;
+es wird keine Freigabe beliebiger Zeichenketten eingeführt.
+
+**Verworfene Alternativen:** Pi-Zähler absenken oder App-Zähler aus ACK-Runden
+ableiten würde die falsche Bedeutung festschreiben. Verdichtung beim Schreiben
+erfordert zusätzlichen dauerhaften Zwischenzustand und verändert das
+Originalmaterial. Unbegrenztes Aufheben des aktuellen Starts würde die
+64-MiB-/7-Tage-Grenze aushebeln. Ein pauschales UART-Pufferleeren oder eine
+Startwartezeit ist ohne Hardwarebeleg nicht als Ursache/Fix gerechtfertigt.
+
+**Konsequenz:** Der Export enthält alle noch aufbewahrten Ereignisse des
+aktuellen Starts (mit vorhandenen Schreibsummen und neuer Leerlaufverdichtung),
+nicht unbegrenzt die gesamte Prozesslebensdauer. Vor Wegauswahl und in alten
+Zeilen ohne Kontext bleibt `route` unbekannt (`null`), Legacy-Starts haben
+`app_start: null`. `ts`/`first_ts`/`last_ts` sind Unix-Zeiten mit
+`ts_time_base: unix_realtime`; vorhandene monotone `t_ns` behalten ihre Zeitbasis.
+App-Zähler und Pi-Quittungen können bei verlorenem Hinweg weiterhin abweichen:
+Sie belegen dann COM-Schreiben bzw. eingegangene Quittungen. Kein GSVmulti-ACK.
+Die Ursache der drei UART-Anmelde-Timeouts bleibt [OQ-77](open-questions.md#oq-77).
+
+---
+
 ## 2026-11-13 — Zweite Unterkantenhypothese bei fehlender Startlage
 
 **Problem:** Eine Hough-Linie durch das Zeichenband kann die Richtung sämtlicher

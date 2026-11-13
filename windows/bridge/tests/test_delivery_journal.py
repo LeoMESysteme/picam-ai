@@ -72,12 +72,12 @@ def test_diagnostic_retention_preserves_audit_and_redacts_secrets(tmp_path):
     from dispread_bridge_app.delivery_journal import DiagnosticStore
     audit = tmp_path / 'audit.sqlite'
     audit.write_bytes(b'preserve')
-    store = DiagnosticStore(tmp_path / 'diagnostics', max_bytes=160, max_age_s=10,
+    store = DiagnosticStore(tmp_path / 'diagnostics', max_bytes=256, max_age_s=10,
                             clock=lambda: 20)
     store.append({'type': 'connected', 'token': 'SECRET', 'nested': {'password': 'SECRET'}})
     for _ in range(10):
         store.append({'type': 'idle'})
-    assert store.usage()['bytes'] <= 160
+    assert store.usage()['bytes'] <= 256
     assert 'SECRET' not in store.export()
     assert audit.read_bytes() == b'preserve'
     expired = DiagnosticStore(tmp_path / 'diagnostics', clock=lambda: 100, max_age_s=10)
@@ -115,7 +115,8 @@ def test_detail_store_bounds_file_count_for_small_events(tmp_path):
     for _ in range(100):
         store.append({'type': 'idle'})
     assert len(list(tmp_path.iterdir())) <= 2
-    assert len(store.export().splitlines()) == 100
+    import json
+    assert json.loads(store.export())['count'] == 100
 
 
 def test_orphaned_intent_cannot_be_upgraded_by_new_journal_owner(tmp_path):
@@ -185,6 +186,105 @@ def test_legacy_diagnostic_export_redacts_unknown_secret_keys_recursively(tmp_pa
     exported = store.export()
     assert 'TOPSECRET' not in exported and 'SECRET2' not in exported
     assert 'connected' in exported
+
+
+def test_details_separate_process_starts_and_keep_safe_route_context(tmp_path, monkeypatch):
+    import json
+
+    from dispread_bridge_app import delivery_journal as module
+
+    monkeypatch.setattr(module, '_APP_START', 'a' * 32, raising=False)
+    old = module.DiagnosticStore(tmp_path)
+    old.append(dict(type='connected', route='network', bridge_port='COM4', gsv_port='COM5'))
+    monkeypatch.setattr(module, '_APP_START', 'b' * 32)
+    current = module.DiagnosticStore(tmp_path)
+    current.append(dict(type='connected', route='uart', port='COM9',
+                        token='SECRET', run_id='PRIVATE'))
+    # Every store opened in this process uses the same start, not a new UUID.
+    other = module.DiagnosticStore(tmp_path / 'other')
+    other.append(dict(type='idle'))
+    parts = current.export_parts()
+    latest, older = map(json.loads, parts)
+    assert latest['app_start'] == json.loads(other.export())['app_start'] == 'b' * 32
+    assert (latest['route'], latest['port']) == ('uart', 'COM9')
+    assert (older['route'], older['bridge_port'], older['gsv_port']) == ('network', 'COM4', 'COM5')
+    assert older['app_start'] == 'a' * 32
+    assert 'SECRET' not in ''.join(parts) and 'PRIVATE' not in ''.join(parts)
+
+
+def test_idle_export_compacts_only_adjacent_equal_events_preserving_boundaries(tmp_path):
+    import json
+
+    from dispread_bridge_app.delivery_journal import DiagnosticStore
+
+    now = [10]
+    store = DiagnosticStore(tmp_path, clock=lambda: now[0])
+    idle = dict(kind='exchange', code='idle', detail=dict(outcome='idle'), route='uart', port='COM6')
+    for ts in (10, 11, 12):
+        now[0] = ts
+        store.append(idle)
+    for _ in range(2):
+        store.append(dict(kind='connection', code='uart_timeout', route='uart'))
+    for _ in range(2):
+        store.append(dict(kind='connection', code='authenticated', route='uart'))
+    store.append(idle)
+    store.append(dict(idle, port='COM7'))
+    rows = list(map(json.loads, store.export().splitlines()))
+    assert len(rows) == 7
+    assert (rows[0]['count'], rows[0]['first_ts'], rows[0]['last_ts']) == (3, 10, 12)
+    assert rows[0]['time_base'] == 'unix_realtime'
+    assert [r['code'] for r in rows[1:5]] == ['uart_timeout'] * 2 + ['authenticated'] * 2
+    assert rows[-2]['port'] == 'COM6' and rows[-1]['port'] == 'COM7'
+    assert all('count' not in row for row in rows[1:])
+    # Aggregation at export retains the original detail evidence on disk.
+    assert sum(len(p.read_text().splitlines()) for p in tmp_path.glob('detail-*.jsonl')) == 9
+
+
+def test_diagnostic_context_is_strictly_validated_including_legacy_exports(tmp_path):
+    import json
+
+    from dispread_bridge_app.delivery_journal import DiagnosticStore
+
+    store = DiagnosticStore(tmp_path)
+    store.append(dict(type='connected', port='COM6 SECRET', bridge_port='SECRET',
+                      gsv_port=r'\\server\SECRET', route='SECRET',
+                      usb_vid_pid='0403:6001', serial='SECRET', app_start='SECRET'))
+    exported = store.export()
+    assert 'SECRET' not in exported
+    assert json.loads(exported)['usb_vid_pid'] == '0403:6001'
+    (tmp_path / 'detail-legacy.jsonl').write_text(json.dumps(dict(
+        type='idle', port='SECRET', app_start='SECRET', usb_vid_pid='SECRET')) + '\n')
+    current, previous = store.export_parts()
+    assert 'SECRET' not in current + previous
+    assert json.loads(previous)['app_start'] is None
+
+
+def test_each_export_part_stays_within_retention_budget(tmp_path, monkeypatch):
+    from dispread_bridge_app import delivery_journal as module
+
+    monkeypatch.setattr(module, '_APP_START', 'a' * 32, raising=False)
+    old = module.DiagnosticStore(tmp_path, max_bytes=1000)
+    for _ in range(8):
+        old.append(dict(type='connected'))
+    monkeypatch.setattr(module, '_APP_START', 'b' * 32)
+    current = module.DiagnosticStore(tmp_path, max_bytes=1000)
+    for _ in range(4):
+        current.append(dict(type='connected'))
+    assert current.usage()['bytes'] <= 1000
+    assert all(len(part.encode()) <= 1000 for part in current.export_parts())
+
+
+def test_idle_shaped_errors_and_state_changes_are_never_compacted(tmp_path):
+    import json
+
+    from dispread_bridge_app.delivery_journal import DiagnosticStore
+
+    store = DiagnosticStore(tmp_path)
+    for event in (dict(type='idle', error_code='uart_timeout'),
+                  dict(kind='exchange', code='idle', detail=dict(outcome='idle', state='connected'))):
+        store.append(event)
+        store.append(event)
+    assert len(list(map(json.loads, store.export().splitlines()))) == 4
 
 
 
