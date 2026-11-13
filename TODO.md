@@ -22,13 +22,14 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 ## Befunde Smoketest 13.11. (offen)
 
-- **Nachführung bricht bei Lichtwechsel ein (kritisch, Werkbank-Blocker).** Lauf `var/live/live-20261113T111848Z/run-01`: 60 % ungültige Takte, Abschnitte bis 10 s, 2297/7524 Bilder `tracking_lost:rahmen_unstimmig`. Gegenversuch `live-20261113T113119Z/run-01` (Diagnosebilder, Marken):
+- **Nachführung: Zweitdurchgang mit Münzwurf-Bereich (kritisch, Werkbank-Blocker).** Lauf `var/live/live-20261113T111848Z/run-01`: 60 % ungültige Takte, Abschnitte bis 10 s, 2297/7524 Bilder `tracking_lost:rahmen_unstimmig`. Gegenversuch `live-20261113T113119Z/run-01` (Diagnosebilder, Marken):
   - Hand neben dem Display bewegt: bis 41 % Nachführungsverlust je Sekunde.
   - Simulator drehen: höchstens 7 %; Hand ruhig: 0 %.
-  - Ursache: wenige Rahmenbereiche auf der Fase bzw. an der Glaskante (Lauf 1: Nr. 6/9/13/18 links; Lauf 2: Nr. 6/11) wandern bei Licht/Schatten um 0,7–1,3 px, über die Max-Residuum-Grenze 0,65 px.
-  - Die Stilllegung (TB) griff nicht, Schutzprobe verletzt (0,95 px).
-  - Belege: `session.json` (`summary.tracking_region_hint`) und `run-01/diagnose/images.jsonl` (Residuen je Bereich).
-  - Recherche zu Lösungswegen läuft (Teammate, keine Implementierung).
+  - **Ursache laut Recherche (13.11., Fable-Teammate), nicht Licht/Schatten:** Fokuszustand zwischen Einrichtungsbild und Lauf verschieden (Fokus am Laufstart neu gesetzt; Laufbild 140 % bzw. 65 % der Einrichtungsschärfe). Folge: Maßstab 1,0018 gegen die Referenz, der starre Erstdurchgang scheitert in fast jedem Bild; im Zweitdurchgang hat ein schärfeempfindlicher Fasenbereich (Lauf B: Nr. 6) einen festen Versatz von 0,62 px bei Grenze 0,65 px, also Münzwurf. Mit einem Laufbild als Referenz bestehen alle 216 Diagnosebilder den Erstdurchgang. Helligkeitsunterschied abgelehnt/angenommen < 0,5 Graustufen.
+  - Belege: `session.json` (`summary.tracking_region_hint`), `run-01/diagnose/images.jsonl`; Bericht [docs/quellen/nachfuehrung-recherche-2026-11-13](docs/quellen/nachfuehrung-recherche-2026-11-13/README.md).
+  - Stilllegung von Bereich 6 in Lauf A hat die Schutzprobe zu Recht abgelehnt (sonst 2,19 px falsche Lage möglich).
+  - Empfehlung: (1) Fokuszustand von Referenz und Lauf angleichen und sichtbar machen (Schärfeprüfung am Laufstart zweiseitig, heute nur Untergrenze 0,6; Maßstab und Anteil Zweitversuche als Hinweis), 1–2 Tage, keine Messpfadgrenze ändert sich. (2) Schärfeprobe bei der Bereichsauswahl, Bedienhinweis auf maßstabsbereinigte Residuen umstellen, 1–2 Tage plus Neukalibrierung. Nicht: k Ausreißer ausschließen, letztes Quad halten.
+  - Vorher nötig: Versuch mit Schärfeverhältnis nahe 100 % und bewegter Hand; Replay der Läufe vom 11.11. auf Maßstab; Messreihe Fokuswert gegen Maßstab.
 - **Leser:** 975 Bilder unlesbar (Zellen unlesbar, geringer Segmentabstand) im Lauf 1; eigenes Thema nach der Nachführung.
 - **EXE, Altlasten im Zustellprotokoll:** Ein alter `unknown`-Eintrag bleibt für immer stehen; die App kann ihn weder erklären noch auflösen. Seit 53fbbd6 sperrt er das Wiederverbinden nicht mehr.
 - **EXE, `details.jsonl`:** ohne Zeit und Port je Zeile, kumulativ über alle Starts (10 MB), Leerlauf nicht zusammengefasst, Zeilen komplett `[redacted]`.
