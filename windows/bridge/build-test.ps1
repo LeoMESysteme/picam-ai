@@ -2,6 +2,7 @@
 # Kein freigegebener Bauweg (der bleibt build.ps1 + packaging/bridge.spec mit
 # Hash-Locks und Qualifikation). Nur Windows 11 x64, Python >=3.13 x64 explizit.
 #   .\windows\bridge\build-test.ps1 -Python 'C:\Python313\python.exe' [-Inno 'C:\...\ISCC.exe']
+# Bequem: Doppelklick auf build-test.cmd (Ausfuehrungsrichtlinie nur fuer diesen Lauf umgangen, Python 3.13 gefunden).
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Python,

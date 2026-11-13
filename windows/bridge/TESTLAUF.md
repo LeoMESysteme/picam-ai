@@ -49,7 +49,8 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
 ## B. Windows-PC vorbereiten
 
 5. **App bereitstellen.** Auf einem Windows-11-x64-PC mit Python ≥ 3.13 (x64):
-   In PowerShell im entpackten bzw. geklonten Ordner `picam-ai`:
+   Am einfachsten Doppelklick auf `windows\bridge\build-test.cmd` (findet Python 3.13 selbst).
+   Von Hand in PowerShell im entpackten bzw. geklonten Ordner `picam-ai`:
 
    ```powershell
    $py = py -3.13 -c "import sys; print(sys.executable)"   # Pfad zum Python 3.13 x64

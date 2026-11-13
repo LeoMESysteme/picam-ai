@@ -5,6 +5,8 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-13: **Windows-Testbuild per Doppelklick (`windows/bridge/build-test.cmd`).** Problem: `.\build-test.ps1` scheiterte bei jedem ZIP-Download an der Ausführungsrichtlinie („nicht digital signiert“), und `-Python` musste von Hand ermittelt werden. Eine `.ps1` kann ihre eigene Richtlinie nicht umgehen, Windows prüft sie vor der ersten Zeile. Neu: Der Starter holt den Interpreter über `py -3.13`, ruft `build-test.ps1` mit `-ExecutionPolicy Bypass` nur für diesen Lauf auf, öffnet am Ende `dist-test` und hält das Fenster offen. Mit Argumenten gehen diese unverändert durch. `build-test.ps1` bleibt streng (Interpreter ausdrücklich, keine Suche im PATH), `*.cmd` werden mit CRLF ausgeliefert (`windows/bridge/.gitattributes`). Statischer Test in `test_packaging_app.py`. Konsequenz: Bauen ohne Befehlszeile; unter Windows noch nicht gelaufen.
+
 * 2026-11-12: **Rasterstart: Schein-Plus an Gehäusekanten und Einzelartefakte in Leerzellen (OQ-69).** Problem:
   Vier Einrichtungen vom 11.11. scheiterten vor jedem Vorschlag, `154403Z` mit `startlage_mehrdeutig`,
   `154459Z`/`155404Z`/`162902Z` mit `keine_startlage`. Ursachen, am Bild belegt: (1) Die obere linke Glas-/

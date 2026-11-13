@@ -2,7 +2,7 @@
 
 ## 1. Bauen
 * Branch `feat/integration` als ZIP oder per `git clone -b feat/integration` holen.
-* `powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\bridge\build-test.ps1 -Python <Pfad zu Python 3.13 x64>`
+* Doppelklick auf `windows\bridge\build-test.cmd`. Er findet Python 3.13 selbst, umgeht die Ausführungsrichtlinie nur für diesen Lauf und öffnet am Ende `dist-test`. Falls Windows beim ersten Mal fragt: „Ausführen“.
 * EXE aus `windows\bridge\dist-test\` starten. Ältere Brücke vorher über das Tray beenden.
 * Erwartet: Symbole sichtbar (keine leeren Kästchen), keine aufblitzenden Konsolenfenster.
 

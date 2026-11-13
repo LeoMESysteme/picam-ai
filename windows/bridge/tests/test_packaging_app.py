@@ -93,3 +93,14 @@ def test_selftest_ok_when_not_requiring_frozen(monkeypatch):
 
     report = selftest.run_self_test(require_frozen=False)
     assert report["errors"] == [] and report["ok"] is True
+
+
+def test_double_click_starter_bypasses_policy_only_for_this_run():
+    raw = (BRIDGE / "build-test.cmd").read_bytes()
+    assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")   # reine CRLF-Zeilen, sonst zerbricht cmd.exe goto
+    text = raw.decode("ascii")
+    assert '-ExecutionPolicy Bypass -File "%SCRIPT%"' in text and 'build-test.ps1"' in text
+    assert "Set-ExecutionPolicy" not in text                         # keine dauerhafte Systemänderung
+    assert "py -3.13" in text and "pause" in text
+    attrs = (BRIDGE / ".gitattributes").read_text(encoding="utf-8")
+    assert re.search(r"^\*\.cmd -text$", attrs, re.M)
