@@ -20,6 +20,30 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 - **Hintergrund:** [docs/status.md](docs/status.md) und [docs/WORKBENCH_BLOCKER.md](docs/WORKBENCH_BLOCKER.md).
 - **Danach:** Den Lauf auswerten (Abschnitt 8) und den Blocker schließen oder nachbessern.
 
+## Befunde Smoketest 13.11. (offen)
+
+- **Nachführung bricht bei Lichtwechsel ein (kritisch, Werkbank-Blocker).** Lauf `var/live/live-20261113T111848Z/run-01`: 60 % ungültige Takte, Abschnitte bis 10 s, 2297/7524 Bilder `tracking_lost:rahmen_unstimmig`. Gegenversuch `live-20261113T113119Z/run-01` (Diagnosebilder, Marken):
+  - Hand neben dem Display bewegt: bis 41 % Nachführungsverlust je Sekunde.
+  - Simulator drehen: höchstens 7 %; Hand ruhig: 0 %.
+  - Ursache: wenige Rahmenbereiche auf der Fase bzw. an der Glaskante (Lauf 1: Nr. 6/9/13/18 links; Lauf 2: Nr. 6/11) wandern bei Licht/Schatten um 0,7–1,3 px, über die Max-Residuum-Grenze 0,65 px.
+  - Die Stilllegung (TB) griff nicht, Schutzprobe verletzt (0,95 px).
+  - Belege: `session.json` (`summary.tracking_region_hint`) und `run-01/diagnose/images.jsonl` (Residuen je Bereich).
+  - Recherche zu Lösungswegen läuft (Teammate, keine Implementierung).
+- **Leser:** 975 Bilder unlesbar (Zellen unlesbar, geringer Segmentabstand) im Lauf 1; eigenes Thema nach der Nachführung.
+- **EXE, Altlasten im Zustellprotokoll:** Ein alter `unknown`-Eintrag bleibt für immer stehen; die App kann ihn weder erklären noch auflösen. Seit 53fbbd6 sperrt er das Wiederverbinden nicht mehr.
+- **EXE, `details.jsonl`:** ohne Zeit und Port je Zeile, kumulativ über alle Starts (10 MB), Leerlauf nicht zusammengefasst, Zeilen komplett `[redacted]`.
+- **EXE, Gestaltung (Runde 3, `wip/bruecke-ux3`):**
+  - Schritt 5 bei Erfolg neutral („600 von 600 an COM8 übergeben“).
+  - Pair-Check unabhängig von der Reihenfolge der Ports.
+  - Strecke als Bild (Brücke → COM4 ⇄ COM5 → GSVmulti).
+  - Schritt 4 mit Ordner und „Ordner öffnen“.
+  - Kachel-Zweitzeilen kürzen.
+  - Journal zeigt Abbruch und Stopp.
+  - Warnung, wenn die Session nicht zum Port passt.
+  - Puls langsamer.
+  - Taktzähler und Format-Hinweis sichtbar.
+- **Nachprüfen unter Windows:** C-04 (LAN ziehen ohne Lauf, 53fbbd6) und „UART über Brücke“ koppeln (eef2991).
+
 ## Danach offen (Brücke)
 
 - **Merge:** `feat/bruecke-ui` nach `master`, erst mit Leonhards OK nach dem Test.
