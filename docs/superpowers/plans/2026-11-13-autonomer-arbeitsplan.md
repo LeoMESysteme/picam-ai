@@ -113,3 +113,9 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
   zur vollen Suite (Volllast); vermutlich derselbe Wackler zweimal. Nicht belegt. Nächster
   master-Push lässt den Workflow erneut laufen; Leonhard kann auf der Actions-Seite den Schritt
   nachsehen.
+- 2026-11-14 ~01:00: Punkt 5 abgehakt. Zusatz im Sinne von „so weit wie möglich
+  vorantreiben“: Codex arbeitet Installer **P0a** ab, also nur Aufräumarbeiten ohne offene
+  Entscheidung: Paketliste, keine festen Pfade, eine Quelle für Port/Baud/Verzeichnisse,
+  Dienstskript, TLS-Host. Handoff: `docs/superpowers/handoffs/2026-11-14-codex-installer-p0.md`
+  auf `feat/installer-p0` (Worktree `.worktrees/installer-p0`). Danach Review, volle Suite,
+  Merge nach `feat/integration`. Offen bleibt Punkt 4 (Subagent läuft).
