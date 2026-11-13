@@ -81,3 +81,10 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
   behoben, Node 289, Doku-Playwright 91, Live-Playwright 64/65 plus 1 Wackler (OQ-71, einzeln
   grün). Merge `95d0540`, Werkbank darauf neu gestartet (kein Lauf aktiv, Pi-ID unverändert).
   Für Mittwoch: Das Fokusband kann gute Starts sperren (ein guter Lauf lag bei 1,418).
+- 2026-11-13 ~20:15: Punkt 2 läuft. Probe-Merge `origin/master` + `feat/integration` im
+  Scratch-Worktree `mtest`, Konflikte nur CHANGELOG.md und docs/status.md (beide Seiten
+  behalten). Volle Suite darauf läuft. Wiki-Session arbeitet uncommittiert auf
+  `feat/wiki-lebendig` (Basis b22d64a = origin/master); berührt sich mit unserem Merge in
+  CHANGELOG.md und tests/docs-site.spec.ts. Das ist beim Merge der Wiki-Session zu beachten.
+  Parallel aus Punkt 5 erledigt: Spec-Entwürfe Wiki-Seite Ausgabewege, UART-Prüfsumme (mit
+  Befund „stiller Wertfehler möglich“), Installer/TUI inklusive Bestandsaufnahme L1–L11.
