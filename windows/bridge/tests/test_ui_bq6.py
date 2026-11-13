@@ -109,7 +109,7 @@ def _ctx(variant, step, data=None, **kw):
 # ---- 1/2: Schritt 3 Verbinden, Backoff, Fehler
 def test_connecting_shows_progress_and_cancel_instead_of_connect():
     spec = texts.setup_spec(_ctx('E3', 3, dict(connecting=True)))
-    assert any(b[0] == 'progress_busy' and 'Verbindung zu Prüfstand 2 wird aufgebaut' in b[1] for b in spec['blocks'])
+    assert any(b[0] == 'progress_busy' and 'Verbindung wird aufgebaut' in b[1] for b in spec['blocks'])
     assert spec['next'] == 'Abbrechen' and spec['next_action'] == 'cancel_connect' and spec['freeze']
 
 
@@ -206,7 +206,7 @@ def test_pair_button_gate_helper_enter_and_show_toggle(fake_win):
     sv = w.setup_view
     btn = sv.buttons['pair']
     assert btn.text() == 'Code übernehmen' and not btn.isEnabled()
-    assert 'Erst Fingerabdruck bestätigen und Code eingeben' in labels(sv)
+    assert 'Erst Fingerabdruck bestätigen, Code eingeben' in labels(sv)
     sv.checks['fp_ok'].setChecked(True)
     assert not btn.isEnabled()                                   # Code fehlt noch
     sv.code_edit.setText(CODE)
@@ -239,12 +239,12 @@ def test_code_lifetime_hint_and_real_expiry(tmp_path, identity):
     assert ctx.setup.step == 3 and ctx.code_remaining_s == 300
     clock.t += 125
     spec = texts.setup_spec(c.context())
-    assert 'Code gespeichert – gekoppelt wird beim Verbinden, jetzt gleich (Code noch 2:55 gültig).' in flat(spec)
+    assert 'Code gespeichert – noch 2:55 gültig' in flat(spec)
     clock.t += 200
     ctx = c.context()
     assert ctx.setup.variant == 'E2exp' and ctx.setup.step == 2 and ctx.code_remaining_s is None
     assert c._offer is None                                      # Code wirklich verworfen
-    assert 'Code abgelaufen – in der Werkbank einen neuen erzeugen' in flat(texts.setup_spec(ctx))
+    assert 'Code abgelaufen' in flat(texts.setup_spec(ctx)) and 'neuen Code erzeugen' in flat(texts.setup_spec(ctx))
     c.setup_step('pairing')
     assert c.context().setup.variant == 'E2b'
 
@@ -348,10 +348,10 @@ def test_paired_window_offers_switch_only_when_free(fake_win):
 def test_step4_card_states_the_verified_settings(channels, line):
     spec = texts.setup_spec(_ctx("E4locked", 4, gsv_baud=115200, session_channels=channels))
     s = flat(spec)
+    # Runde 3: Werte als Felder, die Anleitung im ⓘ der Karte „Manuelle Einstellung“ (keine Prosa-Absätze)
     for needle in ('UserDef', 'COM8', '115200 Baud, 8N1', line, 'mV/V', '10 Hz', '%',
-                   'Muster: Session aus dem Testlauf vom 06.11.2026 (nur Port anpassen)',
-                   'Legen Sie eine neue Testsession an und speichern Sie sie unter eigenem Namen.',
-                   'In GSVmulti einstellen'):
+                   'Muster: Session aus dem Testlauf vom 06.11.2026', 'unter eigenem Namen',
+                   'Manuelle Einstellung'):
         assert needle in s, needle
     assert 'Trennzeichen' not in s and 'Filter' not in s
 
@@ -360,15 +360,16 @@ def test_step4_card_states_the_verified_settings(channels, line):
 def test_real_run_bar_chip_and_lifesign(fake_win):
     fc, w = fake_win('B1')
     r, wk, c = fc.snapshot(), fc.worker_status(), replace(fc.context(), last_report='14:32:20')
-    bar = texts.action_bar(r, wk, c)
-    assert bar.kind == 'info' and bar.title == 'Lauf 7 läuft.'
+    # Runde 3 (R3-2): im Normalbetrieb keine Infobar; die Erklärung der Sperre steht im ⓘ der Sperrzeile,
+    # das Lebenszeichen im Detailfenster der Pi-Kachel.
+    assert texts.action_bar(r, wk, c) is None
     assert 'GSVmulti erhält absichtlich keine Messwerte – die DUT-Ausgabe ist gesperrt (Windows-Abnahme fehlt). ' \
-           'Das ist kein Fehler.' in bar.text
-    assert 'Letzte Antwort vom Pi: 14:32:20' in bar.text
-    gsv = texts.chips(r, wk, c)[5]
-    assert gsv.sub == 'erhält im Lauf keine Werte' and 'bestätigt' not in gsv.word.lower()
-    assert 'Letzte Antwort' not in texts.action_bar(r, wk, replace(c, last_report='Leerlauf …')).text
-    assert w.status_view.infobar.isVisibleTo(w)
+           'Das ist kein Fehler.' in texts.dut_info(c)
+    chips = texts.chips(r, wk, c)
+    assert ('Letzte Meldung', '14:32:20') in chips[2].details
+    gsv = chips[5]
+    assert gsv.sub == 'keine Werte' and 'bestätigt' not in gsv.word.lower()
+    assert not w.status_view.infobar.isVisibleTo(w)
 
 
 # ---- 7: Neustart
@@ -492,7 +493,7 @@ def test_checkbox_text_wraps_and_toggles_by_click(fake_win):
     fc, w = fake_win('E5', (380, 560))
     sv = w.setup_view
     cb = sv.checks['test_session_ok']
-    lab = [x for x in sv.findChildren(QLabel) if x.text() == 'Ich verwende eine getrennte GSVmulti-Testsession.'][0]
+    lab = [x for x in sv.findChildren(QLabel) if x.text() == 'Getrennte GSVmulti-Testsession verwendet'][0]
     assert lab.wordWrap()
     QTest.mouseClick(lab, Qt.MouseButton.LeftButton)
     assert cb.isChecked()
@@ -505,8 +506,7 @@ def test_unverified_pair_check_hint_and_two_combos(real):
     w.refresh()
     settle(w)                    # Portliste ist anfangs leer (Cache): die Oberfläche liest sie im Pool selbst ein
     sv = w.setup_view
-    assert 'Automatische Prüfung ist in dieser Version nicht verfügbar – wählen Sie Ihr Paar ' \
-           '(z. B. com0com COM7 ↔ COM8).' in labels(sv)
+    assert 'Automatische Prüfung hier nicht verfügbar – Paar von Hand wählen.' in labels(sv)
     assert set(sv.combos) == {'bridge_port', 'gsv_port'}
     a, b = sv.combos['bridge_port'], sv.combos['gsv_port']
     assert isinstance(a, QComboBox) and a.accessibleName() and b.accessibleName()
@@ -565,7 +565,7 @@ def test_next_is_grey_with_reason_until_the_required_check_is_set(fake_win):
     fc, w = fake_win('E4locked_run')
     sv = w.setup_view
     assert not sv.next_button.isEnabled()
-    assert 'Erst bestätigen, dass GSVmulti eingestellt ist' in sv.next_reason.text() and not sv.next_reason.isHidden()
+    assert 'Erst bestätigen: GSVmulti eingestellt' in sv.next_reason.text() and not sv.next_reason.isHidden()
     sv.checks['session_ok'].setChecked(True)
     assert sv.next_button.isEnabled() and sv.next_reason.isHidden()
 
@@ -601,7 +601,7 @@ def test_exit_button_without_connection_quits_without_dialog(fake_win):
 # ---- 12: Schritt 5 mit Lauf
 def test_step5_with_run_texts(fake_win):
     fc, w = fake_win('E5busy')
-    assert 'Diese Ansicht aktualisiert sich selbst, sobald der Lauf endet.' in labels(w.setup_view)
+    assert texts.RUN_ACTIVE_TITLE in labels(w.setup_view)
     assert w.setup_view.next_button.text() == 'Ohne Test beenden'
 
 
@@ -610,7 +610,7 @@ def test_backoff_bar_has_stop_automation_and_one_sentence(fake_win):
     fc, w = fake_win('B3')
     bar = texts.action_bar(fc.snapshot(), fc.worker_status(), fc.context())
     assert ('Automatik stoppen', 'stop_retry', False) in bar.buttons
-    assert bar.text.count('. ') == 0 and bar.text.endswith('.')
+    assert bar.text.count('. ') == 0                       # höchstens ein Satz (R3-2: hier keiner, Titel genügt)
     pi = texts.chips(fc.snapshot(), fc.worker_status(), fc.context())[2]
     assert '1, 2, 4, 8 s' in pi.hint
 
@@ -623,10 +623,9 @@ def test_restart_mid_setup_leads_with_saved_progress(tmp_path, identity):
     c2 = _restart(tmp_path)
     ctx = c2.context()
     assert ctx.setup.step == 3 and ctx.setup.data.get('resumed')
-    assert texts.setup_spec(ctx)['lead'] == \
-        'Schritt 3 von 5: Verbindung neu herstellen (Ihr Fortschritt bis hier ist gespeichert).'
+    assert texts.setup_spec(ctx)['lead'] == 'Verbindung neu herstellen'      # Runde 3: Titel ohne „Schritt x von 5“
     c2.connect('network')
-    assert texts.setup_spec(c2.context())['lead'] == 'Schritt 3 von 5: Weg zum Pi wählen.'
+    assert texts.setup_spec(c2.context())['lead'] == 'Weg zum Pi wählen'
 
 
 # ---- 15: Portpaar manuell im Betrieb
@@ -634,7 +633,7 @@ def test_manual_pair_chip_is_info_with_ports_and_yellow_only_for_open_error():
     r = Readiness('manual_pair', 'not_required', 'authenticated', 'output_off', 'idle', 'unconfirmed', None)
     ctx = UiContext(pi_name='P', bridge_port='COM7', gsv_port='COM8')
     comp = texts.chips(r, None, ctx)[0]
-    assert (comp.word, comp.tone) == ('Portpaar COM7 ↔ COM8', 'info')
+    assert (comp.word, comp.sub, comp.tone) == ('Portpaar manuell', 'COM7 ↔ COM8', 'info')
     bad = texts.chips(r, None, replace(ctx, demo=True, com_issue='busy'))[0]
     assert bad.tone == 'warn'
 
@@ -651,7 +650,7 @@ def test_b1tr_shows_test_release_and_shot(fake_win):
     QTest.qWait(50)
     texts_all = ' '.join(lbl.text() for lbl in w.findChildren(QLabel))
     assert 'Testfreigabe aktiv' in texts_all and 'nicht abgenommen' in texts_all
-    assert '128 Werte an COM4 übergeben' in texts_all
+    assert 'Übergeben' in texts_all and '128 Werte' in texts_all
     assert 'GSVmulti erhält absichtlich keine Messwerte' not in texts_all
     out = Path('/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots')
     if out.is_dir():

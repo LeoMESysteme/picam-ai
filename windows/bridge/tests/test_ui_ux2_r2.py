@@ -63,6 +63,11 @@ def texts_of(widget) -> str:
     return ' | '.join(lab.text() for lab in widget.findChildren(QLabel))
 
 
+def tips_of(widget) -> str:
+    """Runde 3 (R3-2): Erklärungen stehen im ⓘ bzw. Abzeichen-Tooltip, nicht als Absatz."""
+    return ' | '.join(x.toolTip() for x in widget.findChildren(QWidget_) if x.toolTip())
+
+
 # ---------------------------------------------------------------- ValidatedField
 class _Deferred:
     """Ausführer, der Ergebnisse erst auf Zuruf zustellt (Reihenfolge im Test steuerbar)."""
@@ -202,11 +207,13 @@ def test_settings_free_edits_with_checked_takeover(win):
     settle(w)
     sw = w.tool_windows['settings']
     assert sw.isVisible() and not sw.locked
-    for title in ('Weg', 'Pi', 'Ports', 'GSVmulti-Session', 'Protokolle', 'Über'):
+    for title in ('Pi', 'Ports', 'GSVmulti-Session', 'Protokolle', 'Über'):     # Runde 3: kein Abschnitt „Weg“
         assert title in texts_of(sw)
     edit = sw.findChild(QLineEdit, 'settings_endpoint_edit')
-    take = sw.findChild(QPushButton, 'settings_endpoint_apply')
-    assert edit is not None and not take.isEnabled()
+    take = sw.findChild(QWidget_, 'settings_endpoint_apply')
+    assert edit is not None and edit.isReadOnly()
+    take.click()                                                     # Stift: Bearbeiten beginnt
+    assert not edit.isReadOnly() and not take.isEnabled()
     edit.setText('gibtsnicht.example')
     QTest.qWait(600)
     settle(w)
@@ -236,7 +243,7 @@ def test_settings_port_pair_applies_only_after_accepted_check(win):
     g.setCurrentIndex(g.findData('COM1'))                         # vorhanden, kein com0com-Paar: warn, übernommen
     settle(w)
     assert ('check_port_pair', 'COM4', 'COM1') in fc.calls and ('set_port_pair', 'COM4', 'COM1') in fc.calls
-    assert texts.SETTINGS_PORTS_NOTE in texts_of(w.tool_windows['settings'])
+    assert texts.SETTINGS_PORTS_NOTE in tips_of(w.tool_windows['settings'])
 
 
 def test_settings_locked_while_transmitting_but_values_copyable(win):
@@ -246,20 +253,22 @@ def test_settings_locked_while_transmitting_but_values_copyable(win):
     sw = w.tool_windows['settings']
     assert sw.locked and sw.findChild(QLineEdit, 'settings_endpoint_edit') is None
     assert sw.findChild(QComboBox, 'settings_gsv_port') is None
-    assert texts.SETTINGS_LOCKED in texts_of(sw)
+    assert texts.BADGE_READONLY in texts_of(sw) and texts.SETTINGS_LOCKED in tips_of(sw)
     names = {f.name_label.text(): f for f in sw.findChildren(ValueField)}
     for n in ('Pi-ID', 'Endpunkt', 'TLS-Fingerabdruck (SHA-256)', 'Brückenseite', 'GSVmulti-Seite'):
         assert n in names and not names[n].copy_button.isHidden(), n
-    for name in ('settings_modes', 'settings_change_setup'):
-        b = sw.findChild(QPushButton, name)
-        assert not b.isEnabled() and b.toolTip() == texts.REASON_TRANSMISSION_FIRST
+    # Weg und „Einrichtung erneut durchlaufen“ stehen seit Runde 3 nur in der Moduswahl (dort gesperrt)
+    assert sw.findChild(QPushButton, 'settings_modes') is None
 
 
 def test_settings_change_setup_reruns_setup(win):
     fc, w = win('B10')
     w.do_action('open_settings')
     settle(w)
-    w.tool_windows['settings'].findChild(QPushButton, 'settings_change_setup').click()
+    assert w.tool_windows['settings'].findChild(QPushButton, 'settings_change_setup') is None   # Runde 3: Moduswahl
+    w.do_action('open_modes')
+    settle(w)
+    w.tool_windows['modes'].findChild(QPushButton, 'modes_change_setup').click()
     settle(w)
     assert ('setup_step', 'change_setup') in fc.calls
 
@@ -270,18 +279,19 @@ def test_settings_session_export_result_not_green_and_hints(win, tmp_path):
     w.do_action('open_settings')
     settle(w)
     sw = w.tool_windows['settings']
-    assert texts.SINGLE_CHANNEL_WARNING in texts_of(sw)         # Einkanal-Vorlage auf Brückenweg
-    sw.findChild(QPushButton, 'settings_make_session').click()
+    assert texts.SINGLE_CHANNEL_WARNING in tips_of(sw)          # Einkanal-Vorlage auf Brückenweg (Abzeichen ⓘ)
+    sw.findChild(QPushButton, 'btn_make_session').click()
     settle(w)
     call = [c for c in fc.calls if c[0] == 'export_session_file'][0]
     assert call[1] == tmp_path / 'GSVmulti_Pruefstand3HalleA_COM5.ucf'           # Standardname GSVmulti_<Pi>_<COMx>
     assert call[2] == 'COM5'
     sw = w.tool_windows['settings']
-    shown = texts_of(sw)
-    assert texts.SESSION_DONE in shown and texts.SESSION_NOT_ACCEPTED in shown
-    assert texts.autoscale_hint('COM5') in shown and 'Kanal 5_1' in shown
-    assert sw.findChild(QWidget_, 'record_hidden') is None                    # Normalfall: kein Pflichthinweis
-    assert any(f.value == str(call[1]) for f in sw.findChildren(ValueField))
+    shown, tips = texts_of(sw), tips_of(sw)
+    assert texts.SESSION_DONE in tips and texts.SESSION_NOT_ACCEPTED in tips and texts.BADGE_NOT_ACCEPTED in shown
+    assert texts.autoscale_hint('COM5') in tips and 'Kanal 5_1' in shown
+    assert 'record_hidden_ok' not in sw.panel.checks                          # Normalfall: kein Pflichthinweis
+    values = {f.value for f in sw.findChildren(ValueField)}
+    assert call[1].name in values and str(call[1].parent) in values          # Datei und Ordner getrennt
     assert not w.status_view.busy_bar.busy
 
 
@@ -293,10 +303,10 @@ def test_settings_record_hidden_required_is_warn_with_operator_check(win, tmp_pa
     w.do_action('make_session')
     settle(w)
     sw = w.tool_windows['settings']
-    box = sw.findChild(QWidget_, 'record_hidden')
-    assert box is not None and box.property('kind') == 'warn'                  # Achtung, nie grün
-    assert texts.RECORD_HIDDEN in texts_of(box)
-    cb = box.findChild(QCheckBox, 'record_hidden_ok')
+    item = sw.findChild(QWidget_, 'item_record_hidden_ok')                   # Checklistenpunkt mit „Pflicht“
+    assert item is not None and item.badge is not None                         # Abzeichen, nie grün
+    assert texts.RECORD_HIDDEN in tips_of(item)
+    cb = item.findChild(QCheckBox, 'check_record_hidden_ok')
     cb.setChecked(True)
     assert w.record_hidden_confirmed                                           # Bedienerangabe, kein Beleg
 
@@ -304,7 +314,7 @@ def test_settings_record_hidden_required_is_warn_with_operator_check(win, tmp_pa
 def test_session_export_failure_names_problem_and_next_action(win, tmp_path):
     fc, w = win('B10')
 
-    def fail(dest, port=None):
+    def fail(dest, port=None, fmt=None):
         from dispread_bridge_app.app_controller import AppError
         raise AppError('session_write_failed')
     fc.export_session_file = fail
@@ -314,7 +324,8 @@ def test_session_export_failure_names_problem_and_next_action(win, tmp_path):
     w.do_action('make_session')
     settle(w)
     assert w.session_state.state == 'failed'
-    assert texts.ERROR_TEXT['session_write_failed'][1] in texts_of(w.tool_windows['settings'])
+    assert texts.ERROR_TEXT['session_write_failed'][0] in texts_of(w.tool_windows['settings'])
+    assert texts.ERROR_TEXT['session_write_failed'][1] in tips_of(w.tool_windows['settings'])
 
 
 def test_single_channel_warning_only_on_bridge_ways_with_one_channel():
@@ -330,14 +341,15 @@ def test_gsv_tile_detail_carries_single_channel_warning(win):
     fc, w = win('B1')
     w.status_view.chips[5].click()
     settle(w)
-    assert texts.SINGLE_CHANNEL_WARNING in texts_of(w.tool_windows['chip'])
+    win_ = w.tool_windows['chip']
+    assert texts.SINGLE_CHANNEL_WARNING in texts_of(win_) + tips_of(win_)
 
 
 # ---------------------------------------------------------------- Einrichtung
 def test_leave_setup_button_only_when_leavable(win):
     fc, w = win('E2b')
     b = w.setup_view.leave_button
-    assert b.isVisibleTo(w) and b.toolTip() == texts.LEAVE_SETUP == b.accessibleName()
+    assert b.isVisibleTo(w) and b.toolTip() == texts.LEAVE_TIP and b.accessibleName() == texts.LEAVE_SETUP
     b.click()
     settle(w)
     assert ('leave_setup',) in fc.calls and w.stack.currentWidget() is w.status_view
@@ -413,8 +425,8 @@ def test_direct_d3_session_for_adapter_port_then_next(win, tmp_path):
     sv.buttons['make_session'].click()
     settle(w)
     assert ('export_session_file', tmp_path / 'GSVmulti_Pi_COM9.ucf', 'COM9') in fc.calls
-    assert sv.next_button.isEnabled() and texts.SESSION_DONE in texts_of(sv)
-    assert texts.SINGLE_CHANNEL_WARNING not in texts_of(sv)                  # UART direkt: kein Brückenweg
+    assert sv.next_button.isEnabled() and texts.SESSION_DONE in tips_of(sv)
+    assert texts.SINGLE_CHANNEL_WARNING not in tips_of(sv)                   # UART direkt: kein Brückenweg
 
 
 def test_direct_d3_record_hidden_gates_next_until_confirmed(win, tmp_path):
@@ -438,7 +450,7 @@ def test_bridge_session_step_has_real_button(win, tmp_path):
     b.click()
     settle(w)
     assert ('export_session_file', tmp_path / 'GSVmulti_Pruefstand2_COM5.ucf', 'COM5') in fc.calls
-    assert texts.SESSION_DONE in texts_of(sv) and texts.SINGLE_CHANNEL_WARNING in texts_of(sv)
+    assert texts.SESSION_DONE in tips_of(sv) and texts.SINGLE_CHANNEL_WARNING in tips_of(sv)
 
 
 def test_new_error_codes_name_problem_and_next_action():
@@ -502,9 +514,8 @@ def test_direct_headline_and_tone():
 
 def test_direct_infobar_never_offers_connect():
     r, w, c = _direct(True)
-    bar = texts.action_bar(r, w, c, configured=False)
-    assert bar.kind == 'info' and 'liest COM9 direkt' in bar.title and 'zeigt nur GSVmulti' in bar.text
-    assert not bar.buttons
+    # Runde 3: steckt der Adapter, sagt die Sperrzeile es schon und die Strecke zeigt das Bild – keine Infobar
+    assert texts.action_bar(r, w, c, configured=False) is None
     bar = texts.action_bar(*_direct(False), configured=False)
     assert bar.kind == 'warn' and bar.title == 'Adapter COM9 fehlt – einstecken'
     assert all('connect' not in a for a in bar.action_ids)
@@ -516,7 +527,7 @@ def test_direct_chips_and_dut_line():
     assert ch['uart'].word == 'Adapter steckt' and ch['uart'].tone == 'ok' and ch['uart'].sub == 'COM9'
     for k in ('pi', 'output', 'forward'):
         assert (ch[k].word, ch[k].tone, ch[k].sub) == ('nicht benutzt', 'unused', 'UART direkt')
-    assert ch['gsv'].sub == 'Empfang nicht nachgewiesen'
+    assert ch['gsv'].sub == texts.NO_PROOF_SHORT
     assert all(x.tone != 'ok' for x in ch.values() if x.key not in ('components', 'uart'))   # USB-Präsenz ist belegt
     assert texts.chips(*_direct(False))[1].word == 'Adapter fehlt'
     assert texts.dut_line(c) == (texts.DIRECT_DUT_LINE, 'info')
@@ -620,7 +631,7 @@ def test_setup_footer_is_single_row_with_power_icon(win):
 def test_pi_id_is_mono_in_pairing_card(win):
     _, w = win('E2b')
     pid = w.setup_view.findChildren(QLabel)
-    lab = next(x for x in pid if x.text() == w.controller.context().pi_id)
+    lab = next(x for x in pid if x.text().replace('\u200b', '') == w.controller.context().pi_id)   # Umbruchstellen
     assert lab.property('mono') is True
 
 
@@ -637,11 +648,12 @@ def test_german_single_quotes_are_balanced():
 def test_header_shows_only_status_icon_when_warn_and_pulses_it(win):
     fc, w = win('B1tr')
     h = w.status_view.header
-    assert h.head_icon.isVisibleTo(w) and not h.pulse_slot.isVisibleTo(w)
-    n = h.icon_pulses
+    # Runde 3: nur der farbige Punkt steht vor dem Zustandssatz (Achtung = gelber Punkt), kein zweites Symbol
+    assert not h.head_icon.isVisibleTo(w) and h.pulse_slot.isVisibleTo(w) and h.heartbeat.tone == 'warn'
+    n = h.heartbeat.pulses
     fc.tick()
     w.refresh()
-    assert h.icon_pulses == n + 1
+    assert h.heartbeat.pulses == n + 1
     fc.set_state('B1')
     w.refresh()
     assert not h.head_icon.isVisibleTo(w) and h.pulse_slot.isVisibleTo(w)

@@ -154,7 +154,7 @@ def test_header_mode_button_heartbeat_and_dut_line(win):
     assert h.mode_button.label.text() == 'Netzwerk' and 'Netzwerk (LAN)' in h.mode_button.toolTip()
     assert h.title.text() == 'Prüfstand 2'
     assert h.heartbeat.isVisibleTo(w) and h.heartbeat.contact and not h.ring.isVisibleTo(w)
-    assert 'nichts über die Weitergabe' in h.heartbeat.toolTip()
+    assert 'nichts über Weitergabe' in h.heartbeat.toolTip()
     before = h.heartbeat.pulses
     fc.tick()
     QTest.qWait(300)

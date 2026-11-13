@@ -403,8 +403,9 @@ class MainWindow(QWidget):
                 self._show_modes()        # erst den Weg wählen
             else:
                 self._call(ctl.setup_step, 'resume')
-        elif aid == 'make_session':
-            self._make_session()
+        elif aid == 'make_session' or aid.startswith('make_session:'):
+            fmt = aid.split(':', 1)[1] if ':' in aid else None
+            self._make_session(fmt if fmt in ('1ch', '4ch') else None)
         elif aid.startswith('open_session_folder:'):
             self.open_folder(str(Path(aid.split(':', 1)[1]).parent))
         elif aid.startswith('open_folder:'):
@@ -691,7 +692,7 @@ class MainWindow(QWidget):
         self._call(fn, value, done=done)
 
     # ---------------------------------------------------------------- Session (UX2)
-    def _make_session(self) -> None:
+    def _make_session(self, fmt: str | None = None) -> None:
         """Speichern-Dialog, dann ``export_session_file`` im Pool; Ergebnis in Einrichtung und Einstellungen."""
         c = self.controller.context()
         port = session_mode_port(c)
@@ -713,7 +714,10 @@ class MainWindow(QWidget):
             else:
                 self.session_state = SessionState('done', result)
                 self.setup_view.session_export = result
-        self._call(self.controller.export_session_file, Path(dest), port, done=done)
+        if fmt is None:
+            self._call(self.controller.export_session_file, Path(dest), port, done=done)
+        else:                         # Format des laufenden Laufs (Warnung „Session passt nicht“)
+            self._call(self.controller.export_session_file, Path(dest), port, fmt, done=done)
 
     def _refresh_tool_windows(self, r, w, c, locked) -> None:
         """Offene Fenster folgen dem Zustand; neu gebaut wird nur bei geänderten Daten."""
@@ -739,8 +743,9 @@ class MainWindow(QWidget):
     # ---------------------------------------------------------------- Beenden
     def build_exit_dialog(self) -> ExitDialog:
         c = self.controller.context()
-        text = texts.EXIT_TEXT_ACTIVE if (c.release and not c.dut_locked) else texts.EXIT_TEXT_LOCKED
-        return ExitDialog(text, self, transmitting=bool(c.release and not c.dut_locked))
+        sending = texts.is_transmitting(c)     # auch Testfreigabe und Demo schreiben an COM
+        text = texts.EXIT_TEXT_ACTIVE if sending else texts.EXIT_TEXT_LOCKED
+        return ExitDialog(text, self, transmitting=sending)
 
     def _confirm_exit_dialog(self) -> bool:
         dlg = self.build_exit_dialog()

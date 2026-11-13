@@ -230,6 +230,7 @@ QToolButton[flat="true"] {{ background: transparent; border: 1px solid transpare
 QToolButton[flat="true"]:hover {{ background: {t['ctrl_hover']}; }}
 QToolButton[flat="true"]:pressed {{ background: {t['ctrl_press']}; }}
 QToolButton[flat="true"]:disabled {{ background: transparent; }}
+QToolButton#copy {{ min-height: 0px; padding: 2px; }}
 QToolButton[mode="true"] {{ background: transparent; border: 1px solid transparent; padding: 2px 6px; }}
 QToolButton[mode="true"]:hover {{ background: {t['ctrl_hover']}; border: 1px solid {t['stroke']}; }}
 QToolButton[mode="true"]:pressed {{ background: {t['ctrl_press']}; }}

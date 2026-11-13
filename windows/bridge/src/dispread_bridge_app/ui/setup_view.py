@@ -283,6 +283,7 @@ class SetupView(QWidget):
         self._last_fp = None
         self._search_buttons: list = []
         self._record_hidden_gate = False
+        self.remembered_checks: set[str] = set()
 
     def bind(self, check_fns: dict, runner) -> None:
         self.check_fns, self.runner = dict(check_fns), runner
@@ -347,6 +348,9 @@ class SetupView(QWidget):
 
     # --- Neuaufbau ohne Verlust (R3-5): Eingabetext, Haken der Oberfläche, Auswahl, Fokus und Bildlauf
     LOCAL_CHECKS = ('fp_ok', 'test_session_ok')     # reine Oberflächenfelder; session_ok kommt vom Controller
+    # Haken, die über Schrittwechsel und Testwiederholungen hinweg gelten (Laufzeit, nicht gespeichert): die
+    # getrennte GSVmulti-Testsession muss nicht vor jedem Test erneut bestätigt werden (Prüfung 13.11.).
+    REMEMBERED_CHECKS = ('test_session_ok',)
 
     def _snapshot(self, variant: str, ctx) -> dict:
         """Was der Bediener eingegeben hat, bevor ``_build`` die Widgets ersetzt."""
@@ -795,6 +799,10 @@ class SetupView(QWidget):
         c = QCheckBox()
         c.setObjectName(f'check_{aid}')
         c.setAccessibleName(text)
+        if aid in self.REMEMBERED_CHECKS:            # Bedienerbestätigung gilt für die Laufzeit der App
+            checked = checked or aid in self.remembered_checks
+            c.toggled.connect(lambda on, a=aid: (self.remembered_checks.add if on else
+                                                 self.remembered_checks.discard)(a))
         c.setChecked(checked)
         lab = _label(text)
         lab.mousePressEvent = lambda e, c=c: c.toggle() if c.isEnabled() else None
@@ -1000,7 +1008,10 @@ class SetupView(QWidget):
             row.addWidget(_label(texts.SESSION_SAVING, secondary=True), 1)
             lay.addLayout(row)
             return f
-        hidden = bool(exp is not None and full and str(exp.path) == full and exp.record_hidden_required)
+        if exp is not None and full and str(exp.path) == full:
+            hidden = bool(exp.record_hidden_required)
+        else:       # nach Neustart: Format der für diesen Weg/Port erzeugten Session (Vierkanal = 3 ausgeblendet)
+            hidden = bool(full and getattr(self._ctx, 'session_format', None) == '4ch')
         items = checklist_items(port, full, hidden, confirm)
         states = {'record_hidden_ok': full in self.record_hidden_confirmed, 'session_ok': confirmed,
                   'autoscale_ok': f'autoscale_ok|{full}' in self.checklist_done,

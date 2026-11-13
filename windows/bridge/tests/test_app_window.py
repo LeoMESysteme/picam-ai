@@ -84,7 +84,7 @@ def test_setup_walk_through_with_manual_port_pair_and_profile(real):
     assert c.snapshot().components == 'manual_pair'
     assert c.context().setup.variant == 'E1ok'
     labels = ' '.join(lab.text() for lab in w.setup_view.findChildren(type(w.setup_view.lead)))
-    assert 'nicht von der App geprüft' in labels
+    assert 'nicht geprüft' in labels                  # Runde 3: Einschränkung als Abzeichen
     w.setup_view.next_button.click()
     wait_until(lambda: c.context().setup.variant == 'E2' and w.setup_view.variant[0] == 'E2')
     w.open_profile_path(str(real.profile))
@@ -202,12 +202,13 @@ def test_step_circle_tooltip_names_the_step(real):
 def test_inventory_rows_have_caption_label_and_body_value(real):
     c, w = real()
     labels = {lab.text(): lab for lab in w.setup_view.findChildren(QLabel)}
+    # Runde 3 (R3-1): Bezeichner in Beschriftung, Wert im Wertfeld (Mono), Zustand als Symbol davor
     key = labels['Windows']
-    assert key.property('caption') is True and key.property('secondary') is True
-    value = labels['Windows 11, 64 Bit – unterstützt']
-    assert not value.property('caption')
+    assert key.property('typo') == 'caption'
+    value = labels['Windows 11, 64 Bit']
+    assert value.property('typo') == 'data'
     assert 'Unterstützte Windows-Version' not in labels and 'Installiert' not in labels
-    assert labels['Brücke'].property('caption') is True
+    assert labels['Brücke'].property('typo') == 'caption'
 
 
 # ---- Einrichtung bei aktiver Verbindung (Fake-Zustand "verbunden, Worker aktiv")

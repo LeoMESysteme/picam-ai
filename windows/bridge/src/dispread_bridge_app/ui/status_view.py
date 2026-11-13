@@ -219,6 +219,70 @@ class DirectRoute(QFrame):
         self.setAccessibleDescription(f'{texts.ROUTE_ADAPTER} {port or ""}: {word} – {texts.ROUTE_GSV} {texts.ROUTE_READS}')
 
 
+class BridgeRoute(QFrame):
+    """Brückenweg als Bild (Runde 3): Brücke → Brückenseite ⇄ GSVmulti-Seite → GSVmulti.
+
+    Zeigt nur die festgelegten Ports, keinen Zustand: ob Werte fließen, sagen die Kacheln. Die Ports stehen in
+    Wertfeldern, weil sie sich ändern können. Neu gebaut wird nur, wenn sich ein Port ändert."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('bridge_route')
+        self.setProperty('card', True)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 4, 10, 4)
+        lay.setSpacing(6)
+        self._ports = (object(), object())
+        self.fields: list = []
+
+        def node(icon, text):
+            box = QHBoxLayout()
+            box.setSpacing(4)
+            ic = QLabel()
+            ic.setPixmap(theme.icon_pixmap(icon, 'text2', 16))
+            box.addWidget(ic, 0, Qt.AlignmentFlag.AlignVCenter)
+            box.addWidget(theme.set_typo(QLabel(text), 'caption'), 0, Qt.AlignmentFlag.AlignVCenter)
+            return box
+
+        def arrow(icon):
+            a = QLabel()
+            a.setPixmap(theme.icon_pixmap(icon, 'text2', 16))
+            return a
+        lay.addLayout(node('cube', texts.ROUTE_BRIDGE))
+        lay.addWidget(arrow('arrow_forward'), 0, Qt.AlignmentFlag.AlignVCenter)
+        self.slots = []
+        for i in range(2):
+            slot = QWidget()
+            sl = QHBoxLayout(slot)
+            sl.setContentsMargins(0, 0, 0, 0)
+            self.slots.append(sl)
+            lay.addWidget(slot, 1, Qt.AlignmentFlag.AlignVCenter)
+            if i == 0:
+                swap = arrow('arrow_swap')
+                swap.setToolTip(texts.ROUTE_PAIR_TIP)
+                lay.addWidget(swap, 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(arrow('arrow_forward'), 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addLayout(node('data_line', texts.ROUTE_GSV))
+
+    def set_ports(self, bridge: str | None, gsv: str | None) -> None:
+        from .widgets import ValueField
+        if (bridge, gsv) == self._ports:
+            return
+        self._ports = (bridge, gsv)
+        self.fields = []
+        for sl, port, tip in zip(self.slots, (bridge, gsv), (texts.PORT_BRIDGE_TIP, texts.PORT_GSV_TIP), strict=True):
+            while sl.count():
+                it = sl.takeAt(0)
+                if it.widget() is not None:
+                    it.widget().deleteLater()
+            f = ValueField('', port or texts.NOT_SET, copyable=bool(port))
+            f.setToolTip(tip)
+            sl.addWidget(f)
+            self.fields.append(f)
+        self.setAccessibleName(texts.ROUTE_BRIDGE_ACCESSIBLE.format(bridge=bridge or texts.NOT_SET,
+                                                                    gsv=gsv or texts.NOT_SET))
+
+
 class JournalModel(QAbstractListModel):
     def __init__(self):
         super().__init__()
@@ -393,9 +457,37 @@ class _HeadBody(QWidget):
         lay = self.layout()
         if lay is None:
             return super().minimumSizeHint()
-        w = max(self.width(), lay.totalMinimumSize().width())
+        minw = lay.totalMinimumSize().width()
+        if lay.hasHeightForWidth():
+            # Ohne Bildlaufleiste ist der Inhalt breiter und oft niedriger (Sperrzeile in einer Zeile weniger).
+            # Passt er dann in den Bereich, diese Höhe melden – sonst hielte die Leiste sich selbst am Leben
+            # (schmaler wegen Leiste -> höher -> Leiste bleibt).
+            h_full = self._height_without_bar()
+            if h_full is not None:
+                return QSize(minw, h_full)
+        w = max(self.width(), minw)
         h = lay.totalHeightForWidth(w) if lay.hasHeightForWidth() else lay.totalMinimumSize().height()
-        return QSize(lay.totalMinimumSize().width(), h)
+        return QSize(minw, h)
+
+
+    def _height_without_bar(self) -> int | None:
+        """Inhaltshöhe bei voller Breite (ohne Bildlaufleiste), wenn sie in den Bereich passt; sonst None."""
+        lay = self.layout()
+        area = self.parentWidget().parentWidget() if self.parentWidget() is not None else None
+        if lay is None or not isinstance(area, QScrollArea):
+            return None
+        frame = 2 * area.frameWidth()
+        full = max(area.width() - frame, lay.totalMinimumSize().width())
+        h_full = lay.totalHeightForWidth(full)
+        return h_full if 0 <= h_full <= area.height() - frame else None
+
+    def heightForWidth(self, w):
+        # QScrollArea fragt mit der Breite neben der Leiste; passt der Inhalt ohne Leiste, zählt diese Höhe.
+        h_full = self._height_without_bar()
+        if h_full is not None:
+            return h_full
+        lay = self.layout()
+        return lay.totalHeightForWidth(w) if lay is not None and lay.hasHeightForWidth() else super().heightForWidth(w)
 
 
 class _HeadScroll(QScrollArea):
@@ -460,6 +552,9 @@ class StatusView(QWidget):
         self.route = DirectRoute()
         self.route.hide()
         body.addWidget(self.route)
+        self.bridge_route = BridgeRoute()
+        self.bridge_route.hide()
+        body.addWidget(self.bridge_route)
         self.journal_box = QWidget()
         self.journal_box.setObjectName('journal_box')
         jl = QVBoxLayout(self.journal_box)
@@ -591,6 +686,10 @@ class StatusView(QWidget):
         self.route.setVisible(direct)
         if direct:
             self.route.set_state(ctx.adapter_port, ctx.adapter_present)
+        bridged = ctx.route_mode in ('network', 'uart_bridge')
+        self.bridge_route.setVisible(bridged)
+        if bridged:
+            self.bridge_route.set_ports(ctx.bridge_port, ctx.gsv_port)
         self.version_label.setText(texts.version_label(ctx.version))
         self.channel_label.setText(ctx.channel or '')
         self.channel_label.setVisible(bool(ctx.channel))

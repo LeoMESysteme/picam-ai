@@ -322,8 +322,12 @@ def test_value_field_click_and_keyboard_copy_with_1_2_s_check(app):
 def test_value_field_ground_token(app, dark):
     from dispread_bridge_app.ui import theme
     theme.apply_theme(app, dark)
-    assert theme.tokens()['field'] == ('#323232' if dark else '#ededed')
-    assert 'QFrame[valueField="true"]' in theme.qss(theme.tokens())
+    t = theme.tokens()
+    # Das Wertfeld muss sich von Karte und Fenstergrund abheben (grau = veränderlich). Ein fester Hexwert war hier
+    # falsch: #ededed läge auf dem Fenstergrund #eeeeee unsichtbar.
+    assert t['field'] == ('#323232' if dark else '#e8e8e8')
+    assert t['field'] not in (t['card'], t['mica'])
+    assert 'QFrame[valueField="true"]' in theme.qss(t)
     theme.apply_theme(app, False)
 
 

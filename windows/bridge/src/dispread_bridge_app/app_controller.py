@@ -113,6 +113,16 @@ def _reports(fn):
     return wrapper
 
 
+def _abort_reason(texts, event) -> str:
+    """Kurzer Grund für „Empfangstest unterbrochen“; unbekannte Codes bleiben leer statt geraten."""
+    if event.kind == 'connection' and event.code == 'backoff':
+        return 'Pi antwortet nicht'
+    if not event.code or event.code == event.kind:
+        return ''
+    title = texts.explain_code(event.code)[0]
+    return '' if title == 'Unbekannt' else title
+
+
 class AppController:
     def __init__(self, data_dir: Path | str | None = None, *, protector=None, devices=None, vcom=None,
                  transport_factory=None, com_factory: Callable | None = None,
@@ -171,6 +181,7 @@ class AppController:
         self._bo_n, self._bo_t = 0, 0.0           # Backoff: Anzahl Fehlversuche, Zeit des letzten
         self._demo_started = False
         self._demo_ended, self._demo_t0 = False, None
+        self._demo_noted = False          # Ende/Abbruch des Empfangstests schon im Journal
         self._written = 0
         self._com_issue: str | None = None
         self._last_ack = 'keine'
@@ -574,8 +585,17 @@ class AppController:
                     self._tr_written += 1
                 elif test_release and outcome == 'omitted':
                     self._tr_omitted += 1
-                if outcome == 'ended' and self._demo_started:
+                if outcome == 'ended' and self._demo_started and not self._demo_ended:
                     self._demo_ended = True             # Pi: Demo vorbei (auch wenn Werte fehlen)
+                    self._demo_noted = True
+                    n, total = self._written, self._demo_count
+                    self._counter_entry = None
+                    self._entries.appendleft(JournalEntry(
+                        now, f'{texts.DEMO_FINISHED}: {n} von {total} übergeben',
+                        'vollständig an COM übergeben' if n >= total else f'{total - n} fehlen',
+                        tone='info' if n >= total else 'err', fault=n < total))
+                    self._last_exchange = outcome
+                    return
                 if outcome == 'written':
                     self._written += 1
                     self._com_issue = None
@@ -603,6 +623,18 @@ class AppController:
                 return
             self._counter_entry = None
             self._entries.appendleft(texts.event_entry(event, now=now))
+            # Abbruch eines laufenden Empfangstests sichtbar machen (einmal je Test): Verbindung weg, Übertragung
+            # gestoppt oder Störung, bevor alle Werte übergeben waren.
+            if (self._demo_started and not self._demo_ended and not self._demo_noted
+                    and self._written < self._demo_count
+                    and (event.kind in ('stopped', 'blocked', 'audit_failed', 'connection_failed', 'recovering')
+                         or (event.kind == 'connection' and (event.code in ('disconnected', 'backoff')
+                                                             or event.code in texts.CONNECTION_CODE_TEXT)))):
+                self._demo_noted = True
+                self._entries.appendleft(JournalEntry(
+                    now, f'{texts.DEMO_ABORTED}: {self._written} von {self._demo_count} übergeben',
+                    _abort_reason(texts, event),
+                    tone='err', fault=True))
 
     # ------------------------------------------------------------ Profil
     @_reports
@@ -900,7 +932,7 @@ class AppController:
             raise AppError('run_active')
         with self._lock:
             self._demo_started, self._written, self._com_issue = True, 0, None
-            self._demo_ended, self._demo_t0 = False, self._clock()
+            self._demo_ended, self._demo_t0, self._demo_noted = False, self._clock(), False
         try:
             manager.start_demo(self._demo_count, self._demo_rate)
         except Exception as e:
@@ -1236,6 +1268,8 @@ class AppController:
                                                and generation == self._format_generation
                                                and self._route_mode != 'uart_direct') else None,
                 paired=((p.name, p.pi_id, 'gekoppelt'),) if p and self._is_paired() else (),
+                paired_routes=tuple((m, bool(self._paired_cached[m])) for m in ('network', 'uart')
+                                    if m in self._paired_cached) if p else (),
                 journal=journal, last_report=self._last_contact, last_ack=self._last_ack)
 
     # ------------------------------------------------------------ Diagnose / Ende

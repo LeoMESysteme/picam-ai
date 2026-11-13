@@ -240,8 +240,14 @@ def build_chip_detail(view: texts.ChipView, body: QVBoxLayout, on_action: Callab
     help_text = texts.CHIP_HELP.get(view.key, '')
     if help_text:
         body.addWidget(label(help_text))
-    if view.warn:
+    if view.warn == texts.SINGLE_CHANNEL_WARNING:
         body.addWidget(badge_row(Badge(texts.BADGE_SINGLE_CHANNEL, view.warn, name='chip_warn')))
+    elif view.warn:                      # z. B. „Session passt nicht“: Achtung mit Satz, kein Abzeichen
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(StateIcon('warn', 16), 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(label(view.warn), 1)
+        body.addLayout(row)
     if view.details:
         box, inner = section('Werte')
         for k, v in view.details:

@@ -847,8 +847,12 @@ class HeartbeatDot(QWidget):
     ohne Störung, gelb Achtung, rot Fehler); sagt nichts über Weitergabe oder Empfang.
 
     Gefüllt = Kontakt, hohl (stroke_strong) = kein Kontakt. Ein neues ``activity_seq`` löst einen
-    kurzen Puls aus (250 ms, ease-out), nur mit Bewegung."""
+    ruhigen Puls aus (900 ms, ease-out), nur mit Bewegung. Bei 10 Hz Austausch käme sonst alle 100 ms ein neuer
+    Puls (Flackern, Prüfung 13.11.): ein laufender Puls wird nicht neu gestartet, und zwischen zwei Pulsen liegen
+    mindestens ``MIN_GAP_S``."""
     DOT = 8
+    PULSE_MS = 900
+    MIN_GAP_S = 2.0
 
     def __init__(self, height: int = 20, parent=None):
         super().__init__(parent)
@@ -858,8 +862,9 @@ class HeartbeatDot(QWidget):
         self.seq: int | None = None
         self.pulses = 0
         self._t = 1.0
-        self._anim = _ease_anim(self, 0.0, 1.0, 250)
+        self._anim = _ease_anim(self, 0.0, 1.0, self.PULSE_MS)
         self._anim.valueChanged.connect(self._step)
+        self._last_pulse = float('-inf')
         self._apply_text()
 
     def _apply_text(self) -> None:
@@ -887,10 +892,14 @@ class HeartbeatDot(QWidget):
         self.seq = seq
 
     def pulse(self) -> None:
-        self.pulses += 1
-        if theme.motion_enabled() and self.isVisible():
-            self._anim.stop()
-            self._anim.start()
+        self.pulses += 1                    # zählt jeden Kontakt; sichtbar gepulst wird gedrosselt
+        if not (theme.motion_enabled() and self.isVisible()):
+            return
+        now = time.monotonic()
+        if self._anim.state() == QAbstractAnimation.State.Running or now - self._last_pulse < self.MIN_GAP_S:
+            return
+        self._last_pulse = now
+        self._anim.start()
 
     def hideEvent(self, e):
         super().hideEvent(e)
@@ -1023,9 +1032,18 @@ class ValidatedField(QWidget):
         self.message.setTextFormat(Qt.TextFormat.PlainText)
         self.message.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
         self.detail_icon = InfoIcon('', 'Erklärung zur Meldung')     # Erklärung/Abhilfe im ⓘ statt als zweite Zeile
+        # „Erneut prüfen“ nach Achtung/Fehler: dieselbe Prüfung desselben Werts noch einmal (Adapter wieder
+        # eingesteckt, Port freigegeben) – ohne Umweg über eine andere Auswahl (Prüfung 13.11.: COM6→COM0→COM6).
+        self.recheck_button = button(texts.RECHECK, name=f'recheck_{name}' if name else 'recheck')
+        self.recheck_button.setIcon(theme.icon('arrow_sync', 'text', 16))
+        self.recheck_button.setProperty('compact', True)
+        self.recheck_button.setToolTip(texts.RECHECK_TIP)
+        self.recheck_button.clicked.connect(self.recheck)
+        self.recheck_button.hide()
         mr.addWidget(slot, 0, Qt.AlignmentFlag.AlignTop)
         mr.addWidget(self.message, 1)
         mr.addWidget(self.detail_icon, 0, Qt.AlignmentFlag.AlignTop)
+        mr.addWidget(self.recheck_button, 0, Qt.AlignmentFlag.AlignTop)
         self.msg_row.hide()
         lay.addWidget(self.msg_row)
         self._timer = QTimer(self)
@@ -1146,6 +1164,7 @@ class ValidatedField(QWidget):
         repolish(self.message)
         self.detail_icon.set_tip(detail)
         self.status_slot.setVisible(state in ('checking', 'ok', 'warn', 'err'))
+        self.recheck_button.setVisible(state in ('warn', 'err') and self.editor.isEnabled())
         self.msg_row.setVisible(bool(msg))
         self._paint_editor(state)
         desc = ' '.join(x for x in ((texts.SCREEN_READER.get(state, '') if r else ''), msg, detail) if x)

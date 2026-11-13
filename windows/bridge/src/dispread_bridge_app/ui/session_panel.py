@@ -55,6 +55,7 @@ class SessionPanel(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
         if path:
+            folder, fname = _split_path(path)
             row = QHBoxLayout()
             row.setSpacing(8)
             ic = QLabel()
@@ -68,16 +69,24 @@ class SessionPanel(QWidget):
             iw.addWidget(ic)
             iw.addStretch(1)
             row.addLayout(iw)
-            row.addWidget(ValueField(texts.SESSION_PATH, path), 1)
-            ob = IconButton('folder_open', texts.OPEN_FOLDER, name='btn_open_session_folder')
-            ob.clicked.connect(lambda: self.action.emit('open_session_folder:' + path))
+            row.addWidget(ValueField(texts.SESSION_PATH, fname), 1)
             again = IconButton('arrow_sync', texts.SESSION_AGAIN, name='btn_make_session')
             again.setEnabled(bool(port))
             again.clicked.connect(lambda: self.action.emit('make_session'))
-            self.buttons.update(open_session_folder=ob, make_session=again)
-            row.addWidget(ob, 0, Qt.AlignmentFlag.AlignBottom)
             row.addWidget(again, 0, Qt.AlignmentFlag.AlignBottom)
             lay.addLayout(row)
+            # Ordner sichtbar und mit beschriftetem Knopf erreichbar (Prüfung 13.11.: „wo liegt die Datei?“)
+            frow = QHBoxLayout()
+            frow.setSpacing(8)
+            frow.addSpacing(24)
+            frow.addWidget(ValueField(texts.SESSION_FOLDER, folder), 1)
+            ob = button(texts.OPEN_FOLDER, name='btn_open_session_folder')
+            ob.setIcon(theme.icon('folder_open', 'text', 16))
+            ob.setToolTip(texts.OPEN_FOLDER)
+            ob.clicked.connect(lambda: self.action.emit('open_session_folder:' + path))
+            frow.addWidget(ob, 0, Qt.AlignmentFlag.AlignBottom)
+            lay.addLayout(frow)
+            self.buttons.update(open_session_folder=ob, make_session=again)
         if port and show_port:
             lay.addWidget(ValueField(texts.SESSION_PORT, port))
         elif not port and not path:
@@ -107,6 +116,15 @@ class SessionPanel(QWidget):
                 self.checks[key] = it.check
                 it.check.toggled.connect(lambda on, k=key: self.toggled.emit(k, on))
                 lay.addWidget(it)
+
+
+def _split_path(path: str) -> tuple[str, str]:
+    """(Ordner, Dateiname) für Windows- und Posix-Pfade; ohne Trenner: kein Ordner bekannt."""
+    norm = path.replace('\\', '/')
+    if '/' not in norm:
+        return '–', path
+    i = max(path.rfind('\\'), path.rfind('/'))
+    return path[:i] or path[:i + 1], path[i + 1:]
 
 
 def checklist_items(port: str | None, path: str | None, record_hidden_required: bool,

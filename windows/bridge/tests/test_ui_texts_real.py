@@ -96,4 +96,4 @@ def test_gsv_chip_describes_gsv_side_not_pairing():
     assert g0.sub == 'COM5'
     assert 'gekoppelt' not in g.word
     g2 = texts.chips(r, None, UiContext(pi_name='Pi', gsv_port='COM5', session_confirmed=True))[5]
-    assert (g2.word, g2.sub) == ('Von Hand eingestellt', 'Empfang nicht nachgewiesen')
+    assert (g2.word, g2.sub) == ('Von Hand eingestellt', texts.NO_PROOF_SHORT)      # Runde 3: kurze Zweitzeile

@@ -28,6 +28,9 @@ DIRECT_TITLE = 'UART direkt – Adapter noch offen'
 NO_PI_WAY_SET = 'Kein Pi gekoppelt'
 DIRECT_DUT_LINE = 'Die Brücke gibt in diesem Weg keine Werte weiter – Messfreigabe nicht durch die Brücke'
 ROUTE_ADAPTER, ROUTE_GSV, ROUTE_READS = 'USB-Adapter', 'GSVmulti', 'liest direkt'
+ROUTE_BRIDGE = 'Brücke'
+ROUTE_PAIR_TIP = 'Virtuelles Portpaar (com0com): was die Brücke auf der einen Seite schreibt, liest GSVmulti auf der anderen.'
+ROUTE_BRIDGE_ACCESSIBLE = 'Strecke: Brücke schreibt auf {bridge}, Portpaar, GSVmulti liest {gsv}'
 ROUTE_PRESENT, ROUTE_MISSING, ROUTE_UNKNOWN = 'steckt', 'fehlt', 'unbekannt'
 ROUTE_ACCESSIBLE = 'Strecke: USB-Adapter, Port, GSVmulti liest direkt'
 DIRECT_UNUSED = 'nicht benutzt'
@@ -158,6 +161,8 @@ ICON_CREDIT = 'Symbole: Fluent UI System Icons, © Microsoft Corporation, MIT-Li
 # ---- UX2 Runde 2: Prüfen, Moduswahl, Einstellungen, Session
 CHECKING = 'Wird geprüft …'
 CHECK_FAILED = 'Prüfung nicht möglich'
+RECHECK = 'Erneut prüfen'
+RECHECK_TIP = 'Dieselbe Prüfung noch einmal ausführen, z. B. nach dem Einstecken des Adapters'
 CHECK_FAILED_DETAIL = 'Erneut versuchen; bei Wiederholung die Protokolle exportieren.'
 LEAVE_SETUP = 'Einrichtung verlassen'
 LEAVE_LABEL = 'Verlassen'
@@ -216,6 +221,7 @@ SESSION_DIALOG = 'GSVmulti-Session speichern'
 SESSION_SAVING = 'Session-Datei wird erzeugt …'
 SESSION_DONE = 'Session-Datei erzeugt'
 SESSION_PATH = 'Datei'
+SESSION_FOLDER = 'Ordner'
 SESSION_PORT = 'Port in der Session'
 SESSION_TEMPLATE = 'Vorlage'
 SESSION_NOT_ACCEPTED = ('Nicht abgenommen – erst nach Öffnen in GSVmulti und dem Empfangstest belegt.')
@@ -582,6 +588,75 @@ def header_badges(readiness, ctx) -> tuple[tuple[str, str], ...]:
     return tuple(out)
 
 
+NO_PROOF_SHORT = 'kein Nachweis'
+FORMAT_NAME = {'1ch': 'Einkanal', '4ch': 'Vierkanal'}
+FORMAT_UNKNOWN = 'unbekannt'
+SESSION_MISMATCH = ('Session-Datei: {session}, Lauf: {run}. Mit unpassender Session kam in GSVmulti nichts an '
+                    '(Prüfung 13.11.). Session für diesen Port neu erzeugen und in GSVmulti öffnen.')
+SESSION_MISMATCH_SHORT = 'Session {session}, Lauf {run} – Session neu erzeugen.'
+SESSION_REMAKE = 'Session neu erzeugen …'
+
+
+def format_name(fmt: str | None) -> str:
+    return FORMAT_NAME.get(fmt or '', FORMAT_UNKNOWN)
+
+
+def session_mismatch(ctx, short: bool = False) -> str:
+    """Warnung, wenn die erzeugte Session nicht zum Format des laufenden Laufs passt.
+
+    Nur aus belegtem Zustand: das Format des Laufs meldet der Pi (``run_format``), das der Session kommt aus dem
+    Export für genau diesen Weg und Port (Sessions werden je Port geführt). Ist eines unbekannt, wird nichts
+    behauptet. Welche Session GSVmulti tatsächlich geöffnet hat, kann die Brücke nicht sehen."""
+    if not ctx.session_name:
+        return ''
+    run, sess = getattr(ctx, 'run_format', None), getattr(ctx, 'session_format', None)
+    if run in FORMAT_NAME and sess in FORMAT_NAME and run != sess:
+        return (SESSION_MISMATCH_SHORT if short else SESSION_MISMATCH).format(session=FORMAT_NAME[sess],
+                                                                               run=FORMAT_NAME[run])
+    return ''
+
+
+def gsv_mismatch_sub(ctx) -> str:
+    return f'Lauf {format_name(ctx.run_format)}'
+
+
+def tick_rows(worker) -> tuple[tuple[str, str], ...]:
+    """Taktzähler (Vierkanal): nur, wenn der Worker Takte gezählt hat; lokale COM-Annahme, kein Empfangsbeleg."""
+    if worker is None or not getattr(worker, 'ticks_written', 0):
+        return ()
+    rows = (('Takte an COM', str(worker.ticks_written)), ('davon ungültig', str(worker.ticks_invalid)),
+            ('aufgefüllt', str(worker.ticks_filled)))
+    if worker.tick_disturbed:
+        rows += (('Takt', 'Lücke über 50 Takte, nicht aufgefüllt'),)
+    return rows
+
+
+def _with_ticks(fw: ChipView, worker, ctx) -> ChipView:
+    """Zweitzeile der Weitergabe: Taktzähler statt Satz, sobald Takte laufen; gestörter Takt als Achtung."""
+    n = getattr(worker, 'ticks_written', 0) if worker is not None else 0
+    if not n or fw.tone in ('err', 'unclear') or ctx.demo:
+        return fw
+    if worker.tick_disturbed:
+        return ChipView(fw.key, fw.name, 'Takt gestört', 'warn', f'{n} Takte')
+    if fw.word in ('Bestätigt', 'Übergeben'):
+        return ChipView(fw.key, fw.name, fw.word, fw.tone, f'{n} Takte')
+    return fw
+
+
+PAIRING_PER_ROUTE_TIP = ('Der Zugang gilt je Weg: Eine Kopplung über Netzwerk gilt nicht für UART und umgekehrt. '
+                         'Für den gewählten Weg braucht es einen eigenen Kopplungscode aus der Werkbank.')
+PAIRING_ROUTE_NAME = {'network': 'Kopplung Netzwerk', 'uart': 'Kopplung UART'}
+
+
+def pairing_rows(ctx) -> tuple[tuple[str, str], ...]:
+    """Kopplungsstand je Weg (Zugangsdaten gelten je Transport); unbekannt erscheint nicht."""
+    rows = []
+    for route, on in getattr(ctx, 'paired_routes', ()) or ():
+        if route in PAIRING_ROUTE_NAME:
+            rows.append((PAIRING_ROUTE_NAME[route], 'gekoppelt' if on else 'nicht gekoppelt'))
+    return tuple(rows)
+
+
 def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> tuple[ChipView, ...]:
     code = _worker_active_failure(readiness, worker)
     peer_ok = readiness.peer == 'authenticated'
@@ -593,7 +668,9 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
             'restart': ChipView('components', 'Komponenten', 'Neustart nötig', 'warn'),
             'manual_pair': ChipView('components', 'Komponenten',
                                     'Portpaar manuell',
-                                    'warn' if ctx.com_issue == 'busy' else 'info', 'nicht geprüft')
+                                    'warn' if ctx.com_issue == 'busy' else 'info',
+                                    f'{ctx.bridge_port} ↔ {ctx.gsv_port}' if ctx.bridge_port and ctx.gsv_port
+                                    else 'nicht geprüft')
             }.get(readiness.components, _unknown('components', 'Komponenten'))
     comp = ChipView(comp.key, comp.name, comp.word, comp.tone, comp.sub,
                     (('Windows', '11, 64 Bit'), ('App-Version', ctx.version or '–'), ('Portpaar', pair)),
@@ -614,11 +691,11 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
     if peer_ok and not code:
         pi = ChipView('pi', 'Pi', 'Verbunden', 'ok')
     elif peer_ok:
-        pi = ChipView('pi', 'Pi', 'Verbunden', 'info', 'Übertragung gestoppt')
+        pi = ChipView('pi', 'Pi', 'Verbunden', 'info', 'Weitergabe gestoppt')
     elif readiness.peer == 'backoff':
         pi = ChipView('pi', 'Pi', 'Antwortet nicht', 'err')
     elif readiness.peer == 'disconnected':
-        pi = ChipView('pi', 'Pi', 'Pi nicht verbunden', 'info')
+        pi = ChipView('pi', 'Pi', 'Nicht verbunden', 'info')
     else:
         pi = _unknown('pi', 'Pi')
     pi = ChipView(pi.key, pi.name, pi.word, pi.tone, pi.sub,
@@ -626,6 +703,7 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
                    ('TLS-Fingerabdruck (SHA-256)', ctx.fingerprint or '–'),
                    ('Protokoll', ctx.protocol or '–'),
                    ('Letzte Meldung', ctx.last_report or '–'))
+                  + pairing_rows(ctx)
                   + ((('Code', readiness.next_action),) if readiness.next_action not in (
                       None, 'connect', 'reconnect', 'disconnected', 'output_off', 'run_ended', 'dut_release_blocked',
                       'peer_release_blocked') and readiness.next_action not in CONNECTION_CODE_TEXT else ()),
@@ -684,14 +762,16 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
     elif _test_release(readiness) and readiness.com == 'driver_ready':
         fw = ChipView('forward', 'Weitergabe', 'Übergeben', 'warn', _values(ctx.forwarded))
     elif readiness.com == 'driver_ready' and (ctx.demo or (ctx.release and not ctx.dut_locked)):
-        fw = ChipView('forward', 'Weitergabe', 'Bestätigt', 'info', 'vom Port angenommen')
+        fw = ChipView('forward', 'Weitergabe', 'Bestätigt', 'info', 'Demo-Werte' if ctx.demo else 'vom Port angenommen')
     elif ctx.dut_locked:
-        fw = ChipView('forward', 'Weitergabe', 'Keine Weitergabe', 'info', 'DUT-Ausgabe gesperrt')
+        fw = ChipView('forward', 'Weitergabe', 'Keine Weitergabe', 'info')
     else:
         fw = _unknown('forward', 'Weitergabe')
+    fw = _with_ticks(fw, worker, ctx)
     fw = ChipView(fw.key, fw.name, fw.word, fw.tone, fw.sub,
                   ports + (('Letzte Quittung', ctx.last_ack),)
-                  + ((('Ausgelassen (ungültig/veraltet)', str(ctx.omitted)),) if _test_release(readiness) else ()),
+                  + ((('Ausgelassen (ungültig/veraltet)', str(ctx.omitted)),) if _test_release(readiness) else ())
+                  + tick_rows(worker),
                   '„Bestätigt“ heißt: der Windows-Port hat die Daten angenommen.'
                   if fw.word == 'Bestätigt' else
                   'Übergeben heißt: der Windows-Port hat die Daten angenommen – nicht, dass GSVmulti sie empfangen hat.'
@@ -705,7 +785,7 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
                  'Gilt nur für genau diese Testdatei und Konfiguration.')
     elif ctx.session_confirmed:
         gsv = ChipView('gsv', 'GSVmulti', 'Von Hand eingestellt', 'info',
-                       'keine Werte' if _in_locked_run(peer_ok, ctx) else 'Empfang nicht nachgewiesen')
+                       'keine Werte' if _in_locked_run(peer_ok, ctx) else NO_PROOF_SHORT)
         ghint = 'Nur der Empfangstest belegt Empfang. Der laufende Betrieb zeigt nur die COM-Weitergabe.'
     else:
         gsv = ChipView('gsv', 'GSVmulti', 'Kanal einstellen', 'info',
@@ -715,14 +795,26 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
                  'Nur der Empfangstest belegt Empfang.')
     gsv = ChipView(gsv.key, gsv.name, gsv.word, gsv.tone, gsv.sub,
                    (('Session', ctx.session_name or '–'),
+                    ('Format der Session', format_name(ctx.session_format)),
+                    ('Format des Laufs', format_name(ctx.run_format)),
                     ('Empfangsnachweis', ctx.receipt.label if ctx.receipt and ctx.receipt.proven
-                     else 'nicht nachgewiesen')), ghint, warn=single_channel_warning(ctx))
+                     else 'nicht nachgewiesen')), ghint,
+                   warn=session_mismatch(ctx) or single_channel_warning(ctx))
+    if session_mismatch(ctx) and gsv.tone != 'ok':
+        gsv = ChipView(gsv.key, gsv.name, 'Session passt nicht', 'warn', gsv_mismatch_sub(ctx), gsv.details,
+                       gsv.hint, warn=gsv.warn)
     if ctx.route_mode == 'uart_direct':
+        comp = ChipView(comp.key, comp.name, comp.word if readiness.components != 'manual_pair' else 'Nicht benötigt',
+                        comp.tone if readiness.components != 'manual_pair' else 'unused',
+                        '' if readiness.components == 'manual_pair' else comp.sub,
+                        (('Windows', '11, 64 Bit'), ('App-Version', ctx.version or '–'),
+                         ('USB-Adapter', ctx.adapter_port or NOT_SET)),
+                        'Im Weg „UART direkt“ braucht die Brücke kein Portpaar; GSVmulti liest den USB-Adapter.')
         return (comp, _direct_uart(ctx)) + tuple(
             ChipView(k, n, DIRECT_UNUSED, 'unused', DIRECT_UNUSED_SUB, (('Weg', 'UART direkt'),),
                      'Im Weg „UART direkt“ überträgt die Brücke nichts; dieser Punkt wird nicht benutzt.')
             for k, n in (('pi', 'Pi'), ('output', 'Ausgabe'), ('forward', 'Weitergabe'))) + (
-            ChipView(gsv.key, gsv.name, gsv.word, gsv.tone, 'Empfang nicht nachgewiesen' if gsv.tone != 'ok'
+            ChipView(gsv.key, gsv.name, gsv.word, gsv.tone, NO_PROOF_SHORT if gsv.tone != 'ok'
                      else gsv.sub, gsv.details, gsv.hint, warn=''),)
     return (comp, uart, pi, out, fw, gsv)
 
@@ -747,6 +839,11 @@ def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext
         return ActionBar('err', f'Übertragung gestoppt – {WORKER_CODE_TEXT.get(code, code)}',
                          'Nichts mehr an COM geschrieben. Protokolle exportieren, dann neu verbinden.',
                          (('Protokolle exportieren', 'export_diagnostics', True),))
+    mismatch = session_mismatch(ctx)
+    if mismatch:
+        fmt = ctx.run_format if ctx.run_format in FORMAT_NAME and ctx.run_format != ctx.session_format else None
+        return ActionBar('warn', 'Session passt nicht', session_mismatch(ctx, short=True),
+                         ((SESSION_REMAKE, 'make_session' + (f':{fmt}' if fmt else ''), True),))
     if ctx.route_mode == 'uart_direct':
         if ctx.adapter_present is False:
             return ActionBar('warn', f'Adapter {ctx.adapter_port or ""} fehlt – einstecken'.replace('  ', ' '), '',
@@ -798,23 +895,42 @@ def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext
     return None
 
 
+OUTPUT_JOURNAL = {'ended': 'Lauf auf dem Pi beendet', 'blocked': 'Ausgabe gesperrt', 'output_off': 'Keine Ausgabe',
+                  'test_release': 'Testfreigabe aktiv', 'demo_only': 'Demo-Ausgabe', 'unavailable': 'Ausgabe unbekannt'}
+DEMO_ABORTED = 'Empfangstest unterbrochen'
+DEMO_FINISHED = 'Empfangstest beendet'
+
+
 def event_entry(event: BridgeEvent, ctx: UiContext | None = None, now: str = '') -> JournalEntry:
     """BridgeEvent -> Journalzeile. Keine Rohdetails (Zugangsdaten) übernehmen."""
     if event.kind == 'connection':
+        if event.code == 'peer_output_changed':
+            out = (event.detail or {}).get('output')
+            title = OUTPUT_JOURNAL.get(out, 'Ausgabestand geändert')
+            return JournalEntry(now, title, f'Lauf {event.run_id}' if event.run_id else '',
+                                tone='warn' if out == 'test_release' else 'info')
         title = {'authenticated': 'Pi verbunden (Identität geprüft)', 'backoff': 'Pi antwortet nicht',
-                 'disconnected': 'Verbindung beendet'}.get(event.code or '')
+                 'disconnected': 'Verbindung beendet', 'connecting': 'Verbindung wird aufgebaut'}.get(event.code or '')
         if title is None and event.code in CONNECTION_CODE_TEXT:
-            return JournalEntry(now, CONNECTION_CODE_TEXT[event.code][0], tone='err', fault=True)
+            t, sub = CONNECTION_CODE_TEXT[event.code]
+            return JournalEntry(now, t, sub, tone='err', fault=True)
+        if title is None and str(event.code or '').startswith('tailscale_'):
+            return JournalEntry(now, 'Tailscale', str(event.code)[10:], tone='info')
         title = title or 'Verbindungsereignis'
         bad = event.code in ('backoff',)
         return JournalEntry(now, title, tone='err' if bad else 'info', fault=bad)
+    if event.kind == 'recovering':
+        return JournalEntry(now, 'Verbindung unterbrochen', 'die Brücke verbindet neu', tone='warn', fault=True)
+    if event.kind == 'tick_disturbed':
+        return JournalEntry(now, 'Takt gestört', 'Lücke über 50 Takte, nicht aufgefüllt – Zeilenzahl weicht ab',
+                            tone='err', fault=True)
     if event.kind in ('blocked', 'audit_failed', 'connection_failed'):
         return JournalEntry(now, f'Übertragung gestoppt – {WORKER_CODE_TEXT.get(event.code or event.kind, event.kind)}',
                             'keine weiteren Werte an COM', tone='err', fault=True)
     if event.kind == 'started':
         return JournalEntry(now, 'Übertragung gestartet', 'Demo · Werte sind synthetisch', tone='info')
     if event.kind == 'stopped':
-        return JournalEntry(now, 'Übertragung beendet', tone='info')
+        return JournalEntry(now, 'Übertragung gestoppt', 'keine weiteren Werte an COM', tone='info')
     if event.kind == 'exchange':
         outcome = (event.detail or {}).get('outcome')
         if outcome in ('unknown', 'stopped'):
@@ -838,6 +954,9 @@ _INV = ('statusrows', 'Bestandsaufnahme', (('Windows', 'Windows 11, 64 Bit', 'ok
 _PROFILE = ('fields', 'Profil geladen', (('Anzeigename', '{pi_name}'), ('Pi-ID', '{pi_id}')), None, '')
 _WIRING = ('fields', 'Verdrahtung', (('Parameter', '{uart_line}'), ('Leitungen', 'TX→RX · RX→TX · GND')), None,
            UART_WIRING_TIP)
+# UART direkt: der Pi spricht mit der Rate der GSVmulti-Session, nicht mit der Brücken-UART-Rate
+_WIRING_DIRECT = ('fields', 'Verdrahtung', (('Parameter', '{gsv_line}'), ('Leitungen', 'TX→RX · RX→TX · GND')),
+                  None, UART_WIRING_TIP + ' Rate wie in der GSVmulti-Session.')
 _WAY = ('radios', 'way', (('Netzwerk', 'LAN oder Tailscale, verschlüsselt', True),
                           ('UART (USB-Adapter)', 'Direktverbindung, unverschlüsselt', False)))
 _WAY_U = ('radios', 'way', (('Netzwerk', 'LAN oder Tailscale, verschlüsselt', False),
@@ -959,8 +1078,9 @@ SETUP: dict[str, dict] = {
             ('Gerät', 'UserDef'), ('COM-Port', '{gsv_port}'), ('Übertragung', '{gsv_line}'),
             ('Kanäle', '{channels_line}'),
             ('Präfix', '%'), ('Einheit', 'mV/V'), ('Frequenz', '10 Hz')), None,
-         'Ohne Session-Datei von Hand in GSVmulti einstellen (Muster: Session aus dem Testlauf vom 06.11.2026, nur '
-         'Port anpassen). Ob GSVmulti die Einstellungen übernimmt, belegt erst der Empfangstest.')],
+         'Ohne Session-Datei von Hand in GSVmulti einstellen: eine neue Testsession unter eigenem Namen anlegen '
+         '(Muster: Session aus dem Testlauf vom 06.11.2026, nur Port anpassen). Ob GSVmulti die Einstellungen '
+         'übernimmt, belegt erst der Empfangstest.')],
         nxt='Weiter', gate=('session_ok', 'Erst bestätigen: GSVmulti eingestellt')),
     'E4': _s(4, 'GSVmulti-Session erzeugen', [
         _PORTS, ('button', 'Session erzeugen', 'export_session', True)]),
@@ -1022,7 +1142,7 @@ SETUP: dict[str, dict] = {
         ('adapter_pick', 'USB-Adapter')], ready=True, back=False, steps='direct',
         gate=('check:adapter', 'Erst einen Adapter wählen')),
     'D2': _s(2, 'Verdrahtung prüfen', [
-        ('adapter_state',), _WIRING,
+        ('adapter_state',), _WIRING_DIRECT,
         ('hint', 'Die Brücke prüft die Verdrahtung nicht.', 'Ob Werte ankommen, zeigt erst GSVmulti.')],
         ready=True, steps='direct'),
     'D3': _s(3, 'GSVmulti-Session erzeugen', [
@@ -1160,6 +1280,10 @@ def setup_spec(ctx, locked=False):
                            text, (('Erneut versuchen', 'reconnect', True),)))
         else:
             blocks.append(blk)
+    if ctx.setup.variant in ('E2b', 'E2ok'):
+        rows = pairing_rows(ctx)
+        if rows and len({v for _k, v in rows}) > 1:      # je Weg verschieden: sichtbar machen (Prüfung 13.11.)
+            blocks.insert(0, ('fields', 'Kopplung je Weg', rows, None, PAIRING_PER_ROUTE_TIP))
     if ctx.setup.variant == 'E1manual' and data.get('unverified'):
         blocks[0] = ('info', 'warn', *UNVERIFIED_PAIR, ())
     blocks = list(fill(tuple(blocks), m))
