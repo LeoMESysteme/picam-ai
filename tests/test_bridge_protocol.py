@@ -295,3 +295,83 @@ def test_profile_uart_baud_defaults_and_explicit_rate():
 def test_profile_rejects_invalid_uart_baud(rate):
     with pytest.raises(ValueError):
         parse_profile(json.dumps(profile(uart_baud=rate)).encode())
+# --- B2 (2026-11-11): kompakte Taktnachricht ``tick`` und ``tick_ack`` -----------------
+
+def tick(**changes):
+    return {**poll(), "type": "tick", "seq": 7, "valid": True, "value_text": "0.63956",
+            "frame_sequence": 42, "time_unix_ns": 1_794_397_184_232_361_000,
+            "origin_unix_ns": 1_794_397_183_532_361_000, "rate_hz": 10,
+            "release": "test_unaccepted", **changes}
+
+
+def tick_ack(**changes):
+    return {**poll(), "type": "tick_ack", "seq": 7, "outcome": "written", "filled": 0, **changes}
+
+
+def test_tick_roundtrip_is_compact():
+    raw = encode_v2(tick())
+    assert decode_v2(raw) == tick()
+    assert len(raw) < 330  # statt ~1,2 kB je ValueRecord
+    invalid = tick(valid=False, value_text=None, frame_sequence=None)
+    assert decode_v2(encode_v2(invalid)) == invalid
+
+
+@pytest.mark.parametrize("changes", [
+    {"value_text": "1E+300"}, {"value_text": "1e3"}, {"value_text": "NaN"}, {"value_text": "Inf"},
+    {"value_text": "-inf"}, {"value_text": "99999999.0"}, {"value_text": "99999999"},
+    {"value_text": " 1.0"}, {"value_text": ""}, {"value_text": None},
+    {"valid": False},                                   # Wert nur bei gueltig
+    {"valid": False, "value_text": None},               # Bildnummer nur bei gueltig
+    {"frame_sequence": None},
+    {"valid": 1}, {"seq": 0}, {"seq": True}, {"seq": 1.0},
+    {"time_unix_ns": -1}, {"time_unix_ns": 1.5}, {"origin_unix_ns": None},
+    {"rate_hz": 0}, {"rate_hz": 11}, {"rate_hz": True},
+    {"run_id": None}, {"release": None}, {"release": "accepted"},
+    {"release_block": None}, {"extra": 1},
+])
+def test_tick_schema_is_strict(changes):
+    with pytest.raises(ValueError):
+        encode_v2(tick(**changes))
+    with pytest.raises(ValueError):
+        decode_v2(json.dumps(tick(**changes)).encode())
+
+
+def test_tick_without_release_marker_is_rejected():
+    message = tick()
+    del message["release"]
+    with pytest.raises(ValueError):
+        encode_v2(message)
+
+
+def test_tick_ack_is_bounded():
+    assert decode_v2(encode_v2(tick_ack(filled=50))) == tick_ack(filled=50)
+    for outcome in ("written", "expired", "failed", "unconfirmed"):
+        decode_v2(encode_v2(tick_ack(outcome=outcome)))
+    for changes in ({"outcome": "omitted"}, {"filled": 51}, {"filled": -1}, {"seq": 0},
+                    {"frame_sequence": 1}, {"run_id": None}):
+        with pytest.raises(ValueError):
+            encode_v2(tick_ack(**changes))
+
+
+# --- Nachtrag B2 (2026-11-11): output_format in hello/idle ---------------------------
+
+@pytest.mark.parametrize("value", ["4ch", "1ch", None])
+def test_hello_and_idle_may_carry_output_format(value):
+    idle = {**poll(), "type": "idle", "release_block": None, "output_format": value}
+    assert decode_v2(encode_v2(idle)) == idle
+    assert decode_v2(encode_v2(hello(output_format=value)))["output_format"] == value
+    assert "output_format" not in decode_v2(encode_v2(hello()))      # alte Form bleibt gültig
+
+
+@pytest.mark.parametrize("value", ["4CH", "2ch", "", 4, True, ["4ch"]])
+def test_output_format_is_strict(value):
+    with pytest.raises(ValueError):
+        encode_v2(hello(output_format=value))
+    with pytest.raises(ValueError):
+        encode_v2({**poll(), "type": "idle", "release_block": None, "output_format": value})
+
+
+def test_output_format_only_in_hello_and_idle():
+    for message in (poll(output_format="4ch"), {**poll(), "type": "ended", "output_format": "4ch"}):
+        with pytest.raises(ValueError):
+            encode_v2(message)

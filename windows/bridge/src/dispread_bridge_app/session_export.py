@@ -4,18 +4,18 @@ import re
 from .session_templates import (
     SessionTemplate,
     SessionTemplateError,
-    active_session_template,
     load_session_catalog,
+    session_template,
 )
 
 # Compatibility names are derived, never a second catalog or selection point.
-_ACTIVE_TEMPLATE = active_session_template()
-TEMPLATE_ID = _ACTIVE_TEMPLATE.spec.template_id
-TEMPLATE_SHA256 = _ACTIVE_TEMPLATE.spec.source_sha256
-TEMPLATE_CHANNELS = _ACTIVE_TEMPLATE.channels
-ALLOWED_FIELDS = _ACTIVE_TEMPLATE.allowed_fields
-# GSVmulti's rate belongs to the active session, independently of the bridge UART.
-GSVMULTI_BAUD = _ACTIVE_TEMPLATE.baud_rate
+_DEFAULT_TEMPLATE = session_template()
+TEMPLATE_ID = _DEFAULT_TEMPLATE.spec.template_id
+TEMPLATE_SHA256 = _DEFAULT_TEMPLATE.spec.source_sha256
+TEMPLATE_CHANNELS = _DEFAULT_TEMPLATE.channels
+ALLOWED_FIELDS = _DEFAULT_TEMPLATE.allowed_fields
+# All catalog sessions share this rate, independently of the bridge UART.
+GSVMULTI_BAUD = _DEFAULT_TEMPLATE.baud_rate
 
 
 def _generate(port: str, template: SessionTemplate) -> bytes:
@@ -52,9 +52,9 @@ def _generate(port: str, template: SessionTemplate) -> bytes:
     return b''.join(result)
 
 
-def generate_session(port: str) -> bytes:
-    """Public generator: always the selected active template, with no override."""
-    return _generate(port, active_session_template())
+def generate_session(port: str, fmt: str | None = None) -> bytes:
+    """Port-only export of the requested session format (or the sole default)."""
+    return _generate(port, session_template(fmt))
 
 
 def generate_template_session(port: str, template_id: str, *, allow_prepared: bool = False) -> bytes:

@@ -951,3 +951,115 @@ def test_worker_drops_release_immediately_when_link_loses_it_between_exchanges(t
         link.released = False  # Pi meldet neuen, gesperrten Lauf
         assert worker.status.demo_only is True
         worker.stop()
+
+
+# --- B2 (2026-11-11): Taktzeilen und Auffuellung im WorkerStatus --------------------
+
+def tick_message(seq, valid=True, run='run'):
+    return dict(version=1, type='tick', run_id=run, seq=seq, valid=valid,
+                value_text='1.2345' if valid else None, frame_sequence=seq if valid else None,
+                time_unix_ns=1_794_397_184_000_000_000 + seq * 100_000_000,
+                origin_unix_ns=1_794_397_184_000_000_000, rate_hz=10, release='test_unaccepted')
+
+
+def _tick_worker(tmp_path, replies, db):
+    from dispread_bridge_app.worker import BridgeWorker
+
+    class TickLink(Link):
+        run_id = 'run'
+
+        def test_release_for(self, run_id):
+            return run_id == self.run_id
+
+        def receive(self):
+            reply = replies.pop(0) if replies else dict(version=1, type='idle', run_id='run',
+                                                        release_block=None, release='test_unaccepted')
+            return dict(reply, request_id=self.messages[-1]['request_id'])
+
+    link = TickLink()
+
+    class Manager:
+        profile = SimpleNamespace(pi_id='pi')
+
+        def data_link(self):
+            return link
+
+        def admit_write(self, link, claim):
+            return claim()
+
+        def disconnect(self):
+            pass
+
+    com, events = Com(), []
+    return BridgeWorker(Manager(), lambda: com, db, events.append), com, events, link
+
+
+def test_worker_status_counts_tick_lines_fills_and_disturbance(tmp_path):
+    import time as _time
+
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    from dispread_bridge_app.worker import WorkerStatus
+
+    idle = WorkerStatus('idle', False, False, None)
+    assert (idle.ticks_written, idle.ticks_invalid, idle.ticks_filled, idle.tick_disturbed) == (0, 0, 0, False)
+    replies = [tick_message(1), tick_message(2, valid=False), tick_message(5), tick_message(70)]
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        worker, com, events, link = _tick_worker(tmp_path, replies, db)
+        worker.start()
+        deadline = _time.monotonic() + 3
+        while not any(e.kind == 'tick_disturbed' for e in list(events)):  # nach Takt 70
+            assert _time.monotonic() < deadline, worker.status
+            _time.sleep(.01)
+        status = worker.status
+        worker.stop()
+    assert (status.ticks_written, status.ticks_invalid, status.ticks_filled) == (4, 1, 2)
+    assert [p.split(b';')[2] for p in com.payloads] == [b'1', b'2', b'3', b'4', b'5', b'70']
+    assert any(e.kind == 'tick_disturbed' for e in events)
+    assert [m['filled'] for m in link.messages if m['type'] == 'tick_ack'] == [0, 0, 2, 0]
+
+
+def test_unknown_tick_line_blocks_worker_before_com_open(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+
+    com, events, done = Com(), [], threading.Event()
+
+    def emit(event):
+        events.append(event)
+        if event.kind == 'stopped':
+            done.set()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        db.begin_tick('pi', 'old-run', 3, 'tick', True, b'%1.0;1;3;1.000000\r\n')
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(Connection(Link()), com, db, emit)
+        w.start()
+        assert done.wait(2)
+        w.stop()
+        assert w.failure.kind == 'blocked' and w.failure.code == 'unknown_delivery'
+    assert not com.closed and com.payloads == []
+
+
+def test_old_unresolved_delivery_does_not_block_auto_recovery(tmp_path):
+    """13.11.2026 (C-04): LAN kurz gezogen, kein Lauf -> Brücke stoppte hart mit „Ergebnis unklar“,
+    weil irgendeine alte offene Zustellung im Journal lag. Nur Zustellungen dieser Sitzung sperren."""
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        db.begin_attempt('pi', 'old-run', 3, None, b'%+3.0\r\n')        # Altlast: offen (pending)
+    connection = RecoveringConnection(Link())
+    connection.peer, connection.action = 'backoff', 'network_unavailable'
+    com, recovering, resumed = Com(), threading.Event(), threading.Event()
+    def emit(event):
+        if event.kind == 'recovering':
+            recovering.set()
+        if event.kind == 'exchange':
+            resumed.set()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(connection, com, db, emit)
+        w.start()
+        try:
+            assert recovering.wait(2)
+            connection.link = Link(message(sequence=50))
+            connection.peer, connection.action = 'authenticated', None
+            assert resumed.wait(2)
+            assert w.failure is None
+        finally:
+            w.stop()

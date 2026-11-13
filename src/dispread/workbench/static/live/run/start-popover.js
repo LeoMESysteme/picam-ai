@@ -3,7 +3,7 @@
 // Ereignis markieren mit Text. Texte, Ablauf und POST-Koerper woertlich aus
 // der alten Live-Seite; window.confirm ist durch openModal ersetzt.
 import {openModal} from '../ui/modal.js';
-import {BAUDRATES, BRIDGE_ACK, BRIDGE_NO_ACK, BRIDGE_NOTE, DEFAULTS, LOCK_NOTICE, NAMES, PATHS, SERIAL_ACK, SERIAL_NOTE, TEST_BLOCK, UART_RATE_NOTE, configText,
+import {BAUDRATES, BRIDGE_ACK, CHECKLIST, CHECKLIST_TITLE, FORMATS, FORMAT_DEFAULTS, FORMAT_WARNING, RATE_ERROR, RATE_NOTE, rateValid, BRIDGE_NO_ACK, BRIDGE_NOTE, DEFAULTS, LOCK_NOTICE, NAMES, PATHS, SERIAL_ACK, SERIAL_NOTE, SERIAL_4CH_NOTE, BRIDGE_4CH_NOTE, TEST_BLOCK, UART_RATE_NOTE, configText,
   loadChoice, outputBody, saveChoice} from './output.js';
 
 const TEXT = {
@@ -77,6 +77,16 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     `<fieldset class="outgrp" data-part="output"><legend>${esc(TEXT.outputGroup)}</legend>` +
     `<div class="seg" role="radiogroup" aria-label="${esc(TEXT.outputGroup)}">${PATHS.map(([key, label]) =>
       `<label><input type="radio" name="output-path" value="${key}" data-part="path-${key}"><span>${esc(label)}</span></label>`).join('')}</div>` +
+    '<div data-part="out-format" hidden>' +
+    '<div class="f" id="out-format-l">Format</div>' +
+    `<div class="seg" role="radiogroup" aria-labelledby="out-format-l">${FORMATS.map(([key, label]) =>
+      `<label><input type="radio" name="out-format" value="${key}" data-part="fmt-${key}"><span>${esc(label)}</span></label>`).join('')}</div>` +
+    `<p class="note err-t" role="alert" data-part="fmt-warn" hidden>${esc(FORMAT_WARNING)}</p>` +
+    '<div data-part="fmt-box" hidden><label class="f" for="out-rate">Takt (Hz)</label>' +
+    '<input type="number" id="out-rate" class="mono" min="1" max="10" step="1" data-part="out-rate-hz">' +
+    `<p class="note">${esc(RATE_NOTE)}</p>` +
+    `<div class="note" data-part="checklist"><b>${esc(CHECKLIST_TITLE)}</b><ul>${CHECKLIST.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div></div>` +
+    '</div>' +
     '<div data-part="out-serial" hidden>' +
     '<label class="f" for="out-port">Port</label><input type="text" id="out-port" class="mono" data-part="out-port" autocomplete="off" spellcheck="false">' +
     '<label class="f" for="out-baud">Baudrate</label><select id="out-baud" class="mono" data-part="out-baud">' +
@@ -102,16 +112,24 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
   let status = null;
   let resetKey = null;
   let busy = false;
+  let wasLive = false;
   const showError = (text) => {
     part('error').textContent = text || '';
     part('error').hidden = !text;
   };
   const running = () => status?.state === 'running' && status?.output;
   const choice = () => PATHS.map(([key]) => key).find((key) => part(`path-${key}`).checked) || 'off';
+  const format = () => (part('fmt-1ch').checked ? '1ch' : '4ch');
   const showOutput = () => {
     const mode = choice();
     part('out-serial').hidden = mode !== 'serial';
+    part('out-format').hidden = mode === 'off';
+    part('fmt-warn').hidden = mode === 'off' || format() !== '1ch';
+    part('fmt-box').hidden = mode === 'off' || format() !== '4ch';
+    part('out-prefix').closest('div').querySelectorAll('[for="out-prefix"], #out-prefix').forEach((el) => { el.hidden = format() === '4ch'; });
     part('out-tcpbox').hidden = mode !== 'tcp';
+    part('out-note').textContent = format() === '4ch' ? SERIAL_4CH_NOTE : SERIAL_NOTE;
+    part('out-release-note').textContent = format() === '4ch' ? BRIDGE_4CH_NOTE : BRIDGE_NOTE;
     const bridge = ['uart', 'tcp'].includes(mode) && !running();
     part('out-release').hidden = !bridge;
     part('out-rate').hidden = mode !== 'uart' || running();
@@ -123,8 +141,11 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
   part('out-baud').value = String(DEFAULTS.baudrate);
   part('out-prefix').value = DEFAULTS.prefix;
   part('out-tcp').value = String(DEFAULTS.tcpPort);
+  part('fmt-4ch').checked = true;
+  part('out-rate-hz').value = String(FORMAT_DEFAULTS.rateHz);
   setChoice(loadChoice());
-  const canStart = () => !busy && !(status?.run_block && !part('override').checked) &&
+  const rateOk = () => choice() === 'off' || format() === '1ch' || rateValid(part('out-rate-hz').value);
+  const canStart = () => !busy && rateOk() && !(status?.run_block && !part('override').checked) &&
     !(choice() === 'serial' && !part('out-ack').checked);
   const refresh = () => {
     part('start').disabled = !canStart();
@@ -140,6 +161,8 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     for (const el of part('output').querySelectorAll('input, select')) el.disabled = test || Boolean(running());
   };
   part('override').addEventListener('change', () => { showError(''); syncTest(); refresh(); });
+  for (const f of ['fmt-4ch', 'fmt-1ch']) part(f).addEventListener('change', () => { showError(''); showOutput(); refresh(); });
+  part('out-rate-hz').addEventListener('input', () => { showError(''); refresh(); });
   part('out-ack').addEventListener('change', () => { showError(''); refresh(); });
   part('out-release-ack').addEventListener('change', () => { showError(''); showOutput(); refresh(); });
   for (const [key] of PATHS) {
@@ -151,7 +174,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
   part('start').addEventListener('click', () => api.start());
   part('bridge-setup').addEventListener('click', () => {
     pop.close({focus: true});
-    onBridgeSetup?.(choice(), Boolean(running()));
+    onBridgeSetup?.(choice(), Boolean(running()), choice() === 'off' ? null : format());
   });
   for (const name of ['reference', 'plan']) part(name).addEventListener('input', () => showError(''));
 
@@ -165,6 +188,9 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       if (key !== resetKey) { resetKey = key; part('override').checked = false; part('out-ack').checked = false; part('out-release-ack').checked = false; showOutput(); }
       // Im Lauf schreibgeschuetzt und aus status.output.config vorbelegt.
       const live = running();
+      // Nach dem Lauf zurueck auf die Vorgaben: das Format des letzten Laufs wird nicht stillschweigend uebernommen.
+      if (wasLive && !live) { part('fmt-4ch').checked = true; part('out-rate-hz').value = String(FORMAT_DEFAULTS.rateHz); showOutput(); }
+      wasLive = Boolean(live);
       for (const el of part('output').querySelectorAll('input, select')) el.disabled = Boolean(live);
       part('out-ro').hidden = !live;
       syncTest();
@@ -177,6 +203,11 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
           part('out-baud').value = String(c.baudrate ?? DEFAULTS.baudrate);
           part('out-prefix').value = c.prefix ?? DEFAULTS.prefix;
         } else if (out.transport === 'tcp') part('out-tcp').value = String(c.tcp_port ?? DEFAULTS.tcpPort);
+        if (out.transport !== 'off') {
+          part(c.format === '4ch' ? 'fmt-4ch' : 'fmt-1ch').checked = true;
+          if (c.format === '4ch') part('out-rate-hz').value = String(c.rate_hz ?? FORMAT_DEFAULTS.rateHz);
+          showOutput();
+        }
         part('out-ro').textContent = out.transport === 'off' ? 'Im Lauf nicht änderbar.'
           : `${NAMES[out.transport]}: ${configText(out)} · im Lauf nicht änderbar.`;
       }
@@ -204,6 +235,11 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
         pop.open();
         return null;
       }
+      if (!rateOk()) {
+        showError(RATE_ERROR);
+        pop.open();
+        return null;
+      }
       busy = true;
       refresh();
       try {
@@ -225,6 +261,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
           norm_schedule: schedule || null, diagnostics: part('diagnostics').checked,
           output: outputBody(mode, {port: part('out-port').value, baudrate: part('out-baud').value,
             prefix: part('out-prefix').value, tcpPort: part('out-tcp').value,
+            ...(mode === 'off' ? {} : {format: format(), rateHz: part('out-rate-hz').value}),
             ack: mode === 'serial' ? part('out-ack').checked : part('out-release-ack').checked && !override})};
         part('out-ack').checked = false;
         part('out-release-ack').checked = false;

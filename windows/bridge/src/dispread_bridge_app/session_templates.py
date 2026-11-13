@@ -1,7 +1,7 @@
 """Pinned session catalog and archive provenance, without receiver acceptance.
 
-Only the selected active session permits automatic export. Prepared sessions
-require explicit developer opt-in; archive originals remain evidence only.
+Both reviewed session formats permit port-only export; archive originals
+remain evidence only.
 Only code-reviewed catalog changes can add evidence; external manifests cannot
 promote a file into a supported session template.
 """
@@ -27,25 +27,26 @@ class SessionTemplateSpec:
     source_path: str
     telegram_format: str
     status: Literal['active', 'prepared']
+    fmt: Literal['1ch', '4ch']
 
 
-# The only selection point. A prepared format must be deliberately activated
-# in reviewed code once the sender supports it; no UI/profile setting selects it.
-ACTIVE_SESSION_TEMPLATE = 'bruecke-session-com8-20261106'
+# Vierkanal seit dem gemeinsamen Stand feat/integration (2026-11-12): Die Werkbank
+# startet Läufe mit Vierkanal-Takt als Vorgabe (U1). Einzige Stelle für die Vorgabe.
+DEFAULT_SESSION_FORMAT = '4ch'
 SESSION_TEMPLATES = (
     SessionTemplateSpec(
         template_id='bruecke-session-com8-20261106',
         package_file='templates/Session-COM8.ucf',
         source_sha256='6e553a1e34194266a9a753b621910c144fab95fd16a5219395e1d1d8c8085992',
         source_path='docs/quellen/bruecke-testlauf-2026-11-06/Session-COM8.ucf',
-        telegram_format='single_value', status='active',
+        telegram_format='single_value', status='active', fmt='1ch',
     ),
     SessionTemplateSpec(
-        template_id='bruecke-session-4ch-hidden-20261111',
-        package_file='templates/versuch2b-session-hidden.ucf',
-        source_sha256='eabf06629857b455825f04d85b7c40155f9f9037f75722af4c36f2f801f2686c',
-        source_path='docs/quellen/gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf',
-        telegram_format='gsvmulti_userdefined_4ch_v1', status='prepared',
+        template_id='bruecke-session-4ch-mvv-20261111',
+        package_file='templates/vorlage-4kanal-mvv.ucf',
+        source_sha256='6bc26b61323e054bfea2dd32c375617ec46725e8eb56f455daf45454b3d8ec43',
+        source_path='docs/quellen/gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf',
+        telegram_format='gsvmulti_userdefined_4ch_v1', status='active', fmt='4ch',
     ),
 )
 
@@ -101,13 +102,18 @@ def load_session_catalog() -> dict[str, SessionTemplate]:
         catalog[spec.template_id] = SessionTemplate(spec, raw, channels, hidden, rate, inputs)
     if len(rates) != 1:
         raise SessionTemplateError('baud_rate_mismatch: session catalog')
-    if ACTIVE_SESSION_TEMPLATE not in catalog or catalog[ACTIVE_SESSION_TEMPLATE].spec.status != 'active':
-        raise SessionTemplateError('automatic_export_blocked: selected template is not active')
+    if sorted(template.spec.fmt for template in catalog.values()) != ['1ch', '4ch']:
+        raise SessionTemplateError('session_catalog_invalid: expected 1ch and 4ch')
     return catalog
 
 
-def active_session_template() -> SessionTemplate:
-    return load_session_catalog()[ACTIVE_SESSION_TEMPLATE]
+def session_template(fmt: str | None = None, *, catalog=None) -> SessionTemplate:
+    """Resolve the explicit format or the sole default; reject unknown input."""
+    fmt = DEFAULT_SESSION_FORMAT if fmt is None else fmt
+    if fmt not in ('1ch', '4ch'):
+        raise SessionTemplateError('session_format_invalid')
+    entries = load_session_catalog() if catalog is None else catalog
+    return next(template for template in entries.values() if template.spec.fmt == fmt)
 
 
 @dataclass(frozen=True)
@@ -119,11 +125,12 @@ class TemplateEvidence:
     roundtrip_verified: bool
 
     def require_automatic_export(self) -> None:
-        """Only the pinned active source permits its port-only generator."""
-        active = active_session_template()
-        if (self.template_id == active.spec.template_id and self.source_sha256 == active.spec.source_sha256
-                and self.allowed_fields == active.allowed_fields and not self.roundtrip_verified):
-            return
+        """Only pinned catalog sources permit their port-only generator."""
+        for template in load_session_catalog().values():
+            if (self.template_id == template.spec.template_id and self.source_sha256 == template.spec.source_sha256
+                    and self.allowed_fields == template.allowed_fields and not self.roundtrip_verified
+                    and template.spec.status == 'active'):
+                return
         raise SessionTemplateError(
             'automatic_export_blocked: exact GSVmulti/file versions and a '
             'controlled reopen/receiver check for port, unit, scale, rate, '

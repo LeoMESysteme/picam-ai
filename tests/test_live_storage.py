@@ -196,3 +196,16 @@ def test_cleanup_keeps_runs_at_exact_age_boundary(tmp_path):
     run = run_tree(tmp_path, ended=cutoff)
     assert cleanup_runs(tmp_path, days=10, execute=True, now=NOW)['entries'] == []
     assert run.exists()
+
+
+def test_cleanup_expired_completed_start_rejections(tmp_path):
+    run = tmp_path / 'live-20261001T120000Z' / 'run-01'
+    run.mkdir(parents=True)
+    (run / 'session.json').write_text(json.dumps({
+        'schema': 'live-start-rejection/1', 'run_id': 'abc', 'ended_at_utc': OLD.isoformat(),
+        'state': 'start_abgelehnt', 'focus_check': {'status': 'FEHLER'},
+    }))
+    age_tree(run)
+    result = cleanup_runs(tmp_path, days=10, execute=True, now=NOW)
+    assert len(result['entries']) == 1
+    assert not run.exists()

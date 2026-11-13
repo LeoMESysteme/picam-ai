@@ -78,3 +78,12 @@ test('Bereitschaft: Testfreigabe ersetzt den Sperrtext', () => {
   const rows = readinessRows({pi_id: 'p', connected: true, transport: 'network', release: 'test_unaccepted', release_block: null});
   assert.deepEqual(rows[2], {label: 'Ausgabe', value: 'Testfreigabe – nicht abgenommen', tone: 'warn'});
 });
+
+test('Bereitschaft: Zeile Format nur mit Ausgabe', () => {
+  const st = {pi_id: 'p', connected: true, transport: 'uart', release_block: ''};
+  assert.equal(readinessRows(st).some((r) => r.label === 'Format'), false);
+  assert.equal(readinessRows(st, {transport: 'off'}).some((r) => r.label === 'Format'), false);
+  const four = readinessRows(st, {transport: 'uart', config: {format: '4ch', rate_hz: 5}}).find((r) => r.label === 'Format');
+  assert.equal(four.value, 'Vierkanal-Takt 5 Hz');
+  assert.equal(readinessRows(st, {transport: 'uart', config: {}}).find((r) => r.label === 'Format').value, 'Einkanal (nur gültige Werte)');
+});

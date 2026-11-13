@@ -18,6 +18,8 @@
     {
       "title": "Prüfungen",
       "entries": [
+        {"term": "Fokus", "code": "fokus", "anchor": "fokus-sweep",
+          "text": "Schärfe auf der Anzeige statt auf dem Bildrand. WARNUNG, wenn kein LCD-Hinweis gefunden wurde oder die Schärfe nach dem Kameraneustart auch nach Neusetzen fehlt."},
         {"term": "Kontrast", "code": "kontrast", "anchor": "auto-setup",
           "text": "Wie deutlich die dunklen Punkte vom Glas abstechen. Zu wenig: Licht oder Blickwinkel ändern."},
         {"term": "Kanten", "code": "kanten", "anchor": "auto-setup",
@@ -66,7 +68,7 @@
         {"term": "Wert-Etikett", "anchor": "value-record",
           "text": "Am Viereck: Wert, Status und Spur des gerade gezeigten Bilds."},
         {"term": "Fokus-ROI", "anchor": "fokus-sweep",
-          "text": "Bereich, in dem die Einrichtung die Schärfe misst. Nur in der Einrichtung."}
+          "text": "Bereich, in dem die Einrichtung die Schärfe misst: die grüne LCD-Hinweisbox mit kleinem Rand, ohne Hinweis das mittlere Bilddrittel. Nur in der Einrichtung."}
       ]
     },
     {

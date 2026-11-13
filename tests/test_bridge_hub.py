@@ -307,7 +307,8 @@ def test_delayed_demo_request_cannot_cross_lease_boundary(tmp_path, monkeypatch,
 
 def test_demo_end_does_not_overtake_the_last_value(tmp_path):
     """A demo of N values must be offered N times even if the client polls late:
-    ``ended`` may not discard the final, still unoffered value (BQ5, 599 of 600)."""
+    nothing is overwritten (13.11.2026: latest-only lost 12/600 under poll jitter),
+    ``ended`` does not discard queued values, and the client sees ``ended``."""
     import time
 
     hub = BridgeHub('pi', tmp_path)
@@ -316,16 +317,22 @@ def test_demo_end_does_not_overtake_the_last_value(tmp_path):
                                       client_id='pc', run_id=None, transport='network', count=3, rate_hz=50))
     run_id = hub.status()['run_id']
     time.sleep(.3)                      # the client is late; the demo has produced all three values
-    offered = []
-    for number in range(6):
+    offered, kinds = [], []
+    deadline = time.monotonic() + 3
+    for number in range(200):
         message = dict(request(hub, lease), request_id=f'p{number}', run_id=run_id)
         reply = hub.exchange(lease.lease_id, message)
-        if reply['type'] != 'record':
+        kinds.append(reply['type'])
+        if reply['type'] == 'ended' or time.monotonic() > deadline:
             break
-        offered.append(reply['record']['frame_sequence'])
-        hub.exchange(lease.lease_id, dict(message, type='ack', outcome='written',
-                                          frame_sequence=offered[-1], barrier_id=reply['barrier_id']))
-    assert offered == [2]               # latest-value semantics: the final value is still delivered
+        if reply['type'] == 'record':
+            offered.append(reply['record']['frame_sequence'])
+            hub.exchange(lease.lease_id, dict(message, type='ack', outcome='written',
+                                              frame_sequence=offered[-1], barrier_id=reply['barrier_id']))
+        else:
+            time.sleep(.02)
+    assert offered == [0, 1, 2]         # every demo value, in order, none overwritten
+    assert kinds[-1] == 'ended'         # the end is delivered before the run is unbound
     deadline = time.monotonic() + 3
     while hub.status()['run_id'] is not None and time.monotonic() < deadline:
         time.sleep(.02)
@@ -477,5 +484,136 @@ def test_open_barrier_precedes_values_across_lease_change_under_release(tmp_path
                                           barrier_id=again['barrier_id'], outcome='omitted'))
     value = hub.exchange(second.lease_id, {**request(hub, second), 'request_id': 'v'})
     assert value['record']['frame_sequence'] == 2 and value['barrier_id'] is None
+    hub.close()
+    state.stop()
+
+
+# --- B2 (2026-11-11): Taktnachricht nur an Clients mit Faehigkeit ``tick`` ----------
+
+def _tick_hub(tmp_path, *, capabilities, transport='network'):
+    from test_bridge_output_state import tick_state
+
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('run')
+    state, clocks = tick_state(tmp_path / 'run')
+    state.run_id = 'run'
+    hub.bind_run('run', state, transport=transport)
+    lease = hub.attach('pc', transport, capabilities=capabilities)
+    return hub, state, clocks, lease
+
+
+def test_tick_capable_client_gets_strict_ticks_in_order(tmp_path):
+    from test_bridge_output_state import advance
+
+    hub, state, clocks, lease = _tick_hub(tmp_path, capabilities={'tick': 1})
+    hello = hub._hello(lease, 'h')
+    assert hello['release'] == 'test_unaccepted' and hello['release_block'] is None
+    advance(state, clocks, 3)
+    seqs = []
+    for index in range(3):
+        tick = hub.exchange(lease.lease_id, {**request(hub, lease), 'request_id': f'p{index}'})
+        assert tick == decode_v2(encode_v2(tick)) and tick['type'] == 'tick' and 'demo' not in tick
+        seqs.append(tick['seq'])
+        after = hub.exchange(lease.lease_id, {**request(hub, lease, 'tick_ack', seq=tick['seq'],
+                                                        outcome='written', filled=0), 'request_id': f'p{index}'})
+        assert after['type'] == 'idle' and after['release'] == 'test_unaccepted'
+    assert seqs == [1, 2, 3]
+    assert state.status()['tick']['acknowledged'] == 3
+    hub.close()
+    state.stop()
+
+
+@pytest.mark.parametrize('capabilities', [None, {}, {'tick': True}, {'tick': 2}])
+def test_client_without_tick_capability_never_sees_a_tick(tmp_path, capabilities):
+    from test_bridge_output_state import advance
+
+    from dispread.bridge.hub import TICK_CLIENT_BLOCK
+
+    hub, state, clocks, lease = _tick_hub(tmp_path, capabilities=capabilities)
+    hello = hub._hello(lease, 'h')
+    assert hello['release_block'] == TICK_CLIENT_BLOCK and 'release' not in hello
+    advance(state, clocks, 3)
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and idle['release_block'] == TICK_CLIENT_BLOCK and 'release' not in idle
+    assert state.status()['tick']['offered'] == 0
+    with pytest.raises(ValueError):
+        hub.exchange(lease.lease_id, request(hub, lease, 'tick_ack', seq=1, outcome='written', filled=0))
+    hub.close()
+    state.stop()
+
+
+def test_tick_ack_after_run_end_is_not_accepted_but_keeps_connection(tmp_path):
+    from test_bridge_output_state import advance
+
+    hub, state, clocks, lease = _tick_hub(tmp_path, capabilities={'tick': 1})
+    hub._hello(lease, 'h')
+    advance(state, clocks)
+    tick = hub.exchange(lease.lease_id, request(hub, lease))
+    state.drain_timeout_s = 0
+    hub.unbind_run('run')
+    state.stop()
+    hub.release_real_run('run')
+    reply = hub.exchange(lease.lease_id, {**request(hub, lease, 'tick_ack', seq=tick['seq'], outcome='written',
+                                                    filled=0), 'run_id': 'run'})
+    assert reply['type'] == 'hello' and reply['run_id'] is None
+    assert state.status()['tick']['unconfirmed'] == 1
+    hub.close()
+
+
+# --- Nachtrag B2: output_format des gebundenen Laufs in hello/idle -------------------
+
+def _record_run_hub(tmp_path, capabilities):
+    hub = BridgeHub('pi', tmp_path)
+    hub.reserve_real_run('run')
+    state = OutputState(tmp_path / 'run', release='test_unaccepted')
+    state.run_id = 'run'
+    state.start()
+    hub.bind_run('run', state, transport='network')
+    return hub, state, hub.attach('pc', 'network', capabilities=capabilities)
+
+
+def test_hello_and_idle_announce_four_channel_run_format(tmp_path):
+    hub, state, clocks, lease = _tick_hub(tmp_path, capabilities={'tick': 1})
+    assert hub._hello(lease, 'h')['output_format'] == '4ch'
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and idle['output_format'] == '4ch'
+    hub.close()
+    state.drain_timeout_s = 0
+    state.stop()
+
+
+def test_hello_and_idle_announce_single_channel_run_format(tmp_path):
+    hub, state, lease = _record_run_hub(tmp_path, {'tick': 1})
+    assert hub._hello(lease, 'h')['output_format'] == '1ch'
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and idle['output_format'] == '1ch'
+    state.publish(_real(1))
+    offer = hub.exchange(lease.lease_id, {**request(hub, lease), 'request_id': 'r2'})
+    assert offer['type'] == 'record' and 'output_format' not in offer
+    after = hub.exchange(lease.lease_id, {**request(hub, lease, 'ack', frame_sequence=1, barrier_id=None,
+                                                    outcome='written'), 'request_id': 'r2'})
+    assert after['type'] == 'idle' and after['output_format'] == '1ch'
+    hub.close()
+    state.stop()
+
+
+def test_output_format_absent_without_bound_run(tmp_path):
+    hub = BridgeHub('pi', tmp_path)
+    lease = hub.attach('pc', 'network', capabilities={'tick': 1})
+    assert 'output_format' not in hub._hello(lease, 'h')
+    hub.reserve_real_run('run')       # reserviert, aber keine Ausgabe gebunden (z. B. UART direkt)
+    hello = hub.exchange(lease.lease_id, {**request(hub, lease), 'run_id': None})
+    assert hello['type'] == 'hello' and 'output_format' not in hello
+    idle = hub.exchange(lease.lease_id, request(hub, lease))
+    assert idle['type'] == 'idle' and 'output_format' not in idle
+    hub.close()
+
+
+@pytest.mark.parametrize('capabilities', [None, {}])
+def test_old_client_never_receives_output_format(tmp_path, capabilities):
+    # Alte Codecs lehnen unbekannte Felder ab: nur Clients mit tick-Fähigkeit kennen es.
+    hub, state, lease = _record_run_hub(tmp_path, capabilities)
+    assert 'output_format' not in hub._hello(lease, 'h')
+    assert 'output_format' not in hub.exchange(lease.lease_id, request(hub, lease))
     hub.close()
     state.stop()

@@ -435,3 +435,217 @@ def test_cli_separates_pi_uart_from_gsv_output_rate(tmp_path, monkeypatch):
     monkeypatch.setattr(gsv_bridge.BridgeSession, 'exchange', stop)
     assert gsv_bridge.main(['--uart-port', 'COM9', '--com-port', 'COM4', '--log', str(tmp_path / 'cli.log')]) == 0
     assert opened == [('COM4', 115200), ('COM9', 460800)]
+# --- B2 (2026-11-11): Taktnachricht, Auffuellen verlorener Takte auf Windows ---------
+
+ORIGIN = 1_794_397_184_000_000_000
+
+
+def tick_reply(seq, *, valid=True, text="0.63956", frame=None, time_ns=None, **changes):
+    return dict(version=1, type="tick", run_id="run-1", seq=seq, valid=valid,
+                value_text=text if valid else None,
+                frame_sequence=(frame if frame is not None else seq) if valid else None,
+                time_unix_ns=time_ns if time_ns is not None else ORIGIN + seq * 100_000_000 - 40_000_000,
+                origin_unix_ns=ORIGIN, rate_hz=10, release="test_unaccepted") | changes
+
+
+class SeqLink(Link):
+    def __init__(self, replies):
+        super().__init__(None)
+        self.replies = list(replies)
+
+    def receive(self):
+        return dict(self.replies.pop(0), request_id=self.messages[-1]["request_id"])
+
+
+def tick_session(tmp_path, **kwargs):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+
+    journal = DeliveryJournal(tmp_path / "audit.sqlite")
+    kwargs.setdefault("release_gate", lambda link, run: run == "run-1")
+    return BridgeSession(journal=journal, pi_id="pi-1", **kwargs), journal
+
+
+def run_ticks(session, replies, com=None):
+    com = com or Com()
+    link = SeqLink(replies)
+    outcomes = [session.exchange(link, com) for _ in replies]
+    return outcomes, com, [m for m in link.messages if m["type"] == "tick_ack"]
+
+
+def test_tick_is_written_as_four_channel_line_and_acknowledged(tmp_path):
+    session, journal = tick_session(tmp_path)
+    outcomes, com, acks = run_ticks(session, [tick_reply(1), tick_reply(2, valid=False)])
+    assert outcomes == ["written", "written"]
+    assert com.payloads == [b"%0.63956;1;1;1794397184.060000\r\n",
+                            b"%0.63956;0;2;1794397184.160000\r\n"]   # ungueltig: gueltig=0, Kanal 1 haelt
+    assert [(a["seq"], a["outcome"], a["filled"]) for a in acks] == [(1, "written", 0), (2, "written", 0)]
+    assert set(acks[0]) == {"version", "type", "request_id", "run_id", "seq", "outcome", "filled"}
+    assert session.tick_stats() == dict(run_id="run-1", ticks_written=2, ticks_invalid=1, ticks_filled=0,
+                                         tick_disturbed=False)
+
+
+def test_sequence_jump_is_filled_with_nominal_time_invalid_lines(tmp_path):
+    from dispread.live.tick import nominal_unix_ns
+
+    session, journal = tick_session(tmp_path)
+    outcomes, com, acks = run_ticks(session, [tick_reply(1), tick_reply(5)])
+    lines = [p.decode() for p in com.payloads]
+    assert [line.split(";")[2] for line in lines] == ["1", "2", "3", "4", "5"]
+    for seq in (2, 3, 4):
+        micros = (nominal_unix_ns(ORIGIN, 10, seq) + 500) // 1000
+        assert lines[seq - 1] == f"%0.63956;0;{seq};{micros // 1_000_000}.{micros % 1_000_000:06d}\r\n"   # haelt Takt 1
+    assert acks[-1]["filled"] == 3
+    assert [(row.seq, row.kind, row.outcome) for row in journal.tick_attempts()] == [
+        (1, "tick", "written"), (2, "fill", "written"), (3, "fill", "written"),
+        (4, "fill", "written"), (5, "tick", "written")]
+    assert session.tick_stats()["ticks_filled"] == 3
+
+
+def test_first_tick_after_late_start_is_filled_from_one(tmp_path):
+    session, _ = tick_session(tmp_path)
+    _, com, acks = run_ticks(session, [tick_reply(4)])
+    assert [p.split(b";")[2] for p in com.payloads] == [b"1", b"2", b"3", b"4"]
+    assert acks[0]["filled"] == 3
+
+
+def test_gap_above_window_is_not_filled_and_marks_disturbed(tmp_path):
+    session, journal = tick_session(tmp_path)
+    _, com, acks = run_ticks(session, [tick_reply(1), tick_reply(53)])
+    assert [p.split(b";")[2] for p in com.payloads] == [b"1", b"53"]      # 51 fehlende > 50
+    assert acks[-1]["filled"] == 0
+    assert journal.tick_gaps("pi-1", "run-1") == ((53, 51),)
+    assert session.tick_stats()["tick_disturbed"] is True
+    _, com2, _ = run_ticks(session, [tick_reply(54)])
+    assert session.tick_stats()["tick_disturbed"] is True                  # bleibt im Lauf
+
+
+def test_gap_of_exactly_window_is_filled(tmp_path):
+    session, _ = tick_session(tmp_path)
+    _, com, acks = run_ticks(session, [tick_reply(1), tick_reply(52)])
+    assert len(com.payloads) == 52 and acks[-1]["filled"] == 50
+    assert session.tick_stats()["tick_disturbed"] is False
+
+
+def test_journal_precedes_every_com_line(tmp_path):
+    session, journal = tick_session(tmp_path)
+
+    class CheckingCom(Com):
+        def write(self, payload):
+            pending = [row for row in journal.tick_attempts() if row.outcome == "pending"]
+            assert len(pending) == 1 and payload.split(b";")[2] == str(pending[0].seq).encode()
+            return super().write(payload)
+    run_ticks(session, [tick_reply(1), tick_reply(4)], CheckingCom())
+    assert journal.unresolved_ticks() == ()
+
+
+def test_tick_never_writes_without_test_release(tmp_path):
+    session, _ = tick_session(tmp_path)
+    for reply in (tick_reply(1, run_id="other"), tick_reply(1, release=None)):
+        com = Com()
+        with pytest.raises(BridgeError, match="gesperrt"):
+            session.exchange(SeqLink([reply]), com)
+        assert com.payloads == []
+
+
+def test_tick_requires_durable_journal():
+    com = Com()
+    session = BridgeSession(release_gate=lambda link, run: True)
+    with pytest.raises(BridgeError):
+        session.exchange(SeqLink([tick_reply(1)]), com)
+    assert com.payloads == []
+
+
+@pytest.mark.parametrize("changes", [
+    {"value_text": "1E+300"}, {"value_text": "NaN"}, {"value_text": "99999999.0"},
+    {"valid": False, "value_text": "1.0"}, {"seq": 0}, {"rate_hz": 20}, {"time_unix_ns": -5},
+])
+def test_malformed_tick_never_reaches_journal_or_com(tmp_path, changes):
+    session, journal = tick_session(tmp_path)
+    com = Com()
+    with pytest.raises(BridgeError):
+        session.exchange(SeqLink([tick_reply(1) | changes]), com)
+    assert com.payloads == [] and journal.tick_attempts() == ()
+
+
+def test_out_of_order_or_repeated_tick_is_never_written_twice(tmp_path):
+    session, journal = tick_session(tmp_path)
+    run_ticks(session, [tick_reply(1), tick_reply(3)])
+    outcomes, com, acks = run_ticks(session, [tick_reply(3)])   # Wiederholung: nur erneute Quittung
+    assert outcomes == ["written"] and com.payloads == [] and acks[0]["outcome"] == "written"
+    with pytest.raises(BridgeError, match="order"):
+        run_ticks(session, [tick_reply(2)])                    # bereits aufgefuellt
+
+
+def test_expired_tick_is_acknowledged_and_later_filled(tmp_path):
+    now = [0]
+    session, journal = tick_session(tmp_path, clock=lambda: now[0])
+
+    class SlowLink(SeqLink):
+        def receive(self):
+            now[0] += 2_000_000_000                              # Budget von 1 s verbraucht
+            return super().receive()
+    com = Com()
+    assert session.exchange(SlowLink([tick_reply(1)]), com) == "expired"
+    assert com.payloads == []
+    _, com2, acks = run_ticks(session, [tick_reply(2)])
+    assert [p.split(b";")[:3] for p in com2.payloads] == [[b"%99999999.0", b"0", b"1"], [b"%0.63956", b"1", b"2"]]
+    assert acks[0]["filled"] == 1
+
+
+def test_com_failure_marks_line_unknown_and_blocks(tmp_path):
+    from dispread.gsv_bridge import DeliveryUncertainError
+
+    session, journal = tick_session(tmp_path)
+    with pytest.raises(BridgeError, match="COM"):
+        session.exchange(SeqLink([tick_reply(1)]), Com(short=True))
+    assert [row.outcome for row in journal.tick_attempts()] == ["unknown"]
+    com = Com()
+    with pytest.raises(DeliveryUncertainError):
+        session.exchange(SeqLink([tick_reply(2)]), com)
+    assert com.payloads == []
+
+
+def test_tick_stats_reset_on_new_run(tmp_path):
+    session, _ = tick_session(tmp_path, release_gate=lambda link, run: True)
+    run_ticks(session, [tick_reply(1), tick_reply(60)])
+    assert session.tick_stats()["tick_disturbed"] is True
+    run_ticks(session, [tick_reply(1, run_id="run-2")])
+    assert session.tick_stats() == dict(run_id="run-2", ticks_written=1, ticks_invalid=0, ticks_filled=0,
+                                        tick_disturbed=False)
+
+
+def test_demo_follows_four_channel_session():
+    """13.11.2026: Vierkanal-Session in GSVmulti, Empfangstest einkanalig -> 0 Byte aufgenommen."""
+    link, com, log = Link(reply()), Com(), io.StringIO()
+    session = BridgeSession(log=log, demo_format=lambda: "4ch", wall_clock_ns=lambda: 1_763_000_000_123_456_789)
+    session.exchange(link, com)
+    assert com.payloads == [b"%+0.12345;1;8;1763000000.123457\r\n"]   # Takt = frame_sequence 7 + 1
+    assert link.messages[-1]["outcome"] == "written"
+    assert json.loads(log.getvalue().splitlines()[-1])["format_id"] == "gsvmulti_userdefined_4ch_v1"
+
+
+def test_invalid_demo_in_four_channel_session_uses_error_value():
+    link, com = Link(reply(ValueStatus.UNREADABLE, barrier_id=12)), Com()
+    BridgeSession(demo_format=lambda: "4ch", wall_clock_ns=lambda: 2_000_000).exchange(link, com)
+    assert com.payloads == [b"%99999999.0;0;8;0.002000\r\n"]
+
+
+def test_single_channel_session_keeps_single_channel_demo():
+    link, com = Link(reply()), Com()
+    BridgeSession(demo_format=lambda: "1ch").exchange(link, com)
+    assert com.payloads == [b"%+0.12345\r\n"]
+
+
+def test_released_values_ignore_demo_format():
+    link, com = Link(reply(demo=False, release="test_release")), Com()
+    with pytest.raises(BridgeError, match="DUT"):
+        BridgeSession(demo_format=lambda: "4ch").exchange(link, com)
+    assert not com.payloads
+
+
+def test_held_value_does_not_leak_into_the_next_run(tmp_path):
+    session, journal = tick_session(tmp_path, release_gate=lambda link, run: run in ("run-1", "run-2"))
+    run_ticks(session, [tick_reply(1)])
+    other = dict(tick_reply(2, valid=False), run_id="run-2")
+    _, com, _ = run_ticks(session, [other])
+    assert com.payloads[-1].startswith(b"%99999999.0;0;")   # neuer Lauf: noch nichts zu halten

@@ -35,6 +35,11 @@ class WorkerStatus:
     demo_only: bool = True
     gsv_receipt_confirmed: bool = False
     exchanges_total: int = 0      # additiv: alle Poll-Runden, auch die nicht gemeldeten Leerlaufrunden
+    # B2 (2026-11-11), additiv, je laufendem bzw. letztem Lauf; nur lokale COM-Annahme:
+    ticks_written: int = 0        # vom Pi empfangene Takte, als Zeile an COM geschrieben
+    ticks_invalid: int = 0        # davon vom Pi als ungueltig markiert (gueltig = 0)
+    ticks_filled: int = 0         # von Windows aufgefuellte Fehlwertzeilen fuer verlorene Takte
+    tick_disturbed: bool = False  # Luecke > 50 Takte nicht aufgefuellt: Zeilenzahl weicht ab
 
 
 class BridgeWorker:
@@ -63,6 +68,9 @@ class BridgeWorker:
         self._exchanges = 0
         self._released = False
         self._link = None
+        self._session = None
+        self._unresolved_at_start = frozenset()
+        self.demo_format = None        # Callable -> '1ch'|'4ch': Format der GSVmulti-Session fuer den Empfangstest
         self._wait = self._stop.wait   # Naht fuer Tests mit simulierter Uhr
         self._clock = time.monotonic
 
@@ -80,12 +88,19 @@ class BridgeWorker:
         if released:
             released = link is not None and self._release_gate(link, getattr(link, 'run_id', None))
         with self._lock:
+            session = self._session
+        ticks = session.tick_stats() if session is not None else {}
+        with self._lock:
             return WorkerStatus(self._state, self.is_active(),
                                 self._state == 'running' and self._failure is None
                                 and not self._stop.is_set(),
                                 None if self._failure is None else self._failure.code,
                                 demo_only=not (released and self._released),
-                                exchanges_total=self._exchanges)
+                                exchanges_total=self._exchanges,
+                                ticks_written=ticks.get('ticks_written', 0),
+                                ticks_invalid=ticks.get('ticks_invalid', 0),
+                                ticks_filled=ticks.get('ticks_filled', 0),
+                                tick_disturbed=ticks.get('tick_disturbed', False))
 
     @property
     def last_event(self):
@@ -162,14 +177,23 @@ class BridgeWorker:
             pi_id = self.connection.profile.pi_id
             if self.journal.has_unresolved_invalidation(pi_id):
                 raise DeliveryBlockedError('unknown invalidation')
+            # B2: eine unbekannte Taktzeile macht die Zeilenzahl ungewiss.
+            if self.journal.has_unresolved_tick(pi_id):
+                raise DeliveryUncertainError('unknown tick delivery')
             # A COM failure can itself lose its failed ACK. That outer link
             # exception must never hide uncertain bytes and enable auto-resume.
-            if recovering and any(row.pi_id == pi_id for row in self.journal.unresolved()):
+            # Nur Zustellungen dieser Worker-Sitzung zaehlen: offene Altlasten
+            # lagen schon beim Start vor und wurden dort zugelassen; sonst sperrte
+            # jede LAN-Unterbrechung dauerhaft (13.11.2026, C-04 ohne Lauf).
+            if recovering and self._unresolved(pi_id) - self._unresolved_at_start:
                 raise DeliveryUncertainError('unknown delivery')
         except (DeliveryBlockedError, DeliveryUncertainError):
             raise
         except Exception as exc:
             raise BridgeAuditError('audit_failed reading journal') from exc
+
+    def _unresolved(self, pi_id):
+        return frozenset(row.attempt_id for row in self.journal.unresolved() if row.pi_id == pi_id)
 
     def _may_recover(self, error):
         # Local import avoids connection -> readiness -> worker import cycle.
@@ -184,6 +208,10 @@ class BridgeWorker:
         return (state.peer in {'connecting', 'backoff', 'authenticated'}
                 or (state.peer == 'disconnected' and state.next_action == 'reconnect'))
 
+    def _demo_format(self):
+        source = self.demo_format
+        return source() if source is not None else None
+
     def _run(self):
         com = link = None
         recovering = False
@@ -192,8 +220,16 @@ class BridgeWorker:
         last_active = None
         try:
             pi_id = self.connection.profile.pi_id
+            try:
+                self._unresolved_at_start = self._unresolved(pi_id)
+            except Exception as exc:
+                raise BridgeAuditError('audit_failed reading journal') from exc
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
-                                    admit_write=self._admit_write, release_gate=self._release_gate)
+                                    admit_write=self._admit_write, release_gate=self._release_gate,
+                                    demo_format=self._demo_format)
+            with self._lock:
+                self._session = session
+            disturbed = None
             while not self._stop.is_set():
                 try:
                     current = self.connection.data_link()
@@ -222,6 +258,11 @@ class BridgeWorker:
                     # andere (written, invalid, ...) bleibt ein Ereignis je Runde.
                     if outcome not in _QUIET or outcome != last_outcome or changed:
                         self._event('exchange', outcome=outcome)
+                    ticks = session.tick_stats()
+                    if ticks['tick_disturbed'] and disturbed != ticks['run_id']:
+                        # Einmal je Lauf: Luecke ueber 50 Takte, nicht aufgefuellt.
+                        disturbed = ticks['run_id']
+                        self._event('tick_disturbed', code='tick_gap_unfilled')
                     last_outcome = outcome
                     if outcome not in _QUIET:
                         idle_delay, last_active = 0.0, self._clock()

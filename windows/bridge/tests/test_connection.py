@@ -62,7 +62,9 @@ class HubTransport:
         self.kinds.append(message['type'])
         if message['type'] == 'hello':
             try:
-                self.lease = self.hub.attach(message['client_id'], self.mode)
+                self.hello = message
+                self.lease = self.hub.attach(message['client_id'], self.mode,
+                                             capabilities=message['capabilities'])
             except ValueError:
                 # Match the real WSS route's typed, bound lease-conflict reply.
                 self.pending = {key: message[key] for key in ('version', 'pi_id', 'client_id', 'request_id')}
@@ -646,3 +648,135 @@ def test_invalid_response_never_becomes_activity(setup):
     with pytest.raises(ConnectionError):
         manager.data_link().heartbeat()
     assert sum(e.kind == 'activity' for e in events) == before
+# B2 (2026-11-11): Taktnachricht ueber die validierte v1-Naht.
+def _bind_ticks(hub, run_id, *, release='test_unaccepted'):
+    from dispread.bridge.output_state import OutputState
+    hub.reserve_real_run(run_id)
+    clock = [0]
+    state = OutputState(hub.audit_root / run_id, release=release, clock=lambda: clock[0], tick_rate_hz=10,
+                        tick_thread=False)
+    state.run_id = run_id
+    state.start()
+    hub.bind_run(run_id, state, transport='network')
+
+    def advance(ticks=1):
+        for _ in range(ticks):
+            clock[0] += 100_000_000
+            state.step_ticks()
+    return state, advance
+
+
+def test_client_hello_announces_tick_capability(setup):
+    manager, factory, hub, events = setup
+    connected(manager)
+    assert factory.transports[-1].hello['capabilities'] == {'tick': 1}
+
+
+def test_tick_and_tick_ack_cross_the_validated_seam(setup):
+    manager, factory, hub, events = setup
+    state, advance = _bind_ticks(hub, 'tick-run')
+    try:
+        link = connected(manager)
+        assert link.test_release_for('tick-run')
+        advance(2)
+        link.send(dict(version=1, type='poll', request_id='p1'))
+        reply = link.receive()
+        assert (reply['type'], reply['seq'], reply['valid'], reply['version']) == ('tick', 1, False, 1)
+        assert set(reply) == {'version', 'type', 'request_id', 'run_id', 'seq', 'valid', 'value_text',
+                              'frame_sequence', 'time_unix_ns', 'origin_unix_ns', 'rate_hz', 'release'}
+        with pytest.raises(ConnectionError, match='stale_ack'):
+            link.send(dict(version=1, type='tick_ack', request_id='p1', run_id='tick-run', seq=2,
+                           outcome='written', filled=0))
+        link = connected(manager)
+        advance()
+        link.send(dict(version=1, type='poll', request_id='p2'))
+        second = link.receive()
+        assert second['seq'] == 2                       # Takt 1 bleibt unbestaetigt, nie erneut
+        link.send(dict(version=1, type='tick_ack', request_id='p2', run_id='tick-run', seq=2,
+                       outcome='written', filled=1))
+        tick = state.status()['tick']
+        assert (tick['acknowledged'], tick['unconfirmed']) == (1, 1)
+    finally:
+        hub.release_real_run('tick-run')
+        state.drain_timeout_s = 0
+        state.stop()
+
+
+def test_tick_claiming_release_without_prior_pi_marker_revokes_link(setup):
+    manager, factory, hub, events = setup
+    factory.mutate = lambda reply: ({k: v for k, v in reply.items() if k != 'release'}
+                                    if reply['type'] in ('hello', 'idle') else reply)
+    state, advance = _bind_ticks(hub, 'sneaky-tick')
+    try:
+        link = connected(manager)
+        advance()
+        with pytest.raises(ConnectionError, match='peer_invalid'):
+            link.send(dict(version=1, type='poll', request_id='p1'))
+        assert not link.test_release_for('sneaky-tick')
+    finally:
+        hub.release_real_run('sneaky-tick')
+        state.drain_timeout_s = 0
+        state.stop()
+
+
+def test_controller_run_format_from_hello_and_messages_and_run_changes(setup, tmp_path):
+    from test_app_controller import make
+
+    manager, factory, hub, events = setup
+    controller = make(tmp_path)
+    controller.select_mode('network')
+    controller._manager = manager
+    manager._emit = controller._emit
+    state, advance = _bind_ticks(hub, 'format-ticks')
+    try:
+        link = connected(manager)
+        # output_format aus Hello/Idle: Format schon vor dem ersten Wert bekannt.
+        assert controller.context().run_format == '4ch'
+        advance()
+        link.send(dict(version=1, type='poll', request_id='format-p1'))
+        assert link.receive()['type'] == 'tick'
+        assert controller.context().run_format == '4ch'
+        link.send(dict(version=1, type='tick_ack', request_id='format-p1', run_id='format-ticks', seq=1,
+                       outcome='written', filled=0))
+        # Idle/heartbeat for the same run keep the observed format.
+        link.heartbeat()
+        assert controller.context().run_format == '4ch'
+    finally:
+        hub.release_real_run('format-ticks')
+        state.drain_timeout_s = 0
+        state.stop()
+    state = _bind(hub, 'format-records', release='test_unaccepted')
+    try:
+        link.heartbeat()  # new run, no value yet: Format kommt aus dem Hello des neuen Laufs
+        assert controller.context().run_id == 'format-records'
+        assert controller.context().run_format == '1ch'
+        state.publish(_real(1))
+        link.send(dict(version=1, type='poll', request_id='format-p2'))
+        assert link.receive()['type'] == 'record'
+        assert controller.context().run_format == '1ch'
+        link.send(dict(version=1, type='ack', request_id='format-p2', run_id='format-records', frame_sequence=1,
+                       barrier_id=None, outcome='written'))
+    finally:
+        hub.release_real_run('format-records')
+        state.stop()
+    link.heartbeat()
+    assert controller.context().run_id is None
+    assert controller.context().run_format is None
+    manager.disconnect()
+    assert controller.context().run_format is None
+    controller.request_exit(confirmed=True)
+
+
+def test_link_exposes_pi_output_format_before_first_value(setup):
+    manager, factory, hub, events = setup
+    link = connected(manager)
+    assert link.peer_output_format is None                  # kein Lauf gebunden
+    state, advance = _bind_ticks(hub, 'format-run')
+    try:
+        link.send(dict(version=1, type='poll', request_id='p1'))   # Laufwechsel -> hello
+        link.receive()
+        assert link.peer_output_format == '4ch'
+    finally:
+        hub.release_real_run('format-run')
+        state.drain_timeout_s = 0
+        state.stop()

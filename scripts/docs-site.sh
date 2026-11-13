@@ -6,7 +6,8 @@
 #
 # Zensical erlaubt kein docs_dir = "." und folgt keinen Verzeichnis-Symlinks.
 # Deshalb baut dieses Skript docs-site/ vor jedem Lauf aus Datei-Symlinks auf:
-# docs/ als Baum, dazu die Doku-Dateien im Wurzelverzeichnis. Die relativen
+# docs/ als Baum, dazu die Doku-Dateien im Wurzelverzeichnis und ausgewählte
+# Windows-Brückenseiten. Die relativen
 # Links der Markdown-Dateien bleiben so exakt gültig, und neue Dateien unter
 # docs/ erscheinen ohne weiteres Zutun. Die Symlinks sind absolut und deshalb
 # nicht versioniert (.gitignore); versioniert ist nur docs-site/api/.
@@ -37,6 +38,11 @@ rm -rf "$SITE_SRC/docs"
 cp -rs "$ROOT/docs" "$SITE_SRC/docs"
 for f in "${ROOT_DOCS[@]}"; do
     ln -sfn "$ROOT/$f" "$SITE_SRC/$f"
+done
+# Verlinkte Brückenbelege gezielt aufnehmen, ohne den Quellbaum zu publizieren.
+mkdir -p "$SITE_SRC/windows/bridge"
+for f in SMOKETEST-2026-11-13.md GSVMULTI-VERSUCHE.md; do
+    ln -sfn "$ROOT/windows/bridge/$f" "$SITE_SRC/windows/bridge/$f"
 done
 # README.md ist die Startseite.
 ln -sfn "$ROOT/README.md" "$SITE_SRC/index.md"

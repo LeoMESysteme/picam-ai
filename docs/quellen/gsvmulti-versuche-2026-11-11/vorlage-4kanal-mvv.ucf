@@ -8,7 +8,7 @@ Name = "Chan. 8_1"
 SerNr = 0
 Color = 16777215
 IsHidden = FALSE
-Unit = ""
+Unit = "mV/V"
 
 [ch2]
 device = "UserDef"

@@ -1,62 +1,62 @@
-# Status und Übergabe — 2026-11-11
+# Status und Übergabe — 2026-11-13
 
-> **KRITISCHER NUTZERAUFTRAG 2026-11-11:** Vor Bridge-/EXE-Features den Workbench-Blocker bearbeiten.
-> Einstieg: [/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md](/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md).
-> Originale, Quellstände, Logs und Regressionen sind im Hauptcheckout gesichert.
-> Ziel Freitag 2026-11-13; keine Hardwarefreigabe ohne Beleg.
+## Kurzfassung
 
-Auftrag `.superpowers/sdd/2026-11-11-bruecke-ux2/codex-session-catalog.md`
-im vorhandenen Worktree `bruecke-ux` (`feat/bruecke-ux`) umgesetzt. Alle
-Änderungen bleiben uncommittet. Kein Merge, Push, Deployment, Hardwareeingriff
-oder neue Abhängigkeit. Der parallel bearbeitete UI-Bereich wurde durch diesen
-Auftrag nicht verändert; bestehende Änderungen in `app_controller.py` bleiben
-neben den gezielten Exportanpassungen erhalten.
+- **Abnahme:** Herr Kaulitz hat am 2026-11-13 Werkbank und Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen. Grundlage: Smoketest und Windows-Prüfung UX2 ([Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)).
+- **Heute behoben (alle auf `feat/integration`):** EXE-Selbsttest unter Windows, Empfangstest im Format der Session und verlustfrei mit klarem Ende, Kanal 1 hält bei ungültigem Takt (Entscheidung Leonhard), Wiederverbinden nach LAN-Ausfall, Kopplung je Weg, Laufstart gibt UART-Empfang frei, Diagnose mit Zeit und UART-Fehlercodes, Doppelklick-Build `build-test.cmd`.
+- **Rahmen/Raster (Codex, von Claude reviewt, auf `feat/integration`):** Fokusprüfung am Laufstart zweiseitig, Band vorläufig 0,95–1,05, außerhalb wird der Start abgelehnt („neu einrichten“). Raster A1 (Leerzellengrenze) und B1 (zweite Unterkantenannahme) liefern 63/65 statt 58/65 Fits, kein alter Fit verloren. Details unten.
+- **Offen:** Fokusband am Aufbau kalibrieren (OQ-74), UART über Brücke mit Rahmenfehlern; EXE-Gestaltungsrunde 3; danach Installer/TUI. Reihenfolge und Details: [TODO.md](../TODO.md).
 
-Der exportierbare Vorlagenkatalog steht zentral in `session_templates.py`:
+## Rahmenprüfung und Rasterbestimmung (13.11. abends)
 
-- `bruecke-session-com8-20261106`: `Session-COM8.ucf`, `single_value`,
-  `active`, ein Kanal, keiner ausgeblendet, kein Aufnahmehinweis erforderlich.
-- `bruecke-session-4ch-hidden-20261111`: `versuch2b-session-hidden.ucf`,
-  `gsvmulti_userdefined_4ch_v1`, `prepared`, vier Kanäle, drei ausgeblendet,
-  „Record Hidden Channels“ erforderlich.
+Umsetzung des [Codex-Handoffs](superpowers/handoffs/2026-11-13-codex-rahmen-raster.md), Bericht unter
+[quellen/rahmen-raster-2026-11-13/REPORT-codex.md](quellen/rahmen-raster-2026-11-13/REPORT-codex.md).
 
-SHA-256 und Herkunft sind im Code gepinnt, die neue Paketdatei entspricht dem
-Original und dessen `SHA256SUMS`. Kanalzahl, Sichtbarkeit und Baudrate werden
-beim Laden aus der Datei gelesen. Alle Katalogvorlagen müssen dieselbe Baudrate
-tragen (derzeit 115200). `ACTIVE_SESSION_TEMPLATE` wählt die reguläre Vorlage;
-zusätzlich muss ihr Status `active` sein. Der öffentliche Export bietet keine
-Vorlagenauswahl. Vorbereitete Vorlagen benötigen den Entwicklereinstieg mit
-`allow_prepared=True`. Die Aktivierung bleibt eine geprüfte Codeänderung.
+- **Aufgabe 1, Fokus:** Reale Laufstarts vergleichen die Schärfe nach dem Kameraneustart mit der Einrichtung. Liegt das Verhältnis außerhalb von 0,95–1,05 (vorläufig, aus 14 Laufstarts vom 13.11. mit 0,982–1,026), wird der Start mit Meldung abgelehnt und als `live-start-rejection/1` im Laufordner festgehalten. Fehlt die Referenz oder schlägt die Prüfung fehl, wird ebenfalls abgelehnt. **Bedienerfolge:** auch ein brauchbarer Start kann abgelehnt werden (ein guter Lauf vom 13.11. lag bei 1,418); Abhilfe ist neu einrichten. Zweitversuchsanteil und Maßstab stehen in Status, Inspektor und `session.json`. Residualgrenzen 0,35/0,65 px unverändert.
+- **Aufgabe 2, A1:** Randminima im letzten Viertel der Lückenspalte zählen nicht mehr als Belegung der Leerzelle. Gegenprobe mit belegter Leerzelle bleibt abgelehnt.
+- **Aufgabe 3, B1:** Erst wenn die Suche endgültig `keine_startlage` liefert, folgt ein zweiter Durchgang mit der Unterkante parallel zur Oberkante; Prüfungen unverändert.
 
-Portersetzung ändert ausschließlich `ComNr`/`Name` in jedem `[chN]` und
-`UserDevice.ComNo`; die Kanalnummer im Namen kommt aus `Input`. Sonstige Bytes,
-Zeilenenden und Reihenfolge bleiben erhalten. COM8 ist für beide Vorlagen
-byte-identisch zum jeweiligen Beleg, COM4 ändert bei vier Kanälen genau neun
-Zeilen. `SessionExport` trägt die abgeleiteten Kanal-/Aufnahmehinweise; Diagnose-
-und Kontextlogik bleiben unverändert. Beide PyInstaller-Specs paketieren beide
-Dateien; das bestehende setuptools-Muster erfasst sie ebenfalls. Erkannte
-Archivoriginale bleiben vom exportierbaren Katalog getrennt.
+| Standbilder | Baseline | Nur B1 | Nur A1 | A1+B1 |
+| --- | ---: | ---: | ---: | ---: |
+| ursprüngliche 65 | 58 | 59 | 61 | 63 |
+| erweiterte 74 | 64 | 66 | 69 | 72 |
 
-Prüfstand:
+Kein bisheriger Fit verloren, maximale Eckverschiebung 0,52 px. Die acht neuen Fits wurden gegen den seriellen Text und Overlays geprüft; sechs behalten eine ROM-Offsetwarnung. Belege: [Korpus](quellen/raster-recherche-2026-11-13/korpus/README.md), [VALIDATION](VALIDATION.md), [Laborjournal](lab_journal.md).
 
-- Angeforderte fünf Testdateien: **141 bestanden, ein natives Windows-Gate
-  übersprungen**. Einschließlich separater Prozessprüfung der späteren
-  Vierkanal-Aktivierung mit Export- und Kontextmetadaten.
-- Ruff, `git diff --check`, OQ-Index, Tour-Fakten und Wiki-Check bestanden.
-- Unabhängiges Review: keine kritischen, wichtigen oder kleinen Befunde.
-- Gesamte Brücken-Suite: **589 bestanden, vier übersprungen, 14 fehlgeschlagen**.
-  Dreizehn Fälle in `test_app_controller_integration.py` und `test_transports.py`
-  benötigen Sockets, die die Sandbox verbietet (`PermissionError: [Errno 1]`);
-  dazu gehört der Versionswächter, der schon `network_unavailable` erhält.
-  Ein Unterprozessfall in `test_worker.py` findet das Brückenpaket ohne
-  `PYTHONPATH` nicht; separat mit `PYTHONPATH=src:../../src` bestanden.
-  Alle Fehlernamen und die vollständige Dateiliste stehen im Abschlussbericht
-  `.superpowers/sdd/2026-11-11-bruecke-ux2/codex-session-catalog-abschluss.txt`.
+## Laufender Stand
 
-Offen bleibt die Senderumstellung von Pi/Brücke auf das Vierkanalformat sowie
-die anschließende Windows-/GSVmulti-Abnahme. `prepared` wird hier nicht aktiviert.
-„Record Hidden Channels“ muss in GSVmulti selbst eingeschaltet werden; die UCF
-kann diese Einstellung nicht speichern. Die vorherigen UX2-Backend- und
-parallelen UI-Arbeiten bleiben eigenständige Aufträge; Details des ursprünglichen
-Backend-Abschlusses stehen in
-`.superpowers/sdd/2026-11-11-bruecke-ux2/codex-backend-abschluss.txt`.
+- **Dienst:** `dispread-werkbank-bruecke` (systemd-run `--user`) aus `.worktrees/bruecke-run`, detached auf `feat/integration` 95d0540 (Rahmen/Raster), seit 2026-11-13 ~19:35. Adresse `https://100.122.154.35:8082`, Pi-Identität und Kopplung unverändert. Neustartbefehl siehe Projekt-Memory bzw. `systemctl --user show`.
+- **Gemeinsamer Branch:** `feat/integration` = EXE-Stand `feat/bruecke-merge` (Session picam-ai-65, UX2) + `feat/bruecke-ui` (Werkbank, Brückentakt, Blocker-Fixes). Weitere EXE-Arbeit baut darauf auf.
+- **EXE:** muss Leonhard aus `feat/integration` bauen (`build-test.ps1`). Eine ältere EXE spricht weder Takt noch 460 800 Baud.
+
+## Workbench-Blocker ([WORKBENCH_BLOCKER.md](WORKBENCH_BLOCKER.md))
+
+Triage (`.superpowers/sdd/2026-11-11-gsvmulti-takt/blocker-triage.md`): **keine Regression**. Die Einrichtungsmodule waren in allen Ständen byte-identisch; die Fehler sind alte Lücken, die erst die neuen Aufstellungen sichtbar machten.
+
+| OQ | Stand | Nachweis |
+| --- | --- | --- |
+| OQ-71 Sackgasse | behoben: FEHLER sperrt Bestätigen, „Neu einrichten“ immer erreichbar, Belege bleiben | Backend-, Node- und Playwright-Tests |
+| OQ-74 Fokus | Teilbehebung: ROI aus der LCD-Hinweisbox, Endprüfung nach Neustart (Einrichtung **und** Laufstart), Diagnosebilder; seit 13.11. abends zweiseitiges Startband 0,95–1,05 mit Ablehnung | Regressionen auf 7 Paketbildern, Replay 216 Bilder; Band nur vorläufig, am Aufbau kalibrieren |
+| OQ-70 einseitige Rahmenbereiche | behoben: Rahmen trotz Kerbe erkannt, sonst klare Meldung | 60/63 Vorschläge identisch, 3 besser |
+| OQ-72 Kantenprüfung | geklärt: echte Reflexe, Grenzen bleiben; Meldung nennt Zelle, Lage und Abhilfe | alle Urteile bitgleich |
+| OQ-69 Startlage | behoben: Schein-Plus an Glaskanten und Einzelartefakte in Leerzellen; unabhängiges Review mit Auflagen, erfüllt | 4 Fehlerbilder lösbar (2 danach berechtigt Kanten-FEHLER), 77/77 alte Fits erhalten |
+| OQ-73 Trägheit, OQ-75 Ausfall 7 s | offen, nur am Aufbau messbar | Smoketest notiert Uhrzeiten |
+
+## Weitere Arbeit seit 11.11.
+
+- **GSVmulti-Vierkanal-Takt:** Telegramm `%wert;gültig;takt;zeit` mit festem Takt bis 10 Hz; ungültig = `gültig 0`, Kanal 1 hält seit 13.11. den letzten gültigen Wert (vorher Fehlwert `99999999.0`, Spec 3.5). Spec und Plan unter `docs/superpowers/{specs,plans}/2026-11-11-gsvmulti-takt-vierkanal*`.
+  - Pi und alle drei Wege umgesetzt (B1, B2), Werkbank mit Formatwahl (U1), EXE-Vorgabe Vierkanal.
+  - Brücken-UART auf 460 800 Baud.
+  - Belegt sind nur die GSVmulti-Versuche vom 11.11.; ein Ende-zu-Ende-Lauf mit EXE steht aus.
+- **Nachführung:** strengere Auswahl der Rahmenbereiche und automatische Stilllegung dauerhaft unstimmiger Bereiche mit Schutzprobe (TB). Zweifach reviewt, Testfreigabe.
+
+## Prüfstand 2026-11-12 (`feat/integration` vor dem Smoketest-Commit)
+
+- **Pi** mit `DISPREAD_DEV_DATA`: 4151 bestanden. 2 Brückentests wackelten unter Volllast, einzeln dreimal grün.
+- **Windows** 641, **Node** 273, **Playwright** 64/65. Der eine Fehlschlag ist der bekannte Wackler „UART direkt ohne Haken“, einzeln grün. **ruff** sauber.
+
+## Offen
+
+- Hardware-Bestätigung aller Fixes, Fokusverhalten beim Kameraneustart, OQ-73 und OQ-75.
+- EXE-Oberfläche für Taktzähler und Format-Abgleich (picam-ai-65).
+- Merge nach `master`: freigegeben am 13.11. (autonomer Plan), erst nach grüner voller Suite und ohne Wiki-/Theme-Dateien der Wiki-Session anzufassen.

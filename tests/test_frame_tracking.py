@@ -184,7 +184,9 @@ def test_frame_tracker_exposes_last_regions(scene):
     assert regions[0]['ok'] is False
     assert all(region['ok'] is True for region in regions[1:])
     for region, source in zip(regions, proposal.regions, strict=True):
-        assert set(region) == {'c', 's', 'peak', 'ok'}
+        # res1/res2: reine Diagnose (TC 2026-11-11), Residuum je Bereich in px;
+        # v1: Abweichungsvektor zum Erstfit fuer die Gleichlaufpruefung (TB 2026-11-11).
+        assert set(region) == {'c', 's', 'peak', 'ok', 'res1', 'res2', 'v1'}
         assert region['c'] == list(source.centre)
         assert region['s'] == source.size
         assert isinstance(region['peak'], float)
@@ -2159,3 +2161,607 @@ def test_r25_raw_probe_uses_runtime_ambiguity_rule(scene, monkeypatch):
     monkeypatch.setattr(ft.cv2, 'matchTemplate', lambda *_args: response.copy())
     _, reason = ft._stability_peak(ft._gray(reference), ft._gray(reference), original.regions[0].centre, config)
     assert reason is None
+
+
+# --- TC 2026-11-11: Residuum je Rahmenbereich, reine Diagnose -------------------------
+
+def _tc_outcome(tracker, result):
+    coarse = tracker.last_coarse
+    return (result.reason, result.score, result.shift, result.rotation_deg,
+            None if result.quad is None else np.asarray(result.quad).tolist(),
+            None if coarse is None else (coarse.dx, coarse.dy, coarse.response, coarse.used, coarse.scale),
+            [(region['c'], region['peak'], region['ok']) for region in tracker.last_regions])
+
+
+def test_tc_residuum_je_bereich_erst_und_zweitfit(scene, monkeypatch):
+    from dispread.live import frame_tracking as ft
+
+    reference, _, config, _, tracker = scene
+    target = tracker.sources.copy()
+    target[0, 1] += 0.8
+    rotation, translation, inliers = ft._ransac(tracker.sources, target, config)
+    assert inliers.all()
+    expected = np.linalg.norm(tracker.sources @ rotation.T + translation - target, axis=1)
+    _force_region_targets(monkeypatch, tracker, target)
+    result = tracker.update(reference)
+    # Entscheidung wie bisher: Residualgrenze kippt Erst- und Zweitfit.
+    assert result.reason == 'rahmen_unstimmig' and tracker.last_coarse.used
+    first = [region['res1'] for region in tracker.last_regions]
+    second = [region['res2'] for region in tracker.last_regions]
+    np.testing.assert_allclose(first, expected, atol=1e-9)
+    assert first[0] > config.max_inlier_residual_px
+    assert max(first[1:]) < config.max_inlier_residual_px
+    assert all(isinstance(value, float) for value in second)
+    assert second[0] > config.max_inlier_residual_px
+
+
+def test_tc_residuum_auch_fuer_ausreisser_und_ohne_zweitfit(scene, monkeypatch):
+    reference, _, config, _, tracker = scene
+    target = tracker.sources.copy()
+    target[0, 1] += 3.0  # jenseits der RANSAC-Toleranz: Ausreisser, Bild trotzdem nachgefuehrt
+    _force_region_targets(monkeypatch, tracker, target)
+    result = tracker.update(reference)
+    assert result.quad is not None and result.reason is None
+    regions = tracker.last_regions
+    assert regions[0]['ok'] is False
+    assert regions[0]['res1'] == pytest.approx(3.0, abs=0.05)
+    assert all(region['res2'] is None for region in regions)
+    assert max(region['res1'] for region in regions[1:]) < 0.05
+
+
+def test_tc_residuum_fehlt_ohne_treffer_oder_fit(scene):
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    image = reference.copy()
+    x, y = map(int, proposal.regions[0].centre)
+    r = config.patch_size // 2
+    image[y-r:y+r+1, x-r:x+r+1] = 0
+    close_quad(tracker.update(image), quad)
+    assert tracker.last_regions[0]['res1'] is None
+    assert all(isinstance(region['res1'], float) for region in tracker.last_regions[1:])
+    tracker.update(reference[:10, :10])
+    assert all(region['res1'] is None and region['res2'] is None for region in tracker.last_regions)
+
+
+def _tc_scenarios(reference, quad, config, proposal):
+    h, w = reference.shape[:2]
+    centre = tuple(np.asarray(quad).mean(axis=0))
+    occluded = reference.copy()
+    for region in proposal.regions[:2]:
+        x, y = map(int, region.centre)
+        r = config.patch_size // 2 + config.search_radius_px + 2
+        occluded[y-r:y+r+1, x-r:x+r+1] = 0
+    yield 'referenz', reference
+    yield 'verschoben', cv2.warpAffine(reference, np.float32([[1, 0, 3.4], [0, 1, -2.2]]), (w, h))
+    yield 'gedreht', cv2.warpAffine(reference, cv2.getRotationMatrix2D(centre, 0.6, 1.0), (w, h))
+    yield 'massstab', cv2.warpAffine(reference, cv2.getRotationMatrix2D(centre, 0.0, 1.003), (w, h))
+    yield 'weit_verschoben', cv2.warpAffine(reference, np.float32([[1, 0, 25], [0, 1, 0]]), (w, h))
+    yield 'teilverdeckt', occluded
+    yield 'lokal_verschoben', _paste_region_motion(
+        reference, proposal, config.patch_size // 2 + config.search_radius_px,
+        np.float32([[1, 0, 1.0], [0, 1, 0.0]]), [0, 3, 7])
+    yield 'dunkel', (reference * 0.6).astype(np.uint8)
+    yield 'schwarz', np.zeros_like(reference)
+
+
+def test_tc_residuen_aendern_keine_entscheidung(scene, monkeypatch):
+    """Harte Grenze TC: mit und ohne Residuendiagnose bitgleiche Entscheidungen."""
+    reference, quad, config, proposal, _ = scene
+    scenarios = list(_tc_scenarios(reference, quad, config, proposal))
+    with_diagnosis = FrameTracker(reference, quad, proposal, config)
+    observed = {name: _tc_outcome(with_diagnosis, with_diagnosis.update(image)) for name, image in scenarios}
+    monkeypatch.setattr(FrameTracker, '_note_residuals', lambda *args, **kwargs: None)
+    without = FrameTracker(reference, quad, proposal, config)
+    for name, image in scenarios:
+        assert _tc_outcome(without, without.update(image)) == observed[name], name
+    reasons = {outcome[0] for outcome in observed.values()}
+    # Die Szenarien decken Annahme, Ablehnung und den Zweitfit ab.
+    assert None in reasons and len(reasons) >= 3
+    assert any(outcome[5] is not None and outcome[5][3] for outcome in observed.values())
+
+
+@pytest.mark.slow
+def test_tc_echtlauf_20261111_bitgleich_und_bereich_6_dauerhaft_unstimmig():
+    """222 Diagnosebilder des Laufs live-20261111T103604Z/run-01.
+
+    Die Werte in images.jsonl stammen aus dem Lauf VOR der Residuendiagnose;
+    Grund, Score, Lage und Quad muessen exakt gleich bleiben. Danach muss die
+    Fensterauswertung den Glanzbereich R5 (0-basiert, Mitte ~515,774) als
+    Rahmenbereich 6 melden, so wie die Werkbank ihn nummeriert.
+    """
+    from dispread.live.frame_tracking import RegionProposal
+    from dispread.live.region_hint import RegionConsistency
+
+    root = local_recording('live/live-20261111T103604Z/profile.json').parent
+    diagnose = diagnose_dir(root / 'run-01')
+    if not (diagnose / 'images.jsonl').exists():
+        pytest.skip('Diagnosebilder fehlen (DISPREAD_DEV_DATA setzen)')
+    profile = json.loads((root / 'profile.json').read_text())
+    block = profile['live_tracking']
+    reference = cv2.imread(str(root / 'setup/still.png'))
+    tracker = FrameTracker(reference, profile['quad'], RegionProposal.from_dict(block['proposal']),
+                           FrameTrackingConfig.from_dict(block['config']))
+    rows = [json.loads(line) for line in (diagnose / 'images.jsonl').read_text().splitlines() if line.strip()]
+    assert len(rows) == 222
+    window = RegionConsistency(tracker.sources, limit_px=tracker.config.max_inlier_residual_px)
+    for row in rows:
+        result = tracker.update(cv2.imread(str(diagnose / row['image'])))
+        logged = row['tracking']
+        assert result.reason == logged['reason'], row['image']
+        assert result.score == logged['score'] and result.shift == logged['shift'], row['image']
+        assert result.rotation_deg == logged['rotation_deg'], row['image']
+        quad = None if result.quad is None else [list(map(float, point)) for point in result.quad]
+        assert quad == logged['quad'], row['image']
+        window.observe([region['res1'] for region in tracker.last_regions])
+    hint = window.snapshot()
+    assert hint is not None
+    first = hint['regions'][0]
+    assert first['number'] == 6 and first['index'] == 5
+    assert np.hypot(first['centre'][0] - 515, first['centre'][1] - 774) < 3
+    assert first['share'] >= 0.30 and hint['rest_median_px'] < 0.40
+
+
+# --- TB 2026-11-11: strengere Auswahl und automatische Stilllegung im Lauf --------------
+
+# Satz mit bestandener Schutzprobe (test_tb_schutzprobe_besteht_fuer_den_testsatz). Der fruehere
+# Testsatz {0, 5, 15} besteht die Probe seit Review W1 nicht mehr (Zusatzausfall 8/16/17/19).
+_TB_SET = (7,)
+
+
+def _tb_pass(tracker, index):
+    # Nur fuer Tests der harten Grenzen: Probe als bestanden vorgeben.
+    return {'ok': True, 'base': sorted(tracker.disabled), 'disabled': sorted(tracker.disabled | {index})}
+
+
+def _tb_tracker(scene, disabled=()):
+    reference, quad, config, proposal, _ = scene
+    tracker = FrameTracker(reference, quad, proposal, config)
+    tracker.disabled = frozenset(disabled)
+    return tracker
+
+
+@pytest.fixture(scope='module')
+def tb_satz():
+    return _TB_SET
+
+
+def _tb_outcome(tracker, result):
+    coarse = tracker.last_coarse
+    return (result.reason, None if result.quad is None else np.asarray(result.quad).tolist(),
+            result.shift, result.rotation_deg,
+            None if coarse is None else (coarse.dx, coarse.dy, coarse.response, coarse.used, coarse.scale))
+
+
+def test_tb_lokalisationsregel_braucht_flachen_gipfel_und_lichtversatz():
+    from dispread.live.frame_tracking import _localisation_weak
+
+    config = FrameTrackingConfig()
+    assert (config.proposal_min_peak_curvature, config.proposal_max_photometric_shift_px) == (0.08, 0.12)
+    assert _localisation_weak(0.04, 0.20, config)
+    assert not _localisation_weak(0.04, 0.10, config)  # flach, aber lichtstabil
+    assert not _localisation_weak(0.30, 0.50, config)  # lichtabhaengig, aber scharf lokalisiert
+    assert _localisation_weak(0.04, float('inf'), config)
+    with pytest.raises(ValueError):
+        FrameTrackingConfig(proposal_max_photometric_shift_px=0.0)
+    # Aeltere Profile ohne die neuen Felder laden mit Defaults.
+    old = {key: value for key, value in config.to_dict().items()
+           if key not in ('proposal_min_peak_curvature', 'proposal_max_photometric_shift_px')}
+    assert FrameTrackingConfig.from_dict(old) == config
+
+
+def test_tb_auswahlgrenzen_wirken_nicht_im_lauf(scene):
+    """Sicherheitsrichtung: die neuen Felder steuern nur die Einrichtung."""
+    from dispread.live.session import _run_start_tracking_config
+
+    reference, quad, config, proposal, _ = scene
+    loose = FrameTracker(reference, quad, proposal, config)
+    strict = FrameTracker(reference, quad, proposal, config)
+    strict.config = replace(config, proposal_min_peak_curvature=2.0, proposal_max_photometric_shift_px=1e-6)
+    for name, image in _tc_scenarios(reference, quad, config, proposal):
+        assert _tb_outcome(loose, loose.update(image)) == _tb_outcome(strict, strict.update(image)), name
+    changed = replace(config, proposal_min_peak_curvature=0.5, proposal_max_photometric_shift_px=0.5).to_dict()
+    assert _run_start_tracking_config(changed) == _run_start_tracking_config(config.to_dict())
+
+
+_TB_SETUPS = {
+    # Glanzlinie untere Fase (Bereich 6) und schwache Fase links oben, beide belegt unstimmig.
+    'live-20261111T103604Z': [(515, 774), (319, 415)],
+    'live-20261111T122753Z': [(514, 775), (320, 416)],
+    'live-20261111T095426Z': [(515, 773)],
+    'live-20261111T124851Z': [],
+}
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('name', sorted(_TB_SETUPS))
+def test_tb_einrichtung_waehlt_keine_belegt_schlechten_bereiche(name):
+    root = local_recording(f'live/{name}/setup/still.png').parents[1]
+    still, stability = cv2.imread(str(root / 'setup/still.png')), cv2.imread(str(root / 'setup/stability.png'))
+    quad = json.loads((root / 'setup/proposal.json').read_text())['quad']
+    bad = _TB_SETUPS[name]
+
+    def near_bad(proposal):
+        return [region.centre for region in proposal.regions
+                if any(np.hypot(region.centre[0] - x, region.centre[1] - y) <= 3 for x, y in bad)]
+
+    old = propose_regions(still, quad, replace(FrameTrackingConfig(), proposal_min_peak_curvature=0.0),
+                          stability_images=(stability,) * 8)
+    new = propose_regions(still, quad, FrameTrackingConfig(), stability_images=(stability,) * 8)
+    # RED-Beleg: ohne die neue Regel waehlt die Einrichtung genau diese Bereiche.
+    assert len(near_bad(old)) == len(bad)
+    assert near_bad(new) == []
+    assert new.ok, new.reasons
+    assert new.metrics['reserve_ok'] and len(new.regions) == 20
+    weak = new.metrics['localisation_weak_candidates']
+    assert all(any(np.hypot(item['centre'][0] - x, item['centre'][1] - y) <= 3 for item in weak) for x, y in bad)
+
+
+def test_tb_stilllegung_wirkt_wie_vorschlag_ohne_bereich(scene):
+    reference, quad, config, proposal, _ = scene
+    for index in (0, 7, len(proposal.regions) - 1):
+        disabled = _tb_tracker(scene)
+        assert disabled.disable_region(index, _tb_pass(disabled, index))
+        without = FrameTracker(reference, quad, replace(
+            proposal, regions=tuple(r for i, r in enumerate(proposal.regions) if i != index)), config)
+        for name, image in _tc_scenarios(reference, quad, config, proposal):
+            assert _tb_outcome(disabled, disabled.update(image)) == _tb_outcome(without, without.update(image)), \
+                (index, name)
+            assert disabled.last_regions[index]['ok'] is False and disabled.last_regions[index]['res1'] is None
+
+
+def test_tb_harte_grenzen_der_stilllegung(scene, monkeypatch):
+    from dispread.live import frame_tracking as ft
+
+    assert (ft.MAX_DISABLED_REGIONS, ft.MAX_DISABLED_FRACTION) == (3, 0.15)
+    tracker = _tb_tracker(scene)
+    n = len(tracker.sources)
+    assert tracker.disable_limit() == min(3, int(0.15 * n))
+    for bad in (-1, n, 1.0, True, None):
+        assert tracker.disable_refusal(bad) == 'bereich_unbekannt'
+    # Ohne bestandene Probe fuer genau den neuen Satz keine Stilllegung.
+    assert not tracker.disable_region(0)
+    assert not tracker.disable_region(0, {'ok': False, 'base': [], 'disabled': [0]})
+    assert not tracker.disable_region(0, {'ok': True, 'base': [], 'disabled': [1]})
+    assert not tracker.disable_region(0, {'ok': True, 'base': [3], 'disabled': [0]})  # Probe fuer anderen Ausgangssatz
+    assert tracker.disabled == frozenset()
+    for index in range(tracker.disable_limit()):
+        assert tracker.disable_region(index, _tb_pass(tracker, index))
+    assert tracker.disable_refusal(0) == 'bereits_stillgelegt'
+    assert tracker.disable_refusal(n - 1) == 'obergrenze_erreicht'
+    assert not tracker.disable_region(n - 1, _tb_pass(tracker, n - 1))
+    assert tracker.disabled == frozenset(range(tracker.disable_limit()))
+    # Ohne Obergrenze greift die Reserve: Mindestzahl/Streuung/Reserve wie bei der Einrichtung.
+    monkeypatch.setattr(ft, 'MAX_DISABLED_REGIONS', 99)
+    monkeypatch.setattr(ft, 'MAX_DISABLED_FRACTION', 1.0)
+    tracker = _tb_tracker(scene)
+    local = (tracker.sources - tracker.normalised_quad.mean(axis=0)) @ ft._axes(tracker.normalised_quad).T
+    side = np.flatnonzero(local[:, 0] <= -tracker._spread_limits[0][0])
+    refused = None
+    for index in side:
+        refused = tracker.disable_refusal(int(index))
+        if refused is not None:
+            break
+        assert tracker.disable_region(int(index), _tb_pass(tracker, int(index)))
+        remaining = [tuple(tracker.sources[i]) for i in range(n) if i not in tracker.disabled]
+        assert ft._reserve_ok(remaining, tracker.normalised_quad, tracker.config, tracker._spread_limits)
+    assert refused == 'reserve_verletzt'
+    # Laufzeitgrenzen bleiben unveraendert.
+    config = tracker.config
+    assert (config.max_inlier_residual_px, config.max_inlier_rms_px, config.ransac_tolerance_px) == (0.65, 0.35, 1.5)
+
+
+def test_tb_schutzprobe_rechnet_wie_update(scene):
+    """Die Probe nutzt je Bild einmal bestimmte Treffer; das Ergebnis je Satz ist genau update()."""
+    tracker = _tb_tracker(scene)
+    sets = [frozenset(), frozenset({1}), frozenset({0, 5, 15, 8})]
+    live = {disabled: _tb_tracker(scene, disabled) for disabled in sets}
+    checked = 0
+    for count, (_, image) in enumerate(tracker._probe_images()):
+        if count % 23:
+            continue
+        observation = tracker._probe_observe(image)
+        for disabled in sets:
+            ours = tracker._probe_update(image, *observation, disabled)
+            real = live[disabled].update(image)
+            assert (ours.reason, ours.quad, ours.shift, ours.score) == (real.reason, real.quad, real.shift, real.score)
+            checked += 1
+    assert checked >= 30
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('target', [(1,), (10,)])
+def test_tb_schutzprobe_findet_tragende_zeugenbereiche(scene, target):
+    """Ohne Bereich 2 oder 11 setzt eine ganze Seite im Fixture eine 3,5 px falsche Lage durch."""
+    tracker = _tb_tracker(scene)
+    probe = tracker.bias_probe((), target)
+    assert probe['cases'] == 288 and probe['base_worst_error_px'] < 1.0
+    assert not probe['ok'] and probe['worst_error_px'] > 3.0, probe
+    assert not tracker.disable_region(target[0], probe)
+
+
+@pytest.mark.slow
+def test_tb_w1_stilllegung_darf_zusatzausfall_nicht_gefaehrlicher_machen(scene):
+    """Review W1 (RED mit dem bisherigen absoluten Kriterium): {0, 5, 15} bestand frueher die
+    Probe (schlechtester Fall 0,957 px). Faellt danach zusaetzlich Bereich 8, 16, 17 oder 19 aus,
+    werden ~1,46 px falsche Quads angenommen; ohne Stilllegung bleibt derselbe Zusatzausfall
+    unter 1,0 px. Bereich 10 war schon vorher gefaehrlich (3,5 px) und wird nicht schlechter."""
+    tracker = _tb_tracker(scene)
+    probe = tracker.bias_probe((), _TB_W1_SET)
+    assert probe['worst_error_px'] <= 1.0  # das alte Kriterium haette bestanden
+    assert not probe['ok']
+    flagged = {item['extra']: item for item in probe['violations']}
+    assert set(flagged) == {8, 16, 17, 19}
+    assert all(item['new_px'] > 1.4 and item['base_px'] < 1.0 for item in flagged.values())
+    ten = next(item for item in probe['extra'] if item['extra'] == 10)
+    assert ten['new_px'] > 3.0 and ten['base_px'] > 3.0  # schon vorher gefaehrlich, nicht schlechter
+    assert not tracker.disable_region(15, {**probe, 'base': [], 'disabled': [0, 5, 15]})
+
+
+_TB_W1_SET = (0, 5, 15)
+
+
+@pytest.mark.slow
+def test_tb_schutzprobe_besteht_fuer_den_testsatz(scene, tb_satz):
+    tracker = _tb_tracker(scene)
+    probe = tracker.bias_probe((), tb_satz)
+    assert probe['ok'], probe['violations']
+    assert probe['worst_error_px'] <= probe['base_worst_error_px'] + 0.05
+    assert tracker.disable_region(tb_satz[0], probe)
+
+
+@pytest.mark.parametrize('dx,dy,angle', [(0.5, 0, 0), (2, -1, 0), (6, 3, 0), (15, 0, 0), (0, 0, 0.3), (1, 1, 1.0)])
+def test_tb_echte_bewegung_nach_stilllegung_wird_nachgefuehrt(scene, tb_satz, dx, dy, angle):
+    reference, quad, *_ = scene
+    tracker = _tb_tracker(scene, tb_satz)
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
+    matrix[:, 2] += (dx, dy)
+    moved = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    expected = cv2.transform(quad.reshape(-1, 1, 2), matrix).reshape(-1, 2)
+    close_quad(tracker.update(moved), expected, 0.4)
+
+
+@pytest.mark.parametrize('dx,angle', [(25, 0), (0, 4.0)])
+def test_tb_grosse_bewegung_nach_stilllegung_abgelehnt(scene, tb_satz, dx, angle):
+    reference, quad, *_ = scene
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
+    matrix[0, 2] += dx
+    image = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    result = _tb_tracker(scene, tb_satz).update(image)
+    assert result.quad is None
+    assert result.reason == _tb_tracker(scene).update(image).reason  # gleicher Grund wie ohne Stilllegung
+
+
+@pytest.mark.parametrize('dx', [3.0, 6.0])
+def test_tb_lcd_gegen_rahmen_nach_stilllegung_abgelehnt(scene, tb_satz, dx):
+    reference, quad, config, proposal, _ = scene
+    matrix = np.float32([[1, 0, dx], [0, 1, 0]])
+    image = _paste_region_motion(reference, proposal, config.patch_size // 2 + config.search_radius_px,
+                                 matrix, range(len(proposal.regions)))
+    result = _tb_tracker(scene, tb_satz).update(image)
+    assert result.quad is None and result.reason == 'lcd_rand_fehlt'
+
+
+@pytest.mark.parametrize('bias', [0.8, 1.2])
+@pytest.mark.parametrize('cluster', [(2, 18, 6), (3, 19, 15, 11), (1, 4, 8, 12)])
+def test_tb_lokaler_versatz_nach_stilllegung(scene, tb_satz, bias, cluster):
+    # 1,2 px: unstimmig wie ohne Stilllegung; 0,8 px darf (wie ohne) mit richtigem Quad bestehen.
+    reference, quad, config, proposal, _ = scene
+    image = _paste_region_motion(reference, proposal, config.patch_size // 2 + config.search_radius_px,
+                                 np.float32([[1, 0, bias], [0, 1, 0]]), cluster)
+    result = _tb_tracker(scene, tb_satz).update(image)
+    if bias >= 1.2:
+        assert result.reason == 'rahmen_unstimmig'
+    elif result.quad is not None:
+        close_quad(result, quad, 0.4)
+
+
+@pytest.mark.parametrize('subset', ['right', 'left', 'bottom', 'top'])
+@pytest.mark.parametrize('axis, sign', [(0, 1), (0, -1), (1, 1), (1, -1)])
+def test_tb_koordinierter_lokaler_bias_nach_stilllegung_niemals_falsche_geometrie(scene, tb_satz, subset, axis,
+                                                                                 sign):
+    # Wie test_kandidat_koordinierter_lokaler_bias_niemals_falsche_geometrie mit einem
+    # stillgelegten Satz, der die Schutzprobe bestanden hat.
+    from dispread.live import frame_tracking as ft
+
+    reference, quad, config, proposal, _ = scene
+    tracker = _tb_tracker(scene, tb_satz)
+    local = (tracker.sources - quad.mean(axis=0)) @ ft._axes(quad).T
+    half_axis = 0 if subset in ('right', 'left') else 1
+    half_sign = 1 if subset in ('right', 'bottom') else -1
+    indices = np.flatnonzero(half_sign * local[:, half_axis] > 20)
+    radius = config.patch_size // 2 + config.search_radius_px
+    for angle in (-0.4, 0, 0.4):
+        for bias in (0.5, 1.0, 1.5, 2.0, 3.0, 4.0):
+            matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), angle, 1)
+            matrix[axis, 2] += sign * bias
+            result = tracker.update(_paste_region_motion(reference, proposal, radius, matrix, indices))
+            if result.quad is not None:
+                close_quad(result, quad)
+
+
+def _tb_run_window(tracker, images, frames):
+    """Wie LiveSession._maybe_disable_region, synchron: Fenster, Grenzen, Schutzprobe, Stilllegen."""
+    from dispread.live.region_hint import RegionConsistency
+
+    window = RegionConsistency(tracker.sources, limit_px=tracker.config.max_inlier_residual_px)
+    flagged, probes = set(), {}
+    for frame in range(frames):
+        tracker.update(images[frame % len(images)])
+        window.observe([r['res1'] for r in tracker.last_regions], [r['v1'] for r in tracker.last_regions])
+        flagged |= {item['index'] for item in (window.snapshot() or {}).get('regions', [])}
+        candidate = window.deactivation_candidate()
+        if candidate is None:
+            continue
+        index = candidate['index']
+        refusal = tracker.disable_refusal(index)
+        if refusal is not None:
+            window.note_refused(index, refusal, frame)
+            continue
+        key = (tracker.disabled, index)
+        if key not in probes:
+            probes[key] = tracker.bias_probe(tracker.disabled, tracker.disabled | {index})
+        if not probes[key]['ok']:
+            window.note_refused(index, 'schutzprobe_verletzt', frame, detail=probes[key])
+            continue
+        assert tracker.disable_region(index, probes[key])
+        window.note_deactivated({'frame_sequence': frame, **candidate, 'probe': probes[key]})
+    return window, flagged
+
+
+def _tb_noisy(image, count, seed=7):
+    rng = np.random.default_rng(seed)
+    return [np.clip(image.astype(float) + rng.normal(0, 2.0, image.shape), 0, 255).astype(np.uint8)
+            for _ in range(count)]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('cluster', [(2, 18), (2, 18, 6), (3, 19, 15, 11)])
+@pytest.mark.parametrize('dx,dy', [(0.8, 0.0), (0.0, 1.2), (1.4, -0.6)])
+def test_tb_koordinierte_verschiebung_fuehrt_nie_zur_stilllegung(scene, cluster, dx, dy):
+    """Neu (TB): gleichlaeufig versetzte Bereiche sind nie ein Stilllegungsgrund."""
+    reference, _, config, proposal, _ = scene
+    tracker = _tb_tracker(scene)
+    image = _paste_region_motion(reference, proposal, config.patch_size // 2 + config.search_radius_px,
+                                 np.float32([[1, 0, dx], [0, 1, dy]]), cluster)
+    window, flagged = _tb_run_window(tracker, _tb_noisy(image, 12), 360)
+    # Der Fall ist scharf: die versetzten Bereiche reissen die Grenze und fallen im Hinweis auf.
+    assert set(cluster) & flagged
+    assert tracker.disabled == frozenset() and window.deactivated() == []
+
+
+@pytest.mark.slow
+def test_tb_gleichlaufpruefung_ist_die_schutzwirkung(scene, monkeypatch):
+    """Gegenprobe: ohne Gleichlaufpruefung wuerde ein versetztes Paar stillgelegt.
+
+    Die Schutzprobe ist hier als bestanden vorgegeben, damit allein die Gleichlaufpruefung
+    zaehlt (mit echter Probe wird das Paar seit Review W1 zusaetzlich auch dort verweigert).
+    """
+    from dispread.live import region_hint as rh
+
+    monkeypatch.setattr(rh, 'COORDINATED_MAX_RATIO', -1.0)
+    monkeypatch.setattr(FrameTracker, 'bias_probe', lambda self, base, target, stop=None: {
+        'ok': True, 'base': sorted(base), 'disabled': sorted(target)})
+    reference, _, config, proposal, _ = scene
+    tracker = _tb_tracker(scene)
+    image = _paste_region_motion(reference, proposal, config.patch_size // 2 + config.search_radius_px,
+                                 np.float32([[1, 0, 1.2], [0, 1, 0]]), (2, 18))
+    _tb_run_window(tracker, _tb_noisy(image, 12), 360)
+    assert tracker.disabled & {2, 18}
+
+
+def _tb_glint_images(scene, index, count=24, seed=11):
+    # Ein einzelner Bereich, der sich von Bild zu Bild anders und nicht starr verschiebt.
+    _, _, config, proposal, _ = scene
+    rng = np.random.default_rng(seed)
+    radius = config.patch_size // 2 + config.search_radius_px
+    images = []
+    for noisy in _tb_noisy(scene[0], count, seed):
+        angle = rng.uniform(0, 2*np.pi)
+        size = rng.uniform(0.9, 1.4)
+        matrix = np.float32([[1, 0, size*np.cos(angle)], [0, 1, size*np.sin(angle)]])
+        images.append(_paste_region_motion(noisy, proposal, radius, matrix, [index]))
+    return images
+
+
+@pytest.mark.slow
+def test_tb_einzelner_nicht_starrer_bereich_wird_stillgelegt_und_bewegung_bleibt_erkannt(scene):
+    reference, quad, config, proposal, _ = scene
+    tracker = _tb_tracker(scene)
+    images = _tb_glint_images(scene, 7)
+    before = sum(tracker.update(image).quad is not None for image in images)
+    window, _ = _tb_run_window(tracker, images, 330)
+    assert tracker.disabled == frozenset({7})
+    event = window.deactivated()[0]
+    assert event['index'] == 7 and event['number'] == 8 and event['share'] >= 0.5
+    assert event['rest_median_px'] < 0.4 and event['coordination_ratio'] > 0.5 and event['probe']['ok']
+    after = sum(tracker.update(image).quad is not None for image in images)
+    assert after == len(images) > before
+    # Neu (TB): echte Anzeigebewegung nach der Stilllegung wird weiter erkannt.
+    matrix = cv2.getRotationMatrix2D(tuple(quad.mean(axis=0)), 0.4, 1)
+    matrix[:, 2] += (5, -2)
+    moved = cv2.warpAffine(reference, matrix, reference.shape[1::-1])
+    expected = cv2.transform(quad.reshape(-1, 1, 2), matrix).reshape(-1, 2)
+    close_quad(tracker.update(moved), expected, 0.4)
+    assert tracker.update(cv2.warpAffine(reference, np.float32([[1, 0, 25], [0, 1, 0]]),
+                                         reference.shape[1::-1])).quad is None
+    image = _paste_region_motion(reference, proposal, config.patch_size // 2 + config.search_radius_px,
+                                 np.float32([[1, 0, 1.2], [0, 1, 0]]), (2, 18, 6))
+    assert tracker.update(image).reason == 'rahmen_unstimmig'
+
+
+def _tb_quad_error(a, b):
+    return float(np.linalg.norm(np.asarray(a) - np.asarray(b), axis=1).max())
+
+
+def _tb_glass_quad(tracker, gray):
+    """Unabhaengiger Bezug (Review W2): starre Lage allein aus den LCD-Kanten, ohne Rahmenbereiche.
+
+    Je Kantenpunkt des Vorschlags die Kantenlage entlang der Normalen (+/-6 px) im aktuellen Bild;
+    kleinste Quadrate fuer Verschiebung, Drehung und eine gemeinsame Kantenwanderung (Licht).
+    Am Referenzbild selbst liegt das Ergebnis <= 0,03 px am bestaetigten Quad.
+    """
+    from dispread.live import frame_tracking as ft
+
+    points = np.array([edge.point for edge in tracker.edges])
+    normals = np.array([edge.normal for edge in tracker.edges])
+    offsets, steps, usable = ft._locate_edges(gray.astype(np.float32), points, normals, np.arange(-6, 7),
+                                              tracker.config)
+    strong = np.array([edge.magnitude for edge in tracker.edges]) * 0.5
+    good = usable & (steps >= np.maximum(tracker.config.edge_min_step, strong))
+    centre = tracker.quad.mean(axis=0)
+    arm = points - centre
+    design = np.column_stack([normals[:, 0], normals[:, 1],
+                              normals[:, 1] * arm[:, 0] - normals[:, 0] * arm[:, 1], np.ones(len(points))])
+    (dx, dy, angle, _), *_ = np.linalg.lstsq(design[good], offsets[good], rcond=None)
+    rotation = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    return (tracker.quad - centre) @ rotation.T + centre + (dx, dy)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('name,min_converted', [('live-20261111T103604Z', 85), ('live-20261111T122753Z', 70)])
+def test_tb_echtlauf_stilllegung_akzeptiert_fehlalarme(name, min_converted):
+    """Neu (TB, Review W2): Diagnosebilder zyklisch durch Tracker, Fenster und Schutzprobe wie im Lauf.
+
+    Danach gilt mit dem stillgelegten Satz auf allen Diagnosebildern:
+    * kein bisher gutes Bild faellt weg, die bisherigen Fehlalarme werden ueberwiegend akzeptiert;
+    * unabhaengiger Bezug ist allein die Glaslage aus den LCD-Kanten (_tb_glass_quad). Die neu
+      akzeptierten Quads liegen davon nicht weiter weg als die bisher guten Quads desselben Laufs
+      (Maximum und Median). Der Glasbezug streut selbst (Kanten wandern mit dem Licht, bis ~0,8 px);
+      eine absolute Grenze von 0,35 px laesst sich damit NICHT unabhaengig belegen.
+    Einschraenkung: Diagnosebilder sind eine Stichprobe bei Verlustbeginn (hoechstens 1/s) und
+    ersetzen kein echtes 300-Bilder-Fenster.
+    """
+    from dispread.live import frame_tracking as ft
+    from dispread.live.frame_tracking import RegionProposal
+
+    root = local_recording(f'live/{name}/profile.json').parent
+    diagnose = diagnose_dir(root / 'run-01')
+    if not (diagnose / 'images.jsonl').exists():
+        pytest.skip('Diagnosebilder fehlen (DISPREAD_DEV_DATA setzen)')
+    profile = json.loads((root / 'profile.json').read_text())
+    block = profile['live_tracking']
+    reference = cv2.imread(str(root / 'setup/still.png'))
+    tracker = FrameTracker(reference, profile['quad'], RegionProposal.from_dict(block['proposal']),
+                           FrameTrackingConfig.from_dict(block['config']))
+    assert _tb_quad_error(_tb_glass_quad(tracker, ft._gray(reference)), tracker.quad) <= 0.03
+    rows = [json.loads(line) for line in (diagnose / 'images.jsonl').read_text().splitlines() if line.strip()]
+    images = [cv2.imread(str(diagnose / row['image'])) for row in rows]
+    window, _ = _tb_run_window(tracker, images, 3 * len(images))
+    assert 5 in tracker.disabled  # Glanzlinie untere Fase, Bereich 6
+    assert all(event['coordination_ratio'] > 0.5 and event['rest_median_px'] < 0.4 and event['probe']['ok']
+               for event in window.deactivated())
+    good_to_glass, converted_to_glass = [], []
+    for row, image in zip(rows, images, strict=True):
+        result = tracker.update(image)
+        old = row['tracking']['quad']
+        if result.quad is None:
+            assert old is None, row['image']  # kein bisher gutes Bild faellt weg
+            continue
+        glass = _tb_glass_quad(tracker, ft._gray(image))
+        if old is not None:
+            good_to_glass.append(_tb_quad_error(old, glass))
+        else:
+            converted_to_glass.append(_tb_quad_error(result.quad, glass))
+    assert len(converted_to_glass) >= min_converted
+    assert max(converted_to_glass) <= max(good_to_glass)
+    assert median(converted_to_glass) <= median(good_to_glass) + 0.05

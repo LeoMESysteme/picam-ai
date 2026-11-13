@@ -96,6 +96,7 @@ class SessionExport:
     hidden_channels: int = 0                # davon ausgeblendet (IsHidden = TRUE)
     record_hidden_required: bool = False    # Bediener muss in GSVmulti „Record Hidden Channels“ einschalten
                                             # (steht nicht in der .ucf, sonst fehlen diese Kanäle still)
+    fmt: str = '1ch'
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,9 @@ class UiContext:
     adapter_present: bool | None = None     # steckt der gewählte Adapter gerade? None = unbekannt
     session_template: str | None = None     # Kennung der Vorlage, aus der Sessions erzeugt werden
     session_channels: int | None = None     # Kanalzahl der aktiven Vorlage (1 = Einkanal-Ausgabe, F3-Warnung)
+    session_format: str | None = None       # erzeugte Session für den aktuellen Weg/Port
+    run_format: str | None = None           # erkanntes Format des aktuellen Laufs; None = unbekannt
+    default_session_format: str = '1ch'
 
 
 class ControllerPort(Protocol):
@@ -177,7 +181,7 @@ class ControllerPort(Protocol):
     def check_port_pair(self, bridge_port: str, gsv_port: str) -> CheckResult: ...
     def check_adapter(self, port: str) -> CheckResult: ...          # vorhanden, exklusiv zu öffnen, wieder frei
     def check_pairing_code(self, code: str) -> CheckResult: ...     # nur Format, lokal, nicht blockierend
-    def export_session_file(self, destination: Path, port: str | None = None) -> SessionExport: ...
+    def export_session_file(self, destination: Path, port: str | None = None, fmt: str | None = None) -> SessionExport: ...
     def diagnostics_contents(self) -> tuple[tuple[str, str], ...]: ...   # (Datei im ZIP, was drinsteht)
     # nicht blockierende Lesezugriffe
     def snapshot(self) -> Readiness: ...

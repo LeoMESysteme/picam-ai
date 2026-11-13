@@ -263,6 +263,12 @@ body.offline .app>:not(.titlebar){filter:brightness(.5) saturate(.45)}
 .grid td.m{font-family:var(--mono)}
 .grid td .stc{display:inline-flex;align-items:center;gap:6px}
 .grid tr.pend td{color:var(--tx3)}
+/* TC 2026-11-11: Rahmenbereich dauerhaft unstimmig, ruhiger Warnton statt Alarm. */
+.grid tr.flag td{background:rgba(229,165,53,.08)}.grid tr.flag td:first-child{border-left:2px solid var(--warn)}
+.blk.rhint h4 .sq{margin-right:2px}.blk.rhint p.warn-t{margin:0 0 8px;line-height:1.4}.blk.rhint .grid{margin-bottom:6px}
+.rprev p{margin:8px 0 0;font-size:12px;line-height:1.4}.rprev .sq{margin:-2px 2px 0 0}
+.rlist li.flag{background:rgba(229,165,53,.08);border-left:2px solid var(--warn)}.rlist li.flag .n{color:var(--warn)}
+.rlist .tag{margin-right:4px}
 .verdict{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .verdict .sq{align-self:center}
 
@@ -519,3 +525,8 @@ input[type=search]::placeholder{color:#8a847b}
 .bcode{padding:5px 9px;background:#1b1a17;border:1px solid var(--line);font-size:14px;letter-spacing:.04em;color:var(--tx);user-select:all;word-break:break-all}
 .bcount{font-size:13px;color:var(--tx2)}
 .popover .brow{margin:8px 0 0}
+/* U1: Laufoptionen wachsen mit Format/Checkliste; in niedrigen Fenstern scrollt das Pop-up. */
+.popover.runpop{max-height:calc(100vh - 52px);overflow-y:auto}
+.popover [data-part="checklist"] ul{margin:4px 0 0;padding-left:18px}
+.popover [data-part="out-format"] .f{margin:10px 0 4px}
+.popover [data-part="out-rate-hz"]{width:5em}

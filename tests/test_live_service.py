@@ -213,7 +213,8 @@ def test_status_exposes_focus_samples_while_focusing(tmp_path, monkeypatch, star
         service.start_setup()
         assert restart_blocked.wait(2)
         setup = service.status()["setup"]
-        assert setup["focus"] == {"method": "climb", "samples": [], "verify": None, "roi": None}
+        assert setup["focus"] == {"method": "climb", "samples": [], "verify": None, "roi": None,
+                                  "roi_source": None, "end_check": None}
         assert setup["exposure"] == {"target": 130, "band": [115, 150], "rounds": []}
     finally:
         continue_focus.set()
@@ -690,6 +691,7 @@ def test_status_setup_grid_running_and_stopped(tmp_path, proposal, monkeypatch):
     # Kein gleichmaessiges Schaetzen: auch gerundete Einzelbreiten uebernehmen.
     proposal['grid'].update(left=1.2, pitch=24.7)
     service = ready_service(tmp_path, proposal)
+    monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     service.confirm(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True)
     confirmed = service.status()['setup']['grid']
     profile = SessionProfile.load(service._profile_path)
@@ -722,7 +724,8 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
     assert setup == {
         "overall": overall, "checks": {"rasterversatz": "OK", "gegenlesen": "OK"}, "overlays": ["overlay_source"],
         "step": "vorschlag", "elapsed_s": setup["elapsed_s"],
-        "focus": {"method": "climb", "samples": [], "verify": None, "roi": None},
+        "focus": {"method": "climb", "samples": [], "verify": None, "roi": None, "roi_source": None,
+                  "end_check": None},
         "exposure": {"target": 130, "band": [115, 150], "rounds": []},
     }
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Leonhard Hentschke", format_checked=True, acknowledge_warning=True)
@@ -979,6 +982,13 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
         }
         return camera, measured
 
+    def end_check(cam, hint, sweep, *, should_stop, info):
+        assert hint is None and sweep.focus_verify["target"] == 48
+        events.append("end_check")
+        return None
+
+    monkeypatch.setattr(live_setup, "check_focus_after_restart", end_check)
+
     def assist(cam, **kwargs):
         assert kwargs["stability_s"] == kwargs["min_stability_s"] == 15.0
         assert kwargs["stack_frames"] == 8 and kwargs["fit_attempts"] == 3
@@ -1017,11 +1027,12 @@ def test_real_setup_uses_fixed_camera_and_closes_serial(tmp_path, proposal, monk
     expected = "setup_failed" if fail else "setup_ready"
     assert _wait_state(service, {"setup_ready", "setup_failed"}) == expected
     service._setup_thread.join(1)
-    assert events[:2] == ["focus", "restart"]
+    # OQ-74: Fokus-Endpruefung nach dem letzten Kameraneustart, vor den Standbildern.
+    assert events[:3] == ["focus", "restart", "end_check"]
     if cell_text is None:
-        assert events[2:5] == ["serial_opened", "assist", "serial_closed"]
+        assert events[3:6] == ["serial_opened", "assist", "serial_closed"]
     else:
-        assert events[2:] == ["assist", "proposal"]
+        assert events[3:] == ["assist", "proposal"]
     settings = tmp_path / service.status()["session_id"] / "setup" / "camera-settings.json"
     assert json.loads(settings.read_text())["camera"] == camera.to_dict()
     assert json.loads(settings.read_text())["focus_method"] == "climb"
@@ -1700,6 +1711,7 @@ def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal,
         "status": "WARNUNG", "metrics": {"frames": 2, "read_count": 0, "rejection_reasons": {}},
     }
     service = ready_service(tmp_path, proposal)
+    monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     reason = service.status()["run_block"]
     assert "Gegenlesen WARNUNG: -" in reason
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True)
@@ -1838,6 +1850,7 @@ def test_confirm_adaptive_tolerance_marks_artifacts_and_run(tmp_path, proposal, 
     proposal['setup_checks'].update(overall='WARNUNG')
     proposal['setup_checks']['checks']['gegenlesen'] = {'status': 'WARNUNG', 'metrics': metrics}
     service = ready_service(tmp_path, proposal)
+    monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     assert 'Schatten entfernen.' in service.status()['run_block']
     assert service.status()['setup']['gegenlesen']['metrics'] == metrics
     kwargs = dict(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True,
@@ -2970,23 +2983,27 @@ def test_cancel_setup_rejects_other_states(tmp_path, state):
         service.cancel_setup()
 
 
-def test_focus_roi_visible_at_start_copied_retained_and_reset(tmp_path):
+def test_focus_roi_visible_at_start_copied_retained_and_reset(tmp_path, monkeypatch):
+    from dispread.live import setup as live_setup
+
     entered, proceed = threading.Event(), threading.Event()
 
-    def runner(*, report, **kwargs):
-        report('fokus')
+    def focus(*args, **kwargs):
+        # OQ-74: Die ROI steht vor dem ersten Fokusschritt fest (hier ohne
+        # Vorschaubild: mittleres Drittel als Rueckfall).
         entered.set()
         assert proceed.wait(2)
-        report('kamera')
-        return {}
+        raise live_setup.SetupError("Ende der Testeinrichtung")
 
-    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
-    service.start_setup()
+    monkeypatch.setattr(live_setup, "focus_camera", focus)
+    service = LiveService(FakeOwner(), tmp_path)
+    service.start_setup(cell_text="+ 1.2345 ")
     try:
         assert entered.wait(1)
-        focus = service.status()['setup']['focus']
-        assert focus['roi'] == [640, 360, 640, 360]
-        focus['roi'][0] = -1
+        focus_status = service.status()['setup']['focus']
+        assert focus_status['roi'] == [640, 360, 640, 360]
+        assert focus_status['roi_source'] == 'mittleres_drittel'
+        focus_status['roi'][0] = -1
         proceed.set()
         service._setup_thread.join(1)
         assert service.status()['setup']['focus']['roi'] == [640, 360, 640, 360]
@@ -3174,6 +3191,7 @@ def test_bridge_reserves_off_and_serial_before_camera_and_releases_on_stop(tmp_p
         def __init__(self, *args, output=None, **kwargs):
             super().__init__(*args, **kwargs)
     service = _confirmed_service(tmp_path, monkeypatch, Session)
+    monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     service._bridge_hub = hub
     service._profile_camera = object()
     seen = []
@@ -3243,3 +3261,368 @@ def test_run_passes_confirming_operator_to_session(tmp_path, monkeypatch):
     service.start_run(reference=False)
     assert seen['by'] == 'Operator'
     service.stop_run()
+
+
+def test_tc_bereichshinweis_im_status_und_fuer_die_neueinrichtung(tmp_path):
+    from types import SimpleNamespace
+
+    service = LiveService(FakeOwner(), tmp_path)
+    service._run_dir = tmp_path / 'live-x' / 'run-01'
+    service._session_dir = tmp_path / 'live-x'
+    hint = {'regions': [{'number': 6, 'index': 5, 'centre': [515.0, 774.0], 'share': 0.917,
+                         'median_px': 1.332, 'frames': 205}],
+            'rest_median_px': 0.175, 'frames': 210, 'limit_px': 0.65}
+    summary = {'tracking_region_hint': {'regions': [
+        {'number': 6, 'index': 5, 'centre': [515.0, 774.0], 'flagged_evaluations': 2,
+         'max_share': 0.937, 'median_px': 1.414}], 'last': hint}}
+    session = SimpleNamespace(latest=None, summary=summary, latest_age_s=lambda: None,
+                              region_hint=lambda: hint)
+    service._session = session
+    for full in (False, True):
+        assert service.status(full=full)['run']['region_hint'] == hint
+    service._setup_grid = {'quad': [[1.0, 2.0], [3.0, 2.0], [3.0, 4.0], [1.0, 4.0]]}
+    assert service.status()['previous_region_hint'] is None
+    with service._lock:
+        service._finish_run(session, None)
+    expected = {'session_id': 'live-x', 'run': 'run-01', 'quad': [[1.0, 2.0], [3.0, 2.0], [3.0, 4.0], [1.0, 4.0]],
+                'regions': [{'number': 6, 'centre': [515.0, 774.0], 'max_share': 0.937, 'flagged_evaluations': 2}]}
+    assert service.status()['previous_region_hint'] == expected
+    # Neue Einrichtung verwirft die Sitzung, der Hinweis fuer die Bereichsbearbeitung bleibt.
+    service._session, service._state = None, 'setup_ready'
+    status = service.status()
+    assert status['run'] is None and status['previous_region_hint'] == expected
+    # T3: nur dauerhaft Unstimmiges (Anteil >= 0,30 und mehrfach markiert) bleibt im Hinweis.
+    weak = SimpleNamespace(summary={'tracking_region_hint': {'regions': [
+        {'number': 1, 'centre': [1.0, 1.0], 'flagged_evaluations': 1, 'max_share': 0.9},
+        {'number': 2, 'centre': [2.0, 2.0], 'flagged_evaluations': 5, 'max_share': 0.2}], 'last': None}})
+    with service._lock:
+        service._finish_run(weak, None)
+    assert service.status()['previous_region_hint'] is None
+    with service._lock:
+        service._finish_run(session, None)
+    # Ein Lauf ohne Auffaelligkeit loescht den alten Hinweis.
+    quiet = SimpleNamespace(summary={'tracking_region_hint': {'regions': [], 'last': None}})
+    with service._lock:
+        service._finish_run(quiet, None)
+    assert service.status()['previous_region_hint'] is None
+
+
+# --- OQ-71: Neu einrichten aus Vorschlag und Bestaetigung, Belege bleiben ---
+
+def _runner_with_evidence(proposal):
+    def runner(*, session_dir, **kwargs):
+        (session_dir / "setup").mkdir(parents=True, exist_ok=True)
+        (session_dir / "setup" / "overlay_source.png").write_bytes(b"png")
+        return proposal
+    return runner
+
+
+def _snapshot(directory):
+    return {str(p.relative_to(directory)): p.read_bytes() for p in sorted(directory.rglob("*")) if p.is_file()}
+
+
+@pytest.mark.parametrize("overall", ["OK", "WARNUNG", "FEHLER"])
+def test_oq71_new_setup_from_ready_keeps_previous_evidence(tmp_path, proposal, overall):
+    proposal["setup_checks"]["overall"] = overall
+    service = ready_service(tmp_path, proposal)
+    first = service.status()["session_id"]
+    before = _snapshot(tmp_path / first)
+    assert before
+    service.start_setup()
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    second = service.status()["session_id"]
+    assert second != first
+    assert _snapshot(tmp_path / first) == before
+
+
+def test_oq71_new_setup_from_confirmed_keeps_profile_and_evidence(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    first = service.status()["session_id"]
+    service.confirm(session_id=first, confirmed_by="Leonhard Hentschke", format_checked=True)
+    assert service.status()["state"] == "confirmed"
+    before = _snapshot(tmp_path / first)
+    assert "profile.json" in before
+    service.start_setup()
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    assert service.status()["session_id"] != first
+    assert service.status()["state"] == "setup_ready"
+    assert _snapshot(tmp_path / first) == before
+
+
+def test_oq71_confirm_refused_on_fehler_server_side(tmp_path, proposal):
+    proposal["setup_checks"]["overall"] = "FEHLER"
+    service = ready_service(tmp_path, proposal)
+    with pytest.raises(LiveError, match="FEHLER"):
+        service.confirm(session_id=service.status()["session_id"], confirmed_by="L", format_checked=True,
+                        acknowledge_warning=True)
+    assert service.status()["state"] == "setup_ready"
+    assert not (tmp_path / service.status()["session_id"] / "profile.json").exists()
+
+
+def test_oq71_new_setup_refused_while_running(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    service._state = "running"
+    with pytest.raises(LiveError, match="Lauf zuerst beenden"):
+        service.start_setup()
+    assert service.status()["state"] == "running"
+
+
+def test_oq71_cancel_then_immediate_new_setup_without_restart(tmp_path, proposal):
+    release = threading.Event()
+    calls = []
+
+    def runner(*, session_dir, cell_text, report):
+        calls.append(session_dir)
+        report("fokus")
+        if len(calls) == 1:
+            release.wait(5)
+            report("kamera")  # wirft nach dem Abbruch
+        (session_dir / "setup").mkdir(parents=True, exist_ok=True)
+        return proposal
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner)
+    service.start_setup()
+    assert _wait_state(service, {"setup_running"}) == "setup_running"
+    service.cancel_setup()
+    release.set()
+    assert _wait_state(service, {"setup_failed"}) == "setup_failed"
+    service.start_setup()
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    assert len(calls) == 2
+
+# --- OQ-74: Fokus-ROI aus der LCD-Hinweisbox, Endpruefung nach dem Kameraneustart ---
+
+@pytest.mark.parametrize("with_hint", [True, False])
+def test_setup_focus_roi_from_lcd_hint_and_end_check_after_last_restart(tmp_path, proposal, monkeypatch,
+                                                                       with_hint):
+    import json
+    from types import SimpleNamespace
+
+    import numpy as np
+    from test_live_setup import _green_hint_frame
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.live import setup as live_setup
+
+    events = []
+    camera = CameraSettings.from_dict(proposal["camera"])
+    frame = _green_hint_frame(size=(1200, 480)) if with_hint else np.full((480, 1200, 3), 90, np.uint8)
+    expected_hint = live_setup.focus_hint_box(frame)
+    assert (expected_hint is not None) == with_hint
+
+    class Owner(FakeOwner):
+        def latest(self):
+            return 5, SimpleNamespace(image=frame)
+
+        def restart(self, factory=None, reason=None):
+            events.append(f"restart:{reason}")
+
+    def focus(cam, hint, **kwargs):
+        assert hint == expected_hint
+        events.append("focus")
+        measured = FocusMeasurements()
+        measured.append((48, 500.0))
+        measured.roi_means = {48: 100.0}
+        measured.verify_frame = np.full((1080, 1920, 3), 7, np.uint8)
+        measured.focus_verify = {"target": 48, "best_measured": 500.0, "verified": 490.0, "attempts": 1,
+                                 "approach": "from_below", "backlash_margin": 12}
+        return camera, measured
+
+    def exposure(cam, settings, *, apply, info, on_round):
+        events.append("exposure")
+        apply(settings)
+        return settings, {"achieved": True}
+
+    end = {"status": "OK", "reason": None, "after_restart": {"ratio": 0.98}, "reapproach": None}
+
+    def end_check(cam, hint, sweep, *, should_stop, info):
+        assert hint == expected_hint and sweep.focus_verify["target"] == 48
+        events.append("end_check")
+        return end, {"nach_neustart": np.full((1080, 1920, 3), 9, np.uint8)}
+
+    def assist(cam, **kwargs):
+        events.append("assist")
+        image = np.zeros((2, 2, 3), np.uint8)
+        return SimpleNamespace(first=image, second=image, first_text="+ 1.2345 ", fit=object(),
+                               offset_check=object(), final_checks=object(), stability_elapsed_s=15.0,
+                               reader_check=None, setup_attempt=1, stability_frames=())
+
+    def propose(first, **kwargs):
+        events.append("proposal")
+        check = kwargs["focus_check"]
+        assert check["status"] == ("OK" if with_hint else "WARNUNG")
+        assert check["metrics"]["endpruefung"] == end
+        if not with_hint:
+            assert "Fokus ohne LCD-Hinweis gemessen" in check["reason"]
+        return proposal
+
+    monkeypatch.setattr(live_setup, "focus_camera", focus)
+    monkeypatch.setattr(live_setup, "adjust_exposure", exposure)
+    monkeypatch.setattr(live_setup, "check_focus_after_restart", end_check)
+    monkeypatch.setattr(live_setup, "assist_measure", assist)
+    monkeypatch.setattr(live_setup, "propose_with_fit", propose)
+    service = LiveService(Owner(), tmp_path, source_for=lambda settings: settings)
+    service.start_setup(cell_text="+ 1.2345 ")
+    service._setup_thread.join(5)
+    assert service.status()["state"] == "setup_ready", service.status()["error"]
+    # Endpruefung nach dem letzten Neustart, vor den Standbildern.
+    assert events == ["focus", "restart:einrichtung_regler", "exposure", "restart:einrichtung_belichtung",
+                      "end_check", "assist", "proposal"]
+    setup_dir = tmp_path / service.status()["session_id"] / "setup"
+    saved = json.loads((setup_dir / "camera-settings.json").read_text())
+    roi = live_setup.measurement_roi_pixels(live_setup.FOCUS_SOURCE_SIZE, expected_hint)
+    assert saved["focus_roi"] == {"pixels": roi, "quelle": "lcd_hinweis" if with_hint else "mittleres_drittel",
+                                  "hint_box": list(expected_hint) if with_hint else None}
+    assert saved["focus_sweep_roi_mean"] == [[48, 100.0]]
+    assert saved["focus_end_check"] == end
+    focus_status = service.status()["setup"]["focus"]
+    assert focus_status["roi"] == roi
+    assert focus_status["roi_source"] == saved["focus_roi"]["quelle"]
+    assert focus_status["end_check"] == {"status": "OK", "ratio": 0.98, "reapproach_ratio": None}
+    # Diagnose: Ausschnitte vor und nach dem Neustart, klein (kein Vollbild).
+    import cv2
+    before = cv2.imread(str(setup_dir / "fokus-vor-neustart.png"))
+    after = cv2.imread(str(setup_dir / "fokus-nach-neustart.png"))
+    assert before is not None and int(before[0, 0, 0]) == 7
+    assert after is not None and int(after[0, 0, 0]) == 9
+    assert before.shape[0] * before.shape[1] < 0.5 * 1920 * 1080
+    assert saved["focus_diagnostic_crop"] == live_setup.focus_diagnostic_crop(
+        np.zeros((1080, 1920, 3), np.uint8), expected_hint)[1]
+
+
+@pytest.mark.parametrize("outcome", ["WARNUNG", "fehlt", "kamerafehler", "OK"])
+def test_run_start_checks_focus_after_restart_and_records_it(tmp_path, monkeypatch, outcome):
+    import json
+
+    import numpy as np
+
+    from dispread.camera_settings import CameraSettings
+    from dispread.frames.uvc_source import UvcError
+    from dispread.live import setup as live_setup
+
+    events, sessions = [], []
+    camera = CameraSettings("logitech_streamcam", "046d:0893", (1920, 1080), "YUYV", 30,
+                            {"focus_absolute": 52, "exposure_time_absolute": 300, "gain": 10,
+                             "white_balance_temperature": 4600})
+    reference = None if outcome == "fehlt" else {"roi_pixels": [0, 0, 10, 10], "roi_box": [0, 0, 0.1, 0.1],
+                                                "score": 500.0, "roi_mean": 100.0, "frames": 8,
+                                                "quelle": "stabilitaet_einzelbilder"}
+    text = "Bild nach Kamerastart unschärfer als bei der Einrichtung (31 %) – Fokus prüfen"
+
+    class Owner(FakeOwner):
+        def restart(self, factory=None, reason=None):
+            events.append(f"restart:{reason}")
+
+    def check(cam, ref, *, target):
+        events.append("focus_check")
+        assert ref == reference and target == 52
+        if outcome == "kamerafehler":
+            raise UvcError("kein frisches Bild")
+        if outcome == "OK":
+            return ({"status": "OK", "text": "Fokusvergleich: 104 %", "after_restart": {"ratio": 1.04},
+                     "run_band_ratio": [0.95, 1.05]}, {})
+        return ({"status": "WARNUNG", "text": text, "after_restart": {"ratio": 0.2},
+                 "reapproach": {"ratio": 0.31}}, {"nach_neustart": np.zeros((100, 100, 3), np.uint8)})
+
+    class FakeSession:
+        def __init__(self, *a, **kw):
+            self.latest, self.summary, self.end_reason = None, {}, None
+            self.session_path = tmp_path / "s.json"
+            sessions.append(self)
+
+        def latest_age_s(self):
+            return None
+
+        def start(self):
+            events.append("session_start")
+            self.started_with = getattr(self, "focus_check", "unset")
+
+        def run(self, stop):
+            stop.wait()
+
+        def stop(self, reason="bediener"):
+            return {"end_reason": reason}
+
+    monkeypatch.setattr("dispread.live.service.LiveSession", FakeSession)
+    monkeypatch.setattr(live_setup, "check_focus_at_run_start", check)
+    service = LiveService(Owner(), tmp_path)
+    service._state, service._profile_path = "confirmed", tmp_path / "profile.json"
+    service._profile_camera, service._focus_reference = camera, reference
+    if outcome == "OK":
+        service.start_run(reference=False)
+        try:
+            assert service.status()['run']['focus_check']['after_restart']['ratio'] == 1.04
+            assert sessions[0].started_with['run_band_ratio'] == [0.95, 1.05]
+        finally:
+            service.stop_run()
+        return
+    old_session = FakeSession()
+    service._session = old_session
+    service._run_dir = tmp_path / 'old-run'
+    service._state = 'stopped'
+    with pytest.raises(LiveError, match="Fokus"):
+        service.start_run(reference=False)
+    assert service.status()["state"] == "stopped"
+    assert service._session is old_session and len(sessions) == 1
+    assert service.status()['run']['dir'] == 'old-run'
+    assert (tmp_path / "run-01" / "focus-check.json").exists()
+    meta = json.loads((tmp_path / "run-01" / "session.json").read_text())
+    assert meta['schema'] == 'live-start-rejection/1'
+    assert meta['ended_at_utc'] and meta['run_id'] and meta['profile']['path']
+    assert service.status()['last_start_rejection']['focus_check'] == meta['focus_check']
+    with pytest.raises(LiveError):
+        service.start_run(reference=False)
+    assert service.status()['last_start_rejection']['run_dir'] == 'run-02'
+    monkeypatch.setattr(service, '_check_run_start_focus', lambda *_: {'status': 'OK', 'text': 'Fokus OK'})
+    service.start_run(reference=False)
+    try:
+        assert service.status()['last_start_rejection'] is None
+        assert (tmp_path / 'run-01' / 'session.json').exists()
+        assert (tmp_path / 'run-02' / 'session.json').exists()
+    finally:
+        service.stop_run()
+
+
+
+def test_confirm_keeps_focus_reference_for_run_start(tmp_path, proposal):
+    reference = {"roi_pixels": [1, 2, 3, 4], "score": 9.0}
+    proposal["focus_reference"] = reference
+    service = ready_service(tmp_path, proposal)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Test", format_checked=True,
+                    acknowledge_warning=True)
+    assert service._focus_reference == reference
+    service._last_start_rejection = {'run_id': 'old'}
+    service.start_setup()
+    assert service._focus_reference is None
+    assert service.status()['last_start_rejection'] is None
+    service._setup_thread.join(2)
+
+
+def test_run_on_other_path_releases_bridge_uart_listener(tmp_path, monkeypatch):
+    """13.11.2026 (C-10): UART direkt scheiterte an „serial port occupied“, weil der UART-Empfang
+    der Brücke noch /dev/ttyAMA0 hielt. Ein Lauf auf einem anderen Weg gibt ihn selbst frei."""
+    from dispread.bridge.hub import BridgeHub
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    stopped = []
+    monkeypatch.setattr(hub, 'status', lambda: {'uart_prepared': True, 'run_id': None, 'real_run': False})
+    monkeypatch.setattr(hub, 'stop_uart', lambda: stopped.append(True))
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._bridge_hub = hub
+    service.start_run(reference=False)                 # Weg „Aus“ (nicht UART über Brücke)
+    assert stopped == [True]
+    service.stop_run()
+
+
+def test_run_on_bridge_uart_keeps_listener(tmp_path, monkeypatch):
+    from dispread.bridge.hub import BridgeHub
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    stopped = []
+    monkeypatch.setattr(hub, 'stop_uart', lambda: stopped.append(True))
+    monkeypatch.setattr(hub, 'status', lambda: {'uart_prepared': True})
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._bridge_hub = hub
+    try:
+        service.start_run(reference=False, output={'transport': 'uart'})
+    except Exception:
+        pass                                           # Weg UART: Start darf scheitern, Empfang bleibt
+    assert stopped == []

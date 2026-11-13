@@ -142,18 +142,24 @@ class SerialTransport:
             raise TransportError('uart_peer_unavailable') from None
 
     def receive(self):
+        # Ursache unterscheidbar (13.11.2026: UART-Empfangstest brach ab, der Export
+        # sagte nur connection_unavailable): Zeitlimit, unlesbarer Rahmen, Port weg.
         deadline = time.monotonic() + 2
-        try:
-            while not self._closed.is_set() and time.monotonic() < deadline:
-                if self._messages:
-                    return self._messages.pop(0)
-                # pySerial read(n) blocks for n bytes or the timeout: read only
-                # what is waiting (at least one byte), never a fixed 4096 (R1).
+        while not self._closed.is_set() and time.monotonic() < deadline:
+            if self._messages:
+                return self._messages.pop(0)
+            # pySerial read(n) blocks for n bytes or the timeout: read only
+            # what is waiting (at least one byte), never a fixed 4096 (R1).
+            try:
                 waiting = getattr(self._stream, 'in_waiting', 0) or 0
-                self._messages.extend(self._reader.feed(self._stream.read(max(1, min(waiting, 4096)))))
-        except Exception:
-            raise TransportError('uart_peer_unavailable') from None
-        raise TransportError('uart_peer_unavailable')
+                data = self._stream.read(max(1, min(waiting, 4096)))
+            except Exception:
+                raise TransportError('uart_port_failed') from None
+            try:
+                self._messages.extend(self._reader.feed(data))
+            except Exception:
+                raise TransportError('uart_frame_invalid') from None
+        raise TransportError('uart_closed' if self._closed.is_set() else 'uart_timeout')
 
     def close(self):
         self._closed.set()

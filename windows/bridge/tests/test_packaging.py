@@ -26,8 +26,10 @@ def test_packaged_session_data_include_both_pinned_originals(spec_name):
     packaged = {Path(source).name: (Path(source).read_bytes(), destination) for source, destination in data}
     originals = {
         'Session-COM8.ucf': 'bruecke-testlauf-2026-11-06/Session-COM8.ucf',
-        'versuch2b-session-hidden.ucf': 'gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf',
+        'vorlage-4kanal-mvv.ucf': 'gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf',
     }
+    assert 'versuch2b-session-hidden.ucf' not in packaged
+    assert not (BRIDGE / 'src/dispread_bridge_app/templates/versuch2b-session-hidden.ucf').exists()
     for filename, source in originals.items():
         assert filename in packaged
         assert packaged[filename] == ((BRIDGE.parents[1] / 'docs/quellen' / source).read_bytes(),

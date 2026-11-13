@@ -27,6 +27,8 @@ export const STORE_KEY = 'werkbank.anzeige-bewegt';
 export const LOST_TITLE = 'Rahmenbereiche verdeckt oder verschoben – Kamera und Sicht prüfen';
 export const STALL_TITLE = 'Streamstillstand: kein neues Kamerabild';
 export const MOVED_TITLE = 'Anzeige hat sich bewegt';
+// OQ-74: Fokuspruefung nach dem Kameraneustart am Laufstart (run.focus_check, Text vom Server).
+export const FOCUS_RUN_TITLE = 'Fokus nach Kamerastart';
 const MOVED_ACTIONS = [
   {label: 'Weiter beobachten', value: 'weiter', escape: true, cls: 'ghost'},
   {label: 'Lauf stoppen', value: 'stopp', cls: 'danger', icon: 'stop'},
@@ -111,6 +113,8 @@ export function createAlerts(initial = {}) {
   let warned = null;
   let latest = null;
   let outputKey = null;
+  let focusKey = null;
+  let rejectionKey = null;
 
   function sameStored(runKey, since, start) {
     const stored = readStore(deps.storage);
@@ -192,6 +196,17 @@ export function createAlerts(initial = {}) {
     else if (key) toast({level: 'err', title: out.error || 'Ausgabe fehlgeschlagen', sticky: true, key: 'ausgabe'});
   }
 
+  // Laufstart: Schaerfe nach dem Kameraneustart (Server). WARNUNG stehend, Neusetzen kurz; einmal je Lauf.
+  function focusToast(status, runKey) {
+    const check = status.state === 'running' ? status.run?.focus_check : null;
+    if (!check?.text || !runKey) return;
+    const key = `${runKey}|${check.status}|${check.text}`;
+    if (key === focusKey) return;
+    focusKey = key;
+    const warn = check.status === 'WARNUNG';
+    toast({level: warn ? 'warn' : 'info', title: FOCUS_RUN_TITLE, text: check.text, sticky: warn, key: 'fokus-lauf'});
+  }
+
   function update(status, {replay = false} = {}) {
     if (!status) return;
     latest = status;
@@ -201,6 +216,18 @@ export function createAlerts(initial = {}) {
     if (replay) return;
 
     outputToast(status);
+    focusToast(status, runKey);
+    const rejection = status.last_start_rejection;
+    if (!rejection?.run_id && rejectionKey) {
+      closeToast('start-abgelehnt');
+      rejectionKey = null;
+    }
+    if (rejection?.run_id && rejection.run_id !== rejectionKey) {
+      rejectionKey = rejection.run_id;
+      toast({level: 'warn', title: 'Letzter Start abgelehnt',
+        text: rejection.focus_check?.text || 'Fokus nicht prüfbar – bitte neu einrichten',
+        sticky: true, key: 'start-abgelehnt'});
+    }
 
     const stalled = Boolean(status.camera?.stalled);
     if (stalled && !stalledShown) {

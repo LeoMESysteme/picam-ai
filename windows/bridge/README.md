@@ -299,7 +299,10 @@ Nur unter Linux geprüft, keine Windows-Abnahme.
 
 ## Interner Testbuild (GUI)
 
-Ein Befehl auf einem Windows-11-x64-PC (Python ≥ 3.13 x64, ausdrücklich angegeben, kein PATH-Suchen):
+Auf einem Windows-11-x64-PC mit Python ≥ 3.13 x64: **Doppelklick auf `windows\bridge\build-test.cmd`.**
+Der Starter holt den Interpreter über `py -3.13`, ruft `build-test.ps1` mit `-ExecutionPolicy Bypass`
+nur für diesen Lauf auf (eine `.ps1` kann ihre eigene Richtlinie nicht umgehen) und öffnet am Ende
+`dist-test`. Argumente gehen unverändert durch. Von Hand, Interpreter ausdrücklich angegeben:
 
 ```powershell
 $py = py -3.13 -c "import sys; print(sys.executable)"

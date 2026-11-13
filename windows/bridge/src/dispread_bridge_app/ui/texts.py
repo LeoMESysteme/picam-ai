@@ -229,10 +229,11 @@ SESSION_FAILED = 'Session-Datei nicht erzeugt'
 SESSION_AGAIN = 'Neu erzeugen …'
 RECORD_HIDDEN = ('In GSVmulti: Configure Recording → Advanced → ‚Record Hidden Channels‘ einschalten. Diese '
                  'Einstellung steht nicht in der Session-Datei; ohne sie fehlen die ausgeblendeten Kanäle '
-                 '(Gültigkeit, Sequenz, Zeit) still in der Aufnahme.')
+                 '(Gültigkeit, Sequenz, Zeit) still in der Aufnahme. Kanal 1 hält bei Lesefehlern den letzten '
+                 'Wert; auswerten nur Zeilen mit Gültigkeit 1.')
 RECORD_HIDDEN_OK = 'Habe ich eingeschaltet'
-AUTOSCALE_HINT = ('Für Kanal {channel} ‚Autoscale Y‘ ausschalten und Min/Max fest einstellen, damit Fehlwerte '
-                  'sichtbar über den Rand gehen.')
+AUTOSCALE_HINT = ('Für Kanal {channel} ‚Autoscale Y‘ ausschalten und Min/Max fest einstellen, damit der '
+                  'Fehlwert vor dem ersten gültigen Wert die Skala nicht sprengt.')
 SINGLE_CHANNEL_WARNING = ('Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden '
                           'keine Zeilen gesendet. GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der '
                           'Aufnahme sind deshalb nicht genau.')
@@ -354,6 +355,10 @@ CONNECTION_CODE_TEXT = {
     'connection_lost': ('Verbindung unterbrochen', 'Die Brücke verbindet automatisch neu, ohne den Pi zu wechseln.'),
     'network_unavailable': ('Netzwerk nicht erreichbar', 'Prüfen Sie Netzwerk, VPN oder Tailscale.'),
     'uart_peer_unavailable': ('Pi am UART antwortet nicht', 'Prüfen Sie TX, RX, GND und den Pi-Dienst.'),
+    'uart_timeout': ('Pi am UART antwortet nicht', 'Prüfen Sie TX, RX, GND und den Pi-Dienst.'),
+    'uart_frame_invalid': ('UART-Nachricht gestört', 'Eine Nachricht kam unlesbar an. Die Brücke verbindet neu; bei Häufung Kabel und Masse prüfen.'),
+    'uart_port_failed': ('USB-Adapter nicht lesbar', 'Prüfen Sie, ob der Adapter steckt.'),
+    'uart_closed': ('UART-Verbindung beendet', 'Verbinden Sie bei Bedarf erneut.'),
     'redirect_refused': ('Weiterleitung abgelehnt', 'Die Brücke folgt keiner Weiterleitung. Prüfen Sie die Adresse.'),
     'transport_write_uncertain': ('Senden unklar', 'Es ist offen, ob der Pi die Nachricht erhielt. Neu verbinden.'),
     'disconnected': ('Verbindung beendet', 'Verbinden Sie bei Bedarf erneut.'),
@@ -951,11 +956,11 @@ SETUP: dict[str, dict] = {
     'E4locked': _s(4, 'GSVmulti-Session', [
         ('session', 'gsv_port', 'session_ok'),
         ('fields', 'Manuelle Einstellung', (
-            ('Gerät', 'UserDef'), ('COM-Port', '{gsv_port}'), ('Übertragung', '{gsv_line}'), ('Kanäle', '1'),
+            ('Gerät', 'UserDef'), ('COM-Port', '{gsv_port}'), ('Übertragung', '{gsv_line}'),
+            ('Kanäle', '{channels_line}'),
             ('Präfix', '%'), ('Einheit', 'mV/V'), ('Frequenz', '10 Hz')), None,
          'Ohne Session-Datei von Hand in GSVmulti einstellen (Muster: Session aus dem Testlauf vom 06.11.2026, nur '
-         'Port anpassen). Ein „Kanal“ ist ein Messkanal der Session; die Brücke liefert einen Wertestrom. Ob GSVmulti '
-         'die Einstellungen übernimmt, belegt erst der Empfangstest.')],
+         'Port anpassen). Ob GSVmulti die Einstellungen übernimmt, belegt erst der Empfangstest.')],
         nxt='Weiter', gate=('session_ok', 'Erst bestätigen: GSVmulti eingestellt')),
     'E4': _s(4, 'GSVmulti-Session erzeugen', [
         _PORTS, ('button', 'Session erzeugen', 'export_session', True)]),
@@ -987,10 +992,15 @@ SETUP: dict[str, dict] = {
         _AUTO], nxt='Ohne Test beenden'),
     'E5done': _s(5, 'Test gesendet', [
         _TEST_INFO,
-        ('info', 'warn', 'Empfang nicht nachgewiesen', 'In GSVmulti selbst prüfen, ob die Testwerte ankamen.', ()),
-        ('fields', '', (('Übergeben', '{written}'),), None,
-         'Synthetische Werte wurden an den COM-Port übergeben. Ob GSVmulti sie empfangen hat, prüft die Brücke '
-         'nicht (Testdateivergleich noch nicht verfügbar).'), _AUTO], nxt='Fertig', ready=True),
+        ('info', 'info', '{written} von {count} Werten an {gsv_port} übergeben',
+         'Ob GSVmulti sie aufgezeichnet hat, prüft die Brücke nicht: in der Testsession nachsehen.', ()),
+        _AUTO], nxt='Fertig', ready=True),
+    'E5short': _s(5, 'Test unvollständig', [
+        ('info', 'err', 'Unvollständig: {written} von {count}, {missing} fehlen',
+         'Nicht alle Testwerte kamen bis zum COM-Port. Protokolle exportieren und den Test wiederholen.',
+         (('Protokolle exportieren', 'export_diagnostics', True),)),
+        ('check', 'Getrennte GSVmulti-Testsession verwendet', 'test_session_ok'),
+        ('button', 'Test wiederholen', 'start_demo_check', True), _AUTO], nxt='Fertig', ready=True),
     'E5file': _s(5, 'Empfang prüfen', [
         _TEST_INFO,
         ('info', 'info', 'Testdatei auswählen', 'Aufzeichnung in GSVmulti speichern, dann die Datei wählen.',
@@ -1073,12 +1083,22 @@ def _step3_head(ctx, data) -> tuple[list, dict]:
     return pre, foot
 
 
+def channels_text(channels):
+    """Kanäle laut Session-Vorlage (eine Quelle mit Export und Empfangstest)."""
+    if channels == 4:
+        return '4 – Wert; gültig; Takt; Zeit (3 ausgeblendet, „Record Hidden Channels“ an)'
+    if channels == 1:
+        return '1 – ein Wertestrom'
+    return 'laut Session-Vorlage'
+
+
 def setup_spec(ctx, locked=False):
     """SETUP-Zustand mit Werten aus ctx (und ctx.setup.data) gefüllt."""
     m = dict(bridge_port=ctx.bridge_port, gsv_port=ctx.gsv_port, version=ctx.version, protocol=ctx.protocol,
              pi_name=ctx.pi_name, pi_id=ctx.pi_id, endpoint=ctx.endpoint, fingerprint=ctx.fingerprint,
              session_name=ctx.session_name, adapter_port=ctx.adapter_port,
-             uart_line=baud_text(ctx.uart_baud), gsv_line=baud_text(ctx.gsv_baud))
+             uart_line=baud_text(ctx.uart_baud), gsv_line=baud_text(ctx.gsv_baud),
+             channels_line=channels_text(ctx.session_channels))
     data = ctx.setup.data
     if data.get('gsv_baud') and not ctx.gsv_baud:
         m['gsv_line'] = baud_text(data['gsv_baud'])

@@ -153,12 +153,12 @@ def test_probe_rejects_unknown_template(tmp_path):
 def test_catalog_loads_pinned_sources_and_derives_channel_metadata():
     catalog = templates.load_session_catalog()
     assert len(catalog) == 2
-    active = catalog[templates.ACTIVE_SESSION_TEMPLATE]
+    active = templates.session_template('1ch')
     assert active.spec.template_id == 'bruecke-session-com8-20261106'
     assert active.spec.status == 'active'
     assert active.spec.telegram_format == 'single_value'
-    prepared = catalog['bruecke-session-4ch-hidden-20261111']
-    assert prepared.spec.status == 'prepared'
+    prepared = catalog['bruecke-session-4ch-mvv-20261111']
+    assert prepared.spec.status == 'active'
     assert prepared.spec.telegram_format == 'gsvmulti_userdefined_4ch_v1'
     for entry, channels, hidden, required in [(active, 1, 0, False), (prepared, 4, 3, True)]:
         assert entry.raw == (ROOT / entry.spec.source_path).read_bytes()
@@ -166,11 +166,11 @@ def test_catalog_loads_pinned_sources_and_derives_channel_metadata():
         assert (entry.channels, entry.hidden_channels, entry.record_hidden_required) == (channels, hidden, required)
         assert entry.baud_rate == 115200
     checksums = (ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/SHA256SUMS').read_text()
-    assert f'{prepared.spec.source_sha256}  versuch2b-session-hidden.ucf' in checksums
+    assert f'{prepared.spec.source_sha256}  vorlage-4kanal-mvv.ucf' in checksums
 
 
 @pytest.mark.parametrize('template_id', [
-    'bruecke-session-com8-20261106', 'bruecke-session-4ch-hidden-20261111',
+    'bruecke-session-com8-20261106', 'bruecke-session-4ch-mvv-20261111',
 ])
 def test_catalog_rejects_changed_package_bytes(tmp_path, monkeypatch, template_id):
     for spec in templates.SESSION_TEMPLATES:
@@ -190,7 +190,7 @@ def test_catalog_rejects_different_baud_rates_even_with_valid_hashes(tmp_path, m
     specs = []
     for spec in templates.SESSION_TEMPLATES:
         raw = (ROOT / spec.source_path).read_bytes()
-        if spec.status == 'prepared':
+        if spec.telegram_format == 'gsvmulti_userdefined_4ch_v1':
             raw = raw.replace(b'BaudRate = 115200', b'BaudRate = 9600')
         target = tmp_path / spec.package_file
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -202,9 +202,13 @@ def test_catalog_rejects_different_baud_rates_even_with_valid_hashes(tmp_path, m
         templates.load_session_catalog()
 
 
-def test_prepared_evidence_cannot_authorize_automatic_export():
+def test_four_channel_evidence_authorizes_port_only_export():
     evidence = templates.inspect_template(
-        ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf')
-    assert evidence.template_id == 'bruecke-session-4ch-hidden-20261111'
-    with pytest.raises(templates.SessionTemplateError, match='automatic_export_blocked'):
-        evidence.require_automatic_export()
+        ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf')
+    assert evidence.template_id == 'bruecke-session-4ch-mvv-20261111'
+    evidence.require_automatic_export()
+
+
+def test_previous_four_channel_source_remains_evidence_only():
+    with pytest.raises(templates.SessionTemplateError, match='unknown_template'):
+        templates.inspect_template(ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf')

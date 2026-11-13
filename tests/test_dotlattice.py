@@ -134,6 +134,55 @@ def test_candidate_in_format_empty_cell_is_rejected(column):
                        empty_cells=EMPTY_CELLS) == "leerzelle_belegt"
 
 
+def _faint_spots(cells: tuple[int, ...], contrast: int):
+    """Flache Einzelminima wie Glanzrand oder Kratzer (OQ-69) in Leerzellen."""
+    quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
+    image, h = _synthetic(quad, "+1234567 9012   ")
+    for cell in cells:
+        target = np.float32([[[cell * 25 + 2.5 * 25 / 6, 160 / 9 + 3.5 * 160 / 9]]])
+        x, y = cv2.perspectiveTransform(target, h)[0, 0]
+        cv2.circle(image, (round(float(x)), round(float(y))), 1, (210 - contrast,) * 3, -1)
+    return image, h, quad
+
+
+@pytest.mark.parametrize("cell", (8, 13, 14))
+def test_single_faint_minimum_in_empty_cell_is_tolerated(cell):
+    image, h, quad = _faint_spots((cell,), 25)
+    # Der Fleck muss wirklich Kandidat sein, sonst prueft der Test nichts.
+    candidates = dotlattice._source_candidates(image, quad)
+    assert len(candidates) > 0
+    result = fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h), empty_cells=EMPTY_CELLS)
+    assert isinstance(result, LatticeFit), result
+
+
+def test_two_faint_minima_in_empty_cells_stay_occupied():
+    image, h, quad = _faint_spots((14, 15), 25)
+    assert fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h),
+                       empty_cells=EMPTY_CELLS) == "leerzelle_belegt"
+
+
+def test_single_dot_deep_minimum_in_empty_cell_stays_occupied():
+    image, h, quad = _faint_spots((14,), 80)
+    assert fit_lattice(image, _box(quad, image.shape[:2]), seeds=_seeds(h),
+                       empty_cells=EMPTY_CELLS) == "leerzelle_belegt"
+
+
+def _dot_block(center, pitch, cells):
+    return [(center[0] + c * pitch, center[1] + r * pitch) for c, r in cells]
+
+
+def test_plus_anchor_ignores_filled_glyph_block():
+    # Schein-Plus an Gehaeusekanten (154403Z, ab4): die 26 Leerpositionen des
+    # 5x7-Plus sind dort belegt. Ein voller Block enthaelt ein Plus, ist aber keins.
+    pitch = 1000 / (1.2 * 96)
+    plus = {(0, -2), (0, -1), (0, 1), (0, 2)} | {(i, 0) for i in range(-2, 3)}
+    block = {(c, r) for c in range(-2, 3) for r in range(-3, 4)}
+    src = np.float32(_dot_block((80, 100), pitch, plus) + _dot_block((80, 300), pitch, block))
+    anchors = dotlattice._plus_anchors(src, 0, 1000)
+    assert anchors
+    assert all(abs(float(item[1][1]) - 100) < pitch for item in anchors)
+
+
 def test_cell_bias_over_limit_rejects_locally_displaced_dots():
     quad = np.float32([[720, 550], [1200, 625], [1193, 695], [718, 610]])
     display = render("+1234567 9012   ", GRID, bg=210, ink=30)
@@ -322,19 +371,60 @@ def test_evaluate_quad_agrees_with_fit_on_sc6_still():
     assert check_setup(image, evaluated).to_dict()["overall"] in {"OK", "WARNUNG"}
 
 
-@pytest.mark.parametrize("name,frame,reason", [
-    ("ab4", 16, {"startlage_mehrdeutig"}),
-    ("ab6", 22, {"keine_startlage", "startlage_mehrdeutig"}),
-])
-def test_uncertain_real_still_start_is_rejected(name, frame, reason):
-    still = local_recording(f"diagnostics/{name}-still/frames/frame_{frame:06d}.png")
+def _max_column_offset(quad, reference, cells=range(8)) -> float:
+    """Groesster Versatz der Rasterpunkte in Punktspalten zwischen zwei Quads.
 
+    Ein Spaltenversatz sieht in Ecken-px je nach Perspektive verschieden gross
+    aus (5,7..10 px je Spalte); in Punktspalten ist er direkt erkennbar.
+    """
+    cs = np.array([(cell * 6 + c, r) for cell in cells for c in range(5) for r in range(7)])
+    lat = dotlattice._lat(cs[:, 0], cs[:, 1])
+    corners = dotlattice._CORNERS[0]
+    to_image = np.linalg.inv(cv2.getPerspectiveTransform(np.float32(quad), corners))
+    to_reference = cv2.getPerspectiveTransform(np.float32(reference), corners)
+    moved = dotlattice._warp_points(dotlattice._warp_points(lat, to_image), to_reference)
+    return float(np.max(np.abs(moved[:, 0] - lat[:, 0])) / dotlattice._PH)
+
+
+# Ersetzt `test_uncertain_real_still_start_is_rejected` (ab4/16 mehrdeutig,
+# ab6/22 keine/mehrdeutig). Beide Ablehnungen kamen von Schein-Plus-Ankern an der
+# Glasecke, wie bei 154403Z (OQ-69); sie haben kein falsches Raster abgewehrt.
+# ab4: die alte Einstufung "9,14 px falsch" mass gegen das um ~0,9 Punktspalten
+# versetzte Original-ab4-profile. Unabhaengiges Review:
+# .superpowers/sdd/2026-11-11-gsvmulti-takt/oq69-review.md (Abschnitt 1).
+@pytest.mark.parametrize("name,frame,text,reference_name,reference_quad", [
+    # Bestaetigtes, korrigiertes Profil; gemessen 0,08 Spalten.
+    ("ab4", 16, "+0.46780 ", "ab4-profile-regrid1.json", None),
+    # 25-30 Grad schraeg. Bild 22 statt 20 (Bild 20 zeigt einen Ziffernwechsel).
+    # Referenzfit = Startfit vom 2026-11-12, im Review auf Zellen, Lese- und
+    # 2j-Ergebnis geprueft; Profilabstand der Wertzellen 0,31 Spalten.
+    ("ab6", 22, "+0.46789 ", "ab6-profile",
+     [[1037.4, 511.6], [1623.4, 342.4], [1643.7, 415.3], [1061.4, 590.4]]),
+])
+def test_bezel_anchor_no_longer_blocks_text_confirmed_start(name, frame, text, reference_name, reference_quad):
+    from dispread.lattice_offsets import refine_quad
+    from dispread.live import DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256
+    from dispread.live.setup import DEFAULT_TARGET_SIZE, LATTICE_GRID
+    from dispread.setup_checks import diagnose_reader, raster_offset_check
+
+    still = local_recording(f"diagnostics/{name}-still/frames/frame_{frame:06d}.png")
+    profile = local_recording(Path("diagnostics") / reference_name)
     image = cv2.imread(str(still))
     hint = find_green_hint_box(image)
     assert hint is not None
     result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
-    assert isinstance(result, str), result
-    assert result in reason
+    assert isinstance(result, LatticeFit), result
+    reference = reference_quad or json.loads(profile.read_text())["quad"]
+    assert _max_column_offset(result.quad, reference) < 0.25
+    # Wertzellen gegen das bestaetigte Profil: kein Spaltenversatz.
+    assert _max_column_offset(result.quad, json.loads(profile.read_text())["quad"]) <= 0.35
+    # 2j unter der Fehlergrenze, nach der Nachfuehrung wie in der Einrichtung OK.
+    assert raster_offset_check([(image, text)], result.quad).status != "FEHLER"
+    refined, _ = refine_quad([(image, text)], result.quad, LATTICE_GRID, DEFAULT_TARGET_SIZE)
+    assert raster_offset_check([(image, text)], refined).status == "OK"
+    if DEFAULT_TEMPLATES.is_file():
+        reader = diagnose_reader([(image, text)], result.quad, DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256)
+        assert reader.metrics["contradictions"] == []
 
 
 def test_moderate_left_view_finds_lattice_beyond_first_sixteen_starts():

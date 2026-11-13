@@ -166,16 +166,17 @@ def test_dut_stays_locked_after_successful_pairing(tmp_path, identity):
     exercise_tls(tmp_path, identity, check)
 
 
-def test_barrier_precedes_only_latest_valid_over_real_tls(tmp_path, identity):
+def test_demo_barrier_precedes_queued_values_over_real_tls(tmp_path, identity):
+    """Demo seit 13.11.2026 verlustfrei: nach der Barriere jeder gepufferte Wert in Reihenfolge."""
     def check(rig):
         state = rig.bind()
         state.publish(record(1, valid=False))
         state.publish(record(2))
         state.publish(record(100))
         rig.worker.start()
-        wait_for(lambda: len([a for a in rig.journal.attempts() if a.outcome == 'written']) == 2)
-        assert rig.com.payloads == [b'%NaN\r\n', b'%+100.0\r\n']
-        assert [a.frame_sequence for a in rig.journal.attempts()] == [1, 100]
+        wait_for(lambda: len([a for a in rig.journal.attempts() if a.outcome == 'written']) == 3)
+        assert rig.com.payloads == [b'%NaN\r\n', b'%+2.0\r\n', b'%+100.0\r\n']
+        assert [a.frame_sequence for a in rig.journal.attempts()] == [1, 2, 100]
         assert all(a.outcome == 'written' for a in rig.journal.attempts())
         assert rig.manager.snapshot().output == 'demo_only'
     exercise_tls(tmp_path, identity, check)

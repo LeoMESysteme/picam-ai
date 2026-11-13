@@ -203,3 +203,87 @@ def test_diagnostic_export_preserves_reviewed_recovery_codes_and_redacts_nested_
     assert (value['kind'], value['code']) == ('recovering', 'connection_unavailable')
     assert value['detail']['nested'] == [dict(code='[redacted]', kind='[redacted]')]
     assert 'SECRET' not in exported and 'arbitrary-state' not in exported
+
+
+# --- B2 (2026-11-11): Takte und Fehlwertzeilen, je Zeile vor dem COM-Schreiben ------
+
+def test_tick_rows_track_last_written_and_survive_restart(tmp_path):
+    path = tmp_path / 'audit.sqlite'
+    with journal(path) as first:
+        assert first.last_tick_written('pi', 'run') == 0
+        fill = first.begin_tick('pi', 'run', 1, 'fill', False, b'%99999999.0;0;1;1.000000\r\n')
+        first.finish_tick(fill, 'written')
+        tick = first.begin_tick('pi', 'run', 2, 'tick', True, b'%1.0;1;2;1.100000\r\n')
+        first.finish_tick(tick, 'written')
+        lost = first.begin_tick('pi', 'run', 3, 'tick', False, b'%99999999.0;0;3;1.200000\r\n')
+        first.finish_tick(lost, 'not_written')
+    with journal(path) as second:
+        assert second.last_tick_written('pi', 'run') == 2      # not_written zaehlt nicht
+        assert second.last_tick_written('pi', 'other') == 0
+        assert second.tick_outcome('pi', 'run', 2) == 'written'
+        assert second.tick_outcome('pi', 'run', 1) is None     # Auffuellung ist kein Pi-Takt
+        assert second.unresolved_ticks() == ()
+
+
+def test_pending_tick_blocks_every_further_tick_for_this_pi(tmp_path):
+    from dispread.gsv_bridge import DeliveryAlreadyAttempted, DeliveryBlockedError
+
+    path = tmp_path / 'audit.sqlite'
+    with journal(path) as first:
+        first.begin_tick('pi', 'run', 1, 'tick', True, b'%1.0;1;1;1.000000\r\n')
+    with journal(path) as second:
+        assert [row.seq for row in second.unresolved_ticks()] == [1]
+        assert second.has_unresolved_tick('pi') and not second.has_unresolved_tick('other')
+        with pytest.raises(DeliveryBlockedError):
+            second.begin_tick('pi', 'run', 2, 'tick', True, b'%1.0;1;2;1.100000\r\n')
+        with pytest.raises(DeliveryAlreadyAttempted):
+            second.begin_tick('pi', 'run', 1, 'tick', True, b'%1.0;1;1;1.000000\r\n')
+        orphan = second.unresolved_ticks()[0].attempt_id
+        with pytest.raises(Exception, match='live claim'):
+            second.finish_tick(orphan, 'written')
+
+
+def test_unfilled_gap_is_recorded(tmp_path):
+    with journal(tmp_path / 'audit.sqlite') as store:
+        store.record_tick_gap('pi', 'run', 60, 59)
+        assert store.tick_gaps('pi', 'run') == ((60, 59),)
+        assert store.last_tick_written('pi', 'run') == 0
+
+
+@pytest.mark.parametrize('args', [
+    ('pi', 'run', 0, 'tick', True, b'x'), ('pi', 'run', 1, 'other', True, b'x'),
+    ('pi', 'run', 1, 'fill', True, b'x'), ('pi', 'run', 1, 'tick', True, b''),
+    ('pi', '', 1, 'tick', True, b'x'),
+])
+def test_tick_identity_is_validated(tmp_path, args):
+    with journal(tmp_path / 'audit.sqlite') as store:
+        with pytest.raises(Exception, match='invalid'):
+            store.begin_tick(*args)
+
+
+def test_expired_tick_can_later_be_filled_once(tmp_path):
+    from dispread.gsv_bridge import DeliveryAlreadyAttempted
+
+    with journal(tmp_path / 'audit.sqlite') as store:
+        tick = store.begin_tick('pi', 'run', 1, 'tick', True, b'%1.0;1;1;1.000000\r\n')
+        store.finish_tick(tick, 'not_written')
+        fill = store.begin_tick('pi', 'run', 1, 'fill', False, b'%99999999.0;0;1;1.000000\r\n')
+        store.finish_tick(fill, 'written')
+        assert store.last_tick_written('pi', 'run') == 1
+        with pytest.raises(DeliveryAlreadyAttempted):
+            store.begin_tick('pi', 'run', 1, 'fill', False, b'%99999999.0;0;1;1.000000\r\n')
+
+
+def test_diagnostics_keep_time_and_known_error_codes_but_not_secrets(tmp_path):
+    """13.11.2026: UART-Abbruch im Export nur als „[redacted]/[redacted]“ ohne Zeit."""
+    import json
+
+    from dispread_bridge_app.delivery_journal import DiagnosticStore
+
+    from dispread.bridge.types import BridgeEvent
+    store = DiagnosticStore(tmp_path, clock=lambda: 1794398707.4388)
+    store.append(BridgeEvent('connection', 'uart_peer_unavailable', 'run-secret-id', None,
+                             dict(token='SECRET', outcome='unknown')))
+    line = json.loads(store.export())
+    assert (line['kind'], line['code'], line['ts']) == ('connection', 'uart_peer_unavailable', 1794398707.439)
+    assert 'SECRET' not in store.export() and 'run-secret-id' not in store.export()

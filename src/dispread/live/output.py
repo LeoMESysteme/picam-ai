@@ -13,8 +13,11 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from dispread.gsv_transport import OutputConfig
+from dispread.live.clock import ClockLog
+from dispread.live.tick import Ticker, TickTimebase, tick_status, validate_rate
 from dispread.records import InvalidValuePolicy, TxReceipt, ValueRecord
 from dispread.sink.protocol.userdefined import UserDefinedFormatter
+from dispread.sink.protocol.userdefined_4ch import TickFormatter
 from dispread.sink.serial_out import SerialSink
 
 # ME v2.6 S. 118–121, docs/GSVMULTI_PROTOCOL.md.
@@ -31,10 +34,21 @@ SERIAL_RELEASE_NOTE = (
     'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
     'Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.'
 )
+SERIAL_4CH_RELEASE_NOTE = (
+    'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
+    'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); '
+    'der Zeitkanal ist vorläufig.'
+)
 # R1 (Nutzerentscheidung 2026-11-09): Testfreigabe ueber die Bruecke wie UART direkt.
 BRIDGE_RELEASE_NOTE = (
     'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. '
     'Ungültige und veraltete Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.'
+)
+# B2 (2026-11-11): Vierkanal-Takt ueber die Bruecke.
+BRIDGE_4CH_RELEASE_NOTE = (
+    'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. '
+    'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); '
+    'verlorene Takte füllt die Brücken-App mit solchen Zeilen auf (höchstens 50). Der Zeitkanal ist vorläufig.'
 )
 
 
@@ -64,7 +78,8 @@ def validate_output(value, *, reference_port: str | None = None, sysfs_root: Pat
     if value is None:
         return None
     try:
-        if not isinstance(value, dict) or set(value) - {'port', 'baudrate', 'prefix', 'allow_reference_adapter'}:
+        if not isinstance(value, dict) or set(value) - {'port', 'baudrate', 'prefix', 'allow_reference_adapter',
+                                                               'format', 'rate_hz', 'max_frame_age_ms'}:
             raise ValueError('Objekt mit Port, Baudrate und Präfix erforderlich')
         port = value.get('port')
         if not isinstance(port, str) or not port.strip() or '\x00' in port:
@@ -87,7 +102,23 @@ def validate_output(value, *, reference_port: str | None = None, sysfs_root: Pat
         if not isinstance(prefix, str):
             raise ValueError('Präfix muss ein Zeichen sein')
         UserDefinedFormatter(prefix=prefix)
-        return {'port': port, 'baudrate': baudrate, 'prefix': prefix, 'allow_reference_adapter': allow}
+        result = {'port': port, 'baudrate': baudrate, 'prefix': prefix, 'allow_reference_adapter': allow}
+        fmt = value.get('format', '1ch')  # Alter Vertrag ohne Format bleibt bytegleich.
+        if fmt not in ('1ch', '4ch'):
+            raise ValueError('Format muss 1ch oder 4ch sein')
+        if 'format' in value:
+            result['format'] = fmt
+        if fmt == '4ch':
+            if prefix != '%':
+                raise ValueError('Vierkanal-Präfix muss % sein')
+            result['rate_hz'] = validate_rate(value.get('rate_hz', 10))
+            max_age = value.get('max_frame_age_ms', OutputConfig().max_frame_age_ms)
+            if type(max_age) is not int or not 1 <= max_age <= 1000:
+                raise ValueError('max_frame_age_ms muss zwischen 1 und 1000 liegen')
+            result['max_frame_age_ms'] = max_age
+        elif 'rate_hz' in value or 'max_frame_age_ms' in value:
+            raise ValueError('Taktoptionen erfordern format=4ch')
+        return result
     except (ValueError, OSError, RuntimeError) as exc:
         raise ValueError(f'Ausgabe: {exc}') from exc
 
@@ -115,13 +146,38 @@ def normalize_output(value, *, reference_port: str | None = None) -> dict:
     acknowledged = value.get('acknowledge_unaccepted', False)
     if type(acknowledged) is not bool:
         raise ValueError('Ausgabe: acknowledge_unaccepted muss bool sein')
-    options = {key: item for key, item in value.items() if key != 'acknowledge_unaccepted'}
-    return {**OutputConfig.from_dict(options).to_dict(), 'acknowledge_unaccepted': acknowledged}
+    options = {key: item for key, item in value.items() if key not in ('acknowledge_unaccepted', *_TICK_KEYS)}
+    result = OutputConfig.from_dict(options).to_dict()
+    # B2: Format/Takt additiv; ohne Angabe bleibt der Einkanalvertrag bytegleich.
+    fmt = value.get('format', '1ch')
+    if fmt not in ('1ch', '4ch'):
+        raise ValueError('Ausgabe: Format muss 1ch oder 4ch sein')
+    if 'format' in value:
+        result['format'] = fmt
+    if fmt == '4ch':
+        try:
+            result['rate_hz'] = validate_rate(value.get('rate_hz', 10))
+        except ValueError as exc:
+            raise ValueError(f'Ausgabe: {exc}') from exc
+    elif 'rate_hz' in value:
+        raise ValueError('Ausgabe: Taktoptionen erfordern format=4ch')
+    return {**result, 'acknowledge_unaccepted': acknowledged}
+
+
+_TICK_KEYS = ('format', 'rate_hz')
 
 
 def bridge_config(config: dict) -> OutputConfig:
-    """OutputConfig ohne die Bestaetigung; die gehoert zum Lauf, nicht zur Leitung."""
-    return OutputConfig.from_dict({key: item for key, item in config.items() if key != 'acknowledge_unaccepted'})
+    """OutputConfig ohne Bestaetigung und Taktoptionen; die gehoeren zum Lauf, nicht zur Leitung."""
+    return OutputConfig.from_dict({key: item for key, item in config.items()
+                                   if key not in ('acknowledge_unaccepted', *_TICK_KEYS)})
+
+
+def bridge_tick_options(config: dict) -> dict:
+    """Taktparameter fuer den Brueckenkern; leer beim Einkanalvertrag."""
+    if config.get('format') != '4ch':
+        return {}
+    return {'tick_rate_hz': config['rate_hz'], 'tick_max_frame_age_ns': config['max_frame_age_ms'] * 1_000_000}
 
 
 def require_output_acknowledgement(config: dict) -> None:
@@ -131,9 +187,14 @@ def require_output_acknowledgement(config: dict) -> None:
 
 
 class LiveOutput:
-    def __init__(self, options: dict, path: Path):
+    def __init__(self, options: dict, path: Path, *, clock_ns=time.monotonic_ns, timebase=None):
         self._options = validate_output(options)
-        self._sink = SerialSink(self._options['port'], UserDefinedFormatter(prefix=self._options['prefix']),
+        self._four_channel = self._options.get('format') == '4ch'
+        self._clock_ns = clock_ns
+        self._timebase = timebase
+        self._ticker = None
+        formatter = TickFormatter() if self._four_channel else UserDefinedFormatter(prefix=self._options['prefix'])
+        self._sink = SerialSink(self._options['port'], formatter,
                                 baudrate=self._options['baudrate'], timeout=0, write_timeout=WRITE_TIMEOUT_S)
         self._path = path
         self._stream = None
@@ -151,12 +212,17 @@ class LiveOutput:
         self._counts = dict(sent=0, omitted=0, dropped=0, errors=0)
         self._first_error = None
 
-    def start(self, *, reference_port: str | None = None) -> None:
+    def start(self, *, reference_port: str | None = None, clock_log=None) -> None:
         validate_output(self._options, reference_port=reference_port)
         try:
             self._sink.open()  # Fehler vor dem ersten Leseschritt klar ablehnen.
             self._stream = self._path.open('x', encoding='utf-8')
-            thread = threading.Thread(target=self._run, name='live-output', daemon=True)
+            if self._four_channel:
+                self._timebase = self._timebase or TickTimebase(clock_log or ClockLog())
+                self._ticker = Ticker(self._options['rate_hz'], self._clock_ns,
+                                      self._options['max_frame_age_ms'] * 1_000_000, timebase=self._timebase)
+            thread = threading.Thread(target=self._run_4ch if self._four_channel else self._run,
+                                      name='live-output', daemon=True)
             thread.start()
             self._thread = thread
         except Exception:
@@ -170,7 +236,11 @@ class LiveOutput:
             caps = asdict(self._sink.formatter.capabilities)
             caps['supported_invalid_policies'] = sorted(p.value for p in caps['supported_invalid_policies'])
             return {**self._options, 'capabilities': caps, **self._counts,
-                    'first_error': self._first_error, 'enabled': not self._failed and not self._closing}
+                    'first_error': self._first_error, 'enabled': not self._failed and not self._closing,
+                    **({'tick': self._tick_status()} if self._four_channel else {})}
+
+    def _tick_status(self):
+        return tick_status(self._options['rate_hz'], self._ticker, self._timebase)
 
     def delivery_status(self) -> dict:
         """Nur lokale Treiberannahme; Fehler bis Laufende verriegelt."""
@@ -195,6 +265,11 @@ class LiveOutput:
                          t_enqueue_ns=enqueue, invalid_policy=InvalidValuePolicy.OMIT_RECORD, **kwargs)
 
     def submit(self, record: ValueRecord) -> None:
+        if self._four_channel:
+            with self._lock:
+                if not self._failed and not self._closing:
+                    self._ticker.on_record(record)
+            return
         # Nur Formatpruefung im Bildpfad; kein Zugriff auf den seriellen Treiber.
         payload = self._sink.formatter.format(record)
         enqueue = time.monotonic_ns()
@@ -288,12 +363,54 @@ class LiveOutput:
             with self._lock:
                 self._busy = False
 
+    def _run_4ch(self) -> None:
+        tick = None
+        try:
+            while True:
+                with self._lock:
+                    if self._closing or self._failed:
+                        return
+                    now = self._clock_ns()
+                    tick = self._ticker.due(now)
+                    delay = max(0, self._ticker.next_deadline_ns - now) / 1e9
+                    self._wake.clear()
+                    self._busy = tick is not None
+                if tick is None:
+                    self._wake.wait(delay)
+                    continue
+                # Ein begonnener Takt wird auch beim Stop vollstaendig geschrieben.
+                receipt = replace(self._sink.emit(tick), tx_sequence=tick.seq)
+                with self._lock:
+                    self._record(receipt)
+                    self._busy = False
+                tick = None
+        except BaseException as exc:
+            with self._lock:
+                message = f'{type(exc).__name__}: {exc}'
+                self._error(message)
+                if tick is not None:
+                    try:
+                        self._record(TxReceipt(
+                            frame_sequence=tick.frame_sequence, tx_sequence=tick.seq,
+                            format_id=self._sink.formatter.capabilities.format_id,
+                            t_enqueue_ns=time.monotonic_ns(), t_complete_ns=None,
+                            invalid_policy=InvalidValuePolicy.MARK_RECORD, wire_bytes=None,
+                            error=message, bytes_written=None), count_error=False)
+                    except BaseException:
+                        pass
+        finally:
+            with self._lock:
+                self._busy = False
+
     def stop(self) -> None:
         with self._lock:
             self._closing = True
             self._wake.set()
         if self._thread is not None:
             self._thread.join()
+        if self._four_channel and self._timebase is not None:
+            with self._lock:
+                self._timebase.observe()
         try:
             self._sink.close()
         except Exception as exc:

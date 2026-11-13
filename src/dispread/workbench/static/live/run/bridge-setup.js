@@ -1,6 +1,8 @@
 // Windows-Bruecke einrichten: Logik ohne DOM (node-testbar). Texte und Zustandswoerter
 // des Dialogs; Serverrueckmeldungen erscheinen woertlich. Kein Geheimnis wird hier
 // gespeichert oder protokolliert.
+import {formatLabel} from './output.js';
+
 export const PROFILE_FILENAME = 'pi.dispread';
 export const OFFER_TTL_S = 300;
 export const STATUS_POLL_MS = 2000;
@@ -57,7 +59,7 @@ export function uartView(status) {
 }
 
 // Zeilen der Bereitschaft. Ein verbundener Client heisst nur Verbindung.
-export function readinessRows(status) {
+export function readinessRows(status, output = null) {
   if (!status) return [];
   const via = {network: 'Netzwerk', uart: 'UART'}[status.transport];
   const rows = [
@@ -65,6 +67,8 @@ export function readinessRows(status) {
     {label: 'Windows-App', value: status.connected ? `verbunden${via ? ` über ${via}` : ''}` : 'nicht verbunden',
       tone: status.connected ? 'ok' : 'pend'},
   ];
+  // Format des laufenden (bzw. gewaehlten) Laufs; ohne Ausgabe keine Zeile.
+  if (output && output.transport && output.transport !== 'off') rows.push({label: 'Format', value: formatLabel(output)});
   if (status.release === 'test_unaccepted') rows.push({label: 'Ausgabe', value: 'Testfreigabe – nicht abgenommen', tone: 'warn'});
   else if (status.release_block) rows.push({label: 'Ausgabe', value: String(status.release_block), tone: 'warn'});
   return rows;

@@ -6,10 +6,19 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.fixture
+def single_channel_default(monkeypatch):
+    """Diese Tests prüfen die Einkanal-Vorlage; die Vorgabe ist seit 2026-11-12 Vierkanal."""
+    from dispread_bridge_app import session_templates
+    monkeypatch.setattr(session_templates, 'DEFAULT_SESSION_FORMAT', '1ch')
+
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT / "docs/quellen/bruecke-testlauf-2026-11-06/Session-COM8.ucf"
 
 
+
+@pytest.mark.usefixtures('single_channel_default')
 def test_com8_is_the_exact_reviewed_original():
     from dispread_bridge_app.session_export import GSVMULTI_BAUD, generate_session
 
@@ -19,6 +28,7 @@ def test_com8_is_the_exact_reviewed_original():
     assert GSVMULTI_BAUD == 115200
 
 
+@pytest.mark.usefixtures('single_channel_default')
 def test_com4_preserves_bytes_and_matches_independent_receiver_fixture():
     from dispread_bridge_app.session_export import generate_session
 
@@ -73,19 +83,19 @@ def test_probe_recognizes_restricted_generator(tmp_path):
         assert module.main() == 0
 
 
-def test_prepared_com8_is_byte_identical_to_four_channel_evidence():
-    from dispread_bridge_app.session_export import generate_template_session
+def test_four_channel_com8_is_byte_identical_to_evidence():
+    from dispread_bridge_app.session_export import generate_session
 
-    raw = generate_template_session('COM8', 'bruecke-session-4ch-hidden-20261111', allow_prepared=True)
-    assert raw == (ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf').read_bytes()
-    assert sha256(raw).hexdigest() == 'eabf06629857b455825f04d85b7c40155f9f9037f75722af4c36f2f801f2686c'
+    raw = generate_session('COM8', fmt='4ch')
+    assert raw == (ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf').read_bytes()
+    assert sha256(raw).hexdigest() == '6bc26b61323e054bfea2dd32c375617ec46725e8eb56f455daf45454b3d8ec43'
 
 
 def test_four_channel_com4_changes_exactly_nine_reviewed_lines():
-    from dispread_bridge_app.session_export import generate_template_session
+    from dispread_bridge_app.session_export import generate_session
 
-    original = (ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf').read_bytes()
-    generated = generate_template_session('COM4', 'bruecke-session-4ch-hidden-20261111', allow_prepared=True)
+    original = (ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf').read_bytes()
+    generated = generate_session('COM4', fmt='4ch')
     before, after = original.splitlines(keepends=True), generated.splitlines(keepends=True)
     assert len(before) == len(after)
     changed = [(a, b) for a, b in zip(before, after, strict=True) if a != b]
@@ -102,18 +112,22 @@ def test_four_channel_com4_changes_exactly_nine_reviewed_lines():
     ]
 
 
-def test_prepared_generation_requires_explicit_developer_opt_in():
-    from dispread_bridge_app.session_export import generate_session, generate_template_session
+@pytest.mark.parametrize('fmt', ['', 'single', 'bogus', 4, [], {}])
+def test_unknown_format_is_rejected_before_writing(tmp_path, fmt):
+    from dispread_bridge_app.app_controller import AppError
+    from dispread_bridge_app.session_export import generate_session
     from dispread_bridge_app.session_templates import SessionTemplateError
+    from test_app_controller import make
 
-    with pytest.raises(SessionTemplateError, match='automatic_export_blocked'):
-        generate_template_session('COM8', 'bruecke-session-4ch-hidden-20261111')
-    with pytest.raises(TypeError):
-        generate_session('COM8', template_id='bruecke-session-4ch-hidden-20261111')
-    with pytest.raises(SessionTemplateError, match='unknown_template'):
-        generate_template_session('COM8', 'unknown', allow_prepared=True)
+    with pytest.raises(SessionTemplateError, match='session_format_invalid'):
+        generate_session('COM8', fmt=fmt)
+    destination = tmp_path / 'invalid.ucf'
+    with pytest.raises(AppError, match='session_format_invalid'):
+        make(tmp_path).export_session_file(destination, 'COM8', fmt=fmt)
+    assert not destination.exists()
 
 
+@pytest.mark.usefixtures('single_channel_default')
 def test_public_export_reports_active_metadata_and_refuses_template_selection(tmp_path):
     from dispread_bridge_app.app_controller import AppError
     from test_app_controller import make
@@ -132,33 +146,61 @@ def test_public_export_reports_active_metadata_and_refuses_template_selection(tm
     assert not blocked.exists()
 
 
-def test_catalog_activation_updates_public_export_metadata_and_context(tmp_path):
-    """Simulate a reviewed catalog activation before application startup."""
-    import os
-    import subprocess
-    import sys
+def test_single_default_switch_updates_export_and_unexported_context(tmp_path, monkeypatch):
+    from dispread_bridge_app import session_templates as templates
+    from dispread_bridge_app.session_export import generate_session
+    from test_app_controller import make
 
-    code = '''
-import sys
-from dataclasses import replace
-from pathlib import Path
-from dispread_bridge_app import session_templates as templates
-templates.ACTIVE_SESSION_TEMPLATE = 'bruecke-session-4ch-hidden-20261111'
-templates.SESSION_TEMPLATES = tuple(
-    replace(spec, status='active' if spec.template_id == templates.ACTIVE_SESSION_TEMPLATE else 'prepared')
-    for spec in templates.SESSION_TEMPLATES)
-from test_app_controller import make
-controller = make(Path(sys.argv[1]))
-exported = controller.export_session_file(Path(sys.argv[1]) / 'four.ucf', 'COM8')
-assert (exported.channels, exported.hidden_channels, exported.record_hidden_required) == (4, 3, True)
-assert exported.template_id == controller.context().session_template == templates.ACTIVE_SESSION_TEMPLATE
-assert exported.path.read_bytes() == Path(sys.argv[2]).read_bytes()
-'''
-    result = subprocess.run(
-        [sys.executable, '-c', code, str(tmp_path),
-         str(ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/versuch2b-session-hidden.ucf')],
-        capture_output=True, text=True, check=False,
-        env={**os.environ, 'PYTHONPATH': os.pathsep.join([
-            str(ROOT / 'src'), str(ROOT / 'windows/bridge/src'), str(ROOT / 'windows/bridge/tests')])},
-    )
-    assert result.returncode == 0, result.stderr
+    assert templates.DEFAULT_SESSION_FORMAT == '4ch'
+    assert not hasattr(templates, 'ACTIVE_SESSION_TEMPLATE')
+    monkeypatch.setattr(templates, 'DEFAULT_SESSION_FORMAT', '1ch')
+    controller = make(tmp_path)
+    assert controller.context().default_session_format == '1ch'
+    assert controller.context().session_format is None
+    monkeypatch.setattr(templates, 'DEFAULT_SESSION_FORMAT', '4ch')
+    ctx = controller.context()
+    assert (ctx.default_session_format, ctx.session_channels, ctx.session_format) == ('4ch', 4, None)
+    exported = controller.export_session_file(tmp_path / 'four.ucf', 'COM8')
+    assert exported.fmt == '4ch'
+    assert (exported.channels, exported.hidden_channels, exported.record_hidden_required) == (4, 3, True)
+    original = (ROOT / 'docs/quellen/gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf').read_bytes()
+    assert exported.path.read_bytes() == generate_session('COM8') == original
+    assert generate_session('COM8', fmt='1ch') == SOURCE.read_bytes()
+
+
+def test_context_uses_cached_template_metadata_without_package_io(tmp_path, monkeypatch):
+    from dispread_bridge_app import session_templates as templates
+    from dispread_bridge_app.ui.port import PortChoice
+    from test_app_controller import make
+
+    controller = make(tmp_path, list_ports=lambda: [PortChoice('COM9', 'USB serial', 'usb_serial', device_id='usb9')])
+    controller.select_mode('uart_direct')
+    controller.select_adapter('usb9')
+    controller.export_session_file(tmp_path / 'direct.ucf', fmt='4ch')
+
+    def unexpected_io(*args):
+        pytest.fail('context must not read packaged files')
+
+    monkeypatch.setattr(templates, 'files', unexpected_io)
+    assert controller.context().session_channels == 4
+
+
+def test_demo_check_uses_the_session_format_of_the_route(tmp_path):
+    """13.11.2026: Empfangstest einkanalig in eine Vierkanal-Session -> GSVmulti nahm 0 Byte auf."""
+    from test_app_controller import DeviceIdentity, FakeWorker, make, profile_bytes
+
+    identity = DeviceIdentity.load_or_create(tmp_path / 'id', 'ac-pi')
+
+    class Worker(FakeWorker):
+        demo_format = None
+
+    controller = make(tmp_path, worker_factory=Worker)
+    controller.set_port_pair('COM4', 'COM5')
+    controller.load_profile(profile_bytes(identity))
+    controller.connect('network')
+    source = controller._worker.demo_format
+    assert source() == '4ch'                                    # Vorgabe ohne erzeugte Session
+    controller.export_session_file(tmp_path / 'single.ucf', 'COM5', fmt='1ch')
+    assert source() == '1ch'                                    # erzeugte Einkanal-Session gilt
+    controller.export_session_file(tmp_path / 'four.ucf', 'COM5', fmt='4ch')
+    assert source() == '4ch'

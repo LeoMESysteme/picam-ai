@@ -10,7 +10,7 @@ a = Analysis(
     binaries=[],
     datas=[(str(bridge_root / "src/dispread_bridge_app/templates/Session-COM8.ucf"),
             "dispread_bridge_app/templates"),
-           (str(bridge_root / "src/dispread_bridge_app/templates/versuch2b-session-hidden.ucf"),
+           (str(bridge_root / "src/dispread_bridge_app/templates/vorlage-4kanal-mvv.ucf"),
             "dispread_bridge_app/templates")],
     hiddenimports=[
         "dispread.gsv_bridge", "serial", "serial.tools.list_ports",

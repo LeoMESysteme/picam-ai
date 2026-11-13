@@ -39,7 +39,7 @@ async def _store_io(operation, *args):
 class UnconfiguredHub:
     """No pretend readiness before the real exclusive output hub is attached."""
 
-    def prepare(self, transport, client_id):
+    def prepare(self, transport, client_id, lease=None):
         raise ValueError("bridge output hub is not configured")
 
 
@@ -308,7 +308,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                 raise ValueError("expected network readiness hello")
             await check_authorization()
             def attach_authorized():
-                lease = hub.attach(client_id, "network")
+                lease = hub.attach(client_id, "network", capabilities=message["capabilities"])
                 created_lease[0] = lease.lease_id
                 if authorization_ended or ws.closed:
                     hub.detach(lease.lease_id)
@@ -328,7 +328,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                 raise
             await check_authorization()
             lease_id = lease.lease_id
-            readiness = hub.prepare("network", client_id)
+            readiness = hub.prepare("network", client_id, lease=lease)
             lease.release = readiness.release  # angekuendigter Freigabestand (R1)
             response = dict(
                 version=2,
@@ -346,6 +346,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                               "heartbeat_interval_s": 1, "lease_timeout_s": 5},
                 permissions=["readiness", "demo"],
                 **({"release": readiness.release} if readiness.release else {}),
+                **hub.output_format_fields(lease),
             )
             await ws.send_str(encode_v2(response).decode("utf-8"))
             async for frame in ws:
@@ -356,7 +357,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                     raise ValueError("authorization ended")
                 message = decode_v2(frame.data.encode("utf-8"))
                 bound(message)
-                if message["type"] not in {"poll", "ack", "heartbeat", "demo_request"}:
+                if message["type"] not in {"poll", "ack", "tick_ack", "heartbeat", "demo_request"}:
                     raise ValueError("unexpected client message")
                 if message["type"] == "demo_request":
                     if message["transport"] != "network":
