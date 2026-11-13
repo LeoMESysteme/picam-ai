@@ -1,0 +1,18 @@
+# Debian/Raspberry Pi OS: aktive UVC-Werkbank inklusive optionaler TUI/Discovery.
+# Ein Paket pro Zeile; Kommentare werden vom Installer entfernt.
+python3-venv        # Projekt-venv mit --system-site-packages und pip anlegen
+python3-setuptools  # Lokaler Paketbuild ohne Build-Isolation oder PyPI-Downloads
+python3-wheel       # Wheel-Unterstuetzung fuer den lokalen Paketbuild
+python3-numpy       # Arrays und numerische Bildverarbeitung
+python3-opencv      # UVC-Bildquelle und Bildverarbeitung (cv2)
+python3-serial      # Referenz, UART direkt und Bruecke (serial)
+python3-aiohttp     # HTTPS/WebSockets und lokale Socket-API
+python3-textual     # Bestehende optionale Werkbank-TUI
+python3-pam         # Linux-Kontoanmeldung (PAM)
+python3-cryptography # Pi-Identitaet, Zertifikate und Kopplung
+python3-zeroconf    # Optionale DNS-SD-Discovery (dynamischer Import)
+v4l-utils          # v4l2-ctl fuer UVC-Regler und Kameradiagnose
+openssl            # Lokales TLS-Zertifikat und Fingerabdruck
+systemd            # systemd-run, systemctl, journalctl und loginctl
+dbus-user-session  # Benutzerbus fuer den systemd-Benutzerdienst
+curl               # Begrenzte HTTPS-Erreichbarkeitspruefung nach Dienstneustart

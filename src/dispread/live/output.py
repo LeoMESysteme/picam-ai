@@ -13,6 +13,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from dispread.gsv_transport import OutputConfig
+from dispread.hardware_ports import DIRECT_UART_BAUD
 from dispread.live.clock import ClockLog
 from dispread.live.tick import Ticker, TickTimebase, tick_status, validate_rate
 from dispread.records import InvalidValuePolicy, TxReceipt, ValueRecord
@@ -93,7 +94,7 @@ def validate_output(value, *, reference_port: str | None = None, sysfs_root: Pat
             raise ValueError('Referenzadapter 067b:2303 (PL2303) ist reserviert; allow_reference_adapter erforderlich')
         if reference_port and same_port(port, reference_port):
             raise ValueError('Port ist bereits fuer Referenz/Werteplan belegt')
-        baudrate = value.get('baudrate', 115200)
+        baudrate = value.get('baudrate', DIRECT_UART_BAUD)
         if type(baudrate) is not int or baudrate not in BAUDRATES:
             raise ValueError(f'Baudrate muss eine von {BAUDRATES} sein')
         if baudrate < MIN_LIVE_BAUDRATE or MAX_TELEGRAM_BYTES * 10 * 1_000_000_000 >= baudrate * FRAME_INTERVAL_NS:

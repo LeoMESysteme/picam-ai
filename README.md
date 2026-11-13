@@ -24,6 +24,13 @@ Für Einsteiger und Bediener im Labor: Kamera aufbauen, Anzeige einrichten, Mess
 * [Optischen Aufbau prüfen](docs/OPTICAL_SETUP.md) — Halterung, Licht, Reflexionen
 * [Projekt-Tour](docs/uebersicht/projekt-tour.md) — das Projekt als Animation
 
+Die Softwareeinrichtung erfolgt mit `bash scripts/install-workbench.sh`.
+Die verbindliche Debian-Paketliste steht in `packaging/apt-packages.txt`;
+[Abhängigkeiten](docs/dependencies.md#pi-werkbank-installieren) erläutert die Auswahl.
+Danach folgen Identität, TLS mit expliziter Adresse, Dienststart und Profilexport
+in dieser [Betriebsanleitung](docs/anleitung/10-kamera-livevorschau.md#werkbank-dienst).
+Vorlagen und Timing-Kalibrierung müssen vor einem Messlauf vorhanden sein.
+
 ### Konfigurieren und verstehen
 
 Für alle, die Einstellungen anpassen und verstehen wollen, was dahinter passiert.

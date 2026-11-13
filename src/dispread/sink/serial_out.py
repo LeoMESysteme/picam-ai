@@ -24,6 +24,7 @@ import threading
 import time
 from time import monotonic
 
+from dispread.hardware_ports import DIRECT_UART_BAUD
 from dispread.records import InvalidValuePolicy, TxReceipt, ValueRecord, ValueStatus
 from dispread.sink import SinkHealth
 from dispread.sink.protocol import TelegramFormatter
@@ -82,7 +83,7 @@ class SerialSink:
         port: str,
         formatter: TelegramFormatter,
         *,
-        baudrate: int = 115200,
+        baudrate: int = DIRECT_UART_BAUD,
         timeout: float = 1.0,
         write_timeout: float = 1.0,
     ) -> None:

@@ -6,6 +6,42 @@ IMX500-Pakete in den Bestandslisten unten stammen vom früheren Aufbau; die
 aktuelle Bildquelle `v4l2://` nutzt OpenCV und V4L2. Die Regel für die
 Projekt-venv mit Debian-Systempaketen gilt weiterhin.
 
+## Pi-Werkbank installieren {#pi-werkbank-installieren}
+
+**Verbindliche Installationsliste:** `packaging/apt-packages.txt`. Sie enthält
+pro Paket den tatsächlichen Zweck und wird direkt von
+`scripts/install-workbench.sh` gelesen. Die Bestandstabellen weiter unten
+dokumentieren historische Versionen und optionale Werkzeuge, nicht eine
+zweite Installationsliste. Der statische Test `tests/test_install_workbench.py`
+gleicht alle Drittmodulimporte aus `src/` einschließlich des dynamischen
+Discovery-Imports mit der Paketliste ab.
+
+Der Installer installiert nur fehlende Debian-Pakete, legt die Projekt-venv
+mit `--system-site-packages` an und installiert das Projekt editierbar mit
+`--no-deps --no-build-isolation`. Setuptools und Wheel kommen ebenfalls aus
+Debian; es werden keine Build-Abhängigkeiten von PyPI nachgeladen. Eine
+passende vorhandene Editable-Installation wird mit „bereits vorhanden“
+übersprungen. Eine vorhandene venv ohne Systempakete wird abgelehnt und nicht
+automatisch umgebaut. Python ab 3.13 bleibt Voraussetzung.
+
+NumPy, OpenCV und pySerial gehören zum aktiven Messpfad; `v4l-utils` liefert
+`v4l2-ctl` für UVC-Regler. systemd und der Benutzerbus tragen den Dienst;
+`curl` prüft nach einem Neustart begrenzt die HTTPS-Erreichbarkeit. Das ist
+kein Zertifikatsvertrauensnachweis. Die bestehende TUI und die optionale
+Discovery bleiben in der Liste, damit ihre CLI-Optionen nutzbar sind.
+
+**Optional:** `tesseract-ocr` und `tesseract-ocr-eng` nur für das ausdrücklich
+gewählte alte Backend `tesseract_cli` und OCR-Vergleiche installieren. Der
+Live-Dot-Matrix-Pfad verwendet sie nicht; der alte Controller erzeugt den
+Tesseract-Leser erst bei Backend-Auswahl. Picamera2/libcamera und IMX500-Pakete
+gehören ebenfalls nicht zur aktiven UVC-Installation.
+
+Gruppen `dialout`/`video`, UART0-Boot-Eintrag, serielle Konsole und Getty werden
+nur geprüft. Abweichungen geben manuell auszuführende Befehle aus; der Installer
+ändert weder Gruppen noch Boot-Konfiguration und startet keinen Dienst.
+Ein erfolgreicher Softwareinstallationslauf ist keine Hardwareabnahme.
+[Folgeschritte und Dienstbefehle](anleitung/10-kamera-livevorschau.md#werkbank-dienst).
+
 ## Windows-Brücke {#windows-bruecke}
 
 Die neue GSVmulti-Brücke benötigt auf Windows Python **3.13 oder neuer**

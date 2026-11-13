@@ -9,8 +9,9 @@ Leonhards Beschreibung vom 13.11.:
 
 Dazu kommt sein Wunsch nach einer aufgeräumten Codebase und einem Setup, das auf anderen
 Raspberries reibungslos läuft. Getestet wird später auf einem zweiten Pi. Gestaltung nach dem
-Skill `terminal:tui-design`. Nichts davon ist umgesetzt; offene Entscheidungen stehen in
-Abschnitt 9.
+Skill `terminal:tui-design`. **Stand 2026-11-14:** Die begrenzte Stufe P0a ist
+umgesetzt (L1/L2/L7/L8/L10, siehe unten); das weitere Zielbild bleibt Entwurf.
+Offene Entscheidungen stehen in Abschnitt 9.
 
 ## 1. Bestandsaufnahme (Stand `feat/integration`, 13.11.)
 
@@ -36,16 +37,16 @@ Abschnitt 9.
 
 | # | Lücke | Beleg |
 | --- | --- | --- |
-| L1 | apt-Liste unvollständig: `python3-numpy`, `python3-opencv`, `python3-serial`, `v4l-utils` fehlen im Skript | `install-workbench.sh`; `uvc_source.py:114,132` ruft `v4l2-ctl` |
-| L2 | Kein Werkbank-Dienst im Repo. Er läuft als `systemd-run --user`, der Befehl steht nur im Agenten-Gedächtnis; `loginctl enable-linger` ist nicht dokumentiert | `systemd/` enthält nur CI- und Wiki-Units |
+| L1 | apt-Liste unvollständig: `python3-numpy`, `python3-opencv`, `python3-serial`, `v4l-utils` fehlen im Skript | `install-workbench.sh`; `uvc_source.py:114,132` ruft `v4l2-ctl` — **P0a umgesetzt**, [Umfang und Betrieb](../../anleitung/10-kamera-livevorschau.md#werkbank-dienst), [Auftrag](../handoffs/2026-11-14-codex-installer-p0.md) |
+| L2 | Kein Werkbank-Dienst im Repo. Er läuft als `systemd-run --user`, der Befehl steht nur im Agenten-Gedächtnis; `loginctl enable-linger` ist nicht dokumentiert | `systemd/` enthält nur CI- und Wiki-Units — **P0a umgesetzt**, [Umfang und Betrieb](../../anleitung/10-kamera-livevorschau.md#werkbank-dienst), [Auftrag](../handoffs/2026-11-14-codex-installer-p0.md) |
 | L3 | Pi-Konfiguration nur beschrieben: `dtparam=uart0=on`, serielle Konsole aus, Gruppen `dialout` und `video` | `HARDWARE_PROFILE.md` |
 | L4 | `var/` ist nicht versioniert. Die Pflichtvorlage `var/dotmatrix/templates-stufe2c-2026-09-30.json` (SHA-geprüft, nicht auf dem Pi erzeugbar) fehlt auf einem frischen Pi | `live/__init__.py:12-13` |
 | L5 | Timing-Kalibrierung ist Pflicht beim Laufstart und hängt vom Aufbau ab. Ob ein neuer Pi die Datei des alten übernehmen darf, ist offen | `live/__init__.py:15` |
 | L6 | Pfade relativ zum Arbeitsverzeichnis (`var/...` in `cli.py`, `live/__init__.py`). Daneben gibt es eine zweite Pfadwelt in `paths.py` (`DISPREAD_ROOT`, `/etc/dispread`, `/var/lib/dispread`) | `cli.py:135-190`, `paths.py:20-43` |
-| L7 | Mehrfach definierte Werte: Standardport `serve` 8080, im Betrieb 8081/8082; `var/workbench` fünfmal in `cli.py`; `/dev/ttyAMA0` in vier Python-Dateien und im JS; 115 200 Baud für UART direkt an vier Stellen | Single-Source-Regel |
-| L8 | TLS: `init-tls` hat als Standardhost `127.0.0.1` (die Doku sagt „interne IP“); Zertifikat 365 Tage, keine Erneuerung, keine Anzeige der Laufzeit | `cli.py:30-65` |
+| L7 | Mehrfach definierte Werte: Standardport `serve` 8080, im Betrieb 8081/8082; `var/workbench` fünfmal in `cli.py`; `/dev/ttyAMA0` in vier Python-Dateien und im JS; 115 200 Baud für UART direkt an vier Stellen | Single-Source-Regel — **P0a umgesetzt**, [Umfang und Betrieb](../../anleitung/10-kamera-livevorschau.md#werkbank-dienst), [Auftrag](../handoffs/2026-11-14-codex-installer-p0.md) |
+| L8 | TLS: `init-tls` hat als Standardhost `127.0.0.1` (die Doku sagt „interne IP“); Zertifikat 365 Tage, keine Erneuerung, keine Anzeige der Laufzeit | `cli.py:30-65` — **P0a umgesetzt**, [Umfang und Betrieb](../../anleitung/10-kamera-livevorschau.md#werkbank-dienst), [Auftrag](../handoffs/2026-11-14-codex-installer-p0.md) |
 | L9 | Reihenfolge für eine Neuinstallation (Identität → TLS → Dienst → Profil exportieren) ist nirgends als Ablauf beschrieben | — |
-| L10 | Fest eingetragen in Skripten: `/home/me-systeme/picam-ai/.venv` (`camera-commissioning.sh:174`), Benutzer `me-systeme` (Wiki-Export), Login-Seite „me-systeme“ (`static/login.html:3`) | grep |
+| L10 | Fest eingetragen in Skripten: `/home/me-systeme/picam-ai/.venv` (`camera-commissioning.sh:174`), Benutzer `me-systeme` (Wiki-Export), Login-Seite „me-systeme“ (`static/login.html:3`) | grep — **P0a umgesetzt**, [Umfang und Betrieb](../../anleitung/10-kamera-livevorschau.md#werkbank-dienst), [Auftrag](../handoffs/2026-11-14-codex-installer-p0.md) |
 | L11 | Kein Update-Weg außer `git pull` von Hand; die Version steht in `VERSION` | — |
 
 Die Produktdaten in `src/` sind frei von festen IPs, Home-Pfaden und SSD
@@ -261,6 +262,12 @@ Die Aktionen liegen auf Tasten und stehen in der Fußzeile.
 - **Sperren:** kein Update bei aktivem Lauf; nicht während einer Diagnosekopie.
 
 ## 8. Umsetzung in Stufen
+
+**P0a umgesetzt (2026-11-14):** vollständiges Paketmanifest, portabler Kameradiagnosepfad,
+zentrale Backend-Vorgaben, bisheriger Benutzerdienst als Skript und expliziter TLS-Host
+mit SAN-/Ablaufanzeige. L7-Frontendkopien sind nur erfasst; L6, `config.toml`,
+Erneuerung der Zertifikate, Installationsort und persistenter Dienst bleiben offen.
+P0a ist noch keine Installation oder Hardwareabnahme auf einem zweiten Pi.
 
 | Stufe | Inhalt | Wer | Testbar auf diesem Pi |
 | --- | --- | --- | --- |

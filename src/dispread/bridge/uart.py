@@ -6,6 +6,8 @@ import threading
 import time
 import uuid
 
+from dispread.hardware_ports import GSV_UART_PORT
+
 from .baud import UART_BAUD
 from .protocol import V2LineReader, canonical_uart_hello, encode_v2
 from .resources import SerialPortLease
@@ -48,7 +50,7 @@ class UartListener:
                 raise ValueError('UART listener already stopped')
             if self._thread is not None:
                 raise ValueError('UART listener already started')
-            port = self.ports.acquire('/dev/ttyAMA0', self.owner, 'uart-listener')
+            port = self.ports.acquire(GSV_UART_PORT, self.owner, 'uart-listener')
             self.state = 'opening'
             thread = threading.Thread(target=self._worker, args=(port,), name='bridge-uart', daemon=True)
             try:

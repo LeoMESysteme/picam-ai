@@ -20,6 +20,7 @@ from pathlib import Path
 from dispread.bridge.baud import UART_BAUD
 from dispread.bridge.protocol import TEST_RELEASE, TICK_WINDOW
 from dispread.gsv_transport import JsonLineReader, encode_message
+from dispread.hardware_ports import DIRECT_UART_BAUD
 from dispread.live.tick import Tick, nominal_unix_ns, validate_rate
 from dispread.records import InvalidValuePolicy, TimeBaseKind, Timestamp, ValueRecord, ValueStatus
 from dispread.sink.protocol.user_defined import UserDefinedFormatter
@@ -552,7 +553,7 @@ def main(argv=None):
     source.add_argument("--demo", action="store_true", help="Endliche synthetische Demowerte ohne Pi senden")
     parser.add_argument("--tcp-port", type=int, default=5000)
     parser.add_argument("--com-port", help="Brückenseite des virtuellen COM-Portpaars")
-    parser.add_argument("--baudrate", type=int, default=115200, help="GSVmulti-Ausgang (Pi-UART separat)")
+    parser.add_argument("--baudrate", type=int, default=DIRECT_UART_BAUD, help="GSVmulti-Ausgang (Pi-UART separat)")
     parser.add_argument("--stdout", action="store_true", help="Nur --demo: Telegramme nach stdout statt COM")
     parser.add_argument("--count", type=int, default=600)
     parser.add_argument("--rate-hz", type=float, default=10)

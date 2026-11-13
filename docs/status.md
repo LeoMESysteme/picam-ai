@@ -2,6 +2,7 @@
 
 ## Kurzfassung
 
+- **Installer P0a (Codex, 2026-11-14, uncommitted):** Aufgaben 1–5 im Worktree `installer-p0` umgesetzt; Paketmanifest, portable Pfade, gemeinsame Vorgaben, Dienstskript und TLS-Host/Anzeige. Prüfbelege, Sandbox-Grenzen und L6-Entscheidungsvorlage in `REPORT-codex.md`; laufender Dienst und Hardware unberührt.
 - **Abnahme:** Herr Kaulitz hat am 2026-11-13 Werkbank und Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen. Grundlage: Smoketest und Windows-Prüfung UX2 ([Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)).
 - **Heute behoben (alle auf `feat/integration`):** EXE-Selbsttest unter Windows, Empfangstest im Format der Session und verlustfrei mit klarem Ende, Kanal 1 hält bei ungültigem Takt (Entscheidung Leonhard), Wiederverbinden nach LAN-Ausfall, Kopplung je Weg, Laufstart gibt UART-Empfang frei, Diagnose mit Zeit und UART-Fehlercodes, Doppelklick-Build `build-test.cmd`.
 - **Rahmen/Raster (Codex, von Claude reviewt, auf `feat/integration`):** Fokusprüfung am Laufstart zweiseitig, Band vorläufig 0,95–1,05, außerhalb wird der Start abgelehnt („neu einrichten“). Raster A1 (Leerzellengrenze) und B1 (zweite Unterkantenannahme) liefern 63/65 statt 58/65 Fits, kein alter Fit verloren. Details unten.

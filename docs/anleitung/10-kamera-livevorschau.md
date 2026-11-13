@@ -28,14 +28,16 @@ Im Projektverzeichnis:
 
 ```bash
 bash scripts/install-workbench.sh
-./.venv/bin/dispread init-tls
-./.venv/bin/dispread serve --port 8081
+./.venv/bin/dispread init-tls --host <adresse>
+./.venv/bin/dispread serve --host <adresse> --port 8081
 ```
 
+`<adresse>` durch die IP oder den DNS-Namen ersetzen, unter der Windows den Pi
+erreicht. Ohne `--host` verweigert `init-tls` die Erzeugung.
 `init-tls` nur einmal ausführen. Bereits vorhandene Schlüssel werden nicht
 überschrieben. Wenn `cert.pem` und `key.pem` bereits unter
 `var/workbench/tls/` vorhanden sind, kannst du direkt
-`./.venv/bin/dispread serve --port 8081` starten.
+`./.venv/bin/dispread serve --host <adresse> --port 8081` starten.
 
 Mit diesem Startbefehl ist die Werkbank unter der zuvor vom Nutzer
 eingestellten internen Adresse und Port 8081 erreichbar:
@@ -58,6 +60,72 @@ Die gesamte Oberfläche verlangt das normale Linux-/SSH-Passwort von
 `me-systeme`, nicht das separate root-Passwort. Passwörter werden weder
 protokolliert noch gespeichert. Nach acht Stunden ist eine erneute Anmeldung
 nötig. Fünf Anmeldeversuche pro Minute und Client sind möglich.
+
+## Werkbank als Benutzerdienst {#werkbank-dienst}
+
+`scripts/werkbank-dienst.sh` hält den bisherigen `systemd-run --user`-Befehl im
+Repository fest. Host und Port sind bei jedem Aufruf Pflicht; der Unitname ist
+`dispread-werkbank-bruecke`. Die Einrichtung auf einem neuen Pi erfolgt im
+Projektverzeichnis in dieser Reihenfolge (Platzhalter ersetzen):
+
+```bash
+./.venv/bin/dispread bridge identity --provision
+./.venv/bin/dispread init-tls --host <adresse>
+scripts/werkbank-dienst.sh start --host <adresse> --port <port>
+./.venv/bin/dispread bridge export-profile --name 'Dispread Pi' --endpoint https://<adresse>:<port>/bridge/v2 --output profil.json --pair
+```
+
+Die Paketliste steht in `packaging/apt-packages.txt`; der
+[Installer](../dependencies.md#pi-werkbank-installieren) meldet noch fehlende
+Gruppen-/Boot-Einrichtung. Vorlagen und gültige Timing-Kalibrierung sind separat
+bereitzustellen. Das Kopplungsangebot im exportierten Profil gilt fünf Minuten.
+
+**Zwei bestehende Zertifikatswege:** Der Brückendienst lädt das gepinnte
+Identitätszertifikat aus `--bridge-directory`; `--cert`/`--key` aus dem klassischen
+Browserbetrieb werden dabei nicht verwendet. Dieses Identitätszertifikat trägt
+eine Pi-URI, keine IP-/DNS-SANs. `init-tls --host` erstellt das separate
+Browserzertifikat für `serve` ohne `--bridge-directory`. Es behebt deshalb keine
+Namenswarnung des Browsers am Brückendienst. Die Windows-Brücken-App prüft dessen
+Identität über das exportierte Profil. Eine Zusammenführung oder Erneuerung
+dieser Zertifikatswege ist nicht Teil von P0a; vorhandene Identitäten bleiben
+unverändert.
+
+```bash
+scripts/werkbank-dienst.sh status --host <adresse> --port <port>
+scripts/werkbank-dienst.sh logs --host <adresse> --port <port>
+scripts/werkbank-dienst.sh stop --host <adresse> --port <port>
+scripts/werkbank-dienst.sh restart --host <adresse> --port <port>
+```
+
+`logs` folgt dem Journal; `Ctrl+C` beendet nur die Anzeige. `stop` und `restart`
+fragen `dispread live status --socket …` ab und verweigern bei aktivem Lauf,
+laufender Einrichtung, Diagnosekopie oder unbekanntem Live-Status. `--force`
+überstimmt diese Sperre mit Warnung und kann einen Lauf abbrechen. Ein bereits
+inaktiver/fehlgeschlagener Dienst braucht keinen Live-Status. Die Statusabfrage
+ist keine atomare Startsperre: während Wartung keinen neuen Lauf im Browser
+starten. Der Dienst erhält 20 Sekunden für den Stop; bei Zeitüberschreitung
+folgt `reset-failed`, ein Fehlercode und kein automatischer Folgestart.
+
+`restart` wartet bis zu 60 Sekunden auf eine HTTPS-Antwort von `/live` (auch
+ein Login-Redirect zählt), einstellbar über `--wait-seconds`. Dabei überträgt
+die Prüfung keine Zugangsdaten und überspringt nur für diese Erreichbarkeitsprobe
+die Zertifikatsprüfung. `start` bestätigt den systemd-Startauftrag, keine
+Kamera- oder Messbereitschaft. Fehlt Linger, erscheint der Hinweis auf
+`loginctl enable-linger <benutzer>`; das Skript führt ihn nicht selbst aus.
+Ohne Linger kann der Benutzerdienst nach dem Abmelden beendet werden. Der
+transiente Dienst ist kein persistenter Boot-Autostart.
+
+Standardpfade werden von der Repo-Wurzel abgeleitet: Werkbankdaten
+`var/workbench`, Live-Daten `var/live`, Identität `var/workbench/bridge` und Socket
+`var/run/werkbank/control.sock`. Sein eigenes Elternverzeichnis erhält 0700.
+`--data`, `--live-data`, `--bridge-directory`, `--socket`, `--endpoint` und
+`--unit` überschreiben diese Werte. Relative Pfadoptionen beziehen sich auf
+die Repo-Wurzel; der Endpunkt ist sonst `https://<host>:<port>/bridge/v2`.
+IPv6 beim Host ohne Klammern angeben; das Skript setzt sie in URLs selbst.
+Bei einer bereits anders gestarteten Unit unbedingt deren tatsächlichen
+Socket und Pfade angeben. Der normale CLI-Standardsocket bleibt unverändert.
+Ein Wechsel des Installationsortes oder des allgemeinen Pfadmodells ist offen
+([Installer-Spec L6](../superpowers/specs/2026-11-13-installer-tui-design.md)).
 
 ## Live-Seite `/live`
 
@@ -732,9 +800,20 @@ lokal erzeugte Zertifikat:
    (bei verwalteten Geräten nach Firmenvorgabe durch die IT).
 4. Erst danach über die zum Zertifikat passende Adresse anmelden.
 
-Die Standardeinstellungen nehmen die interne IP sowie localhost/127.0.0.1 in
-das Zertifikat auf. Für eine andere Adresse `init-tls --host ADRESSE` in einem
-neuen Zertifikatverzeichnis verwenden. SSH-Tunnel bleiben mit
+`init-tls --host ADRESSE` nimmt die explizite Adresse sowie localhost/127.0.0.1
+in das Zertifikat auf; die interne IP wird nicht automatisch ermittelt.
+SAN-Adressen und Ablaufdatum des vorhandenen Browserzertifikats zeigt:
+
+```bash
+./.venv/bin/dispread init-tls --show
+./.venv/bin/dispread init-tls --directory <zertifikatverzeichnis> --show
+```
+
+Die Ausgabe ist JSON mit `san`, `not_after_utc` und Zeitbasis `UTC`; sie benötigt
+keinen privaten Schlüssel und ändert keine Dateien. Die Laufzeit beträgt
+weiterhin 365 Tage. Eine automatische Erneuerung oder Warnung unter 30 Tagen
+ist noch nicht enthalten. Für eine andere Adresse `init-tls --host ADRESSE`
+in einem neuen Zertifikatverzeichnis verwenden. SSH-Tunnel bleiben mit
 `serve --host 127.0.0.1` möglich, ebenfalls mit HTTPS und Anmeldung.
 
 ## Oberfläche: Kamera und setup-Tabelle (alte Seite)

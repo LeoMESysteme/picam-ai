@@ -11,6 +11,7 @@ from pathlib import Path
 
 from dispread.gsv_bridge import demo_records
 from dispread.gsv_transport import OutputConfig, OutputPublisher
+from dispread.hardware_ports import GSV_UART_PORT
 from dispread.sink.jsonl import JsonlSink
 
 
@@ -19,7 +20,7 @@ def main(argv=None):
     parser.add_argument("--transport", choices=("tcp", "uart"), required=True)
     parser.add_argument("--tcp-host", default="0.0.0.0", help="Lokale Pi-Bind-Adresse")
     parser.add_argument("--tcp-port", type=int, default=5000)
-    parser.add_argument("--serial-port", default="/dev/ttyAMA0")
+    parser.add_argument("--serial-port", default=GSV_UART_PORT)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--count", type=int, default=600)
     parser.add_argument("--rate-hz", type=float, default=10)
