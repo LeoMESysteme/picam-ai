@@ -327,6 +327,7 @@ class SettingsWindow(ToolWindow):
     def _port_combo(self, name: str, heading: str, choices, current) -> QComboBox:
         cb = QComboBox()
         cb.setObjectName(f'settings_{name}')
+        cb.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Mausrad nur mit Fokus (B-09a), nicht erst beim Show
         cb.setAccessibleName(heading)
         cb.addItem(texts.PORT_CHOOSE)
         for p in choices:

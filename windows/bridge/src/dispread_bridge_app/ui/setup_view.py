@@ -659,6 +659,7 @@ class SetupView(QWidget):
     def _make_combo(self, name, heading, ports, current) -> QComboBox:
         cb = QComboBox()
         cb.setObjectName(f'combo_{name}')
+        cb.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Mausrad nur mit Fokus (B-09a), nicht erst beim Show
         cb.setAccessibleName(heading)
         cb.addItem(texts.PORT_CHOOSE)
         for port in ports:
