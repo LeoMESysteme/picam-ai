@@ -22,6 +22,49 @@ breitere Gerätevielfalt bleibt offen ([OQ-04](open-questions.md#oq-04)).
 Synthetische Daten ergänzen, sie zählen nie zum realen Testset.
 Technische Kamerastream-Tests belegen keine Erkennungszuverlässigkeit.
 
+## Raster B1 und A1+B1 — Offline-Gegenprobe 2026-11-13
+
+| Bestand | Baseline | B1 | A1+B1 |
+| --- | ---: | ---: | ---: |
+| Handoff-Standbilder | 58/65 | 59/65 | 63/65 |
+| Erweiterte Standbilder | 64/74 | 66/74 | 72/74 |
+| Alle Pfade einschließlich 16 Duplikaten | 80/90 | 82/90 | 88/90 |
+
+B1 erhält alle bisherigen Fits mit 0 px Eckabstand; A1+B1 erhält alle
+Baseline-Fits mit höchstens 0,52243 px und alle A1-Fits mit 0 px Abstand.
+A1+B1 lehnt zwei Fälle ab: je einen mit `keine_startlage` und
+`startlage_mehrdeutig`. B1 lehnt acht Fälle ab: sieben mit
+`keine_startlage` und einen wegen Mehrdeutigkeit. Die zwei B1-Neufits (`115232Z/versuch-1`,
+`142321Z/versuch-1`) stimmen exakt mit A1+B1 überein: serieller Text,
+Reader und Offset `OK`, visuelle Zell- und Punktzuordnung passend. Der
+zusätzliche A1+B1-Fit `130253Z/still` hat Reader `OK` und visuell passende
+Zuordnung, aber Offset **`WARNUNG`** mit 0,18066 Spalten. Fünf weitere
+A1-Neufits sind gegenüber A1 unverändert und behalten ihre früheren
+Offsetwarnungen. Keine falsche Lage wurde in den Gegenprüfungen erkannt;
+die Warnungen sind keine Freigabe oder allgemeine Validierung.
+
+Manifest, SHA-256, Rohdaten, Gegenlesung und Overlays: [Belegpaket](quellen/raster-recherche-2026-11-13/korpus/README.md).
+Aufbau und Deutung: [Laborjournal](lab_journal.md). Keine Kamera benutzt,
+kein Abnahmelauf. Laufzeit unter paralleler Last nicht bewertet.
+
+## Raster A1 — Offline-Gegenprobe 2026-11-13
+
+| Bestand | Baseline | A1 | A1 keine Startlage | A1 mehrdeutig |
+| --- | ---: | ---: | ---: | ---: |
+| Handoff-Standbilder | 58/65 | 61/65 | 3 | 1 |
+| Erweiterte Standbilder | 64/74 | 69/74 | 4 | 1 |
+| OQ-69-Pfade (Duplikate) | 16/16 | 16/16 | 0 | 0 |
+
+Alle 80 bisherigen Fits über 90 Pfade erhalten; maximaler Eckabstand
+0,52243 px. Fünf neue Fits einzeln gegen seriellen Text, Leser und visuelles
+Punkt-/Zelloverlay geprüft; keine falschen neuen Fits im geprüften Korpus
+festgestellt. Alle fünf haben ROM-Offset `WARNUNG` (0,15395–0,20613
+Spalten, vorläufige Warnschwelle 0,15); der einzige verschobene Altfit
+zeigt 0,1875 Spalten und hatte schon zuvor eine Warnung. Die Warnungen
+bleiben stehen. Rohwerte, Quellhash und Grenzen stehen im
+[Belegpaket](quellen/raster-recherche-2026-11-13/korpus/README.md);
+Aufbau und Deutung im [Laborjournal](lab_journal.md). Kein Abnahmelauf.
+
 ## Live-Läufe mit Referenz im Überblick
 
 Zusammenfassung der drei Live-Läufe vom 2026-10-21; Einzelheiten und
@@ -6700,3 +6743,22 @@ sind 3 Bereiche je Seite, mit Reserve 5.
 * Am echten Aufbau ist nichts erprobt.
 * Ein dunkler Gegenstand, der außen an mehr als einem Viertel einer Rahmenseite anliegt, zählt als
   Rahmen. Dieselbe Annahme gilt schon bisher für Komponenten mit Solidität ≥ 0,97.
+
+### Offline-Nachführung und Fokusgleichheit, 2026-11-13
+
+Die gespeicherten Diagnosebilder der Läufe `103604Z` und `122753Z` vom 11.11.
+(nicht repräsentativ, an Zustandswechseln ausgewählt) wurden gegen das jeweilige
+Bestätigungsbild erneut nachgeführt: je 222 Bilder, 134 bzw. 143 Zweitversuche,
+kein abweichendes Live-Urteil. Maßstab im Zweitfit: 0,998729–1,000504,
+Median 0,999769 bzw. 0,997964–1,000654, Median 1,000126. Für
+`20261113T113119Z/run-01`: 216 Bilder, 216 Zweitversuche, Maßstab
+1,001601–1,002073, Median 1,001807, kein abweichendes Live-Urteil.
+
+Für die Startprüfung wurden 14 Läufe vom 13.11. mit verwertbarem Fokusbefund
+betrachtet. Endverhältnisse 0,982–1,026 enthielten Läufe mit 0,1–7,6 %
+Zweitversuchen; 0,650 bzw. 1,397 hatten 100 % bzw. 99 %. Gegenbeispiel:
+1,418 und 0 %. Das vorläufige Band 0,95–1,05 umfasst den engen beobachteten
+Bereich mit niedrigen Anteilen mit etwas Reserve; es ist keine kalibrierte
+Schwelle, kann gute Läufe sperren und belegt keinen Kausalzusammenhang.
+52 `session.json` im Entwicklungsarchiv wurden auf `focus_check` geprüft:
+keine enthielt ihn, daher dort kein vergleichbares gespeichertes Startpaar.

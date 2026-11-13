@@ -386,6 +386,18 @@
       "tracking_lost": 4,
       "tracking_coarse_retries": 0,
       "tracking_coarse_accepted": 0,
+      "tracking_geometry": {
+        "observations": 858,
+        "retry_fraction": 0.0,
+        "scale": {
+          "n": 0,
+          "total": 0,
+          "window_limit": 10000,
+          "min": null,
+          "median": null,
+          "max": null
+        }
+      },
       "tracking_lost_reasons": {},
       "tracking_hints": {
         "count": 0,
@@ -526,6 +538,7 @@
   "diagnose_kopie": false,
   "last_mark": null,
   "previous_region_hint": null,
+  "last_start_rejection": null,
   "output": {
     "transport": "off",
     "state": "off"

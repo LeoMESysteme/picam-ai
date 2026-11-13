@@ -500,3 +500,29 @@ test('alerts: Fokuspruefung am Laufstart zeigt die Warnung stehend, einmal je La
   assert.equal(h.toasts.get('fokus-lauf').level, 'info');
   assert.notEqual(h.toasts.get('fokus-lauf').sticky, true);
 });
+
+test('abgelehnter Start bleibt nach erneutem Statusabruf getrennt sichtbar', () => {
+  const h = harness();
+  const status = {state: 'stopped', session_id: 's', run: {dir: 'run-01'},
+    last_start_rejection: {run_id: 'new', run_dir: 'run-02', focus_check: {text: 'Fokus prüfen'}}};
+  createAlerts(h.deps).update(status);
+  assert.equal(h.toasts.get('start-abgelehnt').text, 'Fokus prüfen');
+  h.toasts.clear();
+  createAlerts(h.deps).update(status);
+  assert.equal(h.toasts.get('start-abgelehnt').title, 'Letzter Start abgelehnt');
+});
+
+test('erledigte Startablehnung schließt Hinweis bei Erfolg oder neuer Einrichtung', () => {
+  for (const next of [{state: 'running', run: {dir: 'run-02', focus_check: {status: 'OK', text: 'Fokus OK'}}},
+    {state: 'setup_running'}]) {
+    const h = harness();
+    const alerts = createAlerts(h.deps);
+    alerts.update({state: 'stopped', last_start_rejection: {run_id: 'old', focus_check: {text: 'neu einrichten'}}});
+    assert.ok(h.toasts.has('start-abgelehnt'));
+    alerts.update({...next, last_start_rejection: null});
+    assert.equal(h.toasts.has('start-abgelehnt'), false);
+    const fresh = harness();
+    createAlerts(fresh.deps).update({...next, last_start_rejection: null});
+    assert.equal(fresh.toasts.has('start-abgelehnt'), false);
+  }
+});

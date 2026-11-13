@@ -4797,3 +4797,72 @@ Außerdem auf der Pi-Seite: Der Werkbank-Dienst lief zuerst ohne den `var`-Link 
 Die GSVmulti-Session des Tests unterscheidet sich von der Lauf-11-Vorlage nur in den drei Port-Feldern und einem ergänzten Abschnitt `[CopyPaste]`. Das ist ein Beitrag zu OQ-53/N3, aber kein Roundtrip-Nachweis.
 
 [Belege und Vergleich](quellen/bruecke-testlauf-2026-11-06/README.md)
+
+### 2026-11-13 — Offline-Auswertung Nachführmaßstab
+
+Vorhandene Profile, Bestätigungsbilder und diagnosebedingt ausgewählte Bilder
+unter `var/live` nur lesend mit `replay-rahmen.py` ausgewertet; kein
+Kamerazugriff. Zahlen und Einschränkungen stehen in [VALIDATION](VALIDATION.md).
+Die 11.11.-Maßstäbe liegen trotz häufiger Zweitversuche nahe eins. Der
+13.11.-Lauf liegt höher, aber die Daten belegen nicht, dass der Fokus den
+Maßstab verursacht. Das Entwicklungsarchiv enthält keine vergleichbaren
+protokollierten Fokusstartwerte. Eine kontrollierte Messreihe und reale
+Startabnahme stehen aus.
+
+
+## 2026-11-13 — Leerzellgrenze und Rasterstart offline
+
+**Ziel und Aufbau:** Isolierte A1-Änderung an eingefrorener Quellkopie,
+74 gespeicherte Standbilder und 16 bytegleiche OQ-69-Duplikatpfade gegen
+die vorbereitete hashgebundene Baseline. Keine Kamera oder Dienste benutzt,
+Eingaben nur gelesen; ein fehlerhafter erster Variantenlauf mit Baselinecode
+wurde verworfen. Ein verpflichtender Quellhash verhindert Wiederholung.
+
+**Beobachtung und Deutung:** 65er-Korpus 58→61 Fits, 74er 64→69; alle
+80 alten Fits blieben erhalten, maximal 0,52243 px Eckabstand. Fünf neue
+Fits stimmen bei Gegenlesen und Sichtprüfung mit den jeweiligen seriellen
+Texten und der Zell- und Punktzuordnung überein; sämtliche ROM-Prüfungen
+bleiben bei 0,15395–0,20613 Spalten `WARNUNG`. Der einzige verschobene
+Altfit war schon zuvor im Warnbereich und liegt nun bei 0,1875. Das sind
+Entwicklungsbelege für diese Aufstellungen, keine allgemeine Abnahme.
+
+**Rest:** 115232Z/versuch-1 und 130253Z/still bleiben abgelehnt. Bei
+115232Z zeigt die ausgewählte Unterkante 0,0712 gegenüber 0,0217 oben;
+eine isolierte `bottom=top`-Gegenprobe findet dort ein Raster, nicht aber
+eine größere Randzone bei unveränderter Startsuche. Das Folgebild-Quad
+ist nur ein Geometrieanker mit Bewegungsvorbehalt.
+[Methodik, Rohdaten, Warnungen und Overlays](quellen/raster-recherche-2026-11-13/README.md).
+
+
+## 2026-11-13 — Zweite Rasterstart-Hypothese offline
+
+**Aufbau:** Gespeicherte Bilder und Entwicklungsdaten nur lesend; Quellkopien
+für B1 allein und A1+B1, Manifest- und Codehashprüfung. Keine Kamera und kein
+Dienstzugriff. Separat beobachtete Tests der Bilder 130253Z/still und
+115232Z/versuch-1 scheiterten vorher mit `keine_startlage` und liefern nach
+A1+B1 Fits nahe den Vergleichsquads. Die beiden Oktober-Gegenproben blieben
+innerhalb 1 px ihrer Baselinequads. Vergleichsquads sind keine unabhängige
+Sollgeometrie; zwischen Einrichtungen ist Bewegung möglich.
+
+**Deutung:** Hough-Linien in allen vier Fällen kreuzen das Zeichenband, daher
+ist ein einfacher Ausschluss solcher Linien nicht belegt. Eine zweite Suche
+nur nach vollständigem Fehlschlag der ursprünglichen Suche schützt bereits
+akzeptierte Ergebnisse, prüft bei ihnen aber keine alternative Lage. Voller
+Korpusvergleich und Gegenprüfung neuer Fits: siehe
+[Rasterrecherche](quellen/raster-recherche-2026-11-13/README.md).
+
+
+**Abschluss der Offline-Gegenprobe:** 90 Pfade je Variante (74 verschiedene
+Bilder einschließlich 16 archivgleicher Duplikatpfade), Bild- und Textdateien
+per Manifest und Quellstand per SHA-256 gesichert. B1 ergibt 59/65 bzw. 66/74,
+A1+B1 63/65 bzw. 72/74 Fits; alte Fits bleiben erhalten. Zwei Neufits von B1
+sind im kombinierten Lauf geometrisch identisch und passen bei serieller
+Gegenprüfung und Overlay; der dritte neue kombinierte Fit hat eine bleibende
+Offsetwarnung trotz passender Zellzuordnung. Die fünf schon mit A1 gewonnenen
+Fits sind quadidentisch, ihre früheren Warnungen bleiben. Einzelheiten und
+Rohbelege im [Korpus](quellen/raster-recherche-2026-11-13/korpus/README.md)
+und Zahlen in [VALIDATION](VALIDATION.md). Die Auswertung lief unter
+paralleler Last und wurde zwischenzeitlich mit `SIGSTOP` pausiert und mit
+`SIGCONT` fortgesetzt; keine belastbare Laufzeitmessung. Alle Shards haben
+30 vollständige, hashgeprüfte Ergebniszeilen und keine Fehlerzeilen; der
+Warteprozess meldete nach der Pause Exit 143 und ist kein Erfolgsnachweis.

@@ -1908,7 +1908,8 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   await confirmedState(page);
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await pop.getByText('UART direkt', { exact: true }).click();
-  await expect(pop).toContainText('Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.');
+  // Vorgabe ist der Vierkanal-Takt: Hinweis zu Kanal 1 hält (13.11.).
+  await expect(pop).toContainText('Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); der Zeitkanal ist vorläufig.');
   const ack = pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' });
   await expect(pop.getByLabel('Port', { exact: true })).toHaveValue('/dev/ttyAMA0');
   await expect(pop.getByLabel('Baudrate')).toHaveValue('115200');

@@ -407,7 +407,10 @@ def _evaluate_fit(
         candidate_in_cell = (
             np.isin(candidate_cell, empty_cells)
             & (local_x >= 0)
-            & (local_x < _PITCH)
+            # Randminima am ersten Nachbarpunkt koennen knapp vor der
+            # Grenze liegen. 0,25 Punktabstand deckt die beobachteten
+            # 0,01–0,04 ab und behaelt die Mitte der Lueckenspalte.
+            & (local_x < _PITCH - 0.25 * _PH)
             & (target_all[:, 1] >= _TOP)
             & (target_all[:, 1] <= _TOP + 7 * _PV)
         )
@@ -519,13 +522,23 @@ def fit_lattice(
     # naechsten Durchgang; Mehrdeutigkeit bleibt immer sichtbar. Andere
     # Fallback-Ablehnungen erhalten den Einrichtungshinweis der ersten Suche;
     # ein erkanntes Minus behaelt den Hinweis auf den fehlenden Pluswert.
-    result: LatticeFit | str = "keine_startlage"
-    for pass_index, fraction in enumerate(_START_SIGMA_FRACTIONS):
-        result = _auto_fit(image_bgr, hint_box, empty_cells=empty_cells, sigma_fraction=fraction)
-        if result != "keine_startlage":
-            if pass_index > 0 and isinstance(result, str) and result not in {"startlage_mehrdeutig", "vorzeichen_kein_plus"}:
-                return "keine_startlage"
-            return result
+    def search(*, alternate_bottom: bool) -> tuple[LatticeFit | str, bool]:
+        result: LatticeFit | str = "keine_startlage"
+        for pass_index, fraction in enumerate(_START_SIGMA_FRACTIONS):
+            kwargs = {"alternate_bottom": True} if alternate_bottom else {}
+            result = _auto_fit(image_bgr, hint_box, empty_cells=empty_cells,
+                               sigma_fraction=fraction, **kwargs)
+            if result != "keine_startlage":
+                if pass_index > 0 and isinstance(result, str) and result not in {
+                    "startlage_mehrdeutig", "vorzeichen_kein_plus",
+                }:
+                    return "keine_startlage", False
+                return result, False
+        return result, True
+
+    result, exhausted = search(alternate_bottom=False)
+    if exhausted:
+        return search(alternate_bottom=True)[0]
     return result
 
 
@@ -535,6 +548,7 @@ def _auto_fit(
     *,
     empty_cells: tuple[int, ...] = (),
     sigma_fraction: float | None = None,
+    alternate_bottom: bool = False,
 ) -> LatticeFit | str:
     height, width = image_bgr.shape[:2]
     x, y, w, hh = hint_box
@@ -561,6 +575,11 @@ def _auto_fit(
     top = max(top_lines)[1] if top_lines else (max(spans)[1] if spans else None)
     bottom_lines = [entry for entry in spans if entry[2] > (y1 - y0) * 0.55]
     bottom = max(bottom_lines)[1] if bottom_lines else top
+    if alternate_bottom:
+        # Nur die alternative Startannahme: Akzeptanz und Eindeutigkeit bleiben gleich.
+        if top is None or bottom == top:
+            return "keine_startlage"
+        bottom = top
     # Quellbild-Minima mit Tiefe relativ zum lokalen LCD-Hintergrund.
     # point_pitch enthaelt bereits den Faktor 1/1,2 fuer die breitere Box.
     # Mit 0,9 wirken 0,15/0,18 effektiv als ca. 0,125/0,15 der echten Punktweite.

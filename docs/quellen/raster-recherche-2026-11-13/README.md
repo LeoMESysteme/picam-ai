@@ -77,3 +77,68 @@ und die 65 Standbilder je Änderung getrennt (bisher zusammen gelaufen). Neue Re
 - Gegen Fehler B allein könnte eine Hinweisbox helfen, deren untere Hälfte keine lange schräge Linie durch die
   Ziffern zulässt; das ist nicht erprobt und behebt A nicht.
 - Ein verlässlicher Ausweg ohne Codeänderung ist nicht belegt.
+
+## 5. A1 isoliert nachgemessen (2026-11-13)
+
+Die Aussage oben „5 neue Fits“ stammt aus einer früheren, nicht isolierten
+Auswertung und gilt **nicht** für A1 allein im ursprünglichen 65er-Korpus.
+Der eingefrorene A1-Lauf mit 0,25 Spalten liefert dort drei neue Fits;
+im um neun spätere Standbilder erweiterten Korpus kommen zwei weitere hinzu.
+`115232Z/still-versuch-1` bleibt mit 0,25 **und** mit 0,5 bei ursprünglicher
+Startsuche abgelehnt. Die getrennte Gegenprobe mit alternativer Unterkante
+findet dort einen Fit: [Diagnose](korpus/probe-115232.md). Auch
+`130253Z/still.png` bleibt wegen der unabhängigen Startsuche abgelehnt.
+
+| Umfang | Baseline Fits | A1 Fits | A1 keine Startlage | A1 mehrdeutig |
+| --- | ---: | ---: | ---: | ---: |
+| Ursprüngliche Standbilder | 58/65 | 61/65 | 3 | 1 |
+| Erweiterte Standbilder | 64/74 | 69/74 | 4 | 1 |
+| OQ-69-Duplikatpfade | 16/16 | 16/16 | 0 | 0 |
+
+Alle 80 vorhandenen Fits über 90 Pfade bleiben erhalten; maximale
+Eckverschiebung 0,52243 px (`121656Z/still.png`), übrige 79 exakt gleich.
+Die fünf neuen Fits (`121656Z/versuch-1`, `130253Z/versuch-1,2`,
+`132755Z/versuch-1,2`) wurden einzeln gegen den jeweiligen seriellen Text,
+Reader und visuelles Punkt-/Zelloverlay geprüft. Reader jeweils `OK` ohne
+Widerspruch. Die ROM-Offsetprüfung meldet jeweils `WARNUNG`: maximale
+horizontale Abstände 0,15395, 0,20613, 0,20466, 0,15417 und 0,16230
+Spalten bei vorläufiger Warnschwelle 0,15. Das Overlay zeigt jeweils
+passende Stellen, Dezimalpunkt, Einheit und Punktspalten. Es wurden im
+geprüften Korpus keine falschen neuen Fits festgestellt; die Warnungen sind
+keine formale Abnahme und bleiben bestehen. Der einzige verschobene Altfit
+wurde ebenfalls gegengelesen und visuell geprüft: seriell `+0.67787`, Reader
+`OK`, Offset `WARNUNG` 0,1875 Spalten. Seine Baseline hatte bereits eine
+Offsetwarnung. Ein aus einer anderen Aufnahme übernommenes Quad ist nur ein
+Geometrieanker unter Bewegungsvorbehalt, keine unabhängige Sollgeometrie.
+
+Manifest, komplette Ergebnisse, Vergleich, Skripte, Quellhashes, Rohbefunde,
+Overlays und Reproduktionshinweise: [Korpus](korpus/README.md). Der zuerst
+irrtümlich mit Baseline-Code durchgeführte Variantenlauf wurde vollständig
+verworfen; der Evaluator erzwingt seitdem vor dem ersten Bild den erwarteten
+Quellhash. Keine Kamera oder Dienste benutzt.
+
+## Nachtrag: begrenzte zweite Startsuche (2026-11-13)
+
+Die ursprüngliche Suche mit allen drei Glättungen bleibt erster Durchlauf.
+Nur wenn alle drei `keine_startlage` melden und die beobachtete Unterkante
+von der oberen Richtung abweicht, wird die obere Richtung in einer zweiten
+Suche als alternative Unterkantenannahme verwendet. Fit-, Plus-, Leerzellen-
+und Eindeutigkeitsprüfungen bleiben bestehen; bereits gefundene Fits und
+andere Ablehnungen werden nicht überschrieben. Bei einem akzeptierten ersten
+Fit wird die Alternative nicht geprüft, daher ist dies kein vollständiger
+Eindeutigkeitsnachweis. Die 26.10.-Linien liegen ebenfalls im Zeichenband;
+eine pauschale räumliche, Neigungs- oder Längenschwelle ist nicht belegt.
+
+Die gezielten Tests finden 130253Z/still und 115232Z/versuch-1 nahe den
+jeweiligen Vergleichsquads; beide 26.10.-Fits bleiben innerhalb 1 px ihrer
+Baseline. Die Vergleichsquads sind keine unabhängig gesicherten Sollwerte.
+Den getrennten Offline-Korpus mit eingefrorenen Quellen und abgeschlossenen
+Ergebnissen enthält [`korpus/`](korpus/README.md). Keine Kamera benutzt.
+
+Die abschließende Offline-Auswertung ergab für B1 59/65 bzw. 66/74 Fits,
+für A1+B1 63/65 bzw. 72/74. Alle Baselinefits bleiben erhalten (maximaler
+Eckabstand 0 bzw. 0,52243 px); alle A1-Fits sind in A1+B1 quadidentisch.
+Die beiden B1-Neufits bestehen Text-, Reader-, Offset- und Sichtprüfung.
+Der dritte Neufit gegenüber A1 (130253Z/still) hat passende Zeichen-/Punktlage
+und Reader `OK`, jedoch Offset `WARNUNG` 0,18066 Spalten. Einzelbelege,
+Vergleiche und Einschränkungen stehen im [Korpusbericht](korpus/README.md).

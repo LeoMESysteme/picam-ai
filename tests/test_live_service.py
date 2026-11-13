@@ -691,6 +691,7 @@ def test_status_setup_grid_running_and_stopped(tmp_path, proposal, monkeypatch):
     # Kein gleichmaessiges Schaetzen: auch gerundete Einzelbreiten uebernehmen.
     proposal['grid'].update(left=1.2, pitch=24.7)
     service = ready_service(tmp_path, proposal)
+    monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     service.confirm(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True)
     confirmed = service.status()['setup']['grid']
     profile = SessionProfile.load(service._profile_path)
@@ -1710,6 +1711,7 @@ def test_block_survives_confirmation_and_override_is_audited(tmp_path, proposal,
         "status": "WARNUNG", "metrics": {"frames": 2, "read_count": 0, "rejection_reasons": {}},
     }
     service = ready_service(tmp_path, proposal)
+    monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     reason = service.status()["run_block"]
     assert "Gegenlesen WARNUNG: -" in reason
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True)
@@ -1848,6 +1850,7 @@ def test_confirm_adaptive_tolerance_marks_artifacts_and_run(tmp_path, proposal, 
     proposal['setup_checks'].update(overall='WARNUNG')
     proposal['setup_checks']['checks']['gegenlesen'] = {'status': 'WARNUNG', 'metrics': metrics}
     service = ready_service(tmp_path, proposal)
+    monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     assert 'Schatten entfernen.' in service.status()['run_block']
     assert service.status()['setup']['gegenlesen']['metrics'] == metrics
     kwargs = dict(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True,
@@ -3188,6 +3191,7 @@ def test_bridge_reserves_off_and_serial_before_camera_and_releases_on_stop(tmp_p
         def __init__(self, *args, output=None, **kwargs):
             super().__init__(*args, **kwargs)
     service = _confirmed_service(tmp_path, monkeypatch, Session)
+    monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     service._bridge_hub = hub
     service._profile_camera = object()
     seen = []
@@ -3486,8 +3490,10 @@ def test_setup_focus_roi_from_lcd_hint_and_end_check_after_last_restart(tmp_path
         np.zeros((1080, 1920, 3), np.uint8), expected_hint)[1]
 
 
-@pytest.mark.parametrize("outcome", ["WARNUNG", "fehlt", "kamerafehler"])
+@pytest.mark.parametrize("outcome", ["WARNUNG", "fehlt", "kamerafehler", "OK"])
 def test_run_start_checks_focus_after_restart_and_records_it(tmp_path, monkeypatch, outcome):
+    import json
+
     import numpy as np
 
     from dispread.camera_settings import CameraSettings
@@ -3512,6 +3518,9 @@ def test_run_start_checks_focus_after_restart_and_records_it(tmp_path, monkeypat
         assert ref == reference and target == 52
         if outcome == "kamerafehler":
             raise UvcError("kein frisches Bild")
+        if outcome == "OK":
+            return ({"status": "OK", "text": "Fokusvergleich: 104 %", "after_restart": {"ratio": 1.04},
+                     "run_band_ratio": [0.95, 1.05]}, {})
         return ({"status": "WARNUNG", "text": text, "after_restart": {"ratio": 0.2},
                  "reapproach": {"ratio": 0.31}}, {"nach_neustart": np.zeros((100, 100, 3), np.uint8)})
 
@@ -3539,28 +3548,40 @@ def test_run_start_checks_focus_after_restart_and_records_it(tmp_path, monkeypat
     service = LiveService(Owner(), tmp_path)
     service._state, service._profile_path = "confirmed", tmp_path / "profile.json"
     service._profile_camera, service._focus_reference = camera, reference
+    if outcome == "OK":
+        service.start_run(reference=False)
+        try:
+            assert service.status()['run']['focus_check']['after_restart']['ratio'] == 1.04
+            assert sessions[0].started_with['run_band_ratio'] == [0.95, 1.05]
+        finally:
+            service.stop_run()
+        return
+    old_session = FakeSession()
+    service._session = old_session
+    service._run_dir = tmp_path / 'old-run'
+    service._state = 'stopped'
+    with pytest.raises(LiveError, match="Fokus"):
+        service.start_run(reference=False)
+    assert service.status()["state"] == "stopped"
+    assert service._session is old_session and len(sessions) == 1
+    assert service.status()['run']['dir'] == 'old-run'
+    assert (tmp_path / "run-01" / "focus-check.json").exists()
+    meta = json.loads((tmp_path / "run-01" / "session.json").read_text())
+    assert meta['schema'] == 'live-start-rejection/1'
+    assert meta['ended_at_utc'] and meta['run_id'] and meta['profile']['path']
+    assert service.status()['last_start_rejection']['focus_check'] == meta['focus_check']
+    with pytest.raises(LiveError):
+        service.start_run(reference=False)
+    assert service.status()['last_start_rejection']['run_dir'] == 'run-02'
+    monkeypatch.setattr(service, '_check_run_start_focus', lambda *_: {'status': 'OK', 'text': 'Fokus OK'})
     service.start_run(reference=False)
     try:
-        if outcome == "fehlt":
-            assert events == ["restart:laufstart", "session_start"]
-            assert sessions[0].started_with == {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz"}
-            assert service.status()["run"]["focus_check"] is None
-            return
-        assert events == ["restart:laufstart", "focus_check", "session_start"]
-        # Der Lauf startet trotzdem; die Warnung steht im Laufstatus und in session.json.
-        assert service.status()["state"] == "running"
-        audit = sessions[0].started_with
-        shown = service.status()["run"]["focus_check"]
-        if outcome == "WARNUNG":
-            assert audit["status"] == "WARNUNG" and audit["text"] == text
-            assert shown == {"status": "WARNUNG", "text": text}
-            # Diagnoseausschnitt im Laufordner (profile_path.parent / run-01).
-            assert (tmp_path / "run-01" / "fokus-laufstart-nach-neustart.png").exists()
-        else:
-            assert audit["status"] == "WARNUNG" and "kein frisches Bild" in audit["text"]
-            assert shown["status"] == "WARNUNG" and "Fokus beim Laufstart nicht geprüft" in shown["text"]
+        assert service.status()['last_start_rejection'] is None
+        assert (tmp_path / 'run-01' / 'session.json').exists()
+        assert (tmp_path / 'run-02' / 'session.json').exists()
     finally:
         service.stop_run()
+
 
 
 def test_confirm_keeps_focus_reference_for_run_start(tmp_path, proposal):
@@ -3570,8 +3591,10 @@ def test_confirm_keeps_focus_reference_for_run_start(tmp_path, proposal):
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Test", format_checked=True,
                     acknowledge_warning=True)
     assert service._focus_reference == reference
+    service._last_start_rejection = {'run_id': 'old'}
     service.start_setup()
     assert service._focus_reference is None
+    assert service.status()['last_start_rejection'] is None
     service._setup_thread.join(2)
 
 

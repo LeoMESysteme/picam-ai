@@ -398,6 +398,9 @@ class LiveSession:
         self._tracking_lost = 0
         self._tracking_coarse_retries = 0
         self._tracking_coarse_accepted = 0
+        self._tracking_scales: deque[float] = deque(maxlen=10_000)
+        self._tracking_scale_total = 0
+        self._tracking_observations = 0
         self._tracking_lost_reasons: Counter[str] = Counter()
         self._track_scores: deque[float] = deque(maxlen=10_000)
         self._track_score_n = 0
@@ -557,9 +560,13 @@ class LiveSession:
                 self._tracking_lost_reasons[record.reject_reasons[0].split(":", 1)[1]] += 1
             track = getattr(self._pipeline.locator, "last_track", None)
             coarse = getattr(getattr(self._pipeline.locator, "_tracker", None), "last_coarse", None)
+            self._tracking_observations += 1
             if coarse is not None and coarse.used:
                 self._tracking_coarse_retries += 1
                 self._tracking_coarse_accepted += int(track is not None and track.quad is not None)
+                if coarse.scale is not None:
+                    self._tracking_scales.append(float(coarse.scale))
+                    self._tracking_scale_total += 1
             if track is not None:
                 score = float(track.score)
                 self._track_scores.append(score)
@@ -1027,6 +1034,16 @@ class LiveSession:
             "tracking_lost": self._tracking_lost,
             "tracking_coarse_retries": self._tracking_coarse_retries,
             "tracking_coarse_accepted": self._tracking_coarse_accepted,
+            "tracking_geometry": {
+                "observations": self._tracking_observations,
+                "retry_fraction": (self._tracking_coarse_retries / self._tracking_observations
+                                   if self._tracking_observations else None),
+                "scale": {"n": len(self._tracking_scales), "total": self._tracking_scale_total,
+                          "window_limit": self._tracking_scales.maxlen,
+                          "min": min(self._tracking_scales, default=None),
+                          "median": median(self._tracking_scales) if self._tracking_scales else None,
+                          "max": max(self._tracking_scales, default=None)},
+            },
             "tracking_lost_reasons": dict(self._tracking_lost_reasons),
             "tracking_hints": (self._tracking_advice.summary() if self._tracking_advice is not None else
                                empty_summary()),

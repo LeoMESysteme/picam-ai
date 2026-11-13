@@ -2,7 +2,7 @@
 
 **Ziel:** Herausfinden, wie ungültige Abschnitte und die echte Zeit in einer GSVmulti-Aufnahme erhalten bleiben, ohne GSVmulti zu ändern.
 
-**Hintergrund** ([Recherche](../../.superpowers/sdd/2026-11-06-bruecke-ui/gsvmulti-fehlwerte-recherche.md) und [Beleg 11.11.](../../docs/quellen/bruecke-testlauf-2026-11-11/README.md)):
+**Hintergrund** (Recherche: `.superpowers/sdd/2026-11-06-bruecke-ui/gsvmulti-fehlwerte-recherche.md`; [Beleg 11.11.](../../docs/quellen/bruecke-testlauf-2026-11-11/README.md)):
 - Die TDMS ist äquidistant (Handbuch S. 73). GSVmulti zählt also Werte und misst keine Zeit.
 - Eine Lücke kann deshalb nur als Wert im Telegramm überleben.
 

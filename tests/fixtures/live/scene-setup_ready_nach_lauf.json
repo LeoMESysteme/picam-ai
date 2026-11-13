@@ -433,6 +433,7 @@
       }
     ]
   },
+  "last_start_rejection": null,
   "output": {
     "transport": "off",
     "state": "off"

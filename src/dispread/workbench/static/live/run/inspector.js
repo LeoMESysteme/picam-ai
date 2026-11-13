@@ -134,6 +134,7 @@ function trackingHTML(status, hud) {
   const track = hud?.track || null;
   const summary = status?.run?.summary || {};
   const score = summary.track_score || {};
+  const geometry = summary.tracking_geometry || {};
   const value = (x, digits, unit = '') => (finite(x) ? `${dec(x, digits)}${unit}` : '–');
   const correcting = track?.correcting ? '<span class="teal-t">Korrektur läuft</span>' : 'ruhend';
   const hint = status?.state === 'running' ? trackingHintText(status?.run?.tracking_hint) : '';
@@ -155,6 +156,8 @@ function trackingHTML(status, hud) {
     `<dt>Drehung</dt><dd>${value(track?.rotation_deg, 1, '°')}</dd><dt>Nachregistrierung</dt><dd class="t">${correcting}</dd>` +
     `<dt>Spur im Lauf</dt><dd>${finite(score.median) ? `${value(score.min, 2)} · ${value(score.median, 2)} · ${value(score.max, 2)}` : '–'}</dd></dl>` +
     `${finite(score.median) ? '<p class="note">Min · Median · Max</p>' : ''}` +
+    `${status?.run?.focus_check?.text ? `<p class="note">${esc(status.run.focus_check.text)}</p>` : ''}` +
+    `${finite(geometry.retry_fraction) ? `<p class="note">Zweitversuche: ${Math.round(100 * geometry.retry_fraction)} % von ${grp(geometry.observations)} geprüften Bildern; Maßstab (Median der letzten ${grp(geometry.scale?.n ?? 0)} von ${grp(geometry.scale?.total ?? 0)} Zweitfits, Fenster höchstens ${grp(geometry.scale?.window_limit ?? 10000)}): ${value(geometry.scale?.median, 4)}. Diagnose, keine Freigabeprüfung.</p>` : ''}` +
     `${hint ? `<p class="err-t">${esc(hint)}</p>` : ''}</div>` +
     '<div class="blk flush"><table class="grid"><thead><tr><th class="r">Nr.</th><th class="r">Mitte</th><th class="r">Treffer</th><th>Status</th></tr></thead>' +
     `<tbody>${regions || '<tr class="pend"><td colspan="4">Keine Rahmenbereiche im Bild</td></tr>'}</tbody></table></div>` +
