@@ -183,7 +183,7 @@ class AppController:
         # Read and validate package data once; context() performs no file I/O.
         self._session_catalog = load_session_catalog()
         self._setup_revision = 0
-        self._paired_cached = False
+        self._paired_cached: dict[str, bool] = {}   # je Weg (network | uart): Zugangsdaten gelten je Transport
         # persistiert
         self._profile: BridgeProfile | None = None
         self._route: str | None = None
@@ -649,22 +649,25 @@ class AppController:
             self._step = 3
 
     def _is_paired(self) -> bool:
-        return self._paired_cached
+        """Gekoppelt fuer den gewaehlten Weg. Ein Netzwerk-Token koppelt UART nicht
+        (13.11.2026: Schleife Schritt 3 -> „Neuen Code eingeben“ -> Schritt 2 ohne Codefeld)."""
+        return self._paired_cached.get(self._route or 'network', False)
 
     def _refresh_pairing(self) -> None:
         # Called by background operations, never from context()/snapshot().
         with self._lock:
             profile = self._profile
-        paired = False
+        paired = {}
         if profile is not None:
-            try:
-                paired = any(self._credentials.load(profile.pi_id, mode,
-                                 expected_pin=profile.certificate_sha256) for mode in ('network', 'uart'))
-            except Exception:
-                pass
+            for mode in ('network', 'uart'):
+                try:
+                    paired[mode] = bool(self._credentials.load(profile.pi_id, mode,
+                                                               expected_pin=profile.certificate_sha256))
+                except Exception:
+                    paired[mode] = False
         with self._lock:
             if self._profile is profile:
-                self._paired_cached = bool(paired)
+                self._paired_cached = paired
 
     # ------------------------------------------------------------ Komponenten / Portpaar
     @_reports

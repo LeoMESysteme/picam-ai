@@ -543,3 +543,17 @@ def test_demo_check_ends_clearly_even_when_values_are_missing(tmp_path):
     with c._lock:
         c._written = 600
     assert c._variant(r, None)[0] == 'E5done'
+
+
+def test_pairing_is_judged_per_route(tmp_path, identity):
+    """13.11.2026: Netzwerk-Token vorhanden, Weg UART über Brücke -> Schritt 2 sagte „gekoppelt“,
+    der Verbindungsaufbau „nicht gekoppelt“; „Neuen Code eingeben“ führte im Kreis."""
+    c = make(tmp_path)
+    c.set_port_pair('COM4', 'COM5')
+    c.load_profile(profile_bytes(identity))
+    c._credentials.save(identity.pi_id, 'network', 'n' * 43, expected_pin=identity.fingerprint)
+    c._refresh_pairing()
+    c.select_mode('network')
+    assert c._is_paired()
+    c.select_mode('uart_bridge')
+    assert not c._is_paired()                       # UART braucht eigene Kopplung: Codefeld zeigen
