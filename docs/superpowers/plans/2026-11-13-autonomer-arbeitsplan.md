@@ -57,7 +57,7 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
        - Adapterwechsel ins Journal
        - 3× `uart_timeout` beim UART-Verbinden
        - Anzeige „Erneut prüfen“ (UI, Runde 3)
-4. [ ] EXE-Runde 3: `wip/bruecke-ux3` auf `feat/integration` rebasen bzw. mergen, R3-Test
+4. [x] EXE-Runde 3: `wip/bruecke-ux3` auf `feat/integration` rebasen bzw. mergen, R3-Test
        `test_value_field_ground_token[False]` reparieren, offene Punkte aus
        `TODO.md` („EXE, Gestaltung“) und dem Prüfbericht. Volle Windows-Suite, `ux_tour`
        hell und dunkel offscreen, `windows/bridge/PRUEFUNG-UX3.md` für Mittwoch. Branch
@@ -119,3 +119,12 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
   Dienstskript, TLS-Host. Handoff: `docs/superpowers/handoffs/2026-11-14-codex-installer-p0.md`
   auf `feat/installer-p0` (Worktree `.worktrees/installer-p0`). Danach Review, volle Suite,
   Merge nach `feat/integration`. Offen bleibt Punkt 4 (Subagent läuft).
+- 2026-11-14 ~01:30: **Punkt 4 erledigt** (Branch gepusht, nicht gemergt).
+  `wip/bruecke-ux3` = Merge `feat/integration` + Runde 3 fertig (R3-1..R3-6; TODO-Punkte bis
+  auf zwei Teilpunkte), Prüfanleitung `windows/bridge/PRUEFUNG-UX3.md` (26 Schritte),
+  Schlüsselbilder `docs/quellen/ux3-tour-2026-11/`. Eigene Nachprüfung: Windows-Suite 722
+  bestanden + 1 deterministischer Fehler (Ausklappfeld-Fokus), behoben in `09c3097`
+  (siehe Branch); alter Blocker-Kopf in CLAUDE.md entfernt. Für Mittwoch: Leonhard baut mit
+  `build-test.cmd` aus `wip/bruecke-ux3` und geht PRUEFUNG-UX3.md durch; erst danach Merge.
+  Installer P0a (Codex) reviewt und auf `feat/installer-p0` (43403ba); volle Pi-Suite läuft,
+  danach Merge nach `feat/integration`.
