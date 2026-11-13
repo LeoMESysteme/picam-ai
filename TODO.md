@@ -68,6 +68,7 @@ Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlo
 - **Merge:** `feat/bruecke-ui` nach `master`, erst mit Leonhards OK nach dem Test.
 - **UART kompakter kodieren:** Für 10 Hz über UART muss das Protokoll kompakter werden. Das ist ein Eingriff ins Protokoll mit Review.
 - **Tracking-Tests:** 15 Tests in `tests/test_frame_tracking.py` (R19b, R19c, R25) schlagen fehl, sobald `var/` vorhanden ist. Das gilt auch auf `master`; ohne `var/` werden sie übersprungen, ihr Fehlschlag blieb deshalb bisher unbemerkt. Ursache klären.
+- **Wackelnder Playwright-Test „UART direkt ohne Haken sendet über Enter und runStart nichts“** (`tests/live-ui.spec.ts` um Zeile 2186): Unter Last bleibt der Fehlertext nach dem zweiten Startversuch leer. Vermutlich Ursache des roten CI-Laufs „Playwright Tests“ auf master `d6d5ab5` am 13.11. 19:59 (lief parallel zu einer vollen Suite). Ursache im Ablauf `start-popover.js` (`start()`/`showError`) klären statt Wartezeit erhöhen.
 - **Wackelnde Integrationstests:** `windows/bridge/tests/test_app_controller_integration.py` wackelt unter starker CPU-Last.
 - **Statuswörter:** Die ergänzten Wörter („Unbekannt“, „Keine Weitergabe“, „nicht verbunden“, „Testfreigabe“) in die Spec §10 übernehmen.
 - **Alter Controller (OQ-61):** S1, S2 und S4 sind umgesetzt; S3 und S5–S9 folgen erst nach dem Test. Der Datensatz-Sammelmodus bleibt, weil er für die invertierten GSV-Anzeigen gebraucht wird. Siehe Audit in `.superpowers/sdd/2026-11-06-bruecke-ui/oq61-audit.md`.

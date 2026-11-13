@@ -105,3 +105,11 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
   den Zähler stehen in `docs/quellen/kleine-backend-2026-11-13/REPORT-codex.md` (für Runde 3).
   Werkbank nicht neu gestartet: Die Pi-Seite ändert sich nur in `gsv_bridge.py`, und das läuft
   in der Windows-App, nicht im Dienst.
+- 2026-11-14 ~00:45: CI auf master `d6d5ab5`: Build und Deploy der Doku-Seite erfolgreich,
+  Workflow „Playwright Tests“ **fehlgeschlagen**. Schritt-Logs sind per Token nicht lesbar.
+  Lokale Nachstellung auf `feat/integration` (= master + Punkt 3): Doku 91 bestanden,
+  Werkbank 64 bestanden plus 1 flaky (bekannter Wackler „UART direkt ohne Haken sendet über
+  Enter und runStart nichts“, Zeile 2186, Fehlertext bleibt leer). CI lief 19:59 parallel
+  zur vollen Suite (Volllast); vermutlich derselbe Wackler zweimal. Nicht belegt. Nächster
+  master-Push lässt den Workflow erneut laufen; Leonhard kann auf der Actions-Seite den Schritt
+  nachsehen.
