@@ -22,6 +22,17 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 ## Befunde Smoketest 13.11. (offen)
 
+**Vollständiger Prüfbericht (Windows-Prüfung UX2, 13.11.):** `docs/quellen/ux2-pruefung-2026-11-13/ux2-pruefung.zip` mit `ux2-bericht.md` (Zusammenfassung, alle Prüf-IDs, Läufe-Tabelle) und `ux2-bericht-details.md` (chronologisch, Zitate, Messwerte), dazu Bilder, TDMS, Sessions, Protokollexporte. *Noch nicht hochgeladen; Leonhard legt das ZIP dort ab.* Top 5 laut Bericht:
+1. UART über Brücke: `uart_frame_invalid` (Signalqualität), siehe unten.
+2. EXE-Einstellungen: Mausrad verstellt Ports, Neuaufbau, Fensterhöhe, Blitzfenster.
+3. EXE-Gestaltung: zu viel Text, Flackern.
+4. 20–60 % ungültige Takte durch die Nachführung, siehe unten.
+5. Bedienfallen zwischen Werkbank und Brücke (Kopplung je Weg, Port-Belegung, Moduswechsel).
+
+Punkte 2 und 3 sind auf `wip/bruecke-ux3` (Gestaltungsrunde 3, 47/48 Tests grün) umgesetzt, aber nicht gemergt und unter Windows **nicht** nachgeprüft. Nächster Schritt: fertigstellen, nach `feat/integration` mergen, Bildschirmfoto-Tour (`windows/bridge/probes/ux_tour.py`) mit Leonhard.
+
+Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlos), UART direkt (Kanal 1 hält, Laufstart gibt UART-Empfang frei), „Kanal 1 hält“ auf allen Wegen. Offen: C-04 (LAN ziehen ohne Lauf, Fix 53fbbd6) mit neuer EXE.
+
 - **Nachführung: Zweitdurchgang mit Münzwurf-Bereich (kritisch, Werkbank-Blocker).** Lauf `var/live/live-20261113T111848Z/run-01`: 60 % ungültige Takte, Abschnitte bis 10 s, 2297/7524 Bilder `tracking_lost:rahmen_unstimmig`. Gegenversuch `live-20261113T113119Z/run-01` (Diagnosebilder, Marken):
   - Hand neben dem Display bewegt: bis 41 % Nachführungsverlust je Sekunde.
   - Simulator drehen: höchstens 7 %; Hand ruhig: 0 %.
