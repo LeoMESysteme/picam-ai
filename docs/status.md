@@ -25,7 +25,7 @@ Kein bisheriger Fit verloren, maximale Eckverschiebung 0,52 px. Die acht neuen F
 
 ## Laufender Stand
 
-- **Dienst:** `dispread-werkbank-bruecke` (systemd-run `--user`) aus `.worktrees/bruecke-run`, detached auf `feat/integration` 5a31b41, seit 2026-11-13 ~13:55. Adresse `https://100.122.154.35:8082`, Pi-Identität und Kopplung unverändert. Neustartbefehl siehe Projekt-Memory bzw. `systemctl --user show`.
+- **Dienst:** `dispread-werkbank-bruecke` (systemd-run `--user`) aus `.worktrees/bruecke-run`, detached auf `feat/integration` 95d0540 (Rahmen/Raster), seit 2026-11-13 ~19:35. Adresse `https://100.122.154.35:8082`, Pi-Identität und Kopplung unverändert. Neustartbefehl siehe Projekt-Memory bzw. `systemctl --user show`.
 - **Gemeinsamer Branch:** `feat/integration` = EXE-Stand `feat/bruecke-merge` (Session picam-ai-65, UX2) + `feat/bruecke-ui` (Werkbank, Brückentakt, Blocker-Fixes). Weitere EXE-Arbeit baut darauf auf.
 - **EXE:** muss Leonhard aus `feat/integration` bauen (`build-test.ps1`). Eine ältere EXE spricht weder Takt noch 460 800 Baud.
 
