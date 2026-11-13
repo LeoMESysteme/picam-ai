@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codebase-Bühne</title>
+<meta name="description" content="Der Code von picam-ai in sieben Kapiteln: Wachstum, Branches, Rhythmus, Struktur, Komplexität, Zustand, Maschine.">
+<script>
+/* Vor dem ersten Zeichnen: Einbettung und Farbschema setzen (?embed=1, ?theme=dark|light, sonst Systemeinstellung). */
+(function () {
+  var q = new URLSearchParams(location.search), root = document.documentElement, t = q.get("theme");
+  if (q.get("embed") === "1") root.dataset.embed = "1";
+  if (t !== "light" && t !== "dark") { t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; root.dataset.themeAuto = "1"; }
+  root.dataset.theme = t;
+})();
+</script>
+<link rel="stylesheet" href="codebase.css">
+</head>
+<body>
+<div id="atmo"></div><div class="tint" id="tA"></div><div class="tint" id="tB"></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--gloss);stop-opacity:var(--gloss-a)"/><stop offset="1" style="stop-color:var(--gloss);stop-opacity:0"/></linearGradient></defs></svg>
+<canvas id="gl" aria-hidden="true"></canvas>
+<div id="mark"></div>
+<div id="chips" aria-hidden="true"></div>
+<nav id="bar" class="glass" aria-label="Kapitel"><div class="lens" id="lensV" aria-hidden="true"></div></nav>
+<main aria-label="Codebase-Bühne">
+  <div id="card" class="glass"><div class="sheen"></div></div>
+  <div id="host"><div id="hin"></div></div>
+</main>
+<button type="button" id="pv" class="tab glass hid" aria-label="Einen Schritt zurück"><svg viewBox="0 0 14 26" aria-hidden="true" focusable="false"><path d="M11 3L3 13l8 10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<div id="rail" class="glass" role="slider" tabindex="0" aria-label="Zeitpunkt" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"><div id="ticks" aria-hidden="true"></div><div class="lens" id="lensH" aria-hidden="true"></div></div>
+<button type="button" id="nx" class="tab glass hid" aria-label="Einen Schritt weiter"><svg viewBox="0 0 14 26" aria-hidden="true" focusable="false"><path d="M3 3l8 10-8 10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<p id="say" class="sr" aria-live="polite"></p>
+<div id="msg" hidden><div class="glass" style="position:relative"><h1 id="msgH"></h1><p id="msgP"></p></div></div>
+<noscript><div id="nojs"><div class="glass" style="position:relative"><h1>Die Bühne braucht JavaScript</h1><p>Dieselben Zahlen stehen als Text und Tabellen auf der Wiki-Seite <a href="../../docs/uebersicht/codebase.html">Codebase im Überblick</a>.</p></div></div></noscript>
+<script src="kit.js"></script>
+<script src="codebase.js"></script>
+</body>
+</html>

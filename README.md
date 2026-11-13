@@ -66,6 +66,7 @@ Die [Dokumentationsübersicht](docs/README.md) erklärt die Rolle der Quellen.
 | --- | --- |
 | [Konzept](Konzept.md) | Anforderungen und Sicherheitsregeln |
 | [Aktueller Stand](docs/status.md) | aktueller Arbeitsstand |
+| [Codebase im Überblick](docs/uebersicht/codebase.md) | Umfang, Verlauf, Komplexität und Aufräumhinweise des Codes |
 | [Arbeitsliste](TODO.md) | aktive Aufgaben |
 | [Roadmap](docs/ROADMAP.md) | Phasen und Exit-Kriterien |
 | [Geplante Features](PLANNED_FEATURES.md) | vorgesehene Funktionen |

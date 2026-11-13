@@ -4,6 +4,18 @@ import { gunzipSync } from 'node:zlib';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSessionArchive } from './session-fixtures';
 
+// Die bestehenden Fälle prüfen die ruhige Darstellung (Stand vor dem
+// Umschalter). Wer die lebendige braucht, setzt sie im Test selbst; ein
+// späteres addInitScript gewinnt, weil es nach diesem läuft.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    try { if (!localStorage.getItem('wiki-look')) localStorage.setItem('wiki-look', 'ruhig'); } catch { /* gesperrter Speicher */ }
+  });
+});
+const lebendig = (page: Page) => page.addInitScript(() => {
+  try { localStorage.setItem('wiki-look', 'lebendig'); } catch { /* gesperrter Speicher */ }
+});
+
 const oq07Link = (page: Page) => page.locator('.md-content__inner a[href$="open-questions.html"], .md-content__inner a[href$="open-questions.html#oq-07"]')
   .filter({ hasText: /^OQ-07$/ }).first();
 
@@ -1977,4 +1989,124 @@ test('Session-Dateidownload bleibt bytegleich; Tastatur und Wiki-Theme erreichen
   await expect(page.locator('body')).toHaveAttribute('data-md-color-scheme', 'default');
   await expect(explorer.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(explorer.locator('#workspace')).toBeVisible();
+});
+
+test('Darstellungsschalter: Vorgabe lebendig, Wahl übersteht Sofortnavigation und Neuladen', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL });
+  const page = await context.newPage();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/docs/uebersicht/messpfad.html');
+  await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'lebendig');
+  const toggle = page.getByRole('switch', { name: 'Lebendige Darstellung' });
+  await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  await toggle.focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'ruhig');
+  await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  await page.locator('.md-nav--primary a', { hasText: 'Zeitstempel richtig lesen' }).click();
+  await expect(page.locator('.md-content__inner h1')).toContainText('Zeitstempel');
+  await expect(page.locator('.wiki-look-switch')).toHaveCount(1);
+  await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'ruhig');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'ruhig');
+  await expect(page.getByRole('switch', { name: 'Lebendige Darstellung' })).toHaveAttribute('aria-checked', 'false');
+  await context.close();
+});
+
+test('Ohne JavaScript gilt die ruhige Darstellung ohne Umschalter', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto('/docs/uebersicht/messpfad.html');
+  expect(await page.locator('html').getAttribute('data-wiki-look')).toBeNull();
+  await expect(page.locator('.wiki-look-switch')).toHaveCount(0);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.md-content')!).borderRadius)).toBe('0px');
+  await context.close();
+});
+
+test('Lebendige Darstellung hält Textkontrast in beiden Themes', async ({ page }) => {
+  await lebendig(page);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+    await page.goto('/docs/uebersicht/messpfad.html');
+    await expect(page.locator('body')).toHaveAttribute('data-md-color-scheme', scheme === 'dark' ? 'slate' : 'default');
+    const ratios = await page.evaluate(() => {
+      const rgba = (value: string) => (value.match(/[\d.]+/g) || []).map(Number);
+      const over = (top: number[], bottom: number[]) => {
+        const a = top.length > 3 ? top[3] : 1;
+        return [0, 1, 2].map(i => top[i] * a + bottom[i] * (1 - a));
+      };
+      const lum = (c: number[]) => {
+        const [r, g, b] = c.map(v => { const x = v / 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; });
+        return .2126 * r + .7152 * g + .0722 * b;
+      };
+      const ratio = (a: number[], b: number[]) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + .05) / (y + .05); };
+      const ground = rgba(getComputedStyle(document.body).backgroundColor);
+      const paper = over(rgba(getComputedStyle(document.querySelector('.md-content')!).backgroundColor), ground);
+      const color = (selector: string) => over(rgba(getComputedStyle(document.querySelector(selector)!).color), paper);
+      return {
+        text: ratio(color('.md-content__inner p'), paper),
+        link: ratio(color('.md-content__inner p a'), paper),
+        meta: ratio(color('.wiki-pagehead'), paper),
+      };
+    });
+    for (const [name, value] of Object.entries(ratios)) expect(value, `${scheme} ${name}`).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+test('Lebendige Darstellung bewegt nichts bei reduzierter Bewegung', async ({ page }) => {
+  await lebendig(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/docs/uebersicht/messpfad.html');
+  await page.locator('.md-nav--primary a', { hasText: 'Zeitstempel richtig lesen' }).click();
+  await expect(page.locator('.md-content__inner h1')).toContainText('Zeitstempel');
+  expect(await page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').length)).toBe(0);
+  await expect(page.locator('.wiki-lens-geist')).toHaveCount(0);
+});
+
+test('Lebendige Darstellung: Linse gleitet bei Sofortnavigation und räumt auf', async ({ page }) => {
+  await lebendig(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/docs/uebersicht/messpfad.html');
+  await page.locator('.md-nav--primary a', { hasText: 'Kamera-Inbetriebnahme' }).click({ noWaitAfter: true });
+  await expect(page.locator('.md-sidebar--primary .wiki-lens-geist')).toHaveCount(1);
+  await expect(page.locator('.wiki-lens-geist')).toHaveCount(0, { timeout: 3000 });
+  await expect(page.locator('.md-nav--primary a.md-nav__link--active.wiki-lens-wartet')).toHaveCount(0);
+  await expect(page.locator('.wiki-atmo')).toHaveCount(1);
+});
+
+for (const look of ['ruhig', 'lebendig'] as const) {
+  test(`Codebase-Seite (${look}): Tabellen bleiben Quelle, Bühne nur lebendig eingebettet`, async ({ page }) => {
+    if (look === 'lebendig') await lebendig(page);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/docs/uebersicht/codebase.html');
+    for (const id of ['wachstum', 'branches', 'rhythmus', 'struktur', 'komplexitaet', 'zustand', 'maschine']) {
+      await expect(page.locator(`h2#${id}`)).toHaveCount(1);
+    }
+    await expect(page.locator('.wiki-chart svg[role="graphics-document"]').first()).toBeVisible();
+    const frame = page.locator('#codebase-stage iframe');
+    if (look === 'ruhig') {
+      await expect(frame).toHaveCount(0);
+      await expect(page.locator('#codebase-stage a', { hasText: 'Vollbild' })).toHaveAttribute('href', /assets\/codebase\/index\.html/);
+    } else {
+      await expect(frame).toHaveAttribute('src', /assets\/codebase\/index\.html\?embed=1&theme=light/);
+      await page.getByRole('switch', { name: 'Lebendige Darstellung' }).click();
+      await expect(frame).toHaveCount(0);
+      await page.getByRole('switch', { name: 'Lebendige Darstellung' }).click();
+      await expect(frame).toHaveCount(1);
+      await page.locator('.md-nav--primary a', { hasText: 'Aktueller Stand' }).click();
+      await expect(page.locator('#codebase-stage')).toHaveCount(0);
+      await expect(page.locator('body')).not.toHaveClass(/codebase-page/);
+    }
+  });
+}
+
+test('Lebendige Darstellung bleibt schmal ohne horizontales Scrollen', async ({ page }) => {
+  await lebendig(page);
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const path of ['/index.html', '/docs/uebersicht/messpfad.html', '/docs/uebersicht/codebase.html']) {
+    await page.goto(path);
+    await expect(page.locator('.wiki-look-switch')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), path).toBe(true);
+  }
 });

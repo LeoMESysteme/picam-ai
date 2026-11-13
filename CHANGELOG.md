@@ -5,6 +5,25 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-13: Wiki: Codebase-Seite und zweite Darstellung „lebendig“.
+  Problem: Eine Codebase-Übersicht (Glass-Artefakt) lag nur als eingefrorener
+  Schnappschuss mit englischen Texten und fest eingetragenen Zahlen vor; das
+  Wiki hatte nur einen, bewusst schlichten Look. Änderung: neue Seite
+  Projekt → „Codebase im Überblick“ (`docs/uebersicht/codebase.md`); Zahlen
+  und Tabellen erzeugt `scripts/codebase-facts.py --write` aus Git und dem
+  Python-Syntaxbaum (`docs-site/assets/data/codebase.json`, Block zwischen
+  den Markern der Seite, Suchmethoden der Befunde stehen mit dabei). Die
+  Bühne aus dem Artefakt liegt deutsch, hell/dunkel und bedienbar unter
+  `docs-site/assets/codebase/`. Umschalter im Kopf zwischen „ruhig“ (bisheriger
+  Stand, gilt auch ohne JavaScript) und „lebendig“ (Glas, Atmosphäre je Weg,
+  gleitende Navigationslinse, Seiteneintritt; Schriften Bricolage Grotesque,
+  Onest, Martian Mono lokal unter SIL OFL). Vorgabe für Erstbesucher:
+  lebendig; die Wahl merkt sich der Browser. Konsequenz: Die Codebase-Zahlen
+  aktualisiert nur ein bewusster `--write`-Lauf (kein `--check` im Build,
+  die Daten ändern sich mit jedem Commit). Bestehende Browsertests laufen in
+  „ruhig“; neue Tests decken Umschalter, Kontrast, reduzierte Bewegung und die
+  Codebase-Seite ab.
+
 * 2026-11-11: Doku-Workflow: Ein manueller Start („Run workflow“) auf
   `master` bindet jetzt das Session-Archiv ein und deployt in die Produktion,
   wie ein Push. Problem: Lauf 1033 scheiterte am 11.11. beim Cloudflare-Upload

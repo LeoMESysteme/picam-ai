@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{#- Darstellung (ruhig / lebendig) vor dem ersten Zeichnen setzen, damit kein
+    falscher Look aufblitzt. Ohne JavaScript fehlt das Attribut, und es gilt
+    die ruhige Darstellung. Wahl und Umschalter: assets/wiki-look.js. -#}
+{% block extrahead %}
+  <script>
+    (function () {
+      var look = "lebendig";
+      try {
+        var saved = localStorage.getItem("wiki-look");
+        if (saved === "ruhig" || saved === "lebendig") look = saved;
+      } catch (error) {}
+      document.documentElement.setAttribute("data-wiki-look", look);
+    })();
+  </script>
+  {{ super() }}
+{% endblock %}

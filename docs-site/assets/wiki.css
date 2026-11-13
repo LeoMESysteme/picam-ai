@@ -432,3 +432,31 @@
 @media (prefers-reduced-motion: reduce) {
   .md-typeset .wiki-kette-list > li + li::before { transform: none; }
 }
+
+/* ---------------------------------------------- Codebase-Seite ---- */
+/* docs/uebersicht/codebase.md, wiki-codebase.js. Breiter wie die Roadmap,
+ * Fließtext bleibt auf Lesebreite. */
+.codebase-page .md-grid { max-width: min(1600px, calc(100% - 56px)); }
+.codebase-page .md-content__inner > :is(p, ul, ol) { max-width: 42rem; }
+.md-typeset .wiki-codebase-bar,
+.md-typeset .wiki-codebase-note {
+  display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: baseline;
+  margin: 1.2rem 0 .5rem; font-size: .68rem; color: var(--md-default-fg-color--light);
+}
+.md-typeset .wiki-codebase-help { flex: 1 1 18rem; }
+.md-typeset .wiki-codebase-full { font-weight: 600; white-space: nowrap; }
+.wiki-codebase-frame {
+  display: block; width: 100%; border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: .4rem; height: clamp(520px, calc(100vh - 7rem), 960px);
+  background: var(--md-default-bg-color);
+}
+.md-typeset h2 .wiki-codebase-jump {
+  margin-left: .6rem; padding: .1em .55em; border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 1rem; background: none; color: var(--md-typeset-a-color);
+  font-family: inherit; font-size: .55rem; font-weight: 600; line-height: 1.4; letter-spacing: 0; vertical-align: middle; cursor: pointer;
+}
+.md-typeset h2 .wiki-codebase-jump:hover { border-color: var(--md-accent-fg-color); color: var(--md-accent-fg-color); }
+.md-typeset h2 .wiki-codebase-jump:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; }
+@media (max-width: 959px) {
+  .codebase-page .md-grid { max-width: 100%; }
+}
