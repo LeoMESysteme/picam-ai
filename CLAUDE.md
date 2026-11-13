@@ -1,10 +1,5 @@
 # CLAUDE.md
 
-> **KRITISCHER NUTZERAUFTRAG 2026-11-11:** Vor Bridge-/EXE-Features den Workbench-Blocker bearbeiten.
-> Einstieg: [/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md](/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md).
-> Originale, Quellstände, Logs und Regressionen sind im Hauptcheckout gesichert.
-> Ziel Freitag 2026-11-13; keine Hardwarefreigabe ohne Beleg.
-
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Einstiegsreihenfolge (verbindlich)
