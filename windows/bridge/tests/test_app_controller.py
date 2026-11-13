@@ -521,3 +521,25 @@ def test_test_release_journal_counters_and_transitions(tmp_path):
     assert [e.title for e in c.context().journal[:2]] == ['Wartet auf Messlauf', 'Ausgabe wieder gesperrt']
     c._emit(_tr_ev('written'))         # neue Freigabe: Zähler beginnen neu
     assert c._tr_written == 1 and c._tr_omitted == 0
+
+
+def test_demo_check_ends_clearly_even_when_values_are_missing(tmp_path):
+    """13.11.2026: Fortschritt blieb bei 588/600 stehen; der Pi meldete ``ended`` nie sichtbar."""
+    now = [100.0]
+    c = make(tmp_path, clock=lambda: now[0], demo_count=600, demo_rate_hz=10)
+    from dispread_bridge_app.readiness import Readiness
+    r = Readiness('ready', 'not_required', 'authenticated', 'output_off', 'idle', 'unconfirmed', 'output_off')
+    c._step = 5
+    with c._lock:
+        c._demo_started, c._written, c._demo_ended, c._demo_t0 = True, 588, False, now[0]
+    assert c._variant(r, None)[0] == 'E5run'
+    c._emit(_ev('ended'))                               # Pi meldet das Ende
+    variant, data = c._variant(r, None)
+    assert variant == 'E5short' and (data['written'], data['count'], data['missing']) == (588, 600, 12)
+    with c._lock:
+        c._demo_ended = False
+    now[0] += 600 / 10 + 10.5                           # ohne ``ended``: spätestens nach Dauer + Puffer
+    assert c._variant(r, None)[0] == 'E5short'
+    with c._lock:
+        c._written = 600
+    assert c._variant(r, None)[0] == 'E5done'

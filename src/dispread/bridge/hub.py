@@ -22,6 +22,7 @@ from .types import PeerHello
 HEARTBEAT_INTERVAL_S = 1
 LEASE_TIMEOUT_S = 5
 DEMO_FINAL_GRACE_S = 2.0
+DEMO_ENDED_GRACE_S = 1.0
 #: B2: Ein Vierkanal-Takt-Lauf bietet nur Clients mit Taktfaehigkeit etwas an.
 TICK_CLIENT_BLOCK = 'DUT-Ausgabe gesperrt: Brücken-App kennt den Vierkanal-Takt nicht (bitte aktualisieren)'
 
@@ -367,6 +368,15 @@ class BridgeHub:
                 finally:
                     try:
                         state.stop()
+                        # ``ended`` zustellen, bevor die Bindung faellt: sonst sieht
+                        # die Bruecke nur "idle" und weiss nicht, dass der Test vorbei
+                        # ist (13.11.2026: Anzeige blieb bei 588/600 stehen). Begrenzt.
+                        ended_by = time.monotonic() + DEMO_ENDED_GRACE_S
+                        while not state.ended_sent and time.monotonic() < ended_by:
+                            self._expire()
+                            if stop.is_set():   # Lease weg oder Abbruch: niemand holt ``ended``
+                                break
+                            time.sleep(.02)
                     finally:
                         self.unbind_run(run_id)
             self._demo_thread = threading.Thread(target=produce, name='bridge-demo', daemon=True)

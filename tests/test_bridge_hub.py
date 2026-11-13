@@ -307,7 +307,8 @@ def test_delayed_demo_request_cannot_cross_lease_boundary(tmp_path, monkeypatch,
 
 def test_demo_end_does_not_overtake_the_last_value(tmp_path):
     """A demo of N values must be offered N times even if the client polls late:
-    ``ended`` may not discard the final, still unoffered value (BQ5, 599 of 600)."""
+    nothing is overwritten (13.11.2026: latest-only lost 12/600 under poll jitter),
+    ``ended`` does not discard queued values, and the client sees ``ended``."""
     import time
 
     hub = BridgeHub('pi', tmp_path)
@@ -316,16 +317,22 @@ def test_demo_end_does_not_overtake_the_last_value(tmp_path):
                                       client_id='pc', run_id=None, transport='network', count=3, rate_hz=50))
     run_id = hub.status()['run_id']
     time.sleep(.3)                      # the client is late; the demo has produced all three values
-    offered = []
-    for number in range(6):
+    offered, kinds = [], []
+    deadline = time.monotonic() + 3
+    for number in range(200):
         message = dict(request(hub, lease), request_id=f'p{number}', run_id=run_id)
         reply = hub.exchange(lease.lease_id, message)
-        if reply['type'] != 'record':
+        kinds.append(reply['type'])
+        if reply['type'] == 'ended' or time.monotonic() > deadline:
             break
-        offered.append(reply['record']['frame_sequence'])
-        hub.exchange(lease.lease_id, dict(message, type='ack', outcome='written',
-                                          frame_sequence=offered[-1], barrier_id=reply['barrier_id']))
-    assert offered == [2]               # latest-value semantics: the final value is still delivered
+        if reply['type'] == 'record':
+            offered.append(reply['record']['frame_sequence'])
+            hub.exchange(lease.lease_id, dict(message, type='ack', outcome='written',
+                                              frame_sequence=offered[-1], barrier_id=reply['barrier_id']))
+        else:
+            time.sleep(.02)
+    assert offered == [0, 1, 2]         # every demo value, in order, none overwritten
+    assert kinds[-1] == 'ended'         # the end is delivered before the run is unbound
     deadline = time.monotonic() + 3
     while hub.status()['run_id'] is not None and time.monotonic() < deadline:
         time.sleep(.02)

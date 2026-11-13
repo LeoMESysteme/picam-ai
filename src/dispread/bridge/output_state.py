@@ -63,6 +63,11 @@ class OutputState:
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._latest = None
+        # Demo: verlustfreie Warteschlange statt "nur der juengste Wert". Der
+        # Empfangstest soll jede Zeile belegen; latest-only verlor Werte, sobald
+        # ein Poll-Umlauf laenger als ein Demo-Takt dauerte (13.11.2026: 12/600).
+        self._demo_queue = deque()
+        self.ended_sent = False
         self._barrier = None
         self._generation = 0
         self._pending = None
@@ -283,11 +288,14 @@ class OutputState:
                 # Ungueltigkeit traegt nur ihre Barriere; der zuvor juengste
                 # gueltige Wert ist damit ueberholt und wird nie mehr angeboten.
                 self._latest = None
+                self._demo_queue.clear()   # auch gepufferte Demo-Werte sind ueberholt
                 self._generation += 1
                 self._barrier = (self._generation, record)
             else:
                 self._latest = record
                 self._published_ns = self._clock()
+                if self.demo:
+                    self._demo_queue.append(record)
 
     def handle_v1(self, message: dict):
         with self._lock:
@@ -329,6 +337,7 @@ class OutputState:
                 raise ValueError("one outstanding poll allowed")
             reply = {"version": 1, "request_id": message["request_id"], "run_id": self.run_id, "demo": self.demo}
             if self._stop.is_set():
+                self.ended_sent = True
                 return {**reply, "type": "ended"}
             if not self.offers_records:
                 return {**reply, "type": "idle", "release_block": RELEASE_BLOCK}
@@ -336,7 +345,12 @@ class OutputState:
                                                  if self.release else {})}
             if self.tick_mode:
                 return self._tick_reply(reply) if self._tick_queue else idle
-            record = self._barrier[1] if self._barrier else self._latest
+            if self.demo and self._barrier is None:
+                while self._demo_queue and self._demo_queue[0].frame_sequence <= self._attempted_sequence:
+                    self._demo_queue.popleft()
+                record = self._demo_queue[0] if self._demo_queue else None
+            else:
+                record = self._barrier[1] if self._barrier else self._latest
             if record is None or (self._barrier is None and record.frame_sequence <= self._attempted_sequence):
                 return idle
             if (self._barrier is None and self.max_offer_age_ns is not None

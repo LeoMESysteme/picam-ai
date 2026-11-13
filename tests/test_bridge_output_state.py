@@ -402,3 +402,27 @@ def test_tick_thread_failure_is_visible_not_silent(tmp_path):
     state.step_ticks = broken
     state._tick_loop()
     assert state.status()["state"] == "tick_failed" and "ticker defect" in state.status()["error"]
+
+
+def test_demo_offers_every_value_in_order_even_when_polls_lag(tmp_path):
+    """13.11.2026: latest-only verlor Demo-Werte, sobald ein Poll-Umlauf länger als ein Takt dauerte."""
+    state = OutputState(tmp_path, demo=True)
+    state.start()
+    offered = []
+    for seq in range(1, 7):
+        state.publish(record(seq))
+        if seq % 3 == 0:                       # Client holt nur bei jedem dritten Wert ab ...
+            while (reply := poll(state, f"r{len(offered)}"))["type"] == "record":
+                offered.append(reply["record"]["frame_sequence"])
+                state.handle_v1(ack(reply))
+    assert offered == [1, 2, 3, 4, 5, 6]       # ... und bekommt trotzdem jeden Wert genau einmal
+    state.stop()
+
+
+def test_real_values_keep_latest_only(tmp_path):
+    state = OutputState(tmp_path, release=TEST_RELEASE)
+    state.start()
+    for seq in (1, 2, 3):
+        state.publish(real(seq))
+    assert poll(state)["record"]["frame_sequence"] == 3   # nie veraltet nachliefern
+    state.stop()

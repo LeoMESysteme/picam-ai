@@ -951,6 +951,12 @@ SETUP: dict[str, dict] = {
          '{written} synthetische Werte wurden an den COM-Port übergeben. Ob GSVmulti sie empfangen hat, prüft die '
          'Brücke nicht (Testdateivergleich noch nicht verfügbar). Vergleichen Sie die Aufzeichnung der '
          'Testsession in GSVmulti selbst.', ()), _AUTO], nxt='Fertig', ready=True),
+    'E5short': _s(5, 'Schritt 5 von 5: Test unvollständig.', [
+        ('info', 'err', 'Unvollständig: {written} von {count} Werten übergeben',
+         '{missing} Werte kamen nicht bis zum COM-Port. Protokolle exportieren und den Test wiederholen.',
+         (('Protokolle exportieren', 'export_diagnostics', True),)),
+        ('check', 'Ich verwende eine getrennte GSVmulti-Testsession.', 'test_session_ok'),
+        ('button', 'Test wiederholen', 'start_demo_check', True), _AUTO], nxt='Fertig', ready=True),
     'E5file': _s(5, 'Schritt 5 von 5: Empfang prüfen.', [
         _TEST_INFO,
         ('info', 'info', 'Testdatei auswählen',

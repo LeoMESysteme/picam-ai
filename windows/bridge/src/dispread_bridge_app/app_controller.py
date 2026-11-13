@@ -48,6 +48,7 @@ JOURNAL_MAX = 500
 DIAG_QUEUE_MAX = 1000
 DIAG_FLUSH_S = 0.5
 CODE_LIFETIME_S = 300
+DEMO_END_SLACK_S = 10.0   # Empfangstest gilt spaetestens nach Anzahl/Rate + diesem Puffer als beendet
 DEV_BUILD = 'Entwicklungsstand'
 _FIRST = Readiness('ready', 'unknown', 'disconnected', 'unavailable', 'unknown', 'unconfirmed', 'connect')
 
@@ -169,6 +170,7 @@ class AppController:
         self._resumed = False
         self._bo_n, self._bo_t = 0, 0.0           # Backoff: Anzahl Fehlversuche, Zeit des letzten
         self._demo_started = False
+        self._demo_ended, self._demo_t0 = False, None
         self._written = 0
         self._com_issue: str | None = None
         self._last_ack = 'keine'
@@ -572,6 +574,8 @@ class AppController:
                     self._tr_written += 1
                 elif test_release and outcome == 'omitted':
                     self._tr_omitted += 1
+                if outcome == 'ended' and self._demo_started:
+                    self._demo_ended = True             # Pi: Demo vorbei (auch wenn Werte fehlen)
                 if outcome == 'written':
                     self._written += 1
                     self._com_issue = None
@@ -893,6 +897,7 @@ class AppController:
             raise AppError('run_active')
         with self._lock:
             self._demo_started, self._written, self._com_issue = True, 0, None
+            self._demo_ended, self._demo_t0 = False, self._clock()
         try:
             manager.start_demo(self._demo_count, self._demo_rate)
         except Exception as e:
@@ -1067,18 +1072,26 @@ class AppController:
             d['session_confirmed'] = self._session_confirmed
             return 'E4locked', d
         d['auto_connect'] = self._auto_effective()
-        done = self._demo_started and (r.output == 'ended' or self._written >= self._demo_count)
+        done = self._demo_started and (r.output == 'ended' or self._demo_ended or self._written >= self._demo_count
+                                       or self._demo_overdue())
         if self._demo_started and not done:
             d.update(progress_value=int(100 * self._written / max(1, self._demo_count)),
                      progress_text=f'{self._written} von {self._demo_count} Werten gesendet '
                                    f'({self._demo_rate:g} Hz, synthetisch)')
             return 'E5run', d
         if done:
-            d['written'] = self._written
-            return 'E5done', d
+            d.update(written=self._written, count=self._demo_count,
+                     missing=max(0, self._demo_count - self._written))
+            # Klares Ende: vollstaendig an den COM-Port uebergeben oder nicht.
+            return ('E5done' if self._written >= self._demo_count else 'E5short'), d
         if self._run_active(r):
             return 'E5busy', d
         return 'E5', d
+
+    def _demo_overdue(self) -> bool:
+        if self._demo_t0 is None or not self._demo_rate:
+            return False
+        return self._clock() - self._demo_t0 > self._demo_count / self._demo_rate + DEMO_END_SLACK_S
 
     def _code_remaining(self) -> int | None:
         if self._offer is None or self._offer_at is None:
