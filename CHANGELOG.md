@@ -5,6 +5,76 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-13: **Fokus- und Rasterbelege präzisiert.** Der Hinweis zum Mittelbild beschreibt die mögliche Ablehnung am zweiseitigen Fokusband; Rastervergleich und Korpusdateien sind zeitlich und namentlich korrekt zugeordnet.
+
+* 2026-11-13: **Dokumentationsseite: Windows-Brückenbelege erreichbar.** Der Build nimmt die verlinkten Seiten zum Smoketest und zu den GSVmulti-Versuchen auf; ein nicht vorhandener Recherchepfad bleibt als Quellenhinweis erhalten.
+
+* 2026-11-13: **Rasterstart: alternative Unterkantenrichtung bei fehlender Startlage.** Erst wenn alle drei ursprünglichen Suchdurchläufe `keine_startlage` ergeben, prüft ein separater Durchlauf die Oberkantenrichtung als alternative Unterkantenannahme. Bestehende Fits und andere Ablehnungen bleiben erhalten; alle Rasterprüfungen gelten weiter. Die neue Hypothese wird bei bereits gefundenen Fits nicht auf Konkurrenz geprüft. Offline-Belege und Grenzen: `docs/quellen/raster-recherche-2026-11-13/`.
+
+* 2026-11-13: **Raster: Randminima an der Nachbarzelle.** Die Leerzellenprüfung ordnet Kandidaten im letzten Viertel eines Punktabstands vor der nächsten Zelle nicht mehr der Leerzelle zu; echte Rasterpunkte und die Mitte der Lückenspalte bleiben geprüft. Die Grenze deckt die beobachteten Randminima ab, ohne die unabhängige Startsuche zu ändern; deren Unterkantenfehler blieb in diesem Schritt offen (siehe anschließenden B1-Eintrag). Offline-Regression und Grenzen: `docs/quellen/raster-recherche-2026-11-13/`.
+
+* 2026-11-13: **Fokusvergleich am Laufstart und Nachführdiagnose.** Die helligkeitsnormierte Schärfe muss nach dem Neustart im vorläufigen Gleichheitsband 95–105 % der Einrichtung liegen; fehlende oder ungültige Evidenz sperrt den Start. Ablehnung mit Fokusbefund in `session.json`. Zweitversuchsanteil und Maßstab der Zweitfits erscheinen im Laufstatus und Audit. Dies validiert weder Fokus noch Maßstab; die Fitgrenzen bleiben unverändert. Abgelehnte Starts erhalten einen eigenen abgeschlossenen Audit-Vertrag und werden beim Messlaufimport übersprungen. Zweitversuchsanteil und Maßstab nennen ihre Bezugsmenge; der Fokusvergleich und eine offene Ablehnung bleiben im Status sichtbar. Nach erfolgreichem Folgestart oder neuer Einrichtung verschwindet die aktive Warnung; das Audit bleibt erhalten.
+
+* 2026-11-13: **Abnahme Werkbank und Ausgabewege durch Herrn Kaulitz.** Grundlage: Smoketest 13.11. und Windows-Prüfung UX2 (`docs/quellen/ux2-pruefung-2026-11-13/`, ZIP mit SHA-256, Berichte entpackt). Netzwerk über Brücke (Empfangstest 600/600, Läufe lückenlos), UART direkt (Kanal 1 hält) und UART über Brücke (Takt lückenlos trotz `uart_frame_invalid`) geprüft. Offen und übergeben: Nachführung bei Fokusunterschied, Rasterbestimmung (`docs/superpowers/handoffs/2026-11-13-codex-rahmen-raster.md`); EXE-Gestaltungsrunde 3; Installer/TUI.
+
+* 2026-11-13: **EXE: UART-Empfangsfehler unterscheidbar.** Problem: Der UART-Empfangstest über die Brücke brach zweimal ab (nach 3 bzw. 124 Werten). Das Pi-Audit zeigt alle Werte quittiert und danach keine Abfrage mehr; die App meldete den Abbruch 0,17 s nach dem letzten Wert, also nicht am 2-s-Zeitlimit. Der Export sagte nur `connection_unavailable`. Neu: `SerialTransport.receive` meldet `uart_frame_invalid` (unlesbarer Rahmen), `uart_timeout`, `uart_port_failed` oder `uart_closed`; der Transportcode geht als `connection`-Ereignis ins Diagnoseprotokoll und steht auf der Freigabeliste; Bedientexte dazu. Vermutung, nicht belegt: einzelne Bitfehler auf der Leitung bei 460 800 Baud; die JSON-Zeilen haben keine Prüfsumme, Demo-Nachrichten sind deutlich größer als Takt-Nachrichten. Test in `test_transports.py`.
+
+* 2026-11-13: **Werkbank: Laufstart gibt den UART-Empfang der Brücke frei; Hinweistexte zum Vierkanal-Takt.** Problem (C-10): UART direkt scheiterte mit „Ausgabe nicht gestartet: serial port occupied; stop its owner explicitly“, weil der UART-Empfang der Brücke noch `/dev/ttyAMA0` hielt; der Bediener musste über „Brücke einrichten → UART-Empfang beenden“ gehen. Neu: Ein Lauf auf einem anderen Weg als „UART über Brücke“ beendet einen offenen UART-Empfang selbst (nach der Laufreservierung, also ohne laufende Demo); bleibt der Port belegt, nennt die Meldung auf Deutsch Ursache und Ausweg. Die Laufhinweise für Vierkanal (Python `SERIAL_4CH_RELEASE_NOTE`/`BRIDGE_4CH_RELEASE_NOTE`, JS `SERIAL_4CH_NOTE`/`BRIDGE_4CH_NOTE`) beschreiben jetzt „Kanal 1 hält“ statt „werden ausgelassen“ bzw. „mit 99999999.0 markiert“; die Checkliste nennt Kanäle 2–4 portneutral und den Recorder, der in GSVmulti die alte Kanalauswahl behält. Nachtrag zu c322f40: `tests/bridge_tick_harness.py` erwartete noch den Fehlwert statt des gehaltenen Werts (7 Tests in `test_bridge_tick_end_to_end.py`, damals nicht mitgelaufen); jetzt modelliert und grün.
+
+* 2026-11-13: **EXE-Diagnose: Zeit je Zeile und bekannte Fehlercodes sichtbar.** Problem: Ein UART-Abbruch während des Empfangstests (3/600, Demo 92cac0f8) stand im Export nur als `[redacted]/[redacted]` ohne Zeit; die Ursache war nicht erkennbar. Neu: Jede Zeile in `details.jsonl` trägt `ts` (Unix-Sekunden, ms). Ereignisarten und Fehlercodes aus dem eigenen Code (z. B. `connection`, `uart_peer_unavailable`, `peer_invalid`, `backoff`) stehen auf der Freigabeliste; alles andere bleibt geschwärzt, Zugangsdaten und Lauf-IDs ebenso. Test in `test_delivery_journal.py`. Offen: Export kumulativ über Tage, Leerlauf nicht zusammengefasst.
+
+* 2026-11-13: **EXE: Kopplung je Weg.** Problem: Mit Netzwerk-Token, aber ohne UART-Kopplung zeigte Schritt 2 im Weg „UART über Brücke“ „Pi ist gekoppelt“ ohne Codefeld, der Verbindungsaufbau meldete „Pi nicht gekoppelt“, und „Neuen Code eingeben“ führte zurück zu Schritt 2 (Schleife ohne Ausweg). Zugangsdaten gelten je Transport. Neu: Die App hält den Kopplungsstand je Weg und beurteilt „gekoppelt“ für den gewählten Weg. Test `test_pairing_is_judged_per_route`.
+
+* 2026-11-13: **Brücke: alte ungeklärte Zustellung sperrt das Wiederverbinden nicht mehr.** Problem (C-04): LAN kurz gezogen, kein Lauf; die Brücke stoppte hart mit „Ergebnis der letzten Weitergabe unklar“ und verband nicht wieder. Export: ein einziger alter `unknown`-Eintrag unter 17 610 Zustellungen. Der Worker prüfte beim Wiederanlauf jede offene Zustellung des Pi, auch solche, die schon beim Start vorlagen und dort zugelassen waren. Neu: Beim Wiederanlauf sperren nur Zustellungen, die in dieser Worker-Sitzung offen geblieben sind. Unverändert: offene Takt-Zeilen und unbekannte Invalidierungen sperren schon beim Start. Test `test_old_unresolved_delivery_does_not_block_auto_recovery`. Offen: Altlasten lassen sich in der App nicht auflösen.
+
+* 2026-11-13: **Vierkanal-Takt: Kanal 1 hält bei ungültigem Takt den letzten gültigen Wert.** Problem: Zwei echte Läufe am 13.11. (GSVmulti 2.01/2.03 Pro, Takt lückenlos) hatten 20 bzw. 24 % ungültige Takte; mit `99999999.0` in Kanal 1 sprang die Zahlenanzeige von GSVmulti bei jedem Lesefehler an den Bereichsrand und war nicht ablesbar. Entscheidung Leonhard (13.11.): Kanal 1 hält den letzten gültigen Wert desselben Laufs, die Markierung trägt allein Kanal 2 (`gültig = 0`); vor dem ersten gültigen Wert bleibt `99999999.0`. Neu: `TickFormatter.format_tick(tick, held_text)` rein, `format()` hält für UART direkt; `BridgeSession` hält je Lauf erst nach geschriebenem gültigem Takt, auch Füllzeilen halten den Wert vor der Lücke; neuer Lauf ohne gehaltenen Wert. Doku: Vierkanal-Spec 3.5 (auch: Zeitkanal springt an Wechseln gültig/ungültig bis `max_frame_age_ms` zurück, Zeitachse über 8_3) und Ausnahme in `GSVMULTI_PROTOCOL.md`; App-Hinweis „auswerten nur Zeilen mit Gültigkeit 1“. Konsequenz: Wer Kanal 1 ohne Kanal 2 auswertet, verwendet veraltete Werte; „Record Hidden Channels“ bleibt Pflicht. Pi-Dienst und EXE müssen neu gebaut bzw. gestartet werden.
+
+* 2026-11-13: **Empfangstest verlustfrei und mit klarem Ende.** Problem (Windows-Prüfung 13.11., zweiter PC): 588 von 600 Demo-Werten kamen an, alle 588 wurden geschrieben (Journal), es fehlten Takt 1 und Gruppen wie 386–411. Ursache: Der Pi bot Demo-Werte wie echte Werte „nur den jüngsten“ an; dauerte ein Poll-Umlauf länger als ein Demo-Takt (100 ms), wurde der Wert überschrieben. Zudem löste der Pi die Bindung sofort nach dem Ende, die Brücke sah `ended` nie, und die App blieb bei „588 von 600“ stehen. Neu: `OutputState` puffert Demo-Werte in einer Warteschlange und bietet jeden in Reihenfolge an; echte Werte bleiben latest-only (nie veraltet nachliefern). Eine Demo-Barriere verwirft gepufferte Werte. Der Hub stellt `ended` zu, bevor er die Bindung löst (höchstens 1 s). Die App beendet den Test bei `ended`, bei vollständiger Zahl oder spätestens nach Anzahl/Rate + 10 s und zeigt dann „Unvollständig: n von 600, k fehlen“ mit Protokollexport und „Test wiederholen“. Tests angepasst (Demo-Latest-only in `test_bridge_hub.py`, `test_bridge_end_to_end.py`) und neu (`test_bridge_output_state.py`, `test_app_controller.py`). Konsequenz: Der Pi-Dienst muss neu starten; belegt ist es erst mit dem nächsten Windows-Lauf.
+
+* 2026-11-13: **Empfangstest im Format der Session (EXE).** Problem: Seit der Vierkanal-Vorgabe erzeugt die EXE Vierkanal-Sessions (NumChan 4, Trenner `;`, Kanäle 2–4 ausgeblendet), der Empfangstest schrieb aber weiter Einkanal-Zeilen (`%wert`). Windows-Prüfung 13.11., Versuch 3: App „597 von 600 gesendet“, GSVmulti-Aufnahme 0 Byte. Schritt 4 behauptete zudem fest „1 Kanal“. Neu: `BridgeSession(demo_format=…)` schreibt Demo-Werte bei Vierkanal-Session als `%wert;gültig;takt;zeit` (Takt = Demo-Index + 1, Zeit = Windows-Uhr beim Schreiben, synthetisch; ungültig = `99999999.0;0`). Der Controller reicht dem Worker das Format der erzeugten bzw. vorgegebenen Session für Weg und Port, dieselbe Quelle wie die Anzeige. Die Kanalzeile in Schritt 4 folgt der Vorlage. Echte Werte (Testfreigabe, Takt) bleiben unverändert. Tests in `tests/test_gsv_bridge.py`, `windows/bridge/tests/test_session_export.py`, `test_ui_bq6.py`. Konsequenz: Ob GSVmulti die Vierkanal-Demo aufnimmt, belegt erst der nächste Windows-Lauf.
+
+* 2026-11-13: **EXE-Selbsttest unter Windows: `time.clock_gettime_ns` beim Import.** Problem: Der Testbuild aus `feat/integration` brach im Selbsttest ab, `dispread.gsv_bridge` und `dispread_bridge_app.ui.window` mit „module 'time' has no attribute 'clock_gettime_ns'“. `dispread.live.clock` setzte die Unix-Uhr als Standardargument, das schon beim Import ausgewertet wird; seit dem Vierkanal-Takt (B1) zieht `gsv_bridge` das Modul über `live.tick`. Neu: Die Uhr wird erst im Aufruf aufgelöst (Pi-Verhalten unverändert). Test `windows/bridge/tests/test_windows_imports.py` importiert die EXE-Module in einem eigenen Prozess ohne `clock_*`/`CLOCK_*` und ohne `fcntl`/`termios`/`pwd`/`grp`/`resource`; ohne Fix rot, mit Fix grün. Konsequenz: Der Import ist unter nachgestelltem Windows sauber; der echte Windows-Selbsttest steht noch aus.
+
+* 2026-11-13: **Windows-Testbuild per Doppelklick (`windows/bridge/build-test.cmd`).** Problem: `.\build-test.ps1` scheiterte bei jedem ZIP-Download an der Ausführungsrichtlinie („nicht digital signiert“), und `-Python` musste von Hand ermittelt werden. Eine `.ps1` kann ihre eigene Richtlinie nicht umgehen, Windows prüft sie vor der ersten Zeile. Neu: Der Starter holt den Interpreter über `py -3.13`, ruft `build-test.ps1` mit `-ExecutionPolicy Bypass` nur für diesen Lauf auf, öffnet am Ende `dist-test` und hält das Fenster offen. Mit Argumenten gehen diese unverändert durch. `build-test.ps1` bleibt streng (Interpreter ausdrücklich, keine Suche im PATH), `*.cmd` werden mit CRLF ausgeliefert (`windows/bridge/.gitattributes`). Statischer Test in `test_packaging_app.py`. Konsequenz: Bauen ohne Befehlszeile; unter Windows noch nicht gelaufen.
+
+* 2026-11-12: **Rasterstart: Schein-Plus an Gehäusekanten und Einzelartefakte in Leerzellen (OQ-69).** Problem:
+  Vier Einrichtungen vom 11.11. scheiterten vor jedem Vorschlag, `154403Z` mit `startlage_mehrdeutig`,
+  `154459Z`/`155404Z`/`162902Z` mit `keine_startlage`. Ursachen, am Bild belegt: (1) Die obere linke Glas-/
+  Gehäuseecke lieferte gleich starke Schein-Plus-Anker (`dotlattice._plus_anchors`), die die Ankervorprüfung als
+  zweite Lage wertete. (2) Das richtige Raster wurde gefunden (152/159/153 Punkte), aber von `leerzelle_belegt`
+  verworfen: ein einziges flaches Minimum am Rand eines Glanzflecks bzw. an einem Kratzer (0,14–0,21 der typischen
+  Punkttiefe). Neu: Ein Plus-Anker zählt nur, wenn höchstens 2 der 26 unbeleuchteten Positionen seiner 5×7-Zelle
+  Kandidaten tragen (echte Anker 0–1, Schein-Anker 3–18). Leerzellen bleiben belegt, sobald sie zusammen zwei
+  Kandidaten oder einen mit mindestens 0,4 der typischen Punkttiefe enthalten; nur ein einzelnes flaches Minimum gilt
+  als Artefakt. Die Tiefenmessung teilt sich eine Hilfsfunktion mit der unveränderten Cursorzeilenregel.
+  Konsequenz: Alle vier Fehlerbilder liefern ein Raster mit 2j OK gegen den seriellen Zellentext und ohne
+  Widerspruch beim Gegenlesen; `154403Z` liegt ≤ 0,3 px auf dem Raster der gleichen Aufstellung `124851Z`.
+  `154459Z`/`155404Z` stoppen danach an der Vorprüfung „Kanten FEHLER“ (Glanzfleck, OQ-72). Über 88 Einrichtungs-
+  bilder behalten alle 77 bisherigen Fits ihr Raster (≤ 1,22 px, 2j-Ampel unverändert). Dieselbe Ankerursache
+  hatte `ab4`/16, `ab6`/20+22 und `sc7-assist/stability` als mehrdeutig gesperrt; sie liefern jetzt Fits, die per
+  2j bzw. gegen das Erstbild der Aufstellung belegt sind. Nach unabhängigem Review (`oq69-review.md`, 0 falsche Fits
+  auf echten, gestörten und synthetischen Bildern) ersetzen Ersatztests die drei alten Ablehnungstests
+  (`test_uncertain_real_still_start_is_rejected`, `test_sc7_stability_still_remains_rejected`); der ab6-Test prüft
+  Bild 22 in Punktspalten. Die alte Aussage „ab4 um 9,14 px falsch“ trägt im Laborjournal und in der
+  Projekthistorie einen Korrekturvermerk. Neue mögliche Ablehnung: Liegen drei oder mehr dunkle Störstellen
+  (Schmutz, Kratzer) auf den Leerpositionen der Pluszelle, wird auch der echte Anker verworfen und es kommt
+  `keine_startlage`, wo der alte Code gefittet hätte – sicher, aber am Aufbau möglich.
+
+* 2026-11-12: **Einrichtung: Kantenprüfung erklärt ihren FEHLER (OQ-72).** Problem: `161702Z`/`161955Z` scheiterten
+  mit „kanten (Zelle 7)“ (Stufe 29,8, Fehlergrenze 20), `170836Z` mit „kanten (Zellen 14, 15)“ (11,0 bzw. 7,0,
+  Grenzen 8/6). Ohne Messwert und Abhilfe. Offline-Befund: Beide Muster sind echte Reflexe, kein Fehlalarm. Bei
+  `161702Z` liegt ein Glanzfleck rechts oben an der letzten Ziffer und eine hellere Glasfläche ab Zelle 7/8. Bei
+  `170836Z` liegt eine dunkle Spiegelung über den Leerzellen rechts. Der Leser muss die Leerzelle 15 dort sicher
+  leer erkennen, sein Abstand ist 1,35, bei allen anderen 11 Aufstellungen höchstens 0,96.
+  Neu: Grenzen und Messwert bleiben unverändert. `kanten` liefert `flagged_cells` (Zelle, belegt/leer, Stufe, Grenze)
+  und einen Bedienertext mit Zelle, Lage (Zahl, Trennzelle, Einheit, rechts der Einheit), Stufe, Grenze und
+  Abhilfe. Die Abbruchmeldung der Vorprüfung hängt diesen Text an. Tests: synthetischer Glanzfleck an der letzten
+  Ziffer, schwacher Fleck (WARNUNG), dunkle Spiegelung rechts, sauberes Display; 12 echte Aufstellungen über
+  `DISPREAD_DEV_DATA` (`initial-fit-oq72.json` neben den Originalen).
+  Konsequenz: Alle Urteile sind bitgleich, 3 Fehlerfälle, 9 positive Aufstellungen und 6 historische Kontrollen.
+  Der Bediener sieht nun, was er ändern soll. Offen bleibt der Strukturanteil der Belegtmessung: Die letzte Ziffer
+  vor der leeren Trennzelle erreicht auch in guten Aufstellungen 14–15 von 16. Ob der Reflex im Lauf wandert, ist
+  am echten Aufbau zu prüfen.
 * 2026-11-11: Doku-Workflow: Ein manueller Start („Run workflow“) auf
   `master` bindet jetzt das Session-Archiv ein und deployt in die Produktion,
   wie ein Push. Problem: Lauf 1033 scheiterte am 11.11. beim Cloudflare-Upload
@@ -25,6 +95,468 @@ was ist die Konsequenz.
   hat (unlesbar zählt als offen); `BUDGET_S = 600`, `TimeoutStartSec=720`.
   Konsequenz: Neuinstallation per `sudo ./scripts/wiki-session-export-install.sh`;
   ein abgestürzter Lauf hält den Export höchstens 5 min auf.
+
+* 2026-11-11: **Windows-Brücke: Session-Format je Lauf abgleichen.** Einkanal und
+  SHA-gepinnte `vorlage-4kanal-mvv.ucf` sind regulär exportierbar; Versuch 2b
+  bleibt ausschließlich Beleg. Einzige Vorgabe ist `DEFAULT_SESSION_FORMAT =
+  'single'` bis U1 auf dem Pi. Session-Format wird je Weg/Port gespeichert;
+  validierte `tick`-/`record`-Antworten liefern das Lauf-Format für den
+  UI-Abgleich, Laufwechsel und Verbindungsverlust setzen es zurück.
+
+* 2026-11-11: **Windows-Brücke: belegter Session-Vorlagenkatalog.** Einkanal-COM8
+  bleibt aktiv; Vierkanal-Vorlage mit drei ausgeblendeten Kanälen ist SHA-gepinnt
+  als `prepared` paketiert und nur ausdrücklich für Entwickler erzeugbar.
+  Portersetzung erhält alle übrigen Bytes; Kanal-/Aufnahmehinweise und gemeinsame
+  GSVmulti-Baudrate werden aus den Vorlagen gelesen. Pi/Brücke senden weiterhin
+  das bisherige Format; keine zusätzliche Empfangs- oder Messfreigabe.
+
+* 2026-11-11: **Windows-Brücke UX2, Runde UI-2: Moduswahl, Einstellungen, geprüfte Eingaben, UART direkt.**
+  Moduswahl-Fenster (drei Karten, Radio-Semantik, „Wechseln“ → `select_mode`, öffnet sich beim ersten Start ohne
+  Weg einmal selbst) und Einstellungen-Fenster (Weg · Pi · Ports · GSVmulti-Session · Protokolle · Über; während
+  der Übertragung schreibgeschützt). Neuer Baustein `ValidatedField`: echte `check_*`-Prüfung im Pool, 500 ms nach
+  dem Tippen bzw. sofort bei Auswahl, veraltete Ergebnisse verworfen, „ok“ nur nach bestandener Prüfung.
+  Einrichtung: „Einrichtung verlassen“, Prüffelder für Adresse/Portpaar/Adapter/Kopplungscode, „Suche wiederholen“
+  als Symbolknopf, „Gespeichert“-Zeile, Schrittwechsel-Überblendung, Varianten D1–D4 für „UART direkt“ (4 Schritte),
+  echter Knopf „Session-Datei erzeugen …“ statt der Sperre. Erzeugte Sessions gelten als nicht abgenommen
+  (nie grün); Pflichthinweis „Record Hidden Channels“ nur bei `record_hidden_required`, Einkanal-Warnung (F3) bei
+  `session_channels == 1` auf Brückenwegen. Feste Baudraten in Texten ersetzt (Pi↔Brücke `uart_baud`, GSVmulti
+  `gsv_baud`). Ursache des leeren Portpaar-Auswahlfelds: `context()` liest die Portliste nur aus dem Cache; die
+  Oberfläche liest sie jetzt selbst im Pool nach. Keine Windows-Abnahme in dieser Session.
+
+* 2026-11-11: **Windows-Brücke UX2: Backend und belegter Session-Generator.** Drei Wege
+  (`network`, `uart_bridge`, `uart_direct`), direkter Einrichtungshelfer ohne Kopplung/Worker,
+  begrenzte Eingabeprüfungen mit gemeinsamem TLS-Pin-Prüfer und gecachte Adapterpräsenz.
+  Session-Export ändert nur drei COM-Felder der SHA-256-gepinnten COM8-Vorlage; übrige
+  Bytes bleiben erhalten. Kein GSVmulti-Empfangsnachweis, N3/OQ-53 bleiben offen.
+  Pi↔Brücke-UART (v1/v2) bezieht 460800 Baud aus einer gemeinsamen Quelle; optionales
+  Profilfeld `uart_baud`, GSVmulti liest seine eigene Rate aus der Vorlage.
+  Validierte Pi-Antworten zählen für die Aktivitätsanzeige; PnP-Inventur gecacht und
+  Windows-Subprozesse ohne Konsolenfenster. Keine Windows-/Hardwareabnahme in dieser Session.
+
+* 2026-11-12: **Einrichtung: dunkler Rahmen trotz beleuchteter Fase (OQ-70).** Problem: Bei `155557Z` war schon der
+  automatische Vorschlag einseitig. −x hatte nur 2 Bereiche, Seiten `[[2,7],[12,7]]`, keine Reserve. Das Raumlicht
+  hellte die untere rechte Fase auf, sie fiel aus der dunklen Rahmenkomponente heraus, und die Solidität sank auf
+  0,9605 < 0,97. Die Bandermittlung fiel deshalb auf das feste Band zurück. Bei kleinem Quad erreicht dieses die
+  linke Fase nicht.
+  Neu: Die Grenze 0,97 bleibt. Darunter misst `_notched_frame` die Rahmenkontur je Quadseite aus Strahlen,
+  0,75-Quantil der Austritte (`bezel_notch_quantile`, nur Einrichtung, bindet keinen Laufstart). Trägt die Fläche
+  außerhalb dieser Kontur ein ganzes Suchfenster, etwa bei Balken, Kabel oder Schatten, bleibt es beim Rückfall
+  `rahmenform_unplausibel`. Sonst gilt die Komponente innerhalb der Kontur als Rahmen, ohne die Kerbe.
+  Einseitige Vorschläge nennen jetzt „Kamera leicht drehen oder verschieben und neu einrichten“. Tests:
+  synthetische Kerbe, Balken mit und ohne Kerbe, Konfiguration; `155557Z` und acht positive Aufstellungen über
+  `DISPREAD_DEV_DATA`.
+  Konsequenz: `155557Z` hat `[[9,10],[10,10]]` mit Reserve. Von 63 Einrichtungsbildern ändern sich nur die drei
+  bisherigen Kerben-Rückfälle, alle besser. Die übrigen 60 bleiben bitgleich, auch die vier Review-Balken. Die
+  Laufprüfung ist unverändert. Am echten Aufbau ist das noch nicht erprobt.
+
+* 2026-11-12: **Werkbank /live: Bediensackgasse der Einrichtung (OQ-71).** Problem: Bei Gesamturteil FEHLER blieb
+  Bestätigen für Knopf und Enter freigegeben (nur der Server lehnte ab), und „Neu einrichten“ gab es nur bei idle,
+  fehlgeschlagen und gestoppt; nach einem Vorschlag oder einer Bestätigung blieb nur Lauf starten und stoppen.
+  Neu: Bei FEHLER ist Bestätigen gesperrt (Titelleiste und Inspektor, Text „Bestätigen nicht möglich: Prüfung FEHLER
+  – neu einrichten“) und „Neu einrichten“ der Primärknopf. In `setup_ready` und `confirmed` ist „Neu einrichten“
+  immer erreichbar; bei `confirmed` fragt ein Dialog „Bestätigte Einrichtung verwerfen und neu einrichten?“; im Lauf
+  steht der Knopf gesperrt mit Grund. Backend: `start_setup` legt nie in einen vorhandenen Setup-Ordner an (bei gleicher
+  Sekunde Suffix `-2`), damit Bilder, Vorschlag, Prüfergebnisse und `profile.json` einer verworfenen Einrichtung
+  unverändert bleiben; die Server-Ablehnung von FEHLER bleibt zweite Sicherung. Tests: Backend (Belege bleiben,
+  FEHLER, Lauf, Abbruch und sofortiger Neustart ohne Dienstneustart), Node, fünf Playwright-Szenen. Konsequenz: keine
+  Schranke gelockert; offen bleibt der Nachweis am echten Aufbau.
+
+* 2026-11-12: **Einrichtung: Fokus misst auf der LCD-Hinweisbox, Endprüfung nach dem Kameraneustart (OQ-74).**
+  Problem: Die Fokussuche maß fest im mittleren Bilddrittel. Bei `162902Z` lag die LCD-Hinweisbox zu 0 % darin,
+  dort wurde das Gehäuse scharf gestellt; bei fünf weiteren Aufstellungen lagen nur 45–53 % der Box darin. Nach
+  der Suche startet die Kamera neu (Regler, Belichtung). Ob die Linse dabei ihre Lage verliert, war ungeprüft,
+  und Bilder davor und danach fehlten. Neu:
+  * Vor der Suche läuft `find_green_hint_box` einmal auf dem neuesten Vorschaubild, Kosten etwa 10–55 ms. Die
+    Fokus-ROI ist diese Box mit 5 % Rand. Ohne Box gilt das mittlere Drittel, und die neue Prüfzeile `fokus`
+    meldet WARNUNG „Fokus ohne LCD-Hinweis gemessen“.
+  * Nach dem letzten Kameraneustart misst `check_focus_after_restart` auf derselben ROI. Verglichen wird die
+    helligkeitsnormierte Schärfe (Laplace-Varianz / ROI-Mittel²) mit der besten Suchprobe. Liegt sie unter
+    0,6, wird der Absolutwert einmal neu gesetzt: erst Automatik aus, dann von unten. Bleibt die Schärfe
+    darunter, meldet `fokus` WARNUNG, und die Bestätigung braucht eine Kenntnisnahme.
+  * Diagnose im Setup-Ordner: Abgelehnte Versuche behalten ihr Mittelbild als `still-versuch-N.png`
+    (umbenannt, nicht neu kodiert). Dazu kommen die ROI-Ausschnitte `fokus-vor-neustart.png`,
+    `fokus-nach-neustart.png` und gegebenenfalls `fokus-nach-neusetzen.png`. `camera-settings.json` trägt
+    `focus_roi`, `focus_sweep_roi_mean`, `focus_end_check` und `focus_diagnostic_crop`. Zusatz im
+    ungünstigsten Fall: etwa 6 MB.
+  * Laufstart: Nach dem Kameraneustart `laufstart` misst `check_focus_at_run_start` die Schärfe auf dem
+    Begrenzungsrechteck des bestätigten Anzeige-Vierecks. Referenz ist der Median der Einzelbilder der
+    Stabilitätsaufnahme (`proposal.json` → `focus_reference`), normiert wie in der Einrichtung. Unter 0,6
+    wird der Fokus einmal von unten neu gesetzt. Bleibt die Schärfe darunter, erscheint im Laufstatus
+    (`run.focus_check`) und als stehender Hinweis die Warnung „Bild nach Kamerastart unschärfer als bei der
+    Einrichtung (x %) – Fokus prüfen“. Der Lauf startet trotzdem, die Freigabe bleibt unberührt. Das
+    Ergebnis steht in `session.json` (`focus_check`), die Ausschnitte als `fokus-laufstart-*.png` im
+    Laufordner. Ein Kamerafehler bei der Prüfung wird als WARNUNG gemeldet; ohne Referenz steht
+    `NICHT_GEPRUEFT` im Audit.
+
+  Konsequenz: Auf allen sieben Paketbildern überdeckt die ROI die Hinweisbox zu ≥ 90 %, auch nach einer
+  Gauss-Unschärfe mit sigma 3. Grundlage sind die Regressionsbilder unter
+  `$DISPREAD_DEV_DATA/regression/2026-11-11/`. Die Schwelle 0,6 ist ein Vorabwert und an den Paketen nicht
+  kalibrierbar. Offline nicht nachgewiesen: das optische Verhalten des Fokusmotors beim Kameraneustart, in der
+  Einrichtung wie am Laufstart. Die neuen Audit-Felder (`restart_effect`) liefern den Beleg beim nächsten
+  echten Lauf.
+* 2026-11-11: **Werkbank /live: Vierkanal-Takt am Laufstart und im Lauf (U1).** Problem: Format und Takt der
+  Ausgabe waren in der Oberfläche nicht wählbar, die Einkanal-Warnung (F3) fehlte. Neu: Laufoptionen mit „Format“
+  (Vierkanal-Takt empfohlen, Vorgabe; Einkanal mit wörtlicher F3-Warnung), Takt 1–10 Hz (Vorgabe 10), Checkliste
+  „In GSVmulti“ inkl. „Record Hidden Channels“; POST sendet `format`/`rate_hz` (Vierkanal) bzw. `format: '1ch'`;
+  Testlauf sperrt die Felder. Im Lauf zeigen Dock und Statusleiste Takt, Anteil gültig, verpasst (verloren/
+  unbestätigt bei > 0) aus `run.output.tick`, bei Einkanal die Kurzwarnung; Brücken-Dialog „Bereitschaft“ mit Zeile
+  „Format“. Laufoptionen scrollen in niedrigen Fenstern. Konsequenz: neue Läufe gehen standardmäßig im Vierkanal-Takt
+  hinaus; Tests (Node, Playwright mit Fake-Server-Szenen) decken Körper, Warnung, Sperre und Statuszeile ab.
+* 2026-11-11: **Brücke: Ausgabeformat des Laufs in `hello`/`idle` (Nachtrag B2, additiv).** Problem: Die
+  Windows-App erfuhr das Format des Laufs erst am ersten Wert und konnte nicht vorher warnen, wenn die erzeugte
+  GSVmulti-Session nicht passt. Neu: `hello` und `idle` tragen `output_format: "4ch"|"1ch"` des gebundenen
+  Laufs (`4ch` bei Taktbetrieb, sonst `1ch`, also auch ohne `format` im Start-POST). Ohne gebundenen Lauf fehlt
+  das Feld. Der Codec akzeptiert nur diese Werte oder `null`, nur in `hello`/`idle`. Gesendet wird es nur an
+  Clients mit Hello-Fähigkeit `tick: 1`; ältere Codecs lehnen unbekannte Felder ab und bekommen es nie. Die
+  Windows-Verbindung legt den Wert als `peer_output_format` ab (sonst `None`).
+* 2026-11-11: **Nachführung: Stilllegung nach Review nachgeschärft (TB, W1/W2/G3–G5).**
+  * *W1:* Die Schutzprobe vergleicht jetzt den Schritt vom bisherigen zum neuen Satz, auch mit einem weiteren
+    ausfallenden Bereich. Stillgelegt wird nur, wenn ein Zusatzausfall dadurch weder häufiger noch um mehr als
+    0,05 px schwerer gefährlich (> 1,0 px) wird und der neue Satz selbst höchstens 0,05 px schlechter ist.
+    Beleg: Der frühere Testsatz {0, 5, 15} bestand die alte Probe (0,957 px), wird jetzt aber abgelehnt
+    (Zusatzausfall 8/16/17/19: 1,46 px statt < 1,0 px). Die Entscheidung je Probenbild ist genau `update()`
+    (Treffer werden je Bild einmal gesucht; `_match`/`_decide` bitgleich aus `_fine_update` ausgelagert).
+  * *G4:* Die Probe läuft als eigener Prozess (`python -m dispread.live.region_probe`, nice 19) und wird bei
+    Laufende abgebrochen. An 1080p: 31 s CPU, 41 s bis zur Entscheidung; `update()` im Messprozess dabei
+    13,1 statt 12,0 ms je Bild.
+  * *G3:* `off` erst ab dem Bild nach der Stilllegung; je Satz und Bereich höchstens ein Audit-Versuch (kein
+    doppeltes Ereignis), Verzeichnis-fsync, eigener Fehlerzähler `deactivation_errors`. *G5:* Die Obergrenze
+    zählt nur nutzbare Bereiche.
+  * *W2:* Der Echtdatentest misst neu akzeptierte Quads gegen einen unabhängigen Glasbezug (Lage allein aus den
+    LCD-Kanten). Sie liegen nicht weiter davon weg als die bisher guten Quads desselben Laufs. Eine absolute
+    Grenze von 0,35 px lässt sich so nicht belegen, weil der Glasbezug selbst bis 0,8 px streut.
+  * *OQ-70-Gegenprobe:* Mit der strengeren Auswahl wählen die drei positiven Aufstellungen
+    (`164508Z`, `165234Z`, `165754Z`, Paket per SHA-256 geprüft) genau ihre gespeicherten 20 Bereiche mit Reserve.
+    Der Fehlfall `155557Z` bleibt gleich einseitig ([[2, 7], [12, 7]]): nicht verschlimmert, nicht behoben.
+* 2026-11-11: **Nachführung: Rahmenbereiche automatisch robust (TB, Freigabe Leonhard, Punkte 1 und 2).**
+  Problem: Glanz- und Fasenbereiche bewegen sich bei Lichtänderung nicht starr mit und kosten im Lauf bis
+  24 % der Bilder (`rahmen_unstimmig`); bisher half nur manuelles Entfernen nach dem Lauf.
+  * *Einrichtung:* Automatische Kandidaten mit flachem Autokorrelationsgipfel (Krümmung < 0,08) **und**
+    lichtabhängiger Lage (> 0,12 px unter Gamma-, Glanz- und Hellproben) werden nicht mehr gewählt
+    (`proposal_min_peak_curvature`, `proposal_max_photometric_shift_px`, `metrics.localisation_weak_candidates`).
+    Kalibriert an 55 Einrichtungen; alle 53 geeigneten bleiben geeignet. Offline auf den Diagnosebildern:
+    103604Z 221/222 statt 113/222, 122753Z 221/222 statt 112/222. Ältere Profile bleiben startbar.
+  * *Stilllegung im Lauf:* Dieselbe Fensterauswertung wie der TC-Hinweis schlägt einen Bereich vor, wenn er
+    über volle 300 Bilder in ≥ 50 % die Grenze reißt, der Rest im Median < 0,4 px liegt und er mit keinem
+    anderen Bereich gleichläuft. Harte Grenzen: höchstens 3 Bereiche bzw. 15 %; Mindestzahl, Streuung und
+    Reserve wie bei der Einrichtung; dazu eine Schutzprobe am Referenzbild (Raster des Tests
+    „koordinierter lokaler Bias“, kein angenommenes Quad > 1,0 px falsch), die im Hintergrund läuft. Ohne
+    Probe wäre es unsicher: Im Fixture setzt eine ganze Seite ohne Bereich 2 oder 11 eine 3,5 px falsche
+    Lage durch. Der Bereich wird ab dem nächsten Bild nicht mehr gesucht, wirkt also wie ein Vorschlag
+    ohne ihn. Prüfgrenze 0,65 px, RMS 0,35 px, RANSAC 1,5 px und alle übrigen Schwellen bleiben unverändert.
+  * *Audit:* Ereignis vor der Stilllegung in `tracking_events.jsonl` (Bild, Bereich, Anteil, Median,
+    Rest-Median, Gleichlaufmaß, Probe), `summary.tracking_region_hint.deactivated`, additiv
+    `component_versions.locator_regions_disabled` in jedem folgenden Datensatz und `off` je Bereich in
+    `diagnose/images.jsonl`. Schlägt das Schreiben fehl, bleibt der Bereich aktiv.
+  * *Werkbank:* Statusleiste und Inspektor (Nachführung) zeigen „Bereich N automatisch stillgelegt
+    (x % unstimmig)“ ohne Statusfarbe; der Hinweis „entfernen“ entfällt für stillgelegte Bereiche, das Bild
+    zeichnet sie nicht mehr als Verlust. Status: `run.region_deactivated`.
+  * *Konsequenz:* Neu eingerichtete Geräte wählen die bekannten Problemstellen nicht mehr; ältere Profile
+    verlieren sie nach etwa 10 s im Lauf. Die Lauf-Gültigquote unter aktiver Laständerung (122753Z: 59 %)
+    hängt danach vor allem an `anzeige_wechselt` (18 %); ≥ 75 % ist offline nicht belegt. Nachweis im echten
+    Lauf steht aus.
+* 2026-11-11: **GSVmulti-Vierkanal-Takt über die Brücke (B2, nicht abgenommen).** Problem: Über
+  UART-Brücke und Netzwerk gingen nur gültige Werte als volle `record`-Nachricht nach Windows, latest-only;
+  ungültige Abschnitte und verlorene Werte fehlten in GSVmulti ohne Lücke. Neu, additiv zu Protokoll v2:
+  `output.format: '4ch'` (und `rate_hz` 1–10, Vorgabe 10) gilt jetzt auch für `uart`/`tcp`; ohne
+  `format` bleibt der Einkanalweg bytegleich. Der Pi entscheidet jeden Takt mit demselben `Ticker` wie
+  UART direkt, auditiert ihn in `output.jsonl` **vor** dem Angebot und bietet die Takte der Reihe nach als
+  kompakte Nachricht `tick` an (`seq`, `valid`, `value_text`, `frame_sequence`, `time_unix_ns`,
+  `origin_unix_ns`, `rate_hz`, `release`; Quittung `tick_ack` mit `filled`). Höchstens 50 Takte warten;
+  ältere gelten als verloren und bleiben in der Taktnummer sichtbar. Takte gibt es nur bei bestätigter
+  Testfreigabe und nur an Clients mit Hello-Fähigkeit `tick: 1`; alte Clients bleiben gesperrt
+  (`TICK_CLIENT_BLOCK`). Windows formatiert mit dem `TickFormatter`, füllt einen Sprung von *n* auf *n+k*
+  mit *k−1* Fehlwertzeilen (`99999999.0`, gültig 0, Nominalzeit) auf, bei mehr als 50 nicht (Lücke im
+  Journal, `tick_disturbed`). Jede Zeile, auch jede Auffüllung, steht vor dem COM-Schreiben im
+  `DeliveryJournal` (neue Tabellen `ticks`, `tick_gaps`); eine offene Zeile sperrt die Ausgabe. Kein Takt
+  wird zweimal geschrieben, kein Wert nachgereicht. Status: Pi `output.tick` mit `offered`,
+  `acknowledged`, `unconfirmed`, `lost`, `queued`; Windows `WorkerStatus.ticks_written`,
+  `ticks_invalid`, `ticks_filled`, `tick_disturbed`.
+  Linux-E2E (pty und TLS, Fake-COM, kein Windows-/GSVmulti-Nachweis) über je 6000 Takte im Zeitraffer
+  mit virtueller Pi-Taktuhr und Gegendruck (lastunabhängig), unlesbaren und dunklen Phasen, drei
+  Pi-Aussetzern (11 verpasste Takte) und zwei Windows-Staus über das Fenster (20 verlorene Takte): auf
+  beiden Wegen 6000 Zeilen = 6000 Takte, Folge lückenlos, 31 Auffüllzeilen bytegenau mit Nominalzeit,
+  5479 gültige Zeilen, kein Bild doppelt, nur frische Bilder. Ein Stau über 120 Takte ergibt den Sprung
+  um 71 > 50: nicht aufgefüllt, Journal-Lücke, `tick_disturbed`. Echtzeit 10 Hz über 600 Takte ohne Staus:
+  Latenz Pi-Takt → COM-Zeile p50/p99 8,8/52 ms (pty) bzw. 10,0/83 ms (TLS), nichts verloren.
+  **UART-Kapazität:** Ein Takt kostet mit Poll, Quittung und Idle etwa 1,2 kB (Taktnachricht 410 Byte),
+  dazu kommen Leerlauf-Polls. Auf 115 200 Baud gedrosselt fällt die Brücke zurück (p50 ≈ 5 s, 97 von 600
+  Takten verloren, Laufende abgeschnitten); auf 460 800 Baud 600/600 Zeilen, p50/p99 22,6/44,5 ms. Der
+  Vierkanal-Takt über die UART-Brücke braucht deshalb die Baudrate aus `feat/bruecke-ux`.
+  `uart.py` bleibt hier unverändert; Windows-UI, Werkbank-Frontend und Abnahme sind
+  nicht Teil von B2. Doku: `docs/BRIDGE_PROTOCOL_V2.md`, Abschnitt Taktnachricht.
+* 2026-11-11: **Einrichtung: Hinweise zu Rahmenbereichen entrümpelt (T3).** Die Bereichsbearbeitung
+  zeigte je Stelle des letzten Laufs eine gelbe Zeile, auch „dort liegt kein Bereich“, das ist der gute
+  Fall. Jetzt erscheint ein Hinweis nur, wenn im neuen Vorschlag ein Bereich (Toleranz 8 px) an einer
+  dauerhaft unstimmigen Stelle liegt: Anteil ≥ 0,30 und mehrfach markiert, höchstens 3, stärkste zuerst.
+  Bei neuer Aufstellung (Anzeige-Viereck um mehr als 12 px verschoben) wird nichts verglichen. Der Dienst
+  reicht dafür nur dauerhaft Unstimmiges samt Zähler und Viereck in `previous_region_hint` weiter.
+  Messpfad, Tracker und `session.json` bleiben unverändert.
+* 2026-11-11: **GSVmulti-Vierkanal-Takt für UART direkt (B1, noch nicht abgenommen).**
+  Neues Format `gsvmulti_userdefined_4ch_v1` mit `MARK_RECORD`: pro Takt
+  `%wert;gültig;takt;zeit\r\n`, bei ungültigem Takt genau `99999999.0` und Gültigkeit 0.
+  `format: '4ch'` aktiviert 1–10 Hz (Vorgabe 10); das feste Monotonraster holt
+  verpasste Takte nicht nach. Nur frische Bilder aus dem aktuellen Rasterfenster
+  werden gültig gesendet; derselbe Rahmen nie zweimal, derselbe Zahlenwert aus
+  einem neuen Bild ist erlaubt. Reservierter Fehlwert-Anzeigetext wird vor dem
+  Audit als UNREADABLE abgelehnt. Erfassungszeit über `records.to_boottime_ns`
+  und den geklammert gemessenen REALTIME−MONOTONIC-Startversatz; spätere
+  Uhrsprünge ändern den Zeitkanal nicht und werden protokolliert. `session.json`
+  erhält `output.tick` mit Taktstatistik, Uhrversatz, NTP-Status und unbekannter
+  Zeitunsicherheit (`null`); Zeitsemantik bleibt wegen OQ-43 provisional.
+  Testfreigabe bleibt Pflicht, Testläufe erzeugen keine externe Ausgabe.
+  `format: '1ch'` und alte Konfigurationen ohne Format behalten die bisherigen
+  Einkanalbytes; U1 muss Vierkanal als neue Vorgabe explizit auswählen.
+  **Brückentransport und Windows-Auffüllen kommen erst in B2**, Werkbank-/EXE-UI
+  und Hardware-/GSVmulti-Abnahme sind nicht Teil von B1.
+* 2026-11-11: **Nachführung: Diagnose je Rahmenbereich und Hinweis „Rahmenbereich N dauerhaft unstimmig“ (TC, reine
+  Diagnose).** Anlass: Brückentest `live-20261111T103604Z/run-01` mit 24 % `tracking_lost:rahmen_unstimmig`. Ursache war
+  ein einzelner Bereich auf einer Glanzlinie der Fase (in der Werkbank Bereich 6), der sich nach einer Lichtänderung
+  nicht mehr starr mitbewegt. Das war im Lauf nicht zu sehen. Neu: `FrameTracker.last_regions` trägt je Bereich
+  `res1`/`res2` (Abstand zum Erst-/Zweitfit in px, auch für Ausreißer und abgelehnte Bilder); `diagnose/images.jsonl`
+  schreibt sie je Bild mit (`tracking.regions`, additiv). `dispread.live.region_hint` wertet die Erstfit-Residuen
+  über 300 Bilder aus: auffällig, wenn ein Bereich in ≥ 30 % seiner Bilder die Prüfgrenze
+  `max_inlier_residual_px` (0,65 px, aus der Tracker-Konfiguration) reißt und der Rest im Median < 0,40 px liegt,
+  frühestens nach 150 Bildern. Live-Status `run.region_hint`, nach dem Lauf `previous_region_hint` (für die
+  Neueinrichtung), `session.json` `summary.tracking_region_hint` (nur bei Rahmenbereich-Nachführung, sonst
+  bleibt die Datei byte-gleich). Werkbank `/live`: ruhiger Warnhinweis in Statusleiste und Inspektor
+  (Nachführung, mit Abzeichen) „Rahmenbereich 6 ist dauerhaft unstimmig (92 % der Bilder). Werte bleiben
+  geschützt; es gehen nur Werte verloren. Nach dem Lauf neu einrichten und Bereich 6 entfernen.“, der Bereich
+  ist im Bild in Warnfarbe mit Nummer markiert. In der Bereichsbearbeitung der Neueinrichtung wird er über die Lage
+  (≤ 8 px) wiedergefunden und mit alter und neuer Nummer benannt, da eine Neueinrichtung neu nummerieren kann.
+  **Freigabe, Schwellen, RANSAC, Akzeptanzentscheidung und ValueRecord bleiben bitgleich**: Tests mit und ohne
+  Residuenrechnung auf synthetischen Szenen und exakter Vergleich von Grund, Score, Lage und Quad gegen alle 222
+  Diagnosebilder des Laufs (`test_tc_echtlauf_20261111_…`, meldet dort genau Bereich 6). Die Einrichtungsregel,
+  solche Bereiche gar nicht erst zu wählen, ist nicht Teil davon (OQ-63).
+* 2026-11-11: **Brücke: Verbindungsabbruch bei jedem Wechsel gültig → ungültig behoben (Brückentest mit echten Werten).**
+  Befund im Lauf `live-20261111T095426Z/run-01` (Netzwerk, Testfreigabe): 1 560 Werte an COM übergeben, aber alle 2–15 s
+  ein Abbruch von ca. 2 s; jedes Mal beim ersten Übergangswert nach gültigen Werten (`offered` und `unconfirmed` in
+  derselben Millisekunde). Ursache: `protocol._record` verlangte `frames_confirmed >= 1`; unlesbare Datensätze der echten
+  Kette (leere Anzeige, `no_value`) tragen 0. Die Barriere war nicht kodierbar, der Pi trennte die Lease. Synthetische
+  Quellen erzeugen nie 0, daher blieb es in den Linux-E2E-Tests unentdeckt. Jetzt gilt `>= 1` nur für VALID, sonst
+  `>= 0`. Gegen alle 6 184 Datensätze des Laufs geprüft. Die Prüfung sitzt auch in der EXE: Pi-Dienst **und** EXE
+  müssen neu gebaut werden. Sicherheit war nicht betroffen (fail closed: kein Wert ohne Barriere).
+* 2026-11-09: **Brücke: kein terminaler `connection_failed` am Laufende (R4-Nachtrag).** Ursache (per Traceback am
+  `connection_failed` belegt, `connection.py` Poll-Pfad): zwischen `unbind_run` und `release_real_run` antwortet der
+  Pi auf einen Poll zweimal mit `hello` (Freigabestand weg, dann Lauf weg); der Client wiederholte nur einmal und
+  brach mit `peer_invalid` ab. Jetzt bis zu drei Wiederholungen, jede Antwort bleibt voll validiert. Zusätzlich
+  (deterministisch nachgestellt, nicht als Ursache des Befunds belegt): eine Quittung, die das Laufende überlebt,
+  wird vom Pi nicht angenommen (Angebot bleibt als `unconfirmed` auditiert), antwortet `hello` statt Fehler, und
+  der Client behält die Verbindung; fremde Lauf-IDs bleiben ein Fehler. Tests: `tests/test_bridge_end_to_end.py`.
+* 2026-11-09: **Testfreigabe: Review-Befunde geschlossen (R4).** Pi-Ausgabe unter Testfreigabe bietet nur
+  Datensätze mit `V4L2_MONOTONIC` an (andere: nicht angeboten, Audit `release_time_base_rejected`); Laufstart
+  während einer Demo meldet deutsch statt „bridge occupied“ (409, `BridgeOccupied`); `session.json` trägt
+  `output.acknowledged_by` (Name der Einrichtungsbestätigung); Tests: Hub (freigegebener Lauf A, gesperrter Lauf B;
+  Barriere vor Wert bei Lease-Wechsel), COM-seitige Barrierenreihenfolge im E2E; `windows/bridge/src` im
+  pytest-Pfad, E2E läuft in der Standardsuite statt übersprungen zu werden; Doku (Altersschranke ca. 2 s + OCR,
+  Barriere nicht über Läufe, TESTLAUF F2/G).
+* 2026-11-09: **Testfreigabe echter Werte über die Brücke: Oberfläche (R2).** Werkbank `/live`: bei „UART über
+  Brücke“/„Netzwerk über Brücke“ Hinweis (`BRIDGE_NOTE`, per Test gegen `BRIDGE_RELEASE_NOTE` abgeglichen) und
+  Haken „Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe“; ohne Haken startet der
+  Lauf gesperrt wie bisher (nicht blockiert, anders als UART direkt), mit Haken sendet der POST
+  `acknowledge_unaccepted: true`; Testmodus nie. Dock, Inspektor, Statusleiste und Bridge-Dialog zeigen bei
+  `release == "test_unaccepted"` „Testfreigabe – nicht abgenommen“ (Warn-Ton) statt „gesperrt“; Hinweis zur
+  UART-Rate (3–4 Werte/s bei 115 200 Baud). Windows-App: `output == "test_release"` → Ausgabe „Testfreigabe“,
+  Weitergabe „n Werte an <Port> übergeben“ (Achtung-Ton, nie grün), `omitted`-Zähler, Kopfsatz, Warnzeile statt
+  Sperrzeile, Journal („Testfreigabe aktiv (Lauf n)“, „Ausgabe wieder gesperrt“, „Wert ausgelassen“). Die
+  Info „GSVmulti erhält absichtlich keine Messwerte“ nur noch bei gesperrt. `TESTLAUF.md` F2. Nicht abgenommen,
+  nicht auf Windows-Hardware geprüft.
+* 2026-11-09: **OQ-61 Abbau des alten Controllers, Schritte S1, S2, S4.** Audit in
+  `.superpowers/sdd/2026-11-06-bruecke-ui/oq61-audit.md`. S1/S2: Bedienertexte (`REASONS`,
+  `LIVE_CAUSE_TEXT`, `live_cause`, `DISPLAY_DEFECT_HINT`) nach `dispread/live/texts.py`, Erkennung
+  `workbench/vision.py` nach `detect/vision.py`, `CROP_SIZE`/`crop_box` nach `ocr/autofit.py`;
+  `/live`, `benchmark.py` und Skripte hängen nicht mehr am Workbench-Controller. S4: Browser-Terminals
+  (PTY hinter PAM-Anmeldung) entfernt: `terminals.py`, `shell.py`, xterm, Routen `/terminals*`;
+  `make_app(controller, verifier, live=...)`. Schriftdateien unter `static/vendor/fonts` bleiben
+  (live.css). Offen: S5–S9 (alte Seite, TUI/CLI `mode|profile|camera`, Datensatz-Sammelmodus als
+  Entwicklerwerkzeug behalten, Controller entfernen). Playwright live 53/53, Suite grün bis auf
+  vorbestehende Umgebungsfehler (Skript-Subprozesse nutzen die editierbare Installation des
+  Hauptcheckouts, `test_r13_offline_setup`).
+* 2026-11-09: Bestätigte **Testfreigabe** echter Messwerte über die GSVmulti-Brücke (UART und Netzwerk), R1.
+  Nutzerentscheidung für den Test am 11.11.: wie UART direkt nur nach ausdrücklicher Bestätigung je Lauf
+  (`output = {transport: uart|tcp, acknowledge_unaccepted: true}`), **keine Abnahme, keine Messfreigabe**
+  (OQ-06/OQ-47 offen). Ohne Bestätigung bleibt der Brückenweg gesperrt wie bisher. Pi: `status.output` meldet
+  `release: "test_unaccepted"`, `release_block: null`, `acceptance: "fehlt"`, `release_note`; `session.json` hält
+  Bestätigung, Zeitpunkt und Transport fest. Protokoll v2 additiv: `release` in `hello`/`idle`/`record`,
+  ACK-Ergebnis `omitted`; der Pi kündigt einen geänderten Freigabestand per `hello` an, bevor ein Wert kommt.
+  Nur VALID an COM, formatiert wie UART direkt (P4-3-Formatter, Präfix `%`); Ungültiges bleibt Barriere, wird aber
+  `omitted` quittiert (GSVmulti zeigt dann den letzten Wert unmarkiert weiter). Ein Wert verfällt nach
+  `max_frame_age_ms` auf der Pi-Uhr statt verspätet nachzulaufen. Windows-Kern: `test_release` und
+  `WorkerStatus.demo_only = False` nur aus dem Pi-Marker der aktuellen Generation/Run-ID, kein lokaler Schalter.
+  Nebenbei behoben: UART las auf Pi und Windows mit `read(4096)` und wartete so je Nachricht das volle
+  pySerial-Timeout (100 ms); jetzt nur vorhandene Bytes. Nachweis **nur auf Linux** mit Harness
+  (`tests/bridge_release_harness.py`): echter LiveSession-Lauf aus synthetischen Bildern, UART über ein
+  pty-Kabel (nie `/dev/ttyAMA0`), Netzwerk über lokales TLS, Fake-COM. Kein Windows, kein Treiber, kein GSVmulti.
+  Gemessen über je 30 s (Publish → COM-Write, gleiche Prozessuhr): TLS 10 Hz 272/272, 20 Hz 542/542 gültige Werte,
+  p50 8–9 ms, p95 15–19 ms; ungedrosseltes pty 271/271 und 542/544, p50 ≈ 8 ms. **Auf 115 200 Baud gedrosselt**
+  trägt der UART-Weg nur ≈ 3,4–4,4 Werte/s (Record ≈ 1,2 kB JSON ≈ 103 ms Leitungszeit): bei 10 Hz 132 von 274,
+  bei 20 Hz 102 von 549, p50 133–153 ms, p95 ≤ 206 ms. Übersprungene Werte sind überholte, keine veralteten
+  (Latest-only, kein Nachsenden); in allen Läufen 0 ungültige Werte an COM, Bytes exakt.
+* 2026-11-06: Bedienung der Windows-App „GSVmulti-Brücke“ geglättet (BQ6, Usability-Review). Schritt 3: Fortschritt
+  „Verbindung zu <Pi> wird aufgebaut …“ mit Fußknopf „Abbrechen“ (kein Mehrfachstart), Backoff-Countdown aus dem
+  bekannten Plan 1/2/4/8 s (im Controller abgeleitet, nicht vom Backend gemeldet), Fehlerleiste oberhalb der Wegwahl
+  mit Aktion je Code (neuer Code / anderes Profil / erneut versuchen). Schritt 2: „Code übernehmen“ (Enter, „Anzeigen“,
+  Gate-Hinweis), 5-Minuten-Ablauf lokal gezählt, danach wirklich `E2exp`. Spätere Änderungen („Portpaar ändern“,
+  „Anderes Profil öffnen …“, „Einrichtung ändern …“ → Schritt 1, Pi-Flyout „Zu diesem Pi wechseln“). Schritt 4:
+  belegte GSVmulti-Einstellungen (UserDef, 115200 8N1, %, mV/V, 10 Hz), kein Trennzeichen (OQ-53). Betrieb: Info-Leiste
+  „Lauf n läuft … Das ist kein Fehler“, GSVmulti-Feld „erhält im Lauf keine Werte“. Neustart: „Nicht verbunden.“ +
+  „Mit <Pi> verbinden“, Einstellung „Beim Start automatisch verbinden“ (Standard an nach fertiger Einrichtung; nur
+  gleicher Pi/Weg/Endpunkt, nie Demo). 380×560: zweizeiliger Fuß, umbrechende Haken, InfoBar stapelt Knöpfe und hält
+  Mindesthöhe, Statusansicht scrollt. Schritt 1: zwei Auswahllisten statt Radio-Kaskade. „Weiter“ grau mit Grund,
+  Fehlerleiste mit Fokus, Beenden-Dialog „Abbrechen“, „Beenden …“ im Fuß. Wahrheitsregeln unverändert.
+* 2026-11-06: Demo lieferte 599 statt 600 Werte (BQ5). Ursache: `ended` überholte den letzten Wert. Der Pi-Slot ist
+  Latest-only; der Producer setzte 1/rate nach dem letzten Wert `stop()`, und ein dann noch nicht abgefragter letzter
+  Wert wurde nie angeboten (`hub.py` `produce`). Jetzt wartet der Producer nach dem letzten Wert begrenzt
+  (`DEMO_FINAL_GRACE_S` = 2 s, Lease-Ablauf beendet früher) bis er angeboten und beantwortet ist
+  (`OutputState.settled`). Keine Lockerung von Barriere, unklarer Übergabe oder DUT-Sperre. Der „Stillstand nach
+  Demo-Ende“ im TLS-Rig war ein Messartefakt: `QTest.qWait` im Hauptthread hält die GIL und hungert Worker und
+  Server aus; mit `processEvents`+`sleep` läuft der Worker nach `ended` weiter.
+* 2026-11-06: Windows-Brücke ruckelte im Leerlauf (Diagnoseexport: 26 268 `exchange/idle` in 4,8 MB). Ursache:
+  Worker pollte nach `idle` alle 10 ms, jedes Ereignis schrieb synchron (fsync) in den Diagnosespeicher und löste
+  einen kompletten UI-Neuaufbau aus. Jetzt: adaptiver Leerlauftakt 50 → 200 ms (nach `written`/Nicht-Idle sofort
+  nächster Poll, danach 2 s lang 10-ms-Takt, damit der Latest-only-Slot des Pi keine Werte überspringt: 600 Demo-Werte
+  bei 20 Hz ergaben mit reinem Backoff nur 573 COM-Schreibvorgänge, mit Haltezeit 600), `idle`/`ended` nur als Übergang gemeldet, `WorkerStatus.exchanges_total` additiv; Diagnose über
+  Hintergrundschreiber mit begrenzter Warteschlange (Überlauf wird gezählt), `written` als Zählerzeile gebündelt;
+  Journal auf 500 Zeilen mit einer fortlaufenden Zählerzeile „Demo: n Werte weitergegeben“; UI zeichnet höchstens
+  alle 200 ms neu. Gemessen (Fake-Link, 10 ms RTT, 10 s Leerlauf): Polls/s 50,9 → 5,1, Ereignisse/s 51 → 0,
+  UI-Refreshes/s 47,6 → 0, Diagnose 96 kB → 0,3 kB. Audit-/Journalverträge des Kerns unverändert.
+* 2026-11-06: Echter `AppController` der Windows-App „GSVmulti-Brücke“
+  (`windows/bridge/src/dispread_bridge_app/app_controller.py`) erfüllt den `ControllerPort` mit dem Kern
+  (strikter Profilparser, `ConnectionManager`, `BridgeWorker`, `DeliveryJournal`, `CredentialStore`).
+  Client-ID und App-Zustand (Profil ohne Kopplungscode, Weg, Endpunkt, Portpaar, Schritt) versioniert unter
+  `%LOCALAPPDATA%\dispread-bridge\`; Kopplungscode nur im Speicher; Worker startet erst nach
+  authentifizierter Verbindung, Demo nur über ausdrückliche Aktion; kein Portpaar wird erzeugt (Treiberanbieter
+  unverifiziert), stattdessen „Vorhandenes Portpaar angeben“ (Chip „Portpaar manuell“); Sessionexport bleibt
+  gesperrt (manuelle Anleitung); Empfang bleibt „nicht nachgewiesen“; Diagnose-ZIP redigiert. Oberfläche:
+  neue Port-Methoden, Profil per Dialog/Drag&Drop/`.dispread`-Argument, Abbildung der Kern-Readiness
+  (`output_off`, `demo_only`, `blocked`, `ended`, `unavailable`) und aller Maschinencodes, Mock-Beispieldaten
+  aus den Einrichtungsschritten entfernt, `main.py` nutzt standardmäßig den echten Controller (`--demo-ui` bleibt
+  Fake). **Nur unter Linux offscreen und gegen einen lokalen TLS-Pi geprüft (Fake-COM); Windows-APIs (DPAPI,
+  pySerial-COM, Geräte, Instanzschutz), Treiber und GSVmulti ungeprüft; unsigniert.**
+* 2026-11-06: Interner Testbuild-Weg der Windows-App „GSVmulti-Brücke“: `windows/bridge/build-test.ps1`
+  (ein Befehl, explizites Python ≥ 3.13 x64, frische venv, `PIP_CONFIG_FILE=NUL`, nur Binärpakete),
+  `packaging/bridge-app.spec` (GUI-Ordnerpaket, `console=False`), `packaging/app_launcher.py`
+  (`freeze_support()`, `--self-test-out` vor jedem GUI-Import), `dispread_bridge_app/selftest.py`,
+  optional Benutzer-Setup `packaging/setup-app.iss` (ohne Admin, `.dispread` pro Benutzer, keine
+  Löschung von Benutzerdaten), `build_info.py` wird beim Bau erzeugt (gitignored). Dazu
+  `windows/bridge/TESTLAUF.md` (erster Test Pi ↔ Windows ↔ GSVmulti, mit Grenzen und Checkliste) und
+  README-Abschnitt. **Nicht auf Windows gebaut oder ausgeführt (auf dem Pi unmöglich), nur statische
+  Tests und der Selbsttest unter Linux; unsigniert, unqualifiziert; `build.ps1`/`bridge.spec` unverändert.**
+* 2026-11-06: Qt-Oberfläche der Windows-App „GSVmulti-Brücke“ (`windows/bridge/src/dispread_bridge_app/ui/`:
+  `port.py`, `theme.py`, `texts.py`, `status_view.py`, `setup_view.py`, `window.py`, `fake.py`) und
+  `main.py` (Einzelinstanz, Tray, `--demo-ui` mit FakeController). Die Oberfläche hängt nur am
+  `ControllerPort`; der echte AppController fehlt noch. Wahrheitsregeln in `texts.py` mit Tests
+  (`tests/test_ui_*.py`, 34 Tests). **Nur offscreen unter Linux geprüft: keine Windows-Abnahme, keine EXE,
+  keine echten Zustände; die DUT-Ausgabe bleibt gesperrt.** `UiContext` erfindet keine realen Werte mehr
+  (Ports, Version, Protokoll leer = „–“); Übergabe an Codex: `docs/superpowers/handoffs/2026-11-06-windows-bruecke-ui-an-codex.md`.
+* 2026-11-06: Gestaltungsmock der Windows-App „GSVmulti-Brücke“ ergänzt
+  (`docs/superpowers/specs/2026-11-06-windows-bruecke-mock/`, mit Qt-Umsetzungsnotiz
+  und Texttabelle) sowie `windows/bridge/PRODUCT.md` und `windows/bridge/DESIGN.md`
+  (aus dem Mock abgeleitet: Fluent-Tokens, Wahrheitsregeln der Prüfpunkt-Chips). Reine Doku, synthetische
+  Daten; keine Funktion, nichts als geprüft oder ausgeliefert zu verstehen.
+
+* 2026-11-06: Werkbank /live: Dialog „Windows-Brücke einrichten“ (nur
+  Oberfläche, keine Hardware). Fünf Schritte mit Zustand: Windows-App-Hinweis
+  (Installer noch nicht veröffentlicht), Profil-Download `pi.dispread` mit
+  Fingerabdruck in Vierergruppen, Kopplungscode mit 5-Minuten-Countdown (nach
+  Ablauf und beim Schließen aus dem DOM entfernt), UART-Empfang vorbereiten/
+  beenden, Bereitschaft (Status alle 2 s nur bei offenem Dialog; ein
+  verbundener Client heißt nur Verbindung, die Ausgabesperre bleibt sichtbar).
+  Erreichbar aus dem Start-Popover und lesend aus dem Ausgabe-Dock im Lauf;
+  der TCP-Port liegt nun unter „Erweitert: Demo-/Entwicklungsweg“. Serverfehler
+  (409, 503) erscheinen wörtlich. Fake-Routen im UI-Testserver, 7 Node- und
+  6 Playwright-Tests neu; bestehende Live-Suite grün.
+
+* 2026-11-06: Gemeinsamen Wiederanlauf von Verbindungsmanager und Worker
+  fertiggestellt. Gewöhnlicher Kanalverlust überlässt den Backoff dem Manager;
+  der Worker wartet auf eine neu geprüfte Verbindung, ohne alte Werte oder
+  Demos zu wiederholen. Nach Laufende bleibt die Verbindung für die nächste
+  ausdrückliche Demo bereit. Stop, Auditfehler und unklare COM-Übergaben bleiben dauerhaft
+  gesperrt. Authentisierte Pi-Ausgabe aus, Demo, Laufende und DUT-Sperrgrund
+  werden im Windows-Status getrennt weitergegeben; Diagnose erhält die festen
+  Wiederanlaufcodes. 430 abschließende Backend-Prüfungen bestanden, vier native
+  Windows-Prüfungen hier übersprungen. GUI und reale Windows-/GSVmulti-
+  Abnahme bleiben getrennte nächste Schritte.
+
+* 2026-11-06: Windows-Verbindungskern für gepinntes WSS und signierten UART
+  ergänzt, mit geschütztem DPAPI-Speicher und zentraler Bereitschaft. Tokens
+  sind zusätzlich an den Zertifikatsfingerprint gebunden; ein neues Zertifikat
+  kann keine alten Zugangsdaten erhalten. Leasekonflikte verwenden abbrechbaren
+  Backoff, Ersatzverbindungen löschen alte Bereitschaft atomar. 59 fokussierte
+  Tests bestanden, zwei native Windows-Prüfungen hier übersprungen; zwei
+  Reviewrunden bestätigt. GUI, gemeinsame Wiederanlaufintegration und echte
+  Windows-Qualifikation folgen getrennt.
+
+* 2026-11-06: Windows-Worker mit dauerhaftem SQLite-Übergabejournal und
+  atomarer Schreibzulassung ergänzt. Generationswechsel, Stop und Restbudget
+  werden nach Portkonfiguration geprüft; unklare Zahlen werden nicht erneut
+  gesendet, unbekannte Invalidierung sperrt weitere Ausgabe. Diagnosen sind
+  separat begrenzt und auch bei alten Daten rekursiv redigiert; SID-basierter
+  Instanzschutz bleibt GUI-unabhängig. 93 fokussierte Tests bestanden, ein
+  echter Windows-Prozesstest hier übersprungen; Reviewkorrekturen bestätigt.
+  Konkreter Verbindungsmanager und echte Windows-Nachweise folgen separat.
+
+* 2026-11-06: Gekoppelten Pi-Hub mit exklusiven Leases, nicht konsumierendem
+  Heartbeat, signiertem UART-Handshake und ausdrücklicher lokaler Vorbereitung
+  angeschlossen. Jeder echte Lauf reserviert vor dem Start eine frische ID,
+  auch bei Ausgabe Aus/direkt; Demos können ihn nicht überholen. Direkte
+  Ausgabe und Listener teilen die Portbelegung, Referenzport-Aliase werden
+  abgelehnt. Produkt und eigenständige Sitzung fallen ohne Hub nicht auf
+  rohe v1-Sockets zurück. 97 abschließend betroffene Tests und 158 Node-Tests
+  bestanden; zwei Reviewrunden einschließlich sporadischer Store-Race
+  korrigiert. Physische Windows-/UART-Abnahme und GUI bleiben separat offen.
+
+* 2026-11-06: Pi-Profil, Operator-Kopplung und TLS-/Token-geschützten WSS-
+  Zugang vorbereitet. Widerruf gilt bereits vor Hello; Zugangsspeicher und
+  Verbindungsende haben feste Fristen und geben Leases auch bei Fehlern frei.
+  Discovery bleibt unbestätigt und zeitlich begrenzt, konfigurierte Endpunkte
+  bleiben unabhängig davon verfügbar. Host/PAM und Identitäts-TLS sind
+  ausdrücklich konfigurierbar. 163 relevante Tests bestanden, zwei bestehende
+  Fixture-Skips; Nachprüfung sauber. Echten Hub und UART-Ausgabenaht folgen
+  separat; ohne Hub verweigert WSS den Betrieb. Keine Dienstumstellung.
+
+* 2026-11-06: Fortsetzbaren Windows-Installer-/Updatekern ergänzt: aktuelle
+  Portprüfung, Auswahl nach Abbruch, Besitzschutz, auditierte Aktionen,
+  signierte Manifeste und Hashprüfung vor Versionswechsel. Aktive Ausgabe
+  blockiert Updates; Fehler erhalten die Vorversion. 47 fokussierte Tests
+  bestanden, Reviewkorrektur bestätigt. Native UAC-/Deploymentanbieter und
+  Produkt-Release fehlen; Inno-Rezept paketiert nur die interne Runtime-Probe.
+  Release-Vertrauens-/Versionspolitik ist als OQ-65 erfasst.
+
+* 2026-11-06: Hardwaregebundene Pi-Identität, öffentliche Zertifikats-/UART-
+  Signaturprüfung und widerrufbare Kopplung ergänzt. Einmalangebote mit
+  256 Bit verfallen nach höchstens 300 Sekunden auch bei Datenbanksperren;
+  dauerhafte Tokens bleiben gehasht und nach Client/Transport getrennt.
+  Lokale CLI provisioniert nur ausdrücklich und exportiert keine privaten
+  Schlüssel. 26 gezielte Tests bestanden; Server-/HTTP-Anbindung folgt.
+
+* 2026-11-06: Zwei historische GSVmulti-UCFs und eine originale Empfangsdatei
+  samt Archivpfaden und Hashes als Vorlagenbelege gesichert. Inspektion und
+  Manifestprüfung erkennen nur diese Originale; unbekannte Version und
+  fehlender Feld-/Wiederöffnungsnachweis sperren automatischen Sessionexport.
+  17 Tests bestanden. Dies ist kein neuer GSVmulti-Roundtrip oder Formatbeleg.
+
+* 2026-11-06: Isolierten Windows-Build mit eigener Laufzeit, Qt-Probe und
+  geprüftem Importumfang vorbereitet. Paketfreigabe bindet Lockdateien,
+  Freigabedatensatz und kopierte Belege an dieselben geprüften Hashes;
+  Fehler erhalten frühere Pakete. 79 lokale Tests bestanden, ein echter
+  Windows-Artefakttest ist hier übersprungen. Ohne qualifizierte Windows-
+  Locks und VM-Nachweise wird kein freigegebenes Paket erzeugt.
+
+* 2026-11-06: Windows-Brücke erkennt USB-UART-Geräte über PnP/COM-Inventar
+  und verlangt bei fehlender Seriennummer eine ausdrückliche Auswahl.
+  Portpaarverwaltung prüft Besitz, Gerätefehler und begrenzte bidirektionale
+  Übertragung statt nur Installer-Exitcodes; Neustart-/UAC-Ergebnisse bleiben
+  bei Folgefehlern erhalten. Der echte signierte Treiberadapter bleibt bis
+  zum Windows-Nachweis gesperrt. 48 gezielte Adaptertests bestanden.
+
+* 2026-11-06: Technische Grundlage für die Windows-Brücke v2: strenge,
+  größenbegrenzte Profil-/Nachrichtencodierung und eindeutige UART-
+  Signaturbytes ergänzt. Begrenzten Ausgabezustand aus dem bisherigen
+  Transport gelöst; v1 verwendet denselben Kern weiter. Ungültigkeitsbarriere,
+  unklare Übergaben und DUT-Sperre bleiben erhalten. Kopplung/GUI und echte
+  Windows-Nachweise sind damit noch nicht implementiert oder abgenommen.
+
 
 * 2026-11-06: Werkbank `/live`, Schlussreview UI (W4): Ein abgelehnter Datensatz, den
   der Server beim Altern auf `stale` umschreibt, erscheint nicht mehr als

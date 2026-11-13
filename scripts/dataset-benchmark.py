@@ -70,12 +70,11 @@ from dispread.benchmark import (
     segment_report,
     target_layout,
 )
+from dispread.detect.vision import fit_ocr_box
 from dispread.layout import DisplayLayout
-from dispread.ocr.autofit import parse_expected
+from dispread.ocr.autofit import CROP_SIZE, parse_expected
 from dispread.ocr.sevenseg import SevenSegmentReader
 from dispread.rectify import rectify
-from dispread.workbench.controller import CROP_SIZE
-from dispread.workbench.vision import fit_ocr_box
 
 GEOMETRIES = {"axis_aligned": False, "deskewed": True}
 

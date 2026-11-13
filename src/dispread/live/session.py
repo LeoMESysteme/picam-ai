@@ -21,13 +21,16 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from statistics import median
 from typing import Any
 
 import cv2
 
-from dispread.gsv_transport import OutputConfig, OutputPublisher
+from dispread.bridge.protocol import TEST_RELEASE
+from dispread.bridge.publisher import PairedOutputPublisher
+from dispread.gsv_transport import OutputConfig
 from dispread.layout import CharLayout
 from dispread.live import (
     DEFAULT_CALIBRATION,
@@ -40,12 +43,18 @@ from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
 from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.output import (
+    BRIDGE_4CH_RELEASE_NOTE,
+    BRIDGE_RELEASE_NOTE,
+    SERIAL_4CH_RELEASE_NOTE,
     SERIAL_RELEASE_NOTE,
     LiveOutput,
+    bridge_config,
+    bridge_tick_options,
     normalize_output,
     require_output_acknowledgement,
 )
 from dispread.live.recent import RecentStrip
+from dispread.live.region_hint import RegionConsistency
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
 from dispread.ocr.dotmatrix import DotMatrixReader
@@ -53,6 +62,7 @@ from dispread.pipeline import Pipeline, PipelineConfig
 from dispread.records import ValueRecord, ValueStatus, to_boottime_ns
 from dispread.session_profile import SessionProfile, require_live_profile
 from dispread.sink.jsonl import JsonlSink
+from dispread.sink.protocol.userdefined_4ch import checked_value_text
 from dispread.timing_calibration import load_calibration
 from dispread.validate import ReleaseGate, default_gate_config
 
@@ -86,9 +96,19 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+#: Felder, die nur die Auswahl bei der Einrichtung steuern, nie den Lauf.
+_SETUP_ONLY_TRACKING_FIELDS = frozenset({
+    "proposal_stability_peak_margin",
+    # TB 2026-11-11: strengere Auswahl; aeltere Profile bleiben startbar.
+    "proposal_min_peak_curvature", "proposal_max_photometric_shift_px",
+    # OQ-70: Rahmenkontur gekerbter Komponenten, nur Bandermittlung im Vorschlag.
+    "bezel_notch_quantile",
+})
+
+
 def _run_start_tracking_config(config: dict) -> dict:
-    # Diese Marge bewertet nur Einrichtungsbilder, nicht bestaetigte Bereiche im Lauf.
-    return {key: value for key, value in config.items() if key != "proposal_stability_peak_margin"}
+    # Diese Grenzen bewerten nur Einrichtungsbilder, nicht bestaetigte Bereiche im Lauf.
+    return {key: value for key, value in config.items() if key not in _SETUP_ONLY_TRACKING_FIELDS}
 
 
 def build_live_pipeline(
@@ -181,6 +201,89 @@ def build_live_pipeline(
     return pipeline, profile, calibration, tracking
 
 
+class ProbeProcess:
+    """Schutzprobe in einem eigenen Interpreter (kein GIL, nice 19); poll() blockiert nie.
+
+    Ein Hilfsthread uebergibt den Auftrag per stdin und wartet nur auf E/A; der
+    Leserthread fragt mit poll() ab. cancel() beendet den Prozess (Laufende).
+    """
+
+    def __init__(self, payload, base, index, *, command=None):
+        import pickle
+        import subprocess
+        import sys
+
+        self.base, self.index = frozenset(base), index
+        self._outcome = None
+        self._cancelled = False
+        import os
+        from pathlib import Path
+
+        import dispread
+        # Das Kind laedt genau den Code dieses Prozesses (nicht eine andere
+        # installierte dispread-Kopie, z. B. die editierbare Installation der .venv).
+        root = str(Path(dispread.__file__).resolve().parents[1])
+        env = dict(os.environ)
+        env['PYTHONPATH'] = os.pathsep.join(p for p in (root, env.get('PYTHONPATH', '')) if p)
+        self._process = subprocess.Popen(command or [sys.executable, '-m', 'dispread.live.region_probe'],
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         stderr=subprocess.DEVNULL, env=env)
+        job = pickle.dumps((payload, sorted(self.base), sorted(self.base | {index})))
+
+        def talk():
+            try:
+                out, _ = self._process.communicate(job)
+                self._outcome = (pickle.loads(out) if out else
+                                 ('error', f'Probenprozess ohne Ergebnis beendet (Code {self._process.returncode})'))
+            except Exception as exc:  # noqa: BLE001 - ohne Probe keine Stilllegung
+                self._outcome = ('error', f'{type(exc).__name__}: {exc}')
+
+        self._thread = threading.Thread(target=talk, name='rahmen-schutzprobe', daemon=True)
+        self._thread.start()
+
+    @property
+    def pid(self) -> int:
+        return self._process.pid
+
+    def poll(self):
+        """None solange die Probe laeuft, sonst ('ok', Ergebnis) oder ('error', Text)."""
+        if self._thread.is_alive():
+            return None
+        if self._cancelled:
+            return ('error', 'abgebrochen')
+        return self._outcome
+
+    def cancel(self) -> None:
+        self._cancelled = True
+        if self._process.poll() is None:
+            self._process.kill()
+        self._thread.join(2)
+
+
+class _ProbeThread:
+    """Nur fuer Attrappen ohne probe_payload (Tests): dieselbe Schnittstelle im Thread."""
+
+    def __init__(self, tracker, base, index):
+        self.base, self.index = frozenset(base), index
+        self._outcome = None
+        self._stop = threading.Event()
+
+        def work():
+            try:
+                self._outcome = ('ok', tracker.bias_probe(self.base, self.base | {index}))
+            except Exception as exc:  # noqa: BLE001 - ohne Probe keine Stilllegung
+                self._outcome = ('error', f'{type(exc).__name__}: {exc}')
+
+        self.thread = threading.Thread(target=work, name='rahmen-schutzprobe', daemon=True)
+        self.thread.start()
+
+    def poll(self):
+        return None if self.thread.is_alive() else self._outcome
+
+    def cancel(self) -> None:
+        self._stop.set()
+
+
 class LiveSession:
     def __init__(
         self,
@@ -190,7 +293,7 @@ class LiveSession:
         out_dir: Path,
         *,
         test_run: dict | None = None,
-        output_factory: Callable[..., Any] = OutputPublisher,
+        output_factory: Callable[..., Any] = partial(PairedOutputPublisher, hub=None),
         reference_recorder: Any = None,
         output: dict | OutputConfig | None = None,
         diagnostics: bool = False,
@@ -231,12 +334,19 @@ class LiveSession:
         except ValueError as exc:
             raise StartRefused(str(exc)) from exc
         self._output = None
+        self._bridge_acknowledged = False
         if self._output_transport == 'serial':
             options = {key: value for key, value in self._output_config.items()
                        if key not in ('transport', 'acknowledge_unaccepted')}
             self._output = LiveOutput(options, self._out_dir / 'tx.jsonl')
         elif self._output_transport != 'off':
-            self._output = output_factory(OutputConfig.from_dict(self._output_config), self._out_dir)
+            # Testfreigabe nur aus der Laufbestaetigung des Pi-Bedieners (R1).
+            self._bridge_acknowledged = self._output_config['acknowledge_unaccepted'] is True
+            self._output = output_factory(bridge_config(self._output_config), self._out_dir,
+                                          **({'release': TEST_RELEASE} if self._bridge_acknowledged else {}),
+                                          **bridge_tick_options(self._output_config))
+            if self._bridge_acknowledged and getattr(self._output, 'release', None) != TEST_RELEASE:
+                raise StartRefused('Ausgabe: Testfreigabe vom Brückenweg nicht übernommen')
         self._output_error_saved = False
         self._diagnostics = DiagnosticRecorder(self._out_dir, enabled=diagnostics,
                                                staging_root=diagnostic_staging_root, monotonic=monotonic)
@@ -247,6 +357,8 @@ class LiveSession:
         self._clock = clock or ClockLog()
         self._monotonic = monotonic
         self._wall = wall or (lambda: datetime.now(UTC))
+        self._bridge_acknowledged_at_utc = (self._wall().isoformat()
+                                            if self._bridge_acknowledged else None)
         self.session_path = self._out_dir / "session.json"
         self.records_path = self._out_dir / "records.jsonl"
         self.latest: ValueRecord | None = None
@@ -269,6 +381,16 @@ class LiveSession:
         self._rejection_window = RejectionWindow()
         self._tracking_advice: TrackingAdvice | None = None
         self._tracking_advice_warned = False
+        # TC 2026-11-11: Bereichshinweis, reine Diagnose ohne Rueckweg in den Messpfad.
+        self._region_consistency: RegionConsistency | None = None
+        self._region_consistency_warned = False
+        # TB 2026-11-11: laufende Schutzprobe und Ergebnisse je (Satz, Bereich).
+        self._region_probe = None
+        self._region_probe_cache: dict = {}
+        self._region_event_attempted: set = set()
+        self._frame_disabled: frozenset = frozenset()
+        self._region_disable_errors = 0
+        self._region_disable_warned = False
         self._frames_read = 0
         self._frames_skipped = 0
         self._frame_gaps_start = 0
@@ -276,6 +398,9 @@ class LiveSession:
         self._tracking_lost = 0
         self._tracking_coarse_retries = 0
         self._tracking_coarse_accepted = 0
+        self._tracking_scales: deque[float] = deque(maxlen=10_000)
+        self._tracking_scale_total = 0
+        self._tracking_observations = 0
         self._tracking_lost_reasons: Counter[str] = Counter()
         self._track_scores: deque[float] = deque(maxlen=10_000)
         self._track_score_n = 0
@@ -347,11 +472,18 @@ class LiveSession:
         if self._output is not None:
             try:
                 if self._output_transport == 'serial':
-                    self._output.start(reference_port=getattr(self._reference_recorder, 'port', None))
+                    self._output.start(reference_port=getattr(self._reference_recorder, 'port', None),
+                                       **({'clock_log': self._clock}
+                                          if self._output_config.get('format') == '4ch' else {}))
                 else:
-                    self._output.start()
+                    self._output.start(**({'clock_log': self._clock}
+                                          if self._output_config.get('format') == '4ch' else {}))
             except Exception as exc:
                 self.stop(reason='start_failed')
+                if 'serial port occupied' in str(exc):
+                    raise StartRefused('Ausgabe nicht gestartet: Der serielle Port ist belegt. Anderes Programm '
+                                       'bzw. den UART-Empfang der Brücke beenden (Brücke einrichten → '
+                                       'UART-Empfang beenden).') from exc
                 raise StartRefused(f'Ausgabe nicht gestartet: {exc}') from exc
         if self._reference_recorder is not None:
             try:
@@ -394,6 +526,12 @@ class LiveSession:
             self._seen = sequence
             self._frames_skipped += skipped
             record = self._pipeline.process(frame, dropped_frames=skipped)
+            if self._output_config.get('format') == '4ch' and record.status is ValueStatus.VALID:
+                try:
+                    checked_value_text(record.raw_text)
+                except ValueError:
+                    record = replace(record, status=ValueStatus.UNREADABLE, value=None,
+                                     reject_reasons=('reserved_output_value',))
             # Testlauf sperrt die Freigabe vor Audit und jeder weiteren Ausgabe.
             gate_record = record
             suppressed = self._test_run is not None and record.status is ValueStatus.VALID
@@ -422,9 +560,13 @@ class LiveSession:
                 self._tracking_lost_reasons[record.reject_reasons[0].split(":", 1)[1]] += 1
             track = getattr(self._pipeline.locator, "last_track", None)
             coarse = getattr(getattr(self._pipeline.locator, "_tracker", None), "last_coarse", None)
+            self._tracking_observations += 1
             if coarse is not None and coarse.used:
                 self._tracking_coarse_retries += 1
                 self._tracking_coarse_accepted += int(track is not None and track.quad is not None)
+                if coarse.scale is not None:
+                    self._tracking_scales.append(float(coarse.scale))
+                    self._tracking_scale_total += 1
             if track is not None:
                 score = float(track.score)
                 self._track_scores.append(score)
@@ -487,7 +629,9 @@ class LiveSession:
                         _LOG.warning('Bewegungsdiagnose ausgefallen: %s', exc)
                         self._tracking_advice_warned = True
                     self._tracking_advice.failed(self.latest_monotonic)
-            self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'])
+            regions = self._observe_regions(record.frame_sequence)
+            self._diagnostics.observe(frame, record, track, owner_sequence=sequence, mode=self.tracking['mode'],
+                                      regions=regions)
             if self._monotonic() - self._last_clock >= self._config.clock_interval_s:
                 self._clock.sample()
                 self._last_clock = self._monotonic()
@@ -508,10 +652,141 @@ class LiveSession:
                     self._frame_info_warned = True
             return record
 
+    def _observe_regions(self, frame_sequence=None) -> list | None:
+        """Residuen je Rahmenbereich ins Hinweisfenster; erst nach geschriebenem Record.
+
+        Der Hinweis ist reine Bedienhilfe. Die Stilllegung (TB 2026-11-11) wirkt
+        erst ab dem naechsten Bild und nur ueber FrameTracker.disable_region mit
+        dessen harten Grenzen. Jeder Fehler hier laesst alle Bereiche aktiv
+        (strengster Zustand) und bricht den Lauf nicht ab.
+        """
+        try:
+            tracker = getattr(self._pipeline.locator, '_tracker', None)
+            regions = getattr(tracker, 'last_regions', None)
+            if not regions:
+                return None
+            if self._region_consistency is None:
+                self._region_consistency = RegionConsistency(
+                    tracker.sources, limit_px=tracker.config.max_inlier_residual_px)
+            self._region_consistency.observe([region.get('res1') for region in regions],
+                                             [region.get('v1') for region in regions])
+            # Satz, mit dem DIESES Bild bewertet wurde; eine Stilllegung wirkt erst ab dem naechsten.
+            disabled = frozenset(getattr(tracker, 'disabled', None) or ())
+            self._frame_disabled = disabled
+            try:
+                self._maybe_disable_region(tracker, frame_sequence)
+            except Exception as exc:  # noqa: BLE001 - ohne Stilllegung weitermessen
+                self._region_disable_errors += 1
+                if not self._region_disable_warned:
+                    _LOG.warning('Stilllegung ausgefallen, alle Bereiche bleiben aktiv: %s', exc)
+                    self._region_disable_warned = True
+            if disabled:
+                # images.jsonl: stillgelegte Bereiche additiv kennzeichnen.
+                regions = [{**region, 'off': True} if index in disabled else region
+                           for index, region in enumerate(regions)]
+            return regions
+        except Exception as exc:  # noqa: BLE001 - Bedienhilfe darf keinen Lauf abbrechen
+            if not self._region_consistency_warned:
+                _LOG.warning('Bereichsdiagnose ausgefallen: %s', exc)
+                self._region_consistency_warned = True
+            return None
+
+    def _maybe_disable_region(self, tracker, frame_sequence) -> None:
+        """Vorschlag des Fensters pruefen; Schutzprobe im Hintergrund; erst auditieren, dann stilllegen.
+
+        Ablauf (TB 2026-11-11): Das Fenster schlaegt hoechstens einen Bereich vor.
+        disable_refusal prueft Hoechstzahl und Reserve. Danach laeuft die
+        Schutzprobe (FrameTracker.bias_probe, etwa eine Minute CPU) in einem
+        eigenen Prozess mit nice 19, ohne den Messprozess zu bremsen. Erst wenn
+        sie bestanden ist UND das Fenster denselben Bereich weiter vorschlaegt,
+        wird das Ereignis geschrieben und der Bereich stillgelegt. Jede
+        Unsicherheit laesst alle Bereiche aktiv; ein Ereignis wird je Satz und
+        Bereich hoechstens einmal versucht.
+        """
+        window = self._region_consistency
+        if not callable(getattr(tracker, 'disable_region', None)):
+            return
+        pending = self._region_probe
+        if pending is not None:
+            outcome = pending.poll()
+            if outcome is None:
+                return
+            self._region_probe = None
+            kind, value = outcome
+            self._region_probe_cache[(pending.base, pending.index)] = value if kind == 'ok' else None
+            if kind != 'ok':
+                window.note_refused(pending.index, 'schutzprobe_fehler', frame_sequence, detail=value)
+                return
+        candidate = window.deactivation_candidate()
+        if candidate is None:
+            return
+        index = candidate['index']
+        refusal = tracker.disable_refusal(index)
+        if refusal is not None:
+            window.note_refused(index, refusal, frame_sequence)
+            return
+        base = frozenset(tracker.disabled)
+        key = (base, index)
+        if key not in self._region_probe_cache:
+            self._region_probe = self._probe_runner(tracker, base, index)
+            return
+        probe = self._region_probe_cache[key]
+        if probe is None:
+            return  # Probe ist gescheitert; Grund steht schon in deactivation_refused
+        if not probe.get('ok'):
+            window.note_refused(index, 'schutzprobe_verletzt', frame_sequence, detail=probe)
+            return
+        if key in self._region_event_attempted:
+            return  # Audit fuer genau diese Stilllegung schon einmal gescheitert: nie doppelt
+        self._region_event_attempted.add(key)
+        event = {'event': 'rahmenbereich_stillgelegt', 'frame_sequence': frame_sequence,
+                 'utc': self._wall().isoformat(), **candidate,
+                 'disabled_count': len(base) + 1, 'disabled_limit': tracker.disable_limit(), 'probe': probe}
+        path = self._out_dir / 'tracking_events.jsonl'
+        created = not path.exists()
+        # Eine Zeile in einem Schreibaufruf; ohne geschriebenes Ereignis keine Stilllegung.
+        line = (json.dumps(event, ensure_ascii=False) + '\n').encode('utf-8')
+        descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            if os.write(descriptor, line) != len(line):
+                raise OSError('Ereignis unvollstaendig geschrieben')
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        if created:
+            directory = os.open(self._out_dir, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        if not tracker.disable_region(index, probe):
+            raise RuntimeError(f'Stilllegung von Bereich {index + 1} unerwartet verweigert')
+        window.note_deactivated(event)
+        _LOG.info('Rahmenbereich %d automatisch stillgelegt (%.0f %% unstimmig, Bild %s)',
+                  index + 1, 100 * candidate['share'], frame_sequence)
+
+    def _probe_runner(self, tracker, base, index):
+        """Schutzprobe starten: echter Tracker im eigenen Prozess, sonst (Testattrappen) im Thread."""
+        if callable(getattr(tracker, 'probe_payload', None)):
+            return ProbeProcess(tracker.probe_payload(), base, index)
+        return _ProbeThread(tracker, base, index)
+
+    def _cancel_region_probe(self) -> None:
+        pending, self._region_probe = self._region_probe, None
+        if pending is not None:
+            pending.cancel()
+
+    def region_deactivations(self) -> list[dict]:
+        """Stilllegungen dieses Laufs fuer Status und Werkbank; leer ohne Rahmenbereiche."""
+        window = self._region_consistency
+        return [] if window is None else window.deactivated()
+
     def _build_frame_info(self, sequence, record, track, coarse) -> dict:
         pipeline = self._pipeline
         tracker = getattr(pipeline.locator, '_tracker', None)
         regions = getattr(tracker, 'last_regions', None) or []
+        # Satz, mit dem dieses Bild bewertet wurde (Review G3), nicht der danach gesetzte.
+        disabled = self._frame_disabled
         read = pipeline.last_read
         diagnostics = read.diagnostics if read is not None and read.backend_id == 'dotmatrix' else {}
         cells = diagnostics.get('cells')
@@ -536,9 +811,11 @@ class LiveSession:
                 'rotation_deg': None if track is None else float(track.rotation_deg),
                 'reason': None if track is None else track.reason,
                 'correcting': bool(coarse is not None and coarse.used),
+                # TB: 'off' nur an stillgelegten Bereichen (additiv, wenige Bytes im X-Hud).
                 'regions': [{'c': list(region['c']), 's': region['s'],
-                             'peak': float(region['peak']), 'ok': bool(region['ok'])}
-                            for region in regions],
+                             'peak': float(region['peak']), 'ok': bool(region['ok']),
+                             **({'off': True} if index in disabled else {})}
+                            for index, region in enumerate(regions)],
             },
             'cells': [{'i': i, 'best': cell['best'], 'margin': cell['margin'],
                        'uncertain': cell['margin'] < 0} for i, cell in enumerate(cells)],
@@ -567,6 +844,11 @@ class LiveSession:
     def tracking_hint(self) -> dict | None:
         """Bedienhilfe mit monotoner Verlustdauer; kein Freigabeentscheid."""
         return None if self._tracking_advice is None else self._tracking_advice.snapshot(self._monotonic())
+
+    def region_hint(self) -> dict | None:
+        """Bereich(e) dauerhaft unstimmig, letzte Auswertung; auch nach dem Stopp. Kein Freigabeentscheid."""
+        window = self._region_consistency
+        return None if window is None else window.snapshot()
 
     def latest_age_s(self) -> float | None:
         """Alter der letzten Ablesung fuer die STALE-Anzeige, ohne neuen Datensatz."""
@@ -672,6 +954,7 @@ class LiveSession:
                     finally:
                         if self._tracking_advice is not None:
                             self._tracking_advice.close()
+                        self._cancel_region_probe()
                         self._stopped = True
                         self._diagnostics.stop(on_done=self._diagnostics_done)
                         if not self._diagnostics.copying and self.diagnostics_status()['write_errors']:
@@ -706,7 +989,9 @@ class LiveSession:
         status = self._output.status()
         if self._output_transport == 'serial':
             return status
-        return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt'}
+        note = BRIDGE_4CH_RELEASE_NOTE if self._output_config.get('format') == '4ch' else BRIDGE_RELEASE_NOTE
+        return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt',
+                **({'release_note': note} if self._bridge_acknowledged else {})}
 
     def unified_output_status(self) -> dict:
         """serial_ready: lokaler P4-3-Treiber bereit, kein GSVmulti-Empfang.
@@ -723,11 +1008,12 @@ class LiveSession:
         return {
             'transport': 'serial',
             **self._output.delivery_status(),
+            **({'tick': status['tick']} if 'tick' in status else {}),
             'config': dict(self._output_config),
             'error': status['first_error'],
             'release_block': None,
             'acceptance': 'fehlt',
-            'release_note': SERIAL_RELEASE_NOTE,
+            'release_note': SERIAL_4CH_RELEASE_NOTE if 'tick' in status else SERIAL_RELEASE_NOTE,
         }
 
     def _write_session(self, *, ended: bool) -> None:
@@ -748,6 +1034,16 @@ class LiveSession:
             "tracking_lost": self._tracking_lost,
             "tracking_coarse_retries": self._tracking_coarse_retries,
             "tracking_coarse_accepted": self._tracking_coarse_accepted,
+            "tracking_geometry": {
+                "observations": self._tracking_observations,
+                "retry_fraction": (self._tracking_coarse_retries / self._tracking_observations
+                                   if self._tracking_observations else None),
+                "scale": {"n": len(self._tracking_scales), "total": self._tracking_scale_total,
+                          "window_limit": self._tracking_scales.maxlen,
+                          "min": min(self._tracking_scales, default=None),
+                          "median": median(self._tracking_scales) if self._tracking_scales else None,
+                          "max": max(self._tracking_scales, default=None)},
+            },
             "tracking_lost_reasons": dict(self._tracking_lost_reasons),
             "tracking_hints": (self._tracking_advice.summary() if self._tracking_advice is not None else
                                empty_summary()),
@@ -762,15 +1058,29 @@ class LiveSession:
             "end_reason": self.end_reason if ended else None,
         }
         data = dict(self._meta)
+        if hasattr(self, "bridge_run_id"):
+            data["run_id"] = self.bridge_run_id
+        if getattr(self, "focus_check", None) is not None:
+            # OQ-74: Fokuspruefung nach dem Kameraneustart am Laufstart (Audit).
+            data["focus_check"] = self.focus_check
         if self._output_transport == 'serial':
             data['output'] = {**self.output_status(), 'acceptance': 'fehlt', 'acknowledged_unaccepted': True}
         elif self._output is not None:
-            data['output'] = {**self._output.metadata(), 'status': self.unified_output_status()}
+            data['output'] = {**self._output.metadata(), 'status': self.unified_output_status(),
+                              'acceptance': 'fehlt',
+                              'acknowledged_unaccepted': self._bridge_acknowledged,
+                              'acknowledged_at_utc': self._bridge_acknowledged_at_utc,
+                              'acknowledged_by': (getattr(self, 'bridge_acknowledged_by', None)
+                                                  if self._bridge_acknowledged else None)}
         data["reference"] = self.reference_status()
         data['diagnostics'] = self.diagnostics_status()
         data['last_mark'] = self.last_mark
         data["clock_offset_boottime_minus_monotonic_ns"] = self._clock.to_session(ended=ended)
         data["summary"] = self.summary
+        if self._region_consistency is not None:
+            # Nur mit Rahmenbereich-Nachfuehrung; andere Modi behalten ihre bisherigen Bytes.
+            self.summary['tracking_region_hint'] = {**self._region_consistency.summary(),
+                                                    'deactivation_errors': self._region_disable_errors}
         if getattr(self._reference_recorder, 'reconfiguration_enabled', False):
             self.summary['reconfiguration_suppressed'] = self._reconfiguration_suppressed
         if self._test_run is not None:

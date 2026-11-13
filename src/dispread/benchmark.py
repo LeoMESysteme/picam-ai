@@ -32,14 +32,13 @@ from typing import Any
 
 import cv2
 
+from dispread.detect.vision import fit_ocr_box, fit_quad_in_region
 from dispread.frames import open_source, path_uri
 from dispread.layout import DIGIT_SEGMENTS, SEGMENT_NAMES, SEGMENT_SAMPLE_POINTS, DisplayLayout
 from dispread.ocr import ReadResult, ValueReader
-from dispread.ocr.autofit import AutofitResult, fit_layout, parse_expected
+from dispread.ocr.autofit import CROP_SIZE, AutofitResult, crop_box, fit_layout, parse_expected
 from dispread.ocr.sevenseg import SevenSegmentReader
 from dispread.rectify import rectify
-from dispread.workbench.controller import CROP_SIZE, crop_box
-from dispread.workbench.vision import fit_ocr_box, fit_quad_in_region
 
 __all__ = [
     "Outcome",

@@ -72,9 +72,22 @@ def test_one_row_skewed_bench_quad_exceeds_row_limit_and_fails_offset():
     assert raster_offset_check([(image, STILLS[0][1])], quad).status == "FEHLER"
 
 
-def test_sc7_stability_still_remains_rejected():
+def test_sc7_stability_still_matches_lattice_of_first_still():
+    # Ersetzt `test_sc7_stability_still_remains_rejected` (OQ-69). Die alte
+    # Ablehnung schrieb nur eine Verfuegbarkeitsgrenze fest (N7), kein falsches
+    # Raster; Review: .superpowers/sdd/2026-11-11-gsvmulti-takt/oq69-review.md.
+    # Bis OQ-69 `startlage_mehrdeutig`: ein Schein-Plus an der oberen Glasecke
+    # (457,9/438,9) stand gleich stark neben dem echten Plus. Das Zweitbild
+    # liegt 33 s nach dem ersten (gemessene Stabilitaet 0,03 px); beide Fits
+    # muessen deckungsgleich sein. Text: Leser mit bestaetigtem Vorschlags-Quad.
+    still, still_hint = _load("diagnostics/sc7-assist/still.png")
     image, hint = _load("diagnostics/sc7-assist/stability.png")
-    assert isinstance(fit_lattice(image, hint, empty_cells=EMPTY_CELLS), str)
+    first = fit_lattice(still, still_hint, empty_cells=EMPTY_CELLS)
+    result = fit_lattice(image, hint, empty_cells=EMPTY_CELLS)
+    assert isinstance(first, LatticeFit), first
+    assert isinstance(result, LatticeFit), result
+    assert np.max(np.linalg.norm(np.asarray(result.quad) - np.asarray(first.quad), axis=1)) <= 1.0
+    assert raster_offset_check([(image, "+0.46792 ")], result.quad).status != "FEHLER"
 
 
 @pytest.mark.parametrize("path,text", STILLS)
@@ -119,6 +132,8 @@ def test_start_search_does_not_retry_terminal_rejection(monkeypatch, terminal):
 ])
 def test_start_search_retries_only_missing_start_with_measured_smoothing(monkeypatch, outcomes, expected):
     def search(*args, sigma_fraction=None, **kwargs):
+        if kwargs.get("alternate_bottom"):
+            return "keine_startlage"
         assert sigma_fraction == next(fractions)
         return next(results)
 
@@ -156,3 +171,62 @@ def test_start_search_returns_accepted_fit_unchanged(monkeypatch, pass_index):
     image = np.full((160, 400, 3), 200, np.uint8)
     assert fit_lattice(image, (0, 0, 1, 1)) is accepted
     assert list(outcomes) == []
+
+
+@pytest.mark.parametrize("alternate_result", ["startlage_mehrdeutig", "keine_startlage"])
+def test_second_bottom_hypothesis_preserves_rejections(monkeypatch, alternate_result):
+    calls = []
+
+    def search(*args, sigma_fraction=None, alternate_bottom=False, **kwargs):
+        calls.append((alternate_bottom, sigma_fraction))
+        return alternate_result if alternate_bottom else "keine_startlage"
+
+    monkeypatch.setattr(dotlattice, "_auto_fit", search)
+    image = np.full((160, 400, 3), 200, np.uint8)
+    assert fit_lattice(image, (0, 0, 1, 1)) == alternate_result
+    assert calls[:3] == [(False, v) for v in dotlattice._START_SIGMA_FRACTIONS]
+    assert calls[3][0] is True
+
+@pytest.mark.parametrize("lines", [
+    None,
+    np.array([[[0, 10, 150, 10]], [[0, 80, 150, 80]]], dtype=np.int32),
+])
+def test_alternate_bottom_skips_absent_or_identical_line_directions(monkeypatch, lines):
+    image = np.full((100, 200, 3), 200, np.uint8)
+    monkeypatch.setattr(dotlattice.cv2, "HoughLinesP", lambda *args, **kwargs: lines)
+
+    def unexpected_blur(*args, **kwargs):
+        pytest.fail("an identical bottom hypothesis must not run a second search")
+
+    monkeypatch.setattr(dotlattice.cv2, "GaussianBlur", unexpected_blur)
+    assert dotlattice._auto_fit(image, (0, 0, 1, 1), alternate_bottom=True) == "keine_startlage"
+
+
+def test_second_bottom_hypothesis_can_succeed_with_later_smoothing(monkeypatch):
+    accepted = object()
+    calls = []
+
+    def search(*args, sigma_fraction=None, alternate_bottom=False, **kwargs):
+        calls.append((alternate_bottom, sigma_fraction))
+        if alternate_bottom and sigma_fraction == 0.15:
+            return accepted
+        return "keine_startlage"
+
+    monkeypatch.setattr(dotlattice, "_auto_fit", search)
+    image = np.full((160, 400, 3), 200, np.uint8)
+    assert fit_lattice(image, (0, 0, 1, 1)) is accepted
+    assert calls == [(False, None), (False, 0.15), (False, 0.18),
+                     (True, None), (True, 0.15)]
+
+
+def test_second_bottom_hypothesis_preserves_terminal_minus(monkeypatch):
+    calls = []
+
+    def search(*args, sigma_fraction=None, alternate_bottom=False, **kwargs):
+        calls.append((alternate_bottom, sigma_fraction))
+        return "vorzeichen_kein_plus" if alternate_bottom else "keine_startlage"
+
+    monkeypatch.setattr(dotlattice, "_auto_fit", search)
+    image = np.full((160, 400, 3), 200, np.uint8)
+    assert fit_lattice(image, (0, 0, 1, 1)) == "vorzeichen_kein_plus"
+    assert calls == [(False, None), (False, 0.15), (False, 0.18), (True, None)]

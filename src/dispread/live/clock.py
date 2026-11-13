@@ -19,7 +19,7 @@ from dispread.records import SUSPEND_TOLERANCE_NS
 CLOCK_OFFSET_SAMPLES = 5
 
 
-def measure_clock_offset_ns(samples: int = CLOCK_OFFSET_SAMPLES, clock=time.clock_gettime_ns) -> int:
+def measure_clock_offset_ns(samples: int = CLOCK_OFFSET_SAMPLES, clock=None) -> int:
     """Median aus `samples` Einzelmessungen des Versatzes CLOCK_BOOTTIME
     minus CLOCK_MONOTONIC - die einzige Groesse, die `to_boottime_ns`
     (dispread.records) braucht, um einen `v4l2_monotonic`-Zeitstempel der
@@ -30,6 +30,9 @@ def measure_clock_offset_ns(samples: int = CLOCK_OFFSET_SAMPLES, clock=time.cloc
     durch die drei Aufrufe selbst eingebrachte Fehler klein aus. Der Median
     (statt des Mittelwerts) filtert einen einzelnen Ausreisser heraus (z.B.
     ein Scheduler-Aussetzer zwischen den drei Aufrufen)."""
+    # Erst hier aufloesen: unter Windows fehlt time.clock_gettime_ns; die Bruecken-EXE
+    # importiert dieses Modul (ueber live.tick), ruft es aber nie auf.
+    clock = clock or time.clock_gettime_ns
     offsets: list[int] = []
     for _ in range(samples):
         m1 = clock(time.CLOCK_MONOTONIC)

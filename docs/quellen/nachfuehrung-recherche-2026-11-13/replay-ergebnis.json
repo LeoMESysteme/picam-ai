@@ -1,0 +1,50 @@
+[
+  {
+    "id": "20261111T103604Z",
+    "images": 222,
+    "retries": 134,
+    "scale_min_median_max": [
+      0.9987289202916969,
+      0.9997686821608334,
+      1.0005035348908498
+    ],
+    "mismatches": 0,
+    "sha256": {
+      "var/live/live-20261111T103604Z/profile.json": "49a93294449489d19ede51f46ddb9f39eb808f3250b8afb32f5a35d230549fd8",
+      "var/live/live-20261111T103604Z/setup/still.png": "97dfe47e142cf41f8f66a8668c9deec098bc573f22795cdb1b3282006db68f0d",
+      "var/live/live-20261111T103604Z/run-01/diagnose/images.jsonl": "c53695cb817d16a020e0d3febd8168956c606b06fc2b40f68bcd3d7c6b131d34"
+    }
+  },
+  {
+    "id": "20261111T122753Z",
+    "images": 222,
+    "retries": 143,
+    "scale_min_median_max": [
+      0.9979643170924037,
+      1.0001260000846945,
+      1.0006539406636228
+    ],
+    "mismatches": 0,
+    "sha256": {
+      "var/live/live-20261111T122753Z/profile.json": "294657f9c78b88afe8ffbc5d9bfd2328d0716967d8a495b57d968498c4955dff",
+      "var/live/live-20261111T122753Z/setup/still.png": "ef32deb6dbeb0e255aa202d730694cbaa3f32e2f9d5cc315e1eba001ec6c19fb",
+      "var/live/live-20261111T122753Z/run-01/diagnose/images.jsonl": "12cbdc340b0fd439ca1bd6c1c2a28029cef86f09ed0b8f2821e6bd30bc2cebae"
+    }
+  },
+  {
+    "id": "20261113T113119Z",
+    "images": 216,
+    "retries": 216,
+    "scale_min_median_max": [
+      1.0016013898940281,
+      1.0018065151795372,
+      1.0020725111969786
+    ],
+    "mismatches": 0,
+    "sha256": {
+      "var/live/live-20261113T113119Z/profile.json": "ad3c01bc29adb30ac77c999845f77fb8f482d17047201da4901c571e559d5a89",
+      "var/live/live-20261113T113119Z/setup/still.png": "d7f9e96445c21459b44b63841e3b7e21b916ca07b00f485ca3ed1011a79a4571",
+      "var/live/live-20261113T113119Z/run-01/diagnose/images.jsonl": "0a6a26de43af49e2d2250ecca8393f40cfc4211b3824fec1e832aba4d70d9858"
+    }
+  }
+]

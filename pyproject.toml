@@ -29,7 +29,7 @@ dispread = "dispread.workbench.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"dispread.workbench" = ["static/*", "static/vendor/*", "static/vendor/fonts/*", "static/live/*", "static/live/*/*"]
+"dispread.workbench" = ["static/*", "static/vendor/fonts/*", "static/live/*", "static/live/*/*"]
 
 [tool.ruff]
 line-length = 120
@@ -41,7 +41,7 @@ ignore = ["E501", "B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "windows/bridge/src"]
 tmp_path_retention_policy = "failed"
 tmp_path_retention_count = 1
 markers = [

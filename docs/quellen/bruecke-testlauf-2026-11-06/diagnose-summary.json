@@ -1,0 +1,33 @@
+{
+  "version": "0.1.0.dev0 \u00b7 Quelle unbekannt",
+  "readiness": {
+    "components": "manual_pair",
+    "adapter": "not_required",
+    "peer": "authenticated",
+    "output": "output_off",
+    "com": "driver_ready",
+    "gsv": "unconfirmed",
+    "next_action": "output_off"
+  },
+  "worker": {
+    "state": "running",
+    "active": true,
+    "output_ready": true,
+    "code": null,
+    "demo_only": true,
+    "gsv_receipt_confirmed": false
+  },
+  "route": "network",
+  "port_pair": {
+    "bridge_port": "COM7",
+    "gsv_port": "COM8",
+    "manual": true
+  },
+  "journal": {
+    "attempts": 599,
+    "by_outcome": {
+      "written": 599
+    },
+    "unresolved": 0
+  }
+}

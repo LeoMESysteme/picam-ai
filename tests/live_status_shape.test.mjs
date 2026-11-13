@@ -46,7 +46,7 @@ test('setup grid accepts reader boxes or null and rejects malformed or missing g
   delete status.setup.grid;
   assert.throws(() => assertStatusShape(status), TypeError);
 });
-test('all committed scenes exist', () => assert.equal(scenes.length, 11));
+test('all committed scenes exist', () => assert.equal(scenes.length, 17));
 for (const name of scenes) {
   test(`${name}: complete contract`, () => {
     const status = JSON.parse(readFileSync(new URL(name, dir)));

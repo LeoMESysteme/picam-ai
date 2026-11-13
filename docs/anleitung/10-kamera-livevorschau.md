@@ -737,20 +737,13 @@ das Zertifikat auf. Für eine andere Adresse `init-tls --host ADRESSE` in einem
 neuen Zertifikatverzeichnis verwenden. SSH-Tunnel bleiben mit
 `serve --host 127.0.0.1` möglich, ebenfalls mit HTTPS und Anmeldung.
 
-## Oberfläche: Kamera, setup-Tab und echte Shell
+## Oberfläche: Kamera und setup-Tabelle (alte Seite)
 
-Kamera oben links, darunter die Tab-Leiste, Log rechts; auf schmalen
-Bildschirmen werden die Bereiche gestapelt. Der erste Tab heißt `setup` und ist
-nach der Anmeldung **sofort aktiv** — die Einrichtung braucht kein Kommando
-mehr. `+` öffnet eine weitere Shell, `×` schließt sie samt laufenden Prozessen.
-Maximal acht Shell-Tabs. Browser schließen, Verbindung verlieren oder abmelden
-lässt die Shells weiterlaufen; erneutes Anmelden verbindet wieder. Serverende
-schließt alle Shells. Die Sessions überleben keinen Serverneustart.
-
-Jede Shell läuft als `me-systeme` im Startverzeichnis der Workbench. Der PATH
-verwendet die Projekt-venv. `sudo`, Editoren, `Ctrl+C` und Größenänderungen sind
-normal nutzbar. Bis zu 2 MiB Terminalausgabe pro Tab bleiben für Wiederverbindung
-im Speicher; bei Überschreitung erscheint ein Hinweis auf gekürzte Historie.
+Kamera oben links, Log rechts; auf schmalen Bildschirmen werden die Bereiche
+gestapelt. Die Einstelltabelle ist nach der Anmeldung sofort aktiv.
+Seit 2026-11-09 (OQ-61, S4) gibt es **keine Browser-Shell** mehr; Zugriff auf
+den Pi geht per SSH. Die alte Seite wird schrittweise abgebaut, die Bedienung
+läuft auf `/live`.
 
 ### Einstelltabelle bedienen
 
@@ -807,6 +800,19 @@ Werkbank-Oberfläche tatsächlich anbietet, steht in ihrer Einstelltabelle.
 Für reproduzierbare Aufnahmen schaltet `CameraSettings` die Fokusautomatik
 `focus_automatic_continuous` aus und liest den festen Fokuswert
 `focus_absolute` zurück.
+
+Beim Start mit einer echten Kamera vergleicht die Werkbank die helligkeitsnormierte
+Schärfe mit der bestätigten Einrichtung. Liegt sie nach einem gegebenenfalls
+nötigen Neusetzen außerhalb von 95–105 %, oder fehlt eine verwertbare Referenz,
+lehnt sie den Start ab: Fokus prüfen und neu einrichten. Das Band ist ein
+vorläufiger Gleichheitsfilter, keine kalibrierte Qualitätsgrenze. Die
+Nachführansicht zeigt den Anteil der Zweitversuche und den Median ihres
+Maßstabs; beides sind Diagnosewerte und keine Freigabeentscheidung. Der
+Anteil bezieht sich auf alle geprüften Bilder einschließlich solcher mit
+anschließendem Auditfehler. Die Maßstabstatistik umfasst die letzten höchstens
+10.000 Zweitfits und nennt zusätzlich deren Gesamtzahl. Ein abgelehnter
+Start ist als `live-start-rejection/1` mit UTC-Ende dokumentiert, aber kein
+Messlauf; der Session-Importer überspringt ihn.
 
 ### Fokus-Automatik
 

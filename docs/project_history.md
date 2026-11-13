@@ -9,6 +9,262 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-13 — Zweite Unterkantenhypothese bei fehlender Startlage
+
+**Problem:** Eine Hough-Linie durch das Zeichenband kann die Richtung sämtlicher
+Startlagen fehlleiten. Ein pauschaler Ersatz der Unterkantenrichtung verliert
+bestehende Fits; die Messlinien in den Gegenproben laufen ebenfalls durch das
+Zeichenband.
+
+**Entscheidung:** Nur nach drei tatsächlichen `keine_startlage`-Ergebnissen
+sucht ein zweiter Lauf mit der Oberkantenrichtung als zusätzlicher Annahme.
+Alle Annahme- und Eindeutigkeitsprüfungen bleiben erhalten; frühere Fits und
+andere Ablehnungen werden unverändert zurückgegeben.
+
+**Alternativen:** Eine feste Differenz-, Längen- oder Zeichenbandgrenze ist
+nicht trennscharf belegt. Eine immer zusätzliche vollständige Suche könnte
+konkurrierende Fits auch bei alten Erfolgen erkennen, erhöht aber Kosten und
+kann bisherige Ergebnisse ändern. Diese Alternative wurde für diesen
+begrenzten Startsuch-Fallback nicht gewählt.
+
+**Konsequenz:** Bei einem bereits akzeptierten ersten Fit wird die zweite
+Hypothese nicht auf Konkurrenz geprüft. Die beschränkte Suche garantiert
+keine vollständige geometrische Eindeutigkeit; neue Fits erfordern
+unabhängige Gegenprüfung. Details im [Recherchepaket](quellen/raster-recherche-2026-11-13/README.md).
+
+---
+
+## 2026-11-13 — Randminimum an der Leerzellgrenze
+
+**Problem:** Zwei tiefe Quellkandidaten unmittelbar vor der Grenze zum
+Nachbarzeichen wurden der Leerzelle zugerechnet und verwarfen ein Raster.
+
+**Entscheidung:** Das letzte Viertel eines Punktabstands vor der nächsten
+Zelle zählt bei der Leerzellbelegung nicht zur Lückenspalte. Die beobachteten
+Abstände betragen 0,01–0,04 Spalten; die Mitte der Lückenspalte und
+zugewiesene Punkte der Leerzelle bleiben belegt.
+
+**Alternativen:** Größere Randzone erhöht die unüberwachte Fläche; eine
+punktgroße Glättung würde die Kandidatensuche selbst ändern und ihre
+Sicherheitsgrenzen neu zur Prüfung stellen. Beides wurde hier nicht
+übernommen. Die Startsuche und ihr Unterkantenfehler sind getrennt.
+
+**Konsequenz:** Ein Kandidat allein in dieser Randzone wird nicht als
+Leerzellenbeleg gewertet; eine allgemeine Garantie für beliebige Artefakte
+oder Geräte folgt nicht. Die Offline-Gegenproben stehen im
+[Recherchepaket](quellen/raster-recherche-2026-11-13/README.md).
+
+---
+
+## 2026-11-11 — Session-Format je Lauf statt globaler Vorlagenaktivierung
+
+**Problem:** Die globale Aktivierung aus dem vorigen Katalogauftrag passt
+nicht zur jetzt abgestimmten Formatwahl pro Werkbanklauf. Versuch 2b enthält
+zudem noch nicht die für Kanal 1 gewünschte Einheit mV/V.
+
+**Entscheidung:** Beide Formate sind regulär erzeugbar; die neue gepinnte
+`vorlage-4kanal-mvv.ucf` ersetzt die Versuchsvorlage im Paket. Nur
+`DEFAULT_SESSION_FORMAT` legt die Vorgabe fest (`single`, bis U1 auf dem Pi
+eingespielt ist). Sessionformat und Pfad werden je Weg/Port gespeichert.
+Die validierte Verbindung meldet das aus `record`/`tick` erkannte Format über
+das bestehende Aktivitätsereignis, gebunden an Lauf und Verbindungsgeneration;
+der Controller stellt es ohne zusätzliche I/O für den UI-Abgleich bereit.
+
+**Alternativen:** Ein zweiter Schalter `ACTIVE_SESSION_TEMPLATE` könnte der
+Vorgabe widersprechen. Ableitung des Lauf-Formats aus der erzeugten Session
+würde gerade den zu erkennenden Unterschied verdecken. Eine zusätzliche
+Nachrichtenabfrage im UI würde blockieren und die Protokollprüfung duplizieren.
+
+**Konsequenz:** Laufwechsel/kein Lauf liefern zunächst unbekannt, bis eine
+passende Nachricht eintrifft. Ein später validiertes Hello-/Idle-Feld
+`output_format` kann an der markierten Stelle Vorrang erhalten. Bestehende
+Sessionpfade ohne Formatmetadaten bleiben Einkanal; GSVmulti-Abnahme steht aus.
+
+## 2026-11-11 — Session-Katalog mit vorbereiteter Vierkanal-Vorlage
+
+**Problem:** Der Einkanal-Generator enthielt feste COM8-Ersetzungen. Der
+Vierkanal-Beleg aus Versuch 2b hat dagegen vier Kanäle und drei ausgeblendete
+Hilfskanäle; Pi und Brücke senden das zugehörige Format noch nicht.
+
+**Entscheidung:** Ein Code-Katalog in `session_templates.py` hält Paketpfad,
+Belegpfad, SHA-256, Telegrammformat und Status jeder Vorlage. Nur
+`ACTIVE_SESSION_TEMPLATE` wählt die regulär exportierte Vorlage, deren Status
+zusätzlich `active` sein muss. Vierkanal bleibt `prepared`; ein eigener
+Entwicklereinstieg verlangt dafür `allow_prepared=True`. Kanalzahl, Sichtbarkeit
+und Baudrate kommen aus den gepinnten Bytes. Der Export ersetzt ausschließlich
+`ComNr`/`Name` je Kanal und `UserDevice.ComNo`; Kanalnamen folgen `Input`.
+
+**Alternativen:** Eine UI-Auswahl vorbereiteter Vorlagen könnte eine Session
+erzeugen, die nicht zum Sender passt. Ein allgemeiner UCF-Schreiber würde
+Kodierung und Zeilenenden unnötig verändern. Doppelt eingetragene Kanal- und
+Baudmetadaten könnten vom Beleg abweichen. Der bestehende Archivkatalog bleibt
+getrennt: erkannte Archivoriginale werden dadurch nicht exportierbar.
+
+**Konsequenz:** Beide Paketdateien sind in beiden PyInstaller-Specs enthalten.
+Alle Vorlagen müssen dieselbe Baudrate tragen. `record_hidden_required` folgt
+den ausgeblendeten Kanälen; „Record Hidden Channels“ muss der Bediener selbst
+in GSVmulti einschalten, diese Einstellung steht nicht in der UCF. Aktivierung
+des Vierkanalformats und dessen Sender-/Empfangsabnahme bleiben ausstehend.
+
+
+## 2026-11-11 — UX2: begrenzter Session-Export und getrennte UART-Raten
+
+**Problem:** Die Brücke sperrte jeden Session-Export; Pi-UART und GSVmulti
+teilten feste Baudraten trotz verschiedener Aufgaben.
+
+**Entscheidung:** Nur die belegte COM8-Datei (SHA-256 im Code) darf mit
+geänderten `ch1.ComNr`, `ch1.Name` und `UserDevice.ComNo` exportiert werden.
+Die GSVmulti-Baudrate wird aus diesen Paketbytes gelesen. Pi↔Brücke bezieht
+seine Rate aus dem kleinen, transportfreien Modul `dispread.bridge.baud`;
+auch v1 kann es ohne Abhängigkeit auf Windows oder Transportklassen nutzen.
+`uart_direct` bleibt ein Einrichtungshelfer ohne Übertragungsworker.
+
+**Alternativen:** Ein allgemeiner UCF-Schreiber würde unbelegte Felder
+interpretieren; eine weiter vollständige Exportsperre widerspräche dem
+freigegebenen UX2-Auftrag. Doppelte Baudkonstanten oder eine gemeinsame
+Rate für Pi und GSVmulti würden die Strecken erneut vermischen.
+
+**Konsequenz:** Alte Profile ohne Baudfeld laden weiter; Pi und EXE müssen
+für die neue UART-Rate zusammen aktualisiert werden. Export ist keine
+Abnahme: Öffnen und Empfang in GSVmulti (N3/OQ-53) bleiben offen.
+Prüfungen verwenden ein Gesamtbudget von 2,8 s mit einer begrenzten
+Hintergrundprüfung je Controller; ein blockierter OS-Aufruf verhindert
+weitere Probes bis zu seiner Rückkehr, ohne GUI-Lesezugriffe zu blockieren.
+
+
+## 2026-11-06 — Ein Besitzer des Wiederanlaufs
+
+**Problem:** Der Worker trennte nach gewöhnlichem Kanalverlust und nach
+Laufende den Manager. Dadurch wurde dessen bereits implementierter Backoff
+abgebrochen; beide einzeln geprüften Komponenten erholten sich zusammen nicht.
+
+**Entscheidung:** Nur der Manager verbindet erneut. Der Worker wartet bei
+bekannten vorübergehenden Verbindungsfehlern auf eine neue authentisierte
+Generation und prüft das Journal vor der Fortsetzung. COM und Konfiguration
+bleiben gleich; alte Werte, ACKs und Demostarts werden nicht zwischengespeichert.
+Ein ordentliches Laufende beendet den Datenlauf, nicht die Verbindung.
+
+**Alternativen:** Wiederanlauf in GUI oder Worker würde eine zweite
+Verbindungszustandsmaschine schaffen. Pauschal jeden Fehler zu wiederholen
+könnte unklare COM-Übergaben oder Audit-/Invalidierungssperren übergehen.
+
+**Konsequenz:** `recovering` bleibt sichtbar und nicht ausgabebereit.
+Expliziter Stop und dauerhafte Fehler bleiben terminal. Lokale TLS-/SQLite-
+Integration mit Fake-COM belegt die Zusammensetzung, keine Windows- oder
+physische Empfangsabnahme.
+
+## 2026-11-06 — Zertifikatsbindung gespeicherter Windows-Tokens
+
+**Problem:** Pi-ID und Transport allein binden einen gespeicherten Token
+nicht an das bekannte Zertifikat. Ein importiertes anderes Zertifikat könnte
+dieselbe öffentliche Pi-ID beanspruchen und den alten Token erhalten.
+
+**Entscheidung:** CredentialStore bindet den verschlüsselten Inhalt an
+`expected_pin`; Manager lädt/speichert ausschließlich mit dem Profilfingerprint.
+Alte ungebundene oder abweichende Einträge erfordern frische Kopplung.
+Der WSS-Client prüft zusätzlich den wirklichen Peer vor HTTP-Headern über
+einen eng begrenzten, exakt versionsgesperrten aiohttp-Connector.
+
+**Alternative:** Nur Profil-Selbstkonsistenz oder Pi-ID/Transport zu prüfen
+verhindert diese Tokenweitergabe nicht. Ein tatsächlicher TLS-Negativtest
+hat sie vor der Korrektur nachgewiesen.
+
+**Konsequenz:** Zertifikatswechsel verwenden keine alten Tokens. Der private
+SDK-Hook kostet eine explizite Versions-/Windows-Qualifikation; keine globale
+Lockerung von TLS und kein neuer Windows-Nachweis werden daraus abgeleitet.
+
+## 2026-11-06 — Dauerhafter COM-Intent und atomare Schreibzulassung
+
+**Problem:** Nach Prozessabbruch zwischen COM-Schreiben und ACK ist eine
+Zahlübergabe unklar. Eine bloße Vorprüfung kann außerdem während blockierender
+Portkonfiguration durch Stop oder Verbindungswechsel veralten.
+
+**Entscheidung:** SQLite hält einen synchron bestätigten Intent und das
+anschließende Ergebnis, gebunden an Pi/Lauf/Bild/Barriere und Payloadhash.
+Unklare Zahlen werden nicht erneut gesendet; unbekannte Invalidierung sperrt
+spätere Zahlen desselben Pi. Manager-Generationslock und kurze Worker-Zulassung
+prüfen die genaue Verbindung, Stop und Restbudget atomar nach Portkonfiguration.
+COM und Journal-I/O liegen außerhalb dieser Locks.
+
+**Alternativen:** Nur RAM-Entdopplung überlebt keinen Abbruch. Eine Prüfung
+vor Portkonfiguration oder irgendeine aktuell gültige Verbindung schützt
+nicht vor einem Wechsel von Generation A nach B. Unklare Übergaben als
+erfolgreich zu behandeln hätte keinen Beleg.
+
+**Konsequenz:** Ein bereits zugelassener Schreibversuch kann bei Abbruch
+unklar bleiben; Bytes lassen sich nicht rückgängig machen. Keine Exactly-once-
+Zusage und keine Ableitung von GSVmulti-Empfang. Die konkrete Manager-Naht
+und echte Windows-Dauerhaftigkeit werden separat integriert/geprüft.
+
+## 2026-11-06 — Ein Hub für Ausgabe, Ressourcen und echte Laufidentität
+
+**Problem:** Publisher allein sehen weder ausgeschaltete noch direkte serielle
+Läufe. Eine Demo könnte parallel starten; ein Brückenlistener könnte denselben
+UART belegen. Ein stiller v1-Fallback würde außerdem den gekoppelten Pfad umgehen.
+
+**Entscheidung:** LiveService reserviert jeden echten Lauf mit frischer UUID
+vor Ressourcenstart, unabhängig vom Ausgabeweg, und bindet die Factory an
+dieselbe ID. Hub und direkte UART-Ausgabe teilen einen kanonischen,
+prozessübergreifenden Port-Lease. UART öffnet erst auf Operatoraktion, auch
+über den lokalen geschützten Socket. Dedizierter Heartbeat verbraucht keine
+Daten; der Hub hält seinen eigenen Lock nur für Metadaten.
+
+**Alternativen:** Reservierung erst im Publisher übersieht Ausgabe off/serial
+und das Startfenster. Rohe v1-Sockets als Standard können Kopplung nicht
+ersetzen. Deshalb bleiben sie ausdrücklich benannten Demo-/Entwicklungswegen
+vorbehalten; auch eigenständige LiveSession verweigert einen fehlenden Hub.
+
+**Konsequenz:** Demo, echte Messung und UART-Besitzer können einander nicht
+still ersetzen; fehlgeschlagene Starts geben ihre ID wieder frei. Audit-/
+Invalidierungsregeln und DUT-Sperre bleiben erhalten. GUI-Anbindung und
+reale physische Abnahme folgen getrennt.
+
+## 2026-11-06 — Begrenzte Discovery und ausdrückliche Identitäts-TLS-Auswahl
+
+**Problem:** Die mDNS-Bibliothek bietet für Start und Ende keine vollständige
+Aufruferzeitgrenze. Die bisherige Workbench verwendet ein anderes TLS-Zertifikat
+und eine konkrete Adresse; beides darf nicht stillschweigend ersetzt werden.
+
+**Entscheidung:** Discovery-Suchen laufen in einem isolierten `spawn`-Prozess
+mit begrenztem Ergebnis und Abbruch/Reaping. Konfigurierte Endpunkte bleiben
+unabhängig von Suchtreffern erhalten. `--bridge-directory` aktiviert
+ausdrücklich die bereits provisionierte Geräteidentität als HTTPS-Zertifikat;
+sonst bleibt der bisherige TLS-Weg. LAN-/Tailscale-Endpunkte sind Konfiguration,
+keine Ableitung aus dem HTTP-Host-Header.
+
+**Alternativen:** Ein Hintergrundthread allein kann blockierende native
+SDK-Lebenszyklen nicht hart beenden. Vorhandene Zertifikate zu überschreiben
+würde einen unbeauftragten Vertrauenswechsel bewirken.
+
+**Konsequenz:** Seltenes Suchen trägt Prozessstartkosten; eingefrorener
+Windows-Einstieg braucht `freeze_support()` und echten Suchnachweis. mDNS
+liefert Kandidaten, keine Identitätsfreigabe. Keine Netzkonfiguration und
+kein laufender Dienst wurden bei dieser Umsetzung geändert.
+
+## 2026-11-06 — Windows-Vorarbeit ohne unbelegte Produktfreigabe
+
+**Problem:** Linux-Vertragstests können Windows-Paketierung, Treiber-/HVCI-
+Eignung und GSVmulti-Sessionimport nicht nachweisen. Die historischen UCFs
+enthalten zudem keine belegte Skalierungskodierung oder genaue Versionsbindung.
+
+**Entscheidung:** Portable Build-, Geräte-, Installer- und Updateverträge
+sind injizierbar testbar; unqualifizierte native Anbieter verweigern reale
+Änderungen. N3 erkennt nur gepinnte Originalbytes und sperrt den Export.
+Das Inno-Rezept bleibt eine interne Runtime-Probe. Release-Vertrauen nutzt
+einen gesondert provisionierten Ed25519-Schlüssel; Pi-Identitäten verwenden
+davon getrennte RSA-3072-Schlüssel. OQ-65 hält die noch offene Kanal-/
+Versionspolitik fest.
+
+**Alternativen:** Installer-Exitcode, selbst erzeugte Sessiondatei oder
+Fake-Antworten als Abnahme zu behandeln liefert keinen realen Nachweis.
+Ein produktiver Standard-Testschlüssel würde keine vertrauenswürdige
+Herkunft schaffen. Diese Abkürzungen werden nicht verwendet.
+
+**Konsequenz:** Claude erhält geprüfte technische Schnittstellen und
+konkrete externe Gates. UI-Fertigstellung allein hebt sie nicht auf.
+Bestehende Installation, Python-Umgebungen und laufende Werkbank bleiben
+unverändert; keine Produkt-EXE oder Windows-Abnahme behauptet.
+
 ## 2026-11-06 — Windows-Anwendung mit bestehendem Python-Brückenkern
 
 **Problem:** Die manuelle Einrichtung auf einem weiteren Windows-PC benötigt
@@ -30,8 +286,13 @@ spätere Alternative bleibt es möglich.
 **Konsequenz:** Ein eigener Windows-Build und Ergänzungen auf der Pi-Seite
 sind erforderlich. Konkrete Paketierung, Kopplung, Zielplattform und
 Abnahmeschranken stehen zunächst im [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md).
-Architekturwahl ist keine Freigabe dieses Entwurfs oder der Implementierung;
-Treiber-, Session- und fachliche DUT-Abnahme bleiben eigene Nachweise.
+Der vollständige Entwurf wurde danach am 06.11.2026 ausdrücklich freigegeben.
+Der [Umsetzungsplan](superpowers/plans/2026-11-06-windows-bruecke.md) trennt
+Machbarkeitsnachweise, Pi/Protokoll und Windows-Anwendung. Plan und Ausführung durch Codex mit Subagents sind freigegeben. EXE-GUI
+und sichtbare Workbench-Anbindung bleiben nach Leonhards weiterer
+Anweisung Claude vorbehalten. Technische Vorarbeit findet isoliert auf
+`codex/windows-bridge-core` statt; Treiber-, Session- und fachliche
+DUT-Abnahme bleiben eigene Nachweise.
 
 ## 2026-11-04 — Gemeinsame Windows-Brücke für Netzwerk und UART
 
@@ -1088,6 +1349,9 @@ ungeprüftes Raster still passieren könnte. Die automatische Startsuche
 für `ab4`/`ab6` wurde nicht durch bloßes Lockern der Ankerwahl
 erweitert: Eine probeweise Lockerung lieferte für `ab4` ein um 9,14 px
 falsches Quad.
+*Korrekturvermerk 2026-11-12 (OQ-69):* Gemessen wurde gegen das um etwa
+0,9 Punktspalten versetzte alte `ab4-profile`; gegen das korrigierte
+`ab4-profile-regrid1.json` sind es 0,08 Punktspalten (2j OK). Siehe OQ-69.
 
 ## Konsequenz
 
@@ -2199,3 +2463,11 @@ und `json` in der stdlib ist — das vermeidet zwei weitere Abhängigkeiten, die
 Systempakete überschatten könnten.
 
 ---
+
+### 2026-11-13 — Vorläufige Fokusgleichheit am Laufstart
+
+Statt Messpfadgrenzen zu lockern, Bereiche je Bild auszuschließen oder eine
+ungeprüfte alte Lage zu halten, sperrt ein vorläufiger Schärfevergleich einen
+abweichenden Start. 95–105 % umfasst die engen beobachteten Laufstartwerte mit
+niedrigen Zweitversuchsanteilen, ist aber keine kalibrierte Grenze: Ein Lauf mit
+142 % hatte keine Zweitversuche. Maßstab und Zweitversuche sind nur Diagnose.

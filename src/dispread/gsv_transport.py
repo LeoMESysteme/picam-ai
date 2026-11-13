@@ -11,15 +11,14 @@ import json
 import socket
 import threading
 import time
-import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from dispread.records import TimeBaseKind, ValueRecord, ValueStatus
-from dispread.sink.protocol.user_defined import UserDefinedFormatter
+from dispread.bridge.baud import UART_BAUD
+from dispread.bridge.output_state import RELEASE_BLOCK as RELEASE_BLOCK
+from dispread.bridge.output_state import OutputState
 
 MAX_MESSAGE_BYTES = 65536
-RELEASE_BLOCK = "DUT-Ausgabe gesperrt: Windows-Abnahme für Ungültig-/Altwertbehandlung fehlt"
 
 
 def encode_message(message: dict) -> bytes:
@@ -57,7 +56,7 @@ class JsonLineReader:
 class OutputConfig:
     transport: str = "off"
     serial_port: str = "/dev/ttyAMA0"
-    baudrate: int = 115200
+    baudrate: int = UART_BAUD
     tcp_host: str = "0.0.0.0"
     tcp_port: int = 5000
     max_frame_age_ms: int = 1000
@@ -67,8 +66,8 @@ class OutputConfig:
             raise ValueError("Unbekannter Ausgabeweg")
         if self.serial_port != "/dev/ttyAMA0":
             raise ValueError("UART-Ausgang muss /dev/ttyAMA0 sein; Referenzport bleibt frei")
-        if type(self.baudrate) is not int or self.baudrate != 115200:
-            raise ValueError("Prototyp benötigt 115200 Baud")
+        if type(self.baudrate) is not int or self.baudrate != UART_BAUD:
+            raise ValueError(f"Brücke benötigt {UART_BAUD} Baud")
         if type(self.tcp_port) is not int or not 1 <= self.tcp_port <= 65535:
             raise ValueError("Ungültiger TCP-Port")
         if not isinstance(self.tcp_host, str) or not self.tcp_host:
@@ -91,146 +90,30 @@ class OutputConfig:
         return asdict(self)
 
 
-class OutputPublisher:
+class OutputPublisher(OutputState):
+    """Compatibility v1 transport adapter over the shared bounded state."""
+
     def __init__(self, config: OutputConfig, out_dir: Path, *, demo=False):
         self.config = config
-        self.out_dir = Path(out_dir)
-        self.demo = demo
-        self.run_id = uuid.uuid4().hex
-        self._lock = threading.RLock()
-        self._stop = threading.Event()
+        super().__init__(out_dir, demo=demo)
         self._thread = None
-        self._latest = None
-        self._barrier = None
-        self._generation = 0
-        self._pending = None
         self._state = "off" if config.transport == "off" else "waiting"
-        self._error = None
-        self._last_ack = None
-        self._attempted_sequence = -1
-        self._events = None
 
     def metadata(self):
-        caps = asdict(UserDefinedFormatter().capabilities)
-        caps["supported_invalid_policies"] = sorted(caps["supported_invalid_policies"])
-        return {
-            **self.config.to_dict(),
-            "run_id": self.run_id,
-            "demo": self.demo,
-            "release_block": None if self.demo else RELEASE_BLOCK,
-            "formatter": caps,
-        }
+        return {**self.config.to_dict(), **super().metadata()}
 
     def status(self):
-        with self._lock:
-            return {
-                "transport": self.config.transport,
-                "state": self._state,
-                "release_block": None if self.demo else RELEASE_BLOCK,
-                "error": self._error,
-                "last_ack": self._last_ack,
-                "ack_scope": "COM driver write, not GSVmulti reception",
-            }
-
-    def _event(self, kind, **data):
-        if self._events is not None:
-            try:
-                self._events.write(
-                    json.dumps(
-                        {
-                            "event": kind,
-                            "run_id": self.run_id,
-                            "t_ns": time.monotonic_ns(),
-                            "time_base": "host_monotonic",
-                            **data,
-                        },
-                        allow_nan=False,
-                    )
-                    + "\n"
-                )
-                self._events.flush()
-            except OSError as exc:
-                self._state, self._error = "audit_failed", str(exc)
-                self._stop.set()
-                raise
+        return {"transport": self.config.transport, **super().status()}
 
     def start(self):
         if self.config.transport == "off":
             return
-        self.out_dir.mkdir(parents=True, exist_ok=True)
-        self._events = (self.out_dir / "output.jsonl").open("a", encoding="utf-8")
-        self._event("start", demo=self.demo, release_block=None if self.demo else RELEASE_BLOCK)
+        super().start()
         self._thread = threading.Thread(target=self._worker, name="gsv-output", daemon=True)
         self._thread.start()
 
-    def publish(self, record: ValueRecord):
-        if self.demo and record.capture_timestamp.base is not TimeBaseKind.SYNTHETIC:
-            raise ValueError("Demo publisher accepts synthetic records only")
-        with self._lock:
-            if self._state == "audit_failed":
-                raise OSError(self._error or "output audit failed")
-            if self._stop.is_set():
-                return
-            self._latest = record
-            if record.status is not ValueStatus.VALID:
-                self._generation += 1
-                self._barrier = (self._generation, record)
-
     def handle(self, message: dict):
-        with self._lock:
-            if (
-                message.get("version") != 1
-                or not isinstance(message.get("request_id"), str)
-                or not message["request_id"]
-            ):
-                raise ValueError("invalid request")
-            if message.get("type") == "ack":
-                if self._pending is None:
-                    raise ValueError("unsolicited ACK")
-                expected = {
-                    key: self._pending.get(key) for key in ("request_id", "run_id", "frame_sequence", "barrier_id")
-                }
-                if any(message.get(key) != value for key, value in expected.items()):
-                    raise ValueError("ACK does not match pending transfer")
-                if message.get("outcome") not in ("written", "expired", "failed", "unconfirmed"):
-                    raise ValueError("invalid ACK outcome")
-                self._event("ack", **message)
-                self._last_ack = {**expected, "outcome": message["outcome"], "scope": "COM driver only"}
-                if message["outcome"] == "written" and self._barrier and message.get("barrier_id") == self._barrier[0]:
-                    self._barrier = None
-                if self._pending["barrier_id"] is None:
-                    self._attempted_sequence = self._pending["frame_sequence"]
-                self._pending = None
-                return None
-            if message.get("type") != "poll" or self._pending is not None:
-                raise ValueError("one outstanding poll allowed")
-            reply = {"version": 1, "request_id": message["request_id"], "run_id": self.run_id, "demo": self.demo}
-            if self._stop.is_set():
-                return {**reply, "type": "ended"}
-            if not self.demo:
-                return {**reply, "type": "idle", "release_block": RELEASE_BLOCK}
-            record = self._barrier[1] if self._barrier else self._latest
-            if record is None or (self._barrier is None and record.frame_sequence <= self._attempted_sequence):
-                return {**reply, "type": "idle"}
-            barrier_id = self._barrier[0] if self._barrier else None
-            self._pending = {**reply, "frame_sequence": record.frame_sequence, "barrier_id": barrier_id}
-            self._event("offered", **self._pending, status=record.status.value)
-            return {
-                **reply,
-                "type": "record",
-                "record": record.to_dict(),
-                "frame_age_ns": None,
-                "barrier_id": barrier_id,
-            }
-
-    def abandon_pending(self):
-        """Record uncertainty; losing an ACK never proves non-delivery."""
-        with self._lock:
-            if self._pending is not None:
-                self._event("unconfirmed", **self._pending)
-                if self._pending["barrier_id"] is None:
-                    self._attempted_sequence = self._pending["frame_sequence"]
-                self._pending = None
+        return self.handle_v1(message)
 
     def _serve(self, stream, *, tcp):
         decoder = JsonLineReader()
@@ -311,11 +194,4 @@ class OutputPublisher:
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=3)
-        with self._lock:
-            if self._events:
-                try:
-                    self.abandon_pending()
-                    self._event("stop")
-                finally:
-                    self._events.close()
-                    self._events = None
+        super().stop()

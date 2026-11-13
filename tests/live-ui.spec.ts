@@ -1,3 +1,4 @@
+const SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-11-gsvmulti-takt/shots/';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 // Die beiden Abläufe der abgelösten alten Seite,
@@ -1891,22 +1892,24 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
     return (await sent).postDataJSON().output;
   };
   expect(await bodyOf('Aus')).toEqual({ transport: 'off' });
-  expect(await bodyOf('UART über Brücke')).toEqual({ transport: 'uart' });
+  expect(await bodyOf('UART über Brücke')).toEqual({ transport: 'uart', format: '4ch', rate_hz: 10 });
   await confirmedState(page);
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await expect(pop.locator('[data-part="out-lock"]')).toHaveText(/^DUT-Ausgabe gesperrt: Windows-Abnahme fehlt\./);
   await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await pop.getByText('Erweitert: Demo-/Entwicklungsweg').click();
   await pop.getByLabel('TCP-Port').fill('5001');
 
   const sentTcp = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
   await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
-  expect((await sentTcp).postDataJSON().output).toEqual({ transport: 'tcp', tcp_port: 5001 });
+  expect((await sentTcp).postDataJSON().output).toEqual({ transport: 'tcp', tcp_port: 5001, format: '4ch', rate_hz: 10 });
 
   // UART direkt: Hinweis wörtlich, Start gesperrt bis zum Haken, Haken wird nie gemerkt.
   await confirmedState(page);
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await pop.getByText('UART direkt', { exact: true }).click();
-  await expect(pop).toContainText('Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.');
+  // Vorgabe ist der Vierkanal-Takt: Hinweis zu Kanal 1 hält (13.11.).
+  await expect(pop).toContainText('Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); der Zeitkanal ist vorläufig.');
   const ack = pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' });
   await expect(pop.getByLabel('Port', { exact: true })).toHaveValue('/dev/ttyAMA0');
   await expect(pop.getByLabel('Baudrate')).toHaveValue('115200');
@@ -1925,7 +1928,7 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   const sentSerial = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
   await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
   expect((await sentSerial).postDataJSON().output).toEqual({ transport: 'serial', port: '/dev/ttyAMA0',
-    baudrate: 230400, prefix: '%', acknowledge_unaccepted: true });
+    baudrate: 230400, prefix: '%', acknowledge_unaccepted: true, format: '4ch', rate_hz: 10 });
 
   // Lauf: Zeile im Dock, Inspektor, Statusleiste mit Marker; Gruppe schreibgeschützt.
   const left = page.getByRole('complementary', { name: 'Ablauf' });
@@ -1946,6 +1949,72 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await expect(pop.getByRole('radio', { name: 'UART direkt' })).toBeChecked();
   await expect(pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' })).not.toBeChecked();
+  expect(errors).toEqual([]);
+});
+
+async function startBody(page: Page, pop: Locator) {
+  const sent = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  return (await sent).postDataJSON().output;
+}
+
+test('Ausgabe: Testfreigabe über die Brücke nur mit Haken, Anzeige beider Zustände', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  const ack = pop.getByRole('checkbox', { name: 'Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe' });
+  await expect(ack).toBeHidden();
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await expect(pop.locator('[data-part="out-release-note"]')).toContainText('Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe.');
+  await expect(pop.locator('[data-part="out-rate"]')).toHaveText('UART über Brücke läuft mit 460 800 Baud und trägt den Vierkanal-Takt bis 10 Hz. Eine ältere Windows-App mit 115 200 Baud schafft nur etwa 3–4 Werte/s; dann neue App installieren oder Netzwerk verwenden.');
+  await expect(ack).not.toBeChecked();
+  await expect(pop.locator('[data-part="out-lock"]')).toContainText('Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.');
+  await noOverflow(page);
+  // Ohne Haken: Start ist nicht blockiert, das Feld fehlt.
+  expect(await startBody(page, pop)).toEqual({ transport: 'uart', format: '4ch', rate_hz: 10 });
+  // Netzwerk mit Haken; der Hinweis zur UART-Rate gehört nur zu UART.
+  await confirmedState(page);
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await expect(pop.locator('[data-part="out-rate"]')).toBeHidden();
+  await ack.check();
+  await expect(pop.locator('[data-part="out-lock"]')).toBeHidden();
+  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/r2-werkbank-popover.png' });
+  expect(await startBody(page, pop)).toEqual({ transport: 'tcp', tcp_port: 5000, acknowledge_unaccepted: true, format: '4ch', rate_hz: 10 });
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await expect(left.locator('[data-part="output"]')).toContainText('Testfreigabe über die Brücke – nicht abgenommen');
+  await expect(left.locator('[data-part="output"]')).not.toContainText('DUT-Ausgabe gesperrt');
+  await expect(left.locator('[data-part="output"] .tag')).toHaveText('Testfreigabe – nicht abgenommen');
+  const bar = page.getByRole('contentinfo').locator('[data-item="output"]');
+  await expect(bar.locator('.tag')).toHaveText('Testfreigabe – nicht abgenommen');
+  await expect(bar).toHaveClass(/warn/);
+  await noOverflow(page);
+  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/r2-werkbank-dock.png' });
+  // Neue Sitzung verlangt den Haken neu.
+  await confirmedState(page);
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await expect(ack).not.toBeChecked();
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Testmodus sendet nie die Testfreigabe', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await hook(page, '/__test__/state', { state: 'confirmed', run_block: 'Lauf gesperrt: Gegenlesen WARNUNG',
+    profile: { confirmed_by: 'L. Hentschke' }, setup: { proposal_revision: 'rev-1' } });
+  await page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await pop.getByRole('checkbox', { name: /^Testfreigabe: echte Werte/ }).check();
+  await pop.getByText('Testmodus (nur zu Testzwecken)').click();
+  await pop.getByRole('checkbox', { name: /Lesesperre übergehen/ }).check();
+  await expect(pop.getByRole('radio', { name: 'Aus' })).toBeChecked();
+  await expect(pop.locator('[data-part="out-release"]')).toBeHidden();
   expect(errors).toEqual([]);
 });
 
@@ -2027,6 +2096,81 @@ test('Ausgabe: Übungslauf stellt den gewählten Weg nach und sendet keinen POST
   expect(errors).toEqual([]);
 });
 
+test('Ausgabe: Format und Takt im POST, Warnung bei Einkanal, Checkliste bei Vierkanal', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await expect(pop.locator('[data-part="out-format"]')).toBeHidden();
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await expect(pop.getByRole('radio', { name: 'Vierkanal-Takt (empfohlen)' })).toBeChecked();
+  await expect(pop.getByLabel('Takt (Hz)')).toHaveValue('10');
+  await expect(pop).toContainText('In GSVmulti dieselbe Frequenz einstellen (Data Frequency).');
+  await expect(pop.locator('[data-part="checklist"]')).toContainText('Record Hidden Channels');
+  await expect(pop.locator('[data-part="checklist"]')).toContainText('Autoscale Y aus');
+  await expect(pop.locator('[data-part="fmt-warn"]')).toBeHidden();
+  await page.screenshot({ path: SHOTS + 'u1-start-4ch.png' });
+  // Ungültiger Takt sperrt den Start.
+  await pop.getByLabel('Takt (Hz)').fill('11');
+  await expect(pop.getByRole('button', { name: 'Lauf starten', exact: true })).toBeDisabled();
+  await pop.getByLabel('Takt (Hz)').fill('4');
+  expect(await startBody(page, pop)).toEqual({ transport: 'tcp', tcp_port: 5000, format: '4ch', rate_hz: 4 });
+  // Einkanal: Warnung wörtlich, kein Takt im Körper.
+  await confirmedState(page);
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await pop.getByText('Einkanal (nur gültige Werte)', { exact: true }).click();
+  await expect(pop.locator('[data-part="fmt-warn"]')).toHaveText('Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden keine Zeilen gesendet. GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der Aufnahme sind deshalb nicht genau.');
+  await expect(pop.locator('[data-part="fmt-box"]')).toBeHidden();
+  await page.screenshot({ path: SHOTS + 'u1-start-1ch.png' });
+  expect(await startBody(page, pop)).toEqual({ transport: 'uart', format: '1ch' });
+  const bar = page.getByRole('contentinfo').locator('[data-item="output"]');
+  await expect(bar.locator('[data-part="one-ch"]')).toHaveText('Einkanal');
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('[data-part="output"] [data-part="one-ch"]'))
+    .toHaveText('Einkanal: Lücken werden in GSVmulti nicht aufgezeichnet');
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Vierkanal im Lauf zeigt Takt, Anteil gültig und verpasste Takte', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await startBody(page, pop);
+  const dock = page.getByRole('complementary', { name: 'Ablauf' }).locator('[data-part="output"]');
+  await expect(dock.locator('[data-part="tick"]')).toHaveText('Vierkanal-Takt 10 Hz · gültig – · verpasst 0');
+  await hook(page, '/test/output', { state: 'bridge_connected', tick: { rate_hz: 10, seq: 203, total: 200, valid: 150, invalid: 50, missed: 3, lost: 4, unconfirmed: 0 } });
+  await expect(dock.locator('[data-part="tick"]')).toHaveText('Vierkanal-Takt 10 Hz · gültig 75 % · verpasst 3 · verloren 4');
+  await expect(page.getByRole('contentinfo').locator('[data-item="output"]')).toContainText('10 Hz · 75 % gültig');
+  await expect(dock.locator('[data-part="one-ch"]')).toHaveCount(0);
+  await page.screenshot({ path: SHOTS + 'u1-lauf-4ch.png' });
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Testlauf sperrt Format und Takt und sendet keine Ausgabe', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  await confirmedState(page, { run_block: 'Lauf gesperrt: Gegenlesen WARNUNG' });
+  await page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
+  await expect(pop.locator('[data-part="out-format"]')).toBeVisible();
+  await pop.getByText('Testmodus (nur zu Testzwecken)').click();
+  await pop.getByRole('checkbox', { name: /^Lesesperre übergehen/ }).check();
+  await expect(pop.locator('[data-part="out-format"]')).toBeHidden();
+  await expect(pop.locator('[data-part="out-rate-hz"]')).toBeDisabled();
+  await expect(pop.locator('[data-part="fmt-1ch"]')).toBeDisabled();
+  expect(errors).toEqual([]);
+});
+
 test('Ausgabe: UART direkt ohne Haken sendet über Enter und runStart nichts', async ({ page }) => {
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -2062,4 +2206,428 @@ test('Einrichtung abbrechen: 409 des Servers erscheint wörtlich als stehender H
   await page.getByRole('banner').getByRole('button', { name: 'Einrichtung abbrechen' }).click();
   await expect(page.locator('.toast', { hasText: 'Keine Einrichtung läuft' })).toBeVisible();
   expect(errors).toEqual(['Failed to load resource: the server responded with a status of 409 (Conflict)']);
+});
+
+// --- Windows-Brücke einrichten (BW1) ---
+const BRIDGE_RESET = { hub: true, connected: false, transport: null, uart_state: 'unprepared', uart_error: null,
+  release_block: 'DUT-Ausgabe gesperrt: Windows-Abnahme fehlt.', prepare_409: false, expires_in_s: 300, offers: 0 };
+
+async function openBridge(page: Page, choose: 'Netzwerk über Brücke' | 'UART über Brücke') {
+  await hook(page, '/test/bridge', BRIDGE_RESET);
+  await hook(page, '/test/scene', { name: 'idle' }); // ein früherer Lauf darf den Ausgabeweg nicht festhalten
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await expect(pop.getByRole('button', { name: 'Brücke einrichten…' })).toBeHidden();
+  await pop.getByText(choose, { exact: true }).click();
+  await pop.getByRole('button', { name: 'Brücke einrichten…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Windows-Brücke einrichten' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test('Brücke einrichten (Netzwerk): Profil, Kopplungscode mit Ablauf, nichts bleibt im DOM', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.clock.install();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const dialog = await openBridge(page, 'Netzwerk über Brücke');
+  await expect(dialog).toContainText('Interner Testbuild – beim Entwickler anfragen');
+  await expect(dialog.locator('[data-step="uart"]')).toBeHidden();
+  const shots = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots';
+  await page.screenshot({ path: `${shots}/bw1-1-ohne-code.png` });
+
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Profil herunterladen (pi.dispread)' }).click();
+  expect((await download).suggestedFilename()).toBe('pi.dispread');
+  await expect(dialog).toContainText('Werkbank-Pi');
+  await expect(dialog).toContainText('pi-test-0001');
+  await expect(dialog.locator('[data-part="p-fp"]')).toHaveText(Array(4).fill('0123 4567 89ab cdef').join('\n'));
+  const fp = await dialog.locator('[data-part="p-fp"]').evaluate((el) => ({ ws: getComputedStyle(el).whiteSpace, h: el.getBoundingClientRect().height,
+    lh: parseFloat(getComputedStyle(el).lineHeight), overflow: el.scrollWidth > el.clientWidth }));
+  expect(fp.ws).toBe('pre');
+  expect(Math.round(fp.h / fp.lh)).toBe(4);
+  expect(fp.overflow).toBe(false);
+  await expect(dialog).toContainText('In der Windows-App muss derselbe Fingerabdruck erscheinen.');
+
+  await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
+  await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-1-network');
+  await expect(dialog.locator('[data-part="count"]')).toHaveText(/^[45]:\d\d$/);
+  await expect(dialog).toContainText('Code nur in die Windows-App eingeben. Einmal gültig, 5 Minuten.');
+  await page.screenshot({ path: `${shots}/bw1-2-mit-code.png` });
+  await page.clock.fastForward(301_000);
+  await expect(dialog.locator('[data-part="code"]')).toHaveCount(0);
+  await expect(dialog).toContainText('Abgelaufen – neuen Code erzeugen');
+  expect(await page.content()).not.toContain('TESTCODE');
+
+  // Neuer Code, dann Schließen: der Code ist weder im DOM noch im Speicher der Seite.
+  await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
+  await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-2-network');
+  await dialog.getByRole('button', { name: 'Schließen' }).click();
+  await expect(dialog).toBeHidden();
+  expect(await page.content()).not.toContain('TESTCODE');
+  expect(await page.evaluate(() => JSON.stringify([{ ...localStorage }, { ...sessionStorage }]))).not.toContain('TESTCODE');
+  expect(errors).toEqual([]);
+});
+
+test('Brücke einrichten: verbundene Windows-App heißt nur Verbindung, nie Freigabe', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const dialog = await openBridge(page, 'Netzwerk über Brücke');
+  await expect(dialog).toContainText('nicht verbunden');
+  await expect(dialog).toContainText('DUT-Ausgabe gesperrt: Windows-Abnahme fehlt.');
+  await hook(page, '/test/bridge', { connected: true, transport: 'network' });
+  await expect(dialog).toContainText('verbunden über Netzwerk', { timeout: 6000 });
+  await expect(dialog).toContainText('DUT-Ausgabe gesperrt: Windows-Abnahme fehlt.');
+  await expect(dialog).not.toContainText(/Messfreigabe|bereit zur Messung/);
+  await expect(dialog).toContainText('pi-test-0001');
+});
+
+test('Brücke einrichten (UART): 409 wörtlich, Vorbereiten und Beenden', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const dialog = await openBridge(page, 'UART über Brücke');
+  const uart = dialog.locator('[data-step="uart"]');
+  await expect(uart).toBeVisible();
+  await expect(uart).toContainText('nicht vorbereitet');
+  await expect(uart).toContainText('UART direkt und der Brücken-UART nutzen denselben Port');
+  await hook(page, '/test/bridge', { prepare_409: true });
+  await uart.getByRole('button', { name: 'UART-Empfang vorbereiten' }).click();
+  await expect(uart.getByRole('alert')).toHaveText('UART unavailable or occupied; release its owner first');
+  await hook(page, '/test/bridge', { prepare_409: false });
+  await uart.getByRole('button', { name: 'UART-Empfang vorbereiten' }).click();
+  await expect(uart).toContainText('wartet auf Windows-App');
+  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/bw1-3-uart.png' });
+  await uart.getByRole('button', { name: 'Beenden' }).click();
+  await expect(uart).toContainText('beendet');
+  await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
+  await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-1-uart');
+});
+
+test('Brücke einrichten: Brückendienst fehlt (503) ohne Fehlerflut, Profil bleibt nutzbar', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/bridge', { hub: false });
+  const dialog = await openBridge(page, 'UART über Brücke');
+  await hook(page, '/test/bridge', { hub: false });
+  await expect(dialog.locator('[data-step="uart"]')).toContainText('Brückendienst auf dem Pi nicht aktiv');
+  await expect(dialog.locator('[data-step="ready"]')).toContainText('Brückendienst auf dem Pi nicht aktiv');
+  await expect(dialog.getByRole('button', { name: 'UART-Empfang vorbereiten' })).toBeDisabled();
+  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/bw1-4-hub-fehlt.png' });
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Profil herunterladen (pi.dispread)' }).click();
+  expect((await download).suggestedFilename()).toBe('pi.dispread');
+  // Der Browser meldet 503 als Konsolenfehler "Failed to load resource"; sonst nichts.
+  expect(errors.filter((e) => !/503/.test(e))).toEqual([]);
+});
+
+test('Brücke einrichten: Fokusfalle, Esc schließt, Fokus kehrt zurück', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const dialog = await openBridge(page, 'Netzwerk über Brücke');
+  const inside = () => page.evaluate(() => Boolean(document.activeElement?.closest('.modal.bridge')));
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab');
+    expect(await inside()).toBe(true);
+  }
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Shift+Tab');
+    expect(await inside()).toBe(true);
+  }
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' })).toBeFocused();
+});
+
+test('Brücke im Lauf: lesend aus dem Dock, UART-Aktionen gesperrt, Kopplung bleibt möglich', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/bridge', BRIDGE_RESET);
+  await hook(page, '/test/scene', { name: 'idle' });
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await pop.getByText('UART über Brücke', { exact: true }).click();
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  await left.getByRole('button', { name: 'Brücke anzeigen…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Windows-Brücke einrichten' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'UART-Empfang vorbereiten' })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Beenden' })).toBeDisabled();
+  await expect(dialog).toContainText('Im Lauf nicht änderbar.');
+  await dialog.getByRole('button', { name: 'Kopplungscode erzeugen' }).click();
+  await expect(dialog.locator('[data-part="code"]')).toHaveText('TESTCODE-1-uart');
+});
+
+test('Brücke einrichten: Wechsel des Transports verwirft den aktiven Kopplungscode', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/bridge', BRIDGE_RESET);
+  const { csrf } = await (await page.request.get('/live/status')).json();
+  // Über die Oberfläche ist der Wechsel nicht erreichbar (Dialog modal); die Schutzlogik prüft eine eigene Instanz.
+  const result = await page.evaluate(async (token) => {
+    const { mountBridgeDialog } = await import('/static/live/run/bridge-dialog.js');
+    const ui = mountBridgeDialog({ serverStatus: () => ({ csrf: token }) });
+    ui.open({ choice: 'tcp', running: false });
+    const dlg = document.querySelector('.modal.bridge') as HTMLElement;
+    (dlg.querySelector('[data-part="offer-btn"]') as HTMLElement).click();
+    for (let i = 0; i < 50 && !dlg.querySelector('[data-part="code"]'); i++) await new Promise((r) => setTimeout(r, 50));
+    const had = dlg.querySelector('[data-part="code"]')?.textContent;
+    ui.open({ choice: 'uart', running: false });
+    const after = dlg.querySelector('[data-part="code"]');
+    const word = dlg.querySelector('[data-part="offer-word"]')?.textContent;
+    ui.close();
+    return { had, gone: after === null, word };
+  }, csrf);
+  expect(result.had).toBe('TESTCODE-1-network');
+  expect(result.gone).toBe(true);
+  expect(result.word).toBe('kein Code');
+});
+
+// TC 2026-11-11: Rahmenbereich dauerhaft unstimmig – ruhiger Hinweis im Lauf,
+// Wiederfinden in der Bereichsbearbeitung nach der Neueinrichtung.
+const T3_SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-11-gsvmulti-takt/shots';
+const TC_SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots';
+test('Bereichshinweis: Statusleiste, Inspektor, Bild und Einrichtung', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  const bar = page.getByRole('contentinfo');
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(bar.locator('[data-item="session"]')).toBeVisible();
+  await expect(bar.locator('[data-item="region"]')).toBeHidden();
+  await expect(inspector.getByRole('tab', { name: 'Nachführung' }).locator('.cnt')).toHaveCount(0);
+
+  await hook(page, '/test/scene', { name: 'running_bereich_unstimmig' });
+  const item = bar.locator('[data-item="region"]');
+  await expect(item).toBeVisible();
+  await expect(item).toHaveText('Bereich 6 unstimmig');
+  await expect(item).toHaveClass(/warn/);
+  await expect(item).toHaveAttribute('title', 'Rahmenbereich 6 ist dauerhaft unstimmig (92 % der Bilder). ' +
+    'Werte bleiben geschützt; es gehen nur Werte verloren. Nach dem Lauf neu einrichten und Bereich 6 entfernen.');
+  const tab = inspector.getByRole('tab', { name: /Nachführung/ });
+  await expect(tab.locator('.cnt')).toHaveText('1');
+  await expect(tab.locator('.cnt')).toHaveClass(/warn-t/);
+  await tab.click();
+  const block = inspector.locator('[data-part="region-hint"]');
+  await expect(block).toContainText('Rahmenbereich 6 ist dauerhaft unstimmig (92 % der Bilder).');
+  await expect(block).toContainText('Nur Diagnose: Freigabe und Grenzen bleiben unverändert.');
+  await expect(block.locator('p.warn-t')).toHaveCount(1);
+  await expect(inspector.locator('tr.flag')).toContainText('dauerhaft unstimmig');
+  await expect(inspector.locator('tr.flag td').first()).toHaveText('6');
+  // Der Wert bleibt freigegeben: der Hinweis ist kein Alarm und keine Ablehnung.
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('.lead')).toHaveClass(/valid/);
+  // Bereich 6 (Index 5, 822,737) im Bild in Warnfarbe, ein anderer Bereich nicht.
+  await expect.poll(() => colourNear(page, [829.5, 737], [229, 165, 53], 3, 60)).toBe(true);
+  expect(await colourNear(page, [836.5, 411], [229, 165, 53], 3, 60)).toBe(false);
+  await noOverflow(page);
+  await page.screenshot({ path: `${TC_SHOTS}/tc-lauf-bereich-unstimmig.png` });
+
+  await hook(page, '/test/scene', { name: 'setup_ready_nach_lauf' });
+  await expect(item).toBeHidden();
+  const previous = inspector.locator('[data-part="previous"]');
+  await expect(previous).toHaveText(/Bereich 5 liegt an einer Stelle, die im letzten Lauf dauerhaft unstimmig war \(94 %\)\. Die Einrichtung wählt solche Stellen künftig selbst ab; bei Bedarf hier entfernen\./);
+  await inspector.getByText('Bereiche einzeln').click();
+  const flagged = inspector.locator('.rlist li.flag');
+  await expect(flagged).toHaveCount(1);
+  await expect(flagged.locator('.n')).toHaveText('5');
+  await expect(flagged.getByRole('button', { name: /Bereich 5 entfernen/ })).toBeEnabled();
+  await expect.poll(() => colourNear(page, [836.5, 411], [229, 165, 53], 3, 60)).toBe(true);
+  await noOverflow(page);
+  await page.screenshot({ path: `${TC_SHOTS}/tc-einrichtung-bereich-wiederfinden.png` });
+
+  // T3: Rauschen im letzten Lauf: genau ein Hinweis, keine "liegt kein Bereich"-Zeilen.
+  await hook(page, '/test/scene', { name: 'setup_ready_nach_lauf_rauschen' });
+  await expect(previous.locator('p')).toHaveCount(1);
+  await expect(previous).toContainText('Bereich 5 liegt an einer Stelle');
+  await expect(previous).toContainText('(62 %)');
+  await expect(previous).not.toContainText('kein Bereich');
+  await expect(inspector.locator('.rlist li.flag')).toHaveCount(1);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await noOverflow(page);
+  await page.screenshot({ path: `${T3_SHOTS}/t3-einrichtung-rauschen.png` });
+
+  // T3: neue Aufstellung: alte Positionen werden nicht verglichen, nichts angezeigt.
+  await hook(page, '/test/scene', { name: 'setup_ready_nach_lauf_neu' });
+  await expect(previous).toBeHidden();
+  await expect(inspector.locator('.rlist li.flag')).toHaveCount(0);
+  await page.screenshot({ path: `${T3_SHOTS}/t3-einrichtung-neue-aufstellung.png` });
+  expect(errors).toEqual([]);
+});
+
+// TB 2026-11-11: automatisch stillgelegter Rahmenbereich, ruhiger Info-Ton (keine Statusfarbe).
+const TB_SHOTS = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-11-gsvmulti-takt/shots';
+test('Stilllegung: Statusleiste und Inspektor zeigen den Bereich ruhig, ohne "entfernen"', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  const bar = page.getByRole('contentinfo');
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  const item = bar.locator('[data-item="regionOff"]');
+  await expect(bar.locator('[data-item="session"]')).toBeVisible();
+  await expect(item).toBeHidden();
+
+  await hook(page, '/test/scene', { name: 'running_bereich_stillgelegt' });
+  await expect(item).toBeVisible();
+  await expect(item).toHaveText('Bereich 6 automatisch stillgelegt (91 % unstimmig)');
+  await expect(item).not.toHaveClass(/warn|err/);
+  await expect(item.locator('.sq')).toHaveCount(0);
+  await expect(item).toHaveAttribute('title', /übrigen Rahmenbereiche führen nach; Prüfgrenzen unverändert/);
+  await expect(bar.locator('[data-item="region"]')).toBeHidden();
+  const tab = inspector.getByRole('tab', { name: /Nachführung/ });
+  await expect(tab.locator('.cnt')).toHaveCount(0);
+  await tab.click();
+  const block = inspector.locator('[data-part="region-off"]');
+  await expect(block).toContainText('Bereich 6 automatisch stillgelegt (91 % unstimmig).');
+  await expect(block).not.toContainText('entfernen');
+  await expect(block.locator('.warn-t, .err-t, .sq.warn, .sq.err')).toHaveCount(0);
+  await expect(inspector.locator('[data-part="region-hint"]')).toHaveCount(0);
+  await expect(inspector.getByRole('row').filter({ hasText: 'stillgelegt' }).first()).toBeVisible();
+  // Der Wert bleibt freigegeben; die Stilllegung ist kein Alarm.
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('.lead')).toHaveClass(/valid/);
+  await noOverflow(page);
+  await page.screenshot({ path: `${TB_SHOTS}/tb-lauf-bereich-stillgelegt.png` });
+  expect(errors).toEqual([]);
+});
+
+// OQ-71: Bediensackgasse der Einrichtung
+async function fillConfirm(page: Page, { ack = false } = {}) {
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  // Erst den Vorschlag abwarten: eine neue Revision setzt die Felder zurück.
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('.lead h2')).toHaveText('Vorschlag prüfen und bestätigen');
+  await inspector.getByLabel('Name').fill('Operator');
+  await inspector.getByRole('checkbox', { name: 'Einheit mV/V und Format geprüft' }).check();
+  if (ack && await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).isVisible()) {
+    await inspector.getByRole('checkbox', { name: /WARNUNG zur Kenntnis genommen/ }).check();
+  }
+  return inspector;
+}
+
+test('OQ-71: Vorschlag mit FEHLER sperrt Bestätigen für Knopf und Enter, Neu einrichten ist der Weg', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_fehler' });
+  const title = page.getByRole('banner');
+  const confirm = title.getByRole('button', { name: 'Bestätigen', exact: true });
+  const resetup = title.getByRole('button', { name: 'Neu einrichten', exact: true });
+  await expect(confirm).toBeDisabled();
+  await expect(title).toContainText('Bestätigen nicht möglich: Prüfung FEHLER – neu einrichten');
+  await expect(resetup).toBeEnabled();
+  await expect(resetup).toHaveClass(/primary/);
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/live\//.test(new URL(r.url()).pathname)) posts.push(new URL(r.url()).pathname); });
+  const inspector = await fillConfirm(page, { ack: true });
+  await expect(inspector).toContainText('Bestätigen nicht möglich: Prüfung FEHLER – neu einrichten');
+  await expect(inspector.locator('[data-part="submit"]')).toBeDisabled();
+  await expect(confirm).toBeDisabled();
+  await inspector.getByLabel('Name').press('Enter');
+  await page.waitForTimeout(300);
+  expect(posts).toEqual([]);
+  await fits(page, 'Titelleiste, Vorschlag FEHLER');
+  await page.screenshot({ path: SHOTS + 'oq71-fehler.png' });
+  const request = page.waitForRequest('**/live/setup');
+  await resetup.click();
+  expect((await request).method()).toBe('POST');
+  await expect(title.getByRole('button', { name: 'Einrichtung abbrechen' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('OQ-71: Vorschlag OK und WARNUNG zeigen Neu einrichten neben Bestätigen, Bestätigen bleibt möglich', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const title = page.getByRole('banner');
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  await expect(title.getByRole('button', { name: 'Neu einrichten', exact: true })).toBeEnabled();
+  await expect(title.getByRole('button', { name: 'Neu einrichten', exact: true })).not.toHaveClass(/primary/);
+  await expect(title).not.toContainText('Bestätigen nicht möglich');
+  await fillConfirm(page, { ack: true });
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeEnabled();
+  await page.screenshot({ path: SHOTS + 'oq71-warnung.png' });
+  await hook(page, '/__test__/state', { state: 'setup_ready', setup: { overall: 'OK', checks: { raster: 'OK' },
+    overlays: ['overlay_source'], step: 'vorschlag', elapsed_s: 15.0, proposal_revision: 'ok-1' } });
+  await expect(title.getByRole('button', { name: 'Neu einrichten', exact: true })).toBeEnabled();
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeVisible();
+  await page.screenshot({ path: SHOTS + 'oq71-ok.png' });
+  expect(errors).toEqual([]);
+});
+
+test('OQ-71: Kippt der Vorschlag auf FEHLER, wird ein bereit gemachtes Bestätigen nachträglich gesperrt', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/test/scene', { name: 'setup_ready_warnung' });
+  const inspector = await fillConfirm(page, { ack: true });
+  const title = page.getByRole('banner');
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeEnabled();
+  // Der Vorschlag kippt auf FEHLER, ohne dass die Seite es schon weiss: zweite Sicherung des Servers.
+  await hook(page, '/__test__/state', { state: 'setup_ready', setup: { overall: 'FEHLER', proposal_revision: 'b358259f721241f0b9e6af42d4fdb390' } });
+  await expect(title.getByRole('button', { name: 'Bestätigen', exact: true })).toBeDisabled();
+  expect(errors.filter((e) => !/status of 4\d\d/.test(e))).toEqual([]);
+  await expect(inspector.locator('[data-part="submit"]')).toBeDisabled();
+});
+
+test('OQ-71: Bestätigt – Neu einrichten fragt nach, Abbrechen ändert nichts, Verwerfen startet die Einrichtung', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await confirmedState(page);
+  const title = page.getByRole('banner');
+  const resetup = title.getByRole('button', { name: 'Neu einrichten', exact: true });
+  // Erst den bestätigten Zustand abwarten, sonst klickt der Test noch im Vorschlag.
+  await expect(title).toContainText('Einrichtung bestätigt');
+  await expect(resetup).toBeEnabled();
+  const posts: string[] = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && /\/live\//.test(new URL(r.url()).pathname)) posts.push(new URL(r.url()).pathname); });
+  await resetup.click();
+  const dialog = page.getByRole('dialog', { name: 'Neu einrichten' });
+  await expect(dialog).toContainText('Bestätigte Einrichtung verwerfen und neu einrichten?');
+  await page.screenshot({ path: SHOTS + 'oq71-bestaetigt-rueckfrage.png' });
+  await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts).toEqual([]);
+  await expect(title.getByRole('button', { name: 'Lauf starten', exact: true })).toBeVisible();
+  // Esc ist ebenfalls Abbrechen.
+  await resetup.click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  expect(posts).toEqual([]);
+  await resetup.click();
+  const request = page.waitForRequest('**/live/setup');
+  await dialog.getByRole('button', { name: 'Verwerfen und neu einrichten' }).click();
+  expect((await request).headers()['x-csrf-token']).toBeTruthy();
+  await expect(title.getByRole('button', { name: 'Einrichtung abbrechen' })).toBeVisible();
+  await page.screenshot({ path: SHOTS + 'oq71-neu-eingerichtet.png' });
+  expect(errors).toEqual([]);
+});
+
+test('OQ-71: Während der Einrichtung Abbrechen, danach sofort neu einrichten; im Lauf gesperrt mit Grund', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const title = page.getByRole('banner');
+  await hook(page, '/test/scene', { name: 'setup_focus' });
+  await expect(title.getByRole('button', { name: 'Neu einrichten', exact: true })).toHaveCount(0);
+  await title.getByRole('button', { name: 'Einrichtung abbrechen' }).click();
+  const start = title.getByRole('button', { name: 'Einrichtung starten', exact: true });
+  await expect(start).toBeEnabled();
+  const request = page.waitForRequest('**/live/setup');
+  await start.click();
+  await request;
+  await expect(title.getByRole('button', { name: 'Einrichtung abbrechen' })).toBeVisible();
+  await page.screenshot({ path: SHOTS + 'oq71-abbruch-neustart.png' });
+  await hook(page, '/test/scene', { name: 'running_valid' });
+  const locked = title.getByRole('button', { name: 'Neu einrichten', exact: true });
+  await expect(locked).toBeDisabled();
+  await expect(locked).toHaveAttribute('title', /Nicht während eines Laufs/);
+  await fits(page, 'Titelleiste im Lauf');
+  await page.screenshot({ path: SHOTS + 'oq71-lauf.png' });
+  expect(errors).toEqual([]);
 });

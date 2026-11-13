@@ -580,7 +580,7 @@ def test_playwright_service_status_without_socket(tmp_path, monkeypatch, full):
     from aiohttp.test_utils import make_mocked_request
     from live_ui_server import FakeLiveService
 
-    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+    from dispread.live.texts import LIVE_CAUSE_TEXT
 
     async def direct(fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -742,7 +742,7 @@ def test_live_routes_share_auth_and_csrf_guard(monkeypatch, target, expected):
 
     async def check():
         service = FakeService()
-        app = make_app(None, None, verifier=lambda _password: True, live=service)
+        app = make_app(None, verifier=lambda _password: True, live=service)
         guard = app.middlewares[0]
 
         async def handle(method, path, headers=None, body=None):
@@ -918,7 +918,7 @@ def test_live_cli_has_no_confirmation_or_run_start(action):
 
 def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    from unittest.mock import AsyncMock, Mock
+    from unittest.mock import ANY, AsyncMock, Mock
 
     from dispread.camera_settings import preview_settings
     from dispread.workbench import server
@@ -926,12 +926,19 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
 
     original_open = server.Path.open
 
-    async def check(simulate, close_error):
-        runtime = tmp_path / f"{simulate}-{close_error}"
+    async def check(simulate, close_error, configured):
+        runtime = tmp_path / f"{simulate}-{close_error}-{configured}"
         runtime.mkdir(mode=0o700)
         args = parser().parse_args(["serve", "--socket", str(runtime / "control.sock"),
                                     "--live-data", str(tmp_path / "live")]
                                    + (["--simulate"] if simulate else []))
+        from dispread.bridge import hub as hub_module
+        bridge_hub = Mock()
+        hub_factory = Mock(return_value=bridge_hub)
+        monkeypatch.setattr(hub_module, 'BridgeHub', hub_factory)
+        bridge_config = ({'bridge_identity': SimpleNamespace(pi_id='pi'), 'bridge_pairing_store': object()}
+                         if configured else {})
+        monkeypatch.setattr(server, 'bridge_service_config', lambda args: (dict(bridge_config), None))
         signals = []
         loop = asyncio.get_running_loop()
         monkeypatch.setattr(loop, "add_signal_handler", lambda _sig, callback: signals.append(callback))
@@ -964,8 +971,6 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
         monkeypatch.setattr(server.Path, "open", track_open)
         live_factory = Mock(return_value=live)
         monkeypatch.setattr(server, "LiveService", live_factory)
-        terminals = Mock(close=AsyncMock())
-        monkeypatch.setattr(server, "Terminals", Mock(return_value=terminals))
         app_factory = Mock(return_value=web.Application())
         monkeypatch.setattr(server, "make_app", app_factory)
         runner = Mock(setup=AsyncMock(), cleanup=AsyncMock())
@@ -998,9 +1003,15 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
             assert owner_factory.call_args.kwargs == {}
             uvc.assert_called_once_with(preview_settings(), apply_controls=False)
             controller.log.assert_any_call("error", "Kamera: Kamera belegt / USB2")
-        live_factory.assert_called_once_with(owner, tmp_path / "live", simulate=simulate)
+        live_factory.assert_called_once_with(owner, tmp_path / "live", simulate=simulate,
+                                             bridge_hub=bridge_hub if configured else None)
         controller_factory.assert_called_once_with(args.data, args.camera, args.simulate, owner=owner)
-        app_factory.assert_called_once_with(controller, terminals, live=live)
+        app_factory.assert_called_once_with(controller, live=live, verifier=ANY,
+                                             **({**bridge_config, 'bridge_hub': bridge_hub} if configured else {}))
+        if configured:
+            bridge_hub.close.assert_called_once_with()
+        else:
+            hub_factory.assert_not_called()
         owner.start.assert_called_once_with(reason="serverstart")
         controller.close.assert_called_once_with()
         live.close.assert_called_once_with()
@@ -1013,7 +1024,8 @@ def test_serve_owner_factories_camera_failure_and_cleanup(tmp_path, monkeypatch)
 
     for simulate in (True, False):
         for close_error in (False, True):
-            asyncio.run(check(simulate, close_error))
+            for configured in (False, True):
+                asyncio.run(check(simulate, close_error, configured))
 
 
 @pytest.mark.parametrize("state", ["setup_ready", "confirmed"])
@@ -1354,7 +1366,9 @@ def test_run_start_output_reaches_service_without_socket(monkeypatch):
 SCENE_NAMES = (
     'idle', 'setup_focus', 'setup_focus_done', 'setup_standbilder', 'setup_ready_warnung',
     'running_valid', 'running_transition', 'running_rahmen_verdeckt', 'running_stalled',
-    'running_anzeige_bewegt', 'stopped',
+    'running_anzeige_bewegt', 'stopped', 'running_bereich_unstimmig', 'setup_ready_nach_lauf',
+    'setup_ready_nach_lauf_rauschen', 'setup_ready_nach_lauf_neu', 'running_bereich_stillgelegt',
+    'setup_ready_fehler',
 )
 
 
@@ -1372,7 +1386,7 @@ def _assert_real_keys(fake, real, path='status'):
 def test_fake_full_status_carries_cause_texts(tmp_path):
     from live_ui_server import FakeLiveService
 
-    from dispread.workbench.fields import LIVE_CAUSE_TEXT
+    from dispread.live.texts import LIVE_CAUSE_TEXT
 
     expected = LIVE_CAUSE_TEXT.copy()
     service = FakeLiveService(tmp_path / 'overlay.png')

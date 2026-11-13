@@ -5,6 +5,9 @@
 // Servers erscheinen woertlich und inline (Wahrheitsregel 6). Bei neuer
 // proposal_revision oder session_id beginnt die Bestaetigung von vorn.
 
+// Gesamturteil FEHLER: Bestaetigen ist gesperrt, der Weg ist Neu einrichten (OQ-71).
+export const FAILED_CONFIRM_REASON = 'Bestätigen nicht möglich: Prüfung FEHLER – neu einrichten';
+
 export function confirmModel(status) {
   const setup = status?.setup || {};
   const visible = status?.state === 'setup_ready';
@@ -15,6 +18,7 @@ export function confirmModel(status) {
     .map(([key]) => setup.check_reasons?.[key]).filter(Boolean);
   return {
     visible,
+    failed: visible && setup.overall === 'FEHLER',
     key: `${status?.session_id ?? ''}\u0000${setup.proposal_revision ?? ''}`,
     needAck: setup.overall === 'WARNUNG',
     ackReason: warnReasons.length ? warnReasons.join(', ') : null,
@@ -33,7 +37,7 @@ export function confirmModel(status) {
 
 // Freigabe des Knopfs; der Server prueft trotzdem alles selbst.
 export function fieldsReady(model, fields) {
-  return Boolean(model.visible && String(fields.name || '').trim() && fields.format && (!model.needAck || fields.ack));
+  return Boolean(model.visible && !model.failed && String(fields.name || '').trim() && fields.format && (!model.needAck || fields.ack));
 }
 
 // POST-Koerper woertlich wie auf der alten Live-Seite ($('confirm').onclick).
@@ -100,7 +104,7 @@ export function mountConfirm(host, client, {locked = () => false, onChange = () 
     submit.disabled = !ready();
     const f = fields();
     const needs = model.needAck ? 'Name und beide Haken sind nötig.' : 'Name und Haken sind nötig.';
-    const text = locked() ? 'Rahmenbereich wird geprüft … Bestätigen ist bis zur Antwort gesperrt.'
+    const text = model.failed ? FAILED_CONFIRM_REASON : locked() ? 'Rahmenbereich wird geprüft … Bestätigen ist bis zur Antwort gesperrt.'
       : sending ? 'Bestätigung wird gesendet …'
         : fieldsReady(model, f) ? 'Bereit zum Bestätigen.' : needs;
     const state = q('[data-part="state"]');

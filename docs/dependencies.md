@@ -42,6 +42,114 @@ Auf dem Pi gelten unverändert die untenstehenden Regeln: Projekt-`.venv`
 mit `--system-site-packages`, Projektinstallation mit `--no-deps` und keine
 PyPI-Kopien der Debian-Kamera-/CV-/Serialpakete.
 
+## Windows-EXE: getrennte Buildvorbereitung
+
+Die technische Umsetzung unter `windows/bridge/` verwendet einen eigenen
+Windows-Build und bündelt die Laufzeit. Die vorhandene Pi-venv bleibt
+unverändert; Qt/PyInstaller werden dort nicht installiert. Kandidaten für
+Windows-Laufzeit/Build stehen in den `.in`-Dateien des Windows-Pakets.
+Verifizierte, hashgesperrte Locks und tatsächlicher Freeze-Nachweis fehlen,
+solange kein entsprechend geprüfter Windows-Build vorliegt. Der Build darf
+fehlende oder ungeprüfte Lock-Evidenz nicht als erfolgreich ersetzen.
+
+Device-/VCOM-Adapter werden lokal mit injizierten Betriebssystemantworten
+geprüft. Die tatsächliche Windows-PnP-/Treiberinstallation und Freigabe der
+Weitergabe sind getrennte Nachweise. Kein neuer Treiber oder Qt-Paket wurde
+bei dieser Vorbereitung auf dem Pi installiert. [Spec](superpowers/specs/2026-11-06-windows-bruecke-design.md),
+[Nachweisplan](superpowers/plans/2026-11-06-windows-bruecke-nachweise.md).
+
+## Windows-Verbindungskern
+
+Der reale WSS-Client verwendet aiohttp **3.14.3** als exakt geprüften
+API-Kandidaten in der getrennten Windows-`.in`-Datei. Ein enger Connector-Hook
+prüft den tatsächlichen Peer vor dem HTTP-Schreiben; weil diese API privat
+ist, verweigert ein anderer SDK-Stand den Betrieb. Gültigkeit, Pi-ID und Pin
+werden vor Zugangsdaten geprüft. Die Sperre ersetzt keine qualifizierten
+Windows-Wheels/Hashlocks; keine Bibliothek wurde hier installiert.
+
+Zunächst unterstützt sind direkte HTTPS/WSS-Verbindungen zu konfigurierten
+Origins oder `/bridge/v2`. CONNECT-Proxys und Reverse-Proxy-Pfadpräfixe
+werden ausdrücklich nicht geraten. Globale SSL-Einstellungen bleiben
+unverändert. CredentialStore verwendet Windows-DPAPI und SID-DACLs über
+`ctypes`, ohne Maschinenfreigabe oder Klartextfallback. Die nativen
+Windows-Nachweise bleiben separat offen. Gespeicherte Tokens sind an den
+Zertifikatsfingerprint gebunden; Manager-Aufrufe von CredentialStore verwenden
+immer `expected_pin`. Eigene Speicheradapter müssen diese Bindung erhalten.
+
+## Windows-Worker und geschützte Prozessinstanz
+
+Das Übergabejournal nutzt SQLite aus der Standardbibliothek mit bestätigtem
+Intent vor COM und Ergebnis danach. Es ist Lauf-Audit und wird nicht durch
+Diagnoserotation gelöscht. Detaildiagnosen sind getrennt auf 64 MiB/sieben
+Tage begrenzt; Zugriffe und Export wenden die Aufbewahrung an. Wer genaue
+physische Löschung auch während Leerlauf braucht, plant `prune()` regelmäßig
+im Backend ein. Globale Laufbereinigung bleibt OQ-60.
+
+Die Prozessinstanz verwendet native Win32-SID/DACL-/Mutex-/Event-APIs über
+`ctypes`, ohne zusätzliche Bibliothek und ohne GUI-Fenstercode. Linux-Fakes
+sind vom echten Windows-Prozesstest getrennt; dessen Ergebnis steht aus.
+GSVmulti wird nicht beendet. Die GUI muss Aktivierungswunsch, explizites
+Beenden, Abmelden und Standby an die vorhandenen Kernoperationen anbinden.
+
+## Windows-Installer und Updateverträge
+
+W3 verwendet Standardbibliothek plus die bereits getrennt deklarierte
+cryptography-Bibliothek für Ed25519-Manifestprüfung. Vertrauensschlüssel und
+erlaubter HTTPS-Release-Ursprung müssen ausdrücklich provisioniert werden;
+Testschlüssel sind keine Produktvorgabe. OQ-65 führt Kanal-/Schlüsselwechsel
+und Schutz gegen alte signierte Releases. Native Deployment-/UAC-Anbieter
+fehlen weiterhin und bleiben ohne Qualifikation gesperrt.
+
+Optionales Inno-Setup-Rezept paketiert ausschließlich die interne N1-Probe
+nach bestandenen N1-Buildgates. Es ist kein signierter Produktinstaller und
+enthält keinen Treiber-/GUI-Start. Kein Windows-Runner ist bereitgestellt;
+deshalb wurde keine zusätzliche CI-Jobdatei angelegt. Konkrete Inno-Version,
+Signierung und VM-Nachweise sind externe Voraussetzungen, keine Installation
+in der Pi-venv.
+
+## Brücke v2: optionale Discovery und HTTPS-Zugang
+
+Debian `python3-zeroconf` wird im Workbench-Installationsskript deklariert.
+Es wird erst für ausdrücklich aktivierte DNS-SD-Veröffentlichung benötigt;
+SDK-Fehler lassen konfigurierte HTTPS/WSS-Endpunkte verwendbar. Hier wurde
+das Paket nicht installiert. Windows führt `zeroconf` als eigenen, noch zu
+qualifizierenden Buildkandidaten. Die Adapter-API wurde gegen die
+[primäre SDK-Dokumentation](https://python-zeroconf.readthedocs.io/en/latest/api.html)
+und freigegebenen Quelltext geprüft, nicht am installierten Netzwerk.
+
+Die Suche läuft per `multiprocessing` mit `spawn` in einem begrenzten
+Kindprozess, einschließlich SDK-Start und Aufräumen. Der spätere eingefrorene
+Windows-Einstieg braucht `multiprocessing.freeze_support()` und eine echte
+Windows-Suchprüfung. Dies betrifft keine Kameraprozesse. Veröffentlichung
+ist separat optional; explizite Endpunkte bleiben unabhängig davon erhalten.
+
+`--bridge-directory` lädt ausschließlich eine vorhandene provisionierte
+Identität und verwendet deren Zertifikat am HTTPS-Dienst. Vorhandene
+`--cert`/`--key`-Dateien werden nicht überschrieben. Ohne Opt-in bleibt der
+bisherige TLS-Weg. Der portable Bind-Standard ist 127.0.0.1; externe
+Erreichbarkeit braucht eine ausdrückliche Dienstadresse und konfigurierte
+Endpunkte. PAM-Konto muss zum lokalen Dienstkonto passen und ist
+konfigurierbar; kein festes me-systeme-Konto als allgemeiner Vertrag.
+
+## Brücke v2: Identität und Kopplung
+
+Der Pi benötigt zusätzlich Debian `python3-cryptography`;
+`scripts/install-workbench.sh` deklariert es, ohne Qt/PyPI-Kopien einzuführen.
+Die vorhandene Testumgebung stellt cryptography 50.0.1 bereit; in dieser
+Umsetzung wurde nichts installiert. Windows führt cryptography 50.0.1
+als Buildkandidaten in seiner getrennten `.in`-Datei, nicht als bereits
+qualifizierten Windows-Lock.
+
+Die öffentliche Zertifikats-/Signaturprüfung ist auch ohne POSIX-Module
+importierbar. Persistente Identität und lokale Erstkonfiguration sind
+Pi-Aufgaben: Eigentümerverzeichnis 0700, private Identitätsdatei 0600,
+hardwaregebundene ID und RSA-3072-Zertifikat. Bereitstellung ausschließlich
+über ausdrückliches `dispread bridge identity --provision`; bestehende
+Zertifikate und laufende Dienste werden dabei nicht ersetzt. Offline-UART
+kann ein lokal exportiertes Profil mit höchstens fünf Minuten gültigem
+Einmalangebot verwenden. Netzwerk-/HTTP-Anbindung und gemeinsamer Hub sind als Backend integriert;
+Aktivierung und reale Abnahme bleiben ausdrücklich getrennt.
+
 ## Zensical-Pflege auf dem Forgejo-Runner
 
 Der getrennte Wartungs-Runner installiert `@openai/codex@0.156.1` mit Node
@@ -132,7 +240,7 @@ Spezialisierte Traineddata (`ssd`, `letsgodigital`) sind nicht in Debian, siehe
 
 Nichts über die dokumentierten Systempakete hinaus. Der Messkern nutzt
 `numpy`, `cv2` und `pyserial`. Für die Workbench kommen `aiohttp` und PAM
-hinzu; die optionale TUI nutzt `textual` (Pakete siehe unten). Die aktive
+hinzu; Brücke v2 benötigt cryptography und für optionale Discovery zeroconf; die optionale TUI nutzt `textual` (Pakete siehe unten). Die aktive
 UVC-Bildquelle öffnet OpenCV erst beim Öffnen der Kamera. `picamera2` wird von ihr nicht importiert; Tests und Beispiele ohne
 Kamera bleiben ausführbar ([Bildquellen-API](../api/frames.md)).
 
@@ -167,8 +275,9 @@ Paket ausgeliefert; es ist keine Node.js-Laufzeit erforderlich.
 Linux-Shell: Bash auf einem echten PTY. Ein frisch gestarteter Kindprozess
 übernimmt das steuernde Terminal vor `exec`; kein Python-Code nach einem
 Fork aus dem mehrthreadigen Kameraprozess. Kein tmux notwendig. PAM nutzt den
-vorhandenen Dienst `login` für den eigenen Benutzer `me-systeme`; Serverstart
-als root oder als anderer Benutzer wird abgelehnt.
+vorhandenen Dienst `login` für das konfigurierte lokale Dienstkonto
+(standardmäßig effektiver OS-Benutzer). Serverstart als root oder mit einem
+PAM-Konto, dessen UID nicht zum Dienst passt, wird abgelehnt.
 
 ## Doku-Seite und CI (2026-09-23)
 

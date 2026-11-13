@@ -1,0 +1,30 @@
+2/90 var/live/live-20261023T084344Z/setup/still.png: fit
+5/90 var/live/live-20261023T123623Z/setup/still.png: startlage_mehrdeutig
+8/90 var/live/live-20261023T124226Z/setup/still.png: fit
+11/90 var/live/live-20261026T083033Z/setup/still.png: keine_startlage
+14/90 var/live/live-20261028T113238Z/setup/still.png: fit
+17/90 var/live/live-20261028T121101Z/setup/still.png: fit
+20/90 var/live/live-20261028T133037Z/setup/still.png: fit
+23/90 var/live/live-20261028T150539Z/setup/still.png: fit
+26/90 var/live/live-20261030T082502Z/setup/still.png: fit
+29/90 var/live/live-20261030T133635Z/setup/still.png: fit
+32/90 var/live/live-20261106T173456Z/setup/still.png: fit
+35/90 var/live/live-20261106T175834Z/setup/still.png: fit
+38/90 var/live/live-20261111T111008Z/setup/still.png: fit
+41/90 var/live/live-20261111T154403Z/setup/still.png: fit
+44/90 var/live/live-20261111T155557Z/setup/still.png: fit
+47/90 var/live/live-20261111T162902Z/setup/still.png: fit
+50/90 var/live/live-20261111T165754Z/setup/still.png: fit
+53/90 var/live/live-20261113T085544Z/setup/still.png: fit
+56/90 var/live/live-20261113T111637Z/setup/still.png: fit
+59/90 var/live/live-20261113T115232Z/setup/still-versuch-1.png: fit
+62/90 var/live/live-20261113T121656Z/setup/still.png: fit
+65/90 var/live/live-20261113T130253Z/setup/still.png: fit
+68/90 var/live/live-20261113T133144Z/setup/still.png: fit
+71/90 var/live/live-20261113T140830Z/setup/still.png: fit
+74/90 var/live/live-20261113T143830Z/setup/still.png: fit
+77/90 /mnt/ssd/picam-dev/regression/2026-11-11/live-20261111T111008Z/still.png: reused var/live/live-20261111T111008Z/setup/still.png
+80/90 /mnt/ssd/picam-dev/regression/2026-11-11/live-20261111T154403Z/still.png: reused var/live/live-20261111T154403Z/setup/still.png
+83/90 /mnt/ssd/picam-dev/regression/2026-11-11/live-20261111T155557Z/still.png: reused var/live/live-20261111T155557Z/setup/still.png
+86/90 /mnt/ssd/picam-dev/regression/2026-11-11/live-20261111T162902Z/still.png: reused var/live/live-20261111T162902Z/setup/still.png
+89/90 /mnt/ssd/picam-dev/regression/2026-11-11/live-20261111T165754Z/still.png: reused var/live/live-20261111T165754Z/setup/still.png

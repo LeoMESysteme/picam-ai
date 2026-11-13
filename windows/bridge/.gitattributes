@@ -1,0 +1,2 @@
+# Windows-Starter mit CRLF unveraendert ausliefern (auch im ZIP-Download).
+*.cmd -text

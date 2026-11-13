@@ -789,3 +789,18 @@ test('Kamera-Menü: Stillstandsalter mit Dezimalkomma', () => {
   assert.equal(cameraView({stalled: true, error: 'Streamstillstand: kein Bild seit 5.3 s'}),
     'Streamstillstand: kein Bild seit 5,3 s');
 });
+
+test('confirm: Gesamturteil FEHLER sperrt Bestaetigen trotz vollstaendiger Felder (OQ-71)', () => {
+  const status = scene('setup_ready_warnung');
+  status.setup.overall = 'FEHLER';
+  const model = confirmModel(status);
+  assert.equal(model.failed, true);
+  assert.equal(fieldsReady(model, {name: 'L. Hentschke', format: true, ack: true}), false);
+  assert.equal(fieldsReady(model, {name: 'L. Hentschke', format: true, ack: false}), false);
+  status.setup.overall = 'OK';
+  assert.equal(confirmModel(status).failed, false);
+  assert.equal(fieldsReady(confirmModel(status), {name: 'L. Hentschke', format: true, ack: false}), true);
+  // Ausserhalb von setup_ready ist nichts sichtbar und nichts bestaetigbar.
+  status.state = 'confirmed';
+  assert.equal(confirmModel(status).failed, false);
+});

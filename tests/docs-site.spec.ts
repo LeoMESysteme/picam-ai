@@ -1949,6 +1949,11 @@ test('Session-Dateidownload bleibt bytegleich; Tastatur und Wiki-Theme erreichen
   const path = await download.path();
   const expected = gunzipSync(fixture.bodies.get('chunks/live-a-run-01.gz.bin')!.body as Buffer);
   expect(readFileSync(path!)).toEqual(expected);
+  // Nach dem Download die Tabellenwahl vor der Tastaturprüfung ausdrücklich setzen.
+  await page.mouse.move(0, 0);
+  const selectedRow = page.locator('tr[data-session="live-a/run-01"]');
+  await selectedRow.getByRole('button', { name: 'Details schließen' }).focus();
+  await expect(selectedRow).toHaveClass(/session-row--active/);
   const plot = page.locator('.session-trend svg').first();
   await plot.focus();
   // Die zuletzt berührte Tabellenzeile bleibt im Diagramm gewählt; die Werte schweben über dem Diagramm.

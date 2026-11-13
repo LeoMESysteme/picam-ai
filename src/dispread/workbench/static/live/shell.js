@@ -2,8 +2,9 @@
 // Zeitleiste, Ergebnis und Inspektor rechts, Statusleiste. Die Huelle kennt
 // nur Layout und Kontextaktionen; Inhalte rendern die Ansichten in die
 // zurueckgegebenen Knoten.
-import {cameraView} from './model.js';
+import {activeRegionHint, cameraView, regionDeactivatedText, regionHintShort, regionHintText} from './model.js';
 import {outputItem} from './run/output.js';
+import {FAILED_CONFIRM_REASON} from './setup/confirm.js';
 
 const ICONS = `<svg class="sprite" aria-hidden="true" focusable="false"><defs>
 <symbol id="i-chev" viewBox="0 0 16 16"><path d="M6 3.5l4.5 4.5L6 12.5"/></symbol>
@@ -58,6 +59,8 @@ const TEMPLATE = `${ICONS}
     <span class="it shr" data-item="reference"></span>
     <span class="it shr" data-item="output" hidden></span>
     <span class="it shr" data-item="tolerance" hidden></span>
+    <span class="it shr" data-item="region" hidden></span>
+    <span class="it shr" data-item="regionOff" hidden></span>
     <span class="it notice" data-item="notice" hidden></span>
     <span class="it last" data-item="session"></span>
   </footer>
@@ -147,19 +150,32 @@ function titleActions(status, view, handlers) {
         disabled: busy || !handlers.cancelSetup},
       {kind: 'button', name: 'confirm', label: 'Bestätigen', cls: 'primary', disabled: true, title: 'Erst nach dem Vorschlag'});
   } else if (state === 'setup_ready') {
-    const ready = Boolean(view.canConfirm && handlers.confirm) && !busy;
-    actions.push({kind: 'button', name: 'confirm', label: 'Bestätigen', cls: 'primary', disabled: !ready,
-      title: ready ? '' : 'Name und Haken im Inspektor'});
+    const failed = status.setup?.overall === 'FEHLER';
+    const resetup = {kind: 'button', name: 'resetup', label: 'Neu einrichten', icon: 'redo',
+      cls: failed ? 'primary' : 'ghost', disabled: busy || !handlers.resetup};
+    if (failed) {
+      // Gesamturteil FEHLER: Bestaetigen gesperrt, Neu einrichten ist der Weg (OQ-71).
+      actions.push({kind: 'note', cls: 'err-t', text: FAILED_CONFIRM_REASON},
+        {kind: 'button', name: 'confirm', label: 'Bestätigen', disabled: true, title: FAILED_CONFIRM_REASON}, resetup);
+    } else {
+      const ready = Boolean(view.canConfirm && handlers.confirm) && !busy;
+      actions.push(resetup, {kind: 'button', name: 'confirm', label: 'Bestätigen', cls: 'primary', disabled: !ready,
+        title: ready ? '' : 'Name und Haken im Inspektor'});
+    }
   } else if (state === 'confirmed') {
     const by = status.profile?.confirmed_by;
     if (by) actions.push({kind: 'note', text: `Einrichtung bestätigt · ${by}`});
+    actions.push({kind: 'button', name: 'resetup', label: 'Neu einrichten', icon: 'redo', cls: 'ghost',
+      disabled: busy || !handlers.resetup});
     // view.canStart (Pop-up): gesperrt bei Lesesperre ohne Testmodus-Haken.
     const canStart = view.canStart ?? !status.run_block;
     actions.push({kind: 'run', name: 'runStart', toggle: 'runOptions', label: 'Lauf starten', icon: 'run', cls: 'primary',
       disabled: busy || !handlers.runStart || !canStart, toggleDisabled: busy || !handlers.runOptions,
       expanded: Boolean(view.runOptionsOpen), title: status.run_block && !canStart ? status.run_block : ''});
   } else if (state === 'running') {
-    actions.push({kind: 'button', name: 'mark', label: 'Ereignis markieren', icon: 'flag', popup: true,
+    actions.push({kind: 'button', name: 'resetup', label: 'Neu einrichten', icon: 'redo', cls: 'ghost', disabled: true,
+      title: 'Nicht während eines Laufs – erst den Lauf stoppen'},
+      {kind: 'button', name: 'mark', label: 'Ereignis markieren', icon: 'flag', popup: true,
       expanded: Boolean(view.markOpen), disabled: busy || !handlers.mark},
       {kind: 'button', name: 'stop', label: 'Lauf stoppen', icon: 'stop', cls: 'danger', disabled: busy || !handlers.stop});
   }
@@ -322,6 +338,17 @@ export function renderStatusbar(status, hudProc = null) {
   setItem(items.tolerance, {hidden: !tolerance, cls: 'warn',
     html: `<span class="sq warn"></span><span class="tx">Lesetoleranz <b>×${esc(tolerance?.factor)}</b> nicht validiert</span>`,
     title: tolerance ? `Angepasste Lesetoleranz ×${tolerance.factor}: Werte nur in dieser Aufstellung gegen Referenz geprüft, nicht validiert.` : ''});
+  // TC 2026-11-11: ruhiger Warnhinweis, Volltext im Titel und im Inspektor (Nachführung).
+  const shown = ['running', 'stopped'].includes(status?.state);
+  const deactivated = shown ? status?.run?.region_deactivated : null;
+  const regionHint = shown ? activeRegionHint(status?.run?.region_hint, deactivated) : null;
+  const regionShort = regionHintShort(regionHint);
+  setItem(items.region, {hidden: !regionShort, cls: 'warn',
+    html: `<span class="sq warn"></span><span class="tx">${esc(regionShort)}</span>`, title: regionHintText(regionHint)});
+  // TB 2026-11-11: ruhiger Info-Ton, keine Statusfarbe (Nachführung läuft mit den übrigen Bereichen).
+  const offText = regionDeactivatedText(deactivated);
+  setItem(items.regionOff, {hidden: !offText, cls: '', html: `<span class="tx">${esc(offText)}</span>`,
+    title: offText ? `${offText}. Die übrigen Rahmenbereiche führen nach; Prüfgrenzen unverändert.` : ''});
   const notice = status?.release_notice;
   setItem(items.notice, {hidden: !notice, html: `<span>${esc(notice)}</span>`, title: notice || ''});
   setItem(items.session, {html: `Sitzung <b>${esc(status?.session_id || '–')}</b>`});

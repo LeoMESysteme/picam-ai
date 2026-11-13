@@ -168,6 +168,54 @@ Bilder werden mit eigenem Grund abgelehnt. Randfenster werden uebersprungen.
 
 Score = Inlierzahl / vorgeschlagene Regionen * mittlerer Inlierpeak, [0, 1];
 er ist nur informativ und keine Fehlerwahrscheinlichkeit.
+
+TC 2026-11-11, reine Diagnose: last_regions traegt je Bereich res1/res2, den
+euklidischen Abstand des gefundenen Bereichs (Inlier wie Ausreisser) zum Erst-
+bzw. Zweitfit in Rohpixeln; None ohne Treffer, ohne Fit oder ohne Zweitfit.
+Gerechnet wird gleich nach dem RANSAC-Fit, also auch fuer spaeter mit
+rahmen_unstimmig abgelehnte Bilder. Die Rechnung laeuft getrennt von den
+Pruefungen; Freigabe, Schwellen, RANSAC und Entscheidung bleiben bitgleich
+(tests: tc_residuen_aendern_keine_entscheidung, tc_echtlauf_20261111).
+Auswertung: dispread.live.region_hint.
+
+TB 2026-11-11, Einrichtung (nur Auswahl, Laufzeitpruefung unveraendert): Jeder
+automatische Kandidat, Fenster- wie Rahmenpunkt, wird ausgeschlossen, wenn sein
+Autokorrelationsgipfel flach ist (2*Gipfel - Nachbarn auf der schwaecheren
+Achse < proposal_min_peak_curvature = 0.08) UND seine Lage unter festen
+nichtlinearen Lichtproben wandert (_photometric_variants: Gamma 0.7/1.4,
+Glanzanteil ueber dem 75-%-Quantil -60 %, Anteil ueber dem Median halbiert;
+groesster Versatz > proposal_max_photometric_shift_px = 0.12 px oder kein
+eindeutiger Treffer). Kalibriert an 55 Einrichtungen (Produktdaten und
+Entwicklungsaufnahmen): die belegt unstimmigen Glanz- und Fasenbereiche der Laeufe
+live-20261111T103604Z/122753Z/095426Z liegen bei Kruemmung 0.037..0.063 und
+Versatz 0.139..0.279 px; alle zuvor geeigneten Einrichtungen bleiben geeignet,
+mindestens sechs Bereiche je Achsenseite (gefordert fuenf). Ausgeschlossene
+Kandidaten stehen in metrics.localisation_weak_candidates. Manuell
+hinzugefuegte Mittelpunkte (proposal_from_regions) pruefen diese Regel nicht.
+Beide Felder sind Einrichtungsfelder: aeltere Profile laden sie mit Defaults,
+die Laufstartbindung ignoriert sie (session._SETUP_ONLY_TRACKING_FIELDS).
+
+TB 2026-11-11, Stilllegung im Lauf: FrameTracker.disabled ist der einzige
+Zustand ueber Bilder hinweg; er waechst nur (hoechstens MAX_DISABLED_REGIONS = 3
+und hoechstens 15 % der Bereiche) und wirkt genau wie ein Vorschlag ohne diese
+Bereiche (Bereich wird nicht gesucht). Jedes Bild wird weiter unabhaengig gegen
+die urspruengliche Referenz geprueft; Schwellen, RANSAC, Streuung,
+Leave-one-out, Residualgrenzen und LCD-Rand bleiben unveraendert. disable_region
+verlangt: Mindestzahl, Streuung und Reserve der verbleibenden Bereiche wie bei
+der Einrichtung (_reserve_ok) UND eine bestandene Schutzprobe (bias_probe) fuer
+genau den Schritt vom bisherigen zum neuen Satz: das Raster aus test_kandidat_
+koordinierter_lokaler_bias_niemals_falsche_geometrie am Referenzbild (288 Bilder,
+Entscheidung je Satz exakt wie update). Der neue Satz darf kein Quad > 1.0 px
+falsch annehmen und hoechstens 0.05 px schlechter sein als der bisherige; mit
+EINEM weiteren ausfallenden Bereich darf er nur dort gefaehrlich (> 1.0 px)
+sein, wo es der bisherige Satz schon war, und hoechstens 0.05 px schwerer
+(Review W1). Grund: Im Fixture r13 setzt eine ganze Seite ohne Bereich 2 oder
+11 eine 3.5 px falsche Lage durch; nach {0, 5, 15} werden zusaetzliche Ausfaelle
+von 8/16/17/19 gefaehrlich (1.46 px). Die Probe laeuft in einem eigenen Prozess
+(dispread.live.region_probe, nice 19, ~31 s CPU an 1080p).
+Wann vorgeschlagen wird, entscheidet dispread.live.region_hint (Fenster,
+Anteil, Rest-Median, Gleichlauf); die Sitzung schreibt jedes Ereignis vor der
+Stilllegung ins Audit (tracking_events.jsonl).
 """
 
 from __future__ import annotations
@@ -188,6 +236,21 @@ MANUAL_SNAP_RADIUS_PX = 3
 # gemessener maximaler Vektorfehler 4.956 px + mindestens 1.044 px Reserve
 # (zwei echte Referenzen, reiner Translationssweep; VALIDATION R13-23).
 _COARSE_ERROR_MARGIN_PX = 6.0
+# TB 2026-11-11, harte Grenzen der Stilllegung im Lauf (FrameTracker.disable_region):
+# hoechstens drei Bereiche und hoechstens 15 % des Vorschlags, abgerundet.
+MAX_DISABLED_REGIONS = 3
+MAX_DISABLED_FRACTION = 0.15
+# Schutzprobe vor jeder Stilllegung: dasselbe Raster wie
+# test_kandidat_koordinierter_lokaler_bias_niemals_falsche_geometrie (eine ganze
+# Seite meldet eine andere Bewegung), am Referenzbild mit dem verbleibenden Satz.
+# Kein angenommenes Quad darf mehr als 1,0 px (Toleranz jenes Tests) falsch sein.
+BIAS_PROBE_TOLERANCE_PX = 1.0
+# Review W1: hoechstens so viel schlechter als der bisherige Satz, auch mit einem
+# weiteren ausfallenden Bereich.
+BIAS_PROBE_MARGIN_PX = 0.05
+BIAS_PROBE_HALF_MIN_PX = 20.0
+BIAS_PROBE_ANGLES_DEG = (-0.4, 0.0, 0.4)
+BIAS_PROBE_BIASES_PX = (0.5, 1.0, 1.5, 2.0, 3.0, 4.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +266,9 @@ class FrameTrackingConfig:
     proposal_min_peak_margin: float = 0.10
     # Nur Einrichtung: Reserve fuer die 7-von-8-Einzelbildprobe, nicht Laufstartbindung.
     proposal_stability_peak_margin: float = 0.025
+    # Nur Einrichtung (TB 2026-11-11): lokalisationsschwach UND lichtempfindlich.
+    proposal_min_peak_curvature: float = 0.08
+    proposal_max_photometric_shift_px: float = 0.12
     reserve_regions: int = 2
     bezel_max_localisation_error_px: float = 0.10
     bezel_threshold_margin: float = 24.0
@@ -211,6 +277,9 @@ class FrameTrackingConfig:
     bezel_min_area_ratio: float = 2.0
     bezel_max_area_ratio: float = 12.0
     bezel_min_solidity: float = 0.97
+    # Nur Einrichtung (OQ-70): Quantil der Strahlaustritte je Seite fuer die
+    # Rahmenkontur einer gekerbten Komponente (Soliditaet < bezel_min_solidity).
+    bezel_notch_quantile: float = 0.75
     proposal_lever_arm_fraction: float = 0.35
     min_spread_px: float = 20.0
     min_inliers_per_side: int = 3
@@ -249,7 +318,9 @@ class FrameTrackingConfig:
     @classmethod
     def from_dict(cls, data: dict) -> FrameTrackingConfig:
         # Neue Einrichtungs-/Grobfelder ergaenzen; alte Feinpruefgrenzen bleiben Pflicht.
-        optional = {"coarse_min_response", "coarse_max_scale_deviation", "proposal_stability_peak_margin"}
+        optional = {"coarse_min_response", "coarse_max_scale_deviation", "proposal_stability_peak_margin",
+                    "proposal_min_peak_curvature", "proposal_max_photometric_shift_px",
+                    "bezel_notch_quantile"}
         if isinstance(data, dict) and "coarse_min_shift_px" in data:
             data = dict(data)
             legacy_shift = data.pop("coarse_min_shift_px")
@@ -279,11 +350,14 @@ class FrameTrackingConfig:
                 or not 0 < self.proposal_min_peak_margin < 1
                 # Setup-Reserve unabhaengig von den Laufgrenzen validieren.
                 or not 0 < self.proposal_stability_peak_margin <= 1
+                or not 0 <= self.proposal_min_peak_curvature <= 2
+                or self.proposal_max_photometric_shift_px <= 0
                 or self.bezel_max_localisation_error_px <= 0
                 or self.reserve_regions < 2 or not 0 < self.bezel_corner_quality <= self.corner_quality
                 or self.bezel_opening_px < 3 or self.bezel_opening_px % 2 != 1
                 or self.bezel_erosion_px < 1 or not 0 < self.bezel_threshold_margin < 255
                 or not 0 < self.bezel_min_solidity <= 1
+                or not 0.5 <= self.bezel_notch_quantile < 1
                 or not 0 < self.proposal_lever_arm_fraction < 1
                 or not 1 < self.bezel_min_area_ratio < self.bezel_max_area_ratio):
             raise ValueError("Ungueltige Vorschlagsgrenzen")
@@ -484,26 +558,84 @@ def _bezel_band(gray, quad, config):
         if not config.bezel_min_area_ratio <= ratio <= config.bezel_max_area_ratio:
             metrics["band_rueckfallgrund"] = "rahmenflaeche_unplausibel"
             continue
-        if solidity < config.bezel_min_solidity:
-            metrics["band_rueckfallgrund"] = "rahmenform_unplausibel"
-            continue
         filled = np.zeros_like(gray)
         cv2.drawContours(filled, [contour], -1, 255, cv2.FILLED)
+        notch = None
+        if solidity < config.bezel_min_solidity:
+            # OQ-70: Fehlflaeche nach innen (beleuchtete Fase) ist zulaessig,
+            # Ueberstand nach aussen (Balken, Kabel, Schatten) nicht.
+            filled, notch = _notched_frame(filled, quad, config)
+            if filled is None:
+                metrics["band_rueckfallgrund"] = "rahmenform_unplausibel"
+                continue
         edge_pixels = np.rint(points).astype(int)
         if (not np.all(filled[quad_mask != 0])
                 or not np.all(filled[edge_pixels[:, 1], edge_pixels[:, 0]])):
             continue
-        plausible.append((ratio, solidity, filled))
+        plausible.append((ratio, solidity, filled, notch))
     if len(plausible) != 1:
         if len(plausible) > 1:
             metrics["band_rueckfallgrund"] = "rahmen_mehrdeutig"
         return None, metrics
-    ratio, solidity, filled = plausible[0]
+    ratio, solidity, filled, notch = plausible[0]
     radius = config.bezel_erosion_px
     bezel = cv2.erode(filled, np.ones((2*radius+1,)*2, np.uint8))
     metrics.update(band_quelle="dunkler_rahmen", band_rueckfallgrund=None,
                    band_flaeche_quad=ratio, band_soliditaet=solidity)
+    if notch is not None:
+        metrics["band_kerbe_kontur_px"] = notch
     return bezel, metrics
+
+
+_SIDE_NAMES = ("oben", "rechts", "unten", "links")
+
+
+def _notched_frame(filled, quad, config):
+    """Rahmen mit Kerbe von Rahmen mit Ueberstand trennen (OQ-70, nur Einrichtung).
+
+    Eine beleuchtete Fase faellt aus der dunklen Komponente heraus und senkt
+    die Soliditaet, ohne dass etwas Fremdes zum Rahmen gehoert. Ein aussen
+    anliegender Balken senkt sie ebenfalls. Unterschieden wird an der
+    Rahmenkontur: Je Quadseite laufen Strahlen im Abstand von hoechstens 4 px
+    entlang der Normalen nach aussen; der Austritt aus der gefuellten Kontur
+    ist dort die Rahmenbreite. Das ``bezel_notch_quantile`` je Seite ergibt
+    eine quadparallele Kontur, die eine Kerbe auf bis zu diesem Anteil einer
+    Seite uebersteht und die von Vorspruengen auf weniger als dem Rest nicht
+    verschoben wird. Liegt ausserhalb dieser Kontur noch eine Flaeche, die ein
+    ganzes Such-/Patchfenster samt Interpolationsrand traegt, ist die Form
+    unplausibel (bisheriger Rueckfall). Sonst gilt die Komponente innerhalb der
+    Kontur als Rahmen; die Kerbe selbst bleibt ausserhalb des Bandes.
+    """
+    height, width = filled.shape
+    distances = np.arange(max(height, width))
+    caps = []
+    for side in range(4):
+        start, end = quad[side], quad[(side+1) % 4]
+        length = float(np.linalg.norm(end-start))
+        tangent = (end-start) / length
+        normal = np.array([tangent[1], -tangent[0]])
+        bases = start + np.linspace(0, 1, int(length // 4) + 2)[:, None] * (end-start)
+        points = np.rint(bases[:, None] + distances[None, :, None] * normal).astype(int)
+        inside = ((points >= 0) & (points < (width, height))).all(axis=2)
+        ray = np.zeros(inside.shape, bool)
+        ray[inside] = filled[points[inside][:, 1], points[inside][:, 0]] != 0
+        # Die gefuellte Kontur enthaelt das LCD: erster Austritt = Aussenkante.
+        exits = np.argmin(ray, axis=1)
+        if not np.all(exits > 0):
+            return None, None
+        caps.append(float(np.quantile(exits, config.bezel_notch_quantile)))
+    sides = np.roll(quad, -1, axis=0) - quad
+    normals = np.column_stack((sides[:, 1], -sides[:, 0]))
+    normals /= np.linalg.norm(normals, axis=1)[:, None]
+    offsets = np.sum(normals * quad, axis=1) + np.array(caps)
+    contour = np.array([np.linalg.solve(normals[[i-1, i]], offsets[[i-1, i]]) for i in range(4)])
+    inner = np.zeros_like(filled)
+    cv2.fillConvexPoly(inner, np.rint(contour).astype(np.int32), 255)
+    outside = cv2.bitwise_and(filled, cv2.bitwise_not(inner))
+    radius = config.patch_size // 2 + config.search_radius_px + config.interpolation_guard_px
+    if np.any(cv2.erode(outside, np.ones((2*radius+1,)*2, np.uint8))):
+        return None, None
+    return cv2.bitwise_and(filled, inner), dict(zip(_SIDE_NAMES, (round(cap, 1) for cap in caps), strict=True))
 
 
 def _proposal_match(response, config):
@@ -666,6 +798,7 @@ def propose_regions(reference_image, quad, config=FrameTrackingConfig(), *, stab
     zone, outer, mask, band_metrics, fixed_band = _geometry(gray, quad, config)
     groups = [[] for _ in range(4)]
     ambiguous_count = 0
+    weak = []
     strength, threshold = _proposal_strength(gray, mask, fixed_band, config)
     # Je Zone dieselbe relative Schwellenbasis wie bei manuellen Punkten.
     candidates = []
@@ -696,6 +829,12 @@ def propose_regions(reference_image, quad, config=FrameTrackingConfig(), *, stab
         if not _proposal_match(cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED), config):
             ambiguous_count += 1
             continue
+        curvature, light_shift = _localisation_probe(gray, (x, y), config)
+        if _localisation_weak(curvature, light_shift, config):
+            # TB: gilt fuer Fenster- und Rahmenpunkte, nur bei der Auswahl.
+            weak.append({"centre": [int(x), int(y)], "curvature": round(curvature, 4),
+                         "light_shift_px": round(light_shift, 4) if np.isfinite(light_shift) else None})
+            continue
         stable = _bezel_motion_ok(gray, (x, y), config)
         if not fixed_band[y, x] and not stable:
             continue
@@ -720,6 +859,7 @@ def propose_regions(reference_image, quad, config=FrameTrackingConfig(), *, stab
         fallback = [item["new_centre"] for item in replacements] if consistency is None else []
         band_metrics["stability_fallback_centres"] = fallback
         band_metrics["stability_fallback_remaining"] = list(fallback)
+    band_metrics["localisation_weak_candidates"] = weak
     return _region_proposal(gray, quad, zone, outer, regions, ambiguous_count, config, band_metrics)
 
 
@@ -909,6 +1049,52 @@ def _proposal_strength(gray, mask, fixed_band, config):
     return strength, threshold
 
 
+def _photometric_variants(search):
+    """Nichtlineare Lichtproben (TB 2026-11-11), feste Liste, kein Zufall.
+
+    Gamma 0.7 und 1.4; Glanz: Anteil ueber dem 75-%-Quantil um 60 % gesenkt;
+    Hell: Anteil ueber dem Median halbiert. Lineare Helligkeits- und
+    Kontraständerungen sind fuer TM_CCOEFF_NORMED wirkungslos und fehlen daher.
+    """
+    values = search.astype(np.float32)
+    variants = [255.0 * (values / 255.0) ** gamma for gamma in (0.7, 1.4)]
+    for quantile, keep in ((75, 0.4), (50, 0.5)):
+        level = float(np.percentile(values, quantile))
+        variants.append(np.where(values > level, level + keep * (values - level), values))
+    return [np.clip(np.rint(variant), 0, 255).astype(np.uint8) for variant in variants]
+
+
+def _localisation_probe(gray, centre, config):
+    """Gipfelkruemmung der Autokorrelation und groesster Versatz unter Lichtproben.
+
+    Kruemmung: kleinere der beiden Achsen, 2*Gipfel - Nachbarn (positiv, groesser
+    ist schaerfer). Versatz: Lage des Originalpatches im lichtveraenderten
+    Suchfenster gegen die Sollage, euklidisch in Pixeln; inf, wenn eine Probe
+    keinen eindeutigen Treffer ueber min_peak liefert.
+    """
+    h, r = config.patch_size // 2, config.search_radius_px
+    patch, search = _window(gray, centre, h), _window(gray, centre, h+r)
+    if patch is None or search is None:
+        return 0.0, float("inf")
+    response = cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED)
+    top = 2*float(response[r, r])
+    curvature = min(top - float(response[r, r-1]) - float(response[r, r+1]),
+                    top - float(response[r-1, r]) - float(response[r+1, r]))
+    shift = 0.0
+    for variant in _photometric_variants(search):
+        position, peak, ambiguous = _peak(cv2.matchTemplate(variant, patch, cv2.TM_CCOEFF_NORMED), config)
+        if ambiguous or peak < config.min_peak:
+            return curvature, float("inf")
+        shift = max(shift, float(np.linalg.norm(position - r)))
+    return curvature, shift
+
+
+def _localisation_weak(curvature, light_shift, config):
+    """Nur Auswahl: flacher Gipfel UND lichtabhaengige Lage schliessen aus."""
+    return bool(curvature < config.proposal_min_peak_curvature
+                and light_shift > config.proposal_max_photometric_shift_px)
+
+
 def _bezel_motion_ok(gray, centre, config):
     """Neue Fasenstruktur muss bekannte Halb-Pixel-Bewegungen lokalisieren."""
     h, r = config.patch_size // 2, config.search_radius_px
@@ -1064,6 +1250,10 @@ def _similarity_ransac(source, target, config):
     return None
 
 
+class _ProbeCancelled(Exception):
+    """Schutzprobe abgebrochen (Laufende); es wird nicht stillgelegt."""
+
+
 @dataclass(frozen=True, slots=True)
 class CoarseEstimate:
     """Letzte Grobschaetzung in Rohpixeln; used bezeichnet den zweiten Feinversuch."""
@@ -1090,6 +1280,8 @@ class FrameTracker:
         self.normalised_quad = normalised
         self.proposal = proposal
         self.shape = gray.shape
+        # Nur fuer die Schutzprobe vor einer Stilllegung (bias_probe); unveraendert.
+        self._reference_gray = gray.copy()
         h = config.patch_size // 2
         patches = []
         for region in proposal.regions:
@@ -1104,6 +1296,9 @@ class FrameTracker:
         self.edge_normals = np.asarray([edge.normal for edge in self.edges]).reshape(-1, 2)
         self.last_coarse: CoarseEstimate | None = None
         self.last_regions: list[dict] | None = None
+        # TB: fuer den Rest des Laufs stillgelegte Bereiche; waechst nur, nie zurueck.
+        self.disabled: frozenset[int] = frozenset()
+        self._spread_limits = _proposal_spread_limits(normalised, np.asarray(proposal.outer_limit), config)
         # Fester Ausschnitt und feste Maske; kein Zustand aus aktuellen Bildern.
         outer = np.asarray(proposal.outer_limit)
         lo = np.maximum(np.floor(outer.min(axis=0)).astype(int), 0)
@@ -1180,6 +1375,201 @@ class FrameTracker:
         self.last_coarse = None
         gray = _gray(image)
         first = self._fine_update(gray)
+        first_regions = self.last_regions
+        result = self._second_attempt(gray, first)
+        self._attach_residuals(first_regions)
+        return result
+
+    def probe_payload(self) -> dict:
+        """Alles, was ein eigener Prozess fuer bias_probe braucht (picklebar, unveraenderlich)."""
+        return {"reference": self._reference_gray, "quad": self.quad.tolist(),
+                "proposal": self.proposal.to_dict(), "config": self.config.to_dict()}
+
+    def disable_limit(self) -> int:
+        """Hoechstzahl stillgelegter Bereiche, bezogen auf die nutzbaren Bereiche (Review G5)."""
+        usable = sum(patch is not None for patch in self.patches)
+        return min(MAX_DISABLED_REGIONS, int(np.floor(MAX_DISABLED_FRACTION * usable + 1e-9)))
+
+    def disable_refusal(self, index) -> str | None:
+        """Grund, warum Bereich index nicht stillgelegt werden darf, sonst None.
+
+        Harte Grenzen (TB 2026-11-11): Obergrenze aus disable_limit, und die
+        verbleibenden nutzbaren Bereiche muessen Mindestzahl, Streuung und
+        Reserve des Vorschlags weiter erfuellen (dieselbe Regel wie bei der
+        Einrichtung, _reserve_ok mit den Hebelarmgrenzen des Vorschlags).
+        """
+        if type(index) is not int or not 0 <= index < len(self.sources):
+            return "bereich_unbekannt"
+        if index in self.disabled:
+            return "bereits_stillgelegt"
+        if len(self.disabled) + 1 > self.disable_limit():
+            return "obergrenze_erreicht"
+        remaining = [tuple(self.sources[i]) for i, patch in enumerate(self.patches)
+                     if patch is not None and i != index and i not in self.disabled]
+        if not remaining or not _reserve_ok(remaining, self.normalised_quad, self.config, self._spread_limits):
+            return "reserve_verletzt"
+        return None
+
+    def _probe_images(self, stop=None):
+        """Halbseiten-Bias-Raster am Referenzbild, 288 Bilder (Generator, kein Vorrat).
+
+        Wie test_kandidat_koordinierter_lokaler_bias_niemals_falsche_geometrie: je
+        Halbseite (Bereiche mehr als BIAS_PROBE_HALF_MIN_PX vom Quadmittelpunkt)
+        zeigen die Rahmenfenster eine andere Bewegung (Drehung um den
+        Quadmittelpunkt plus Versatz je Achsrichtung) als der Rest; das Glas steht.
+        """
+        gray = self._reference_gray
+        radius = self.config.patch_size // 2 + self.config.search_radius_px
+        local = (self.sources - self.normalised_quad.mean(axis=0)) @ _axes(self.normalised_quad).T
+        halves = [np.flatnonzero(sign * local[:, axis] > BIAS_PROBE_HALF_MIN_PX)
+                  for axis in (0, 1) for sign in (1, -1)]
+        centre = tuple(float(value) for value in self.quad.mean(axis=0))
+        for axis, sign in ((0, 1), (0, -1), (1, 1), (1, -1)):
+            for angle in BIAS_PROBE_ANGLES_DEG:
+                for bias in BIAS_PROBE_BIASES_PX:
+                    matrix = cv2.getRotationMatrix2D(centre, angle, 1)
+                    matrix[axis, 2] += sign * bias
+                    moved = cv2.warpAffine(gray, matrix, gray.shape[::-1])
+                    for half_index, half in enumerate(halves):
+                        if stop is not None and stop.is_set():
+                            raise _ProbeCancelled
+                        image = gray.copy()
+                        for index in half:
+                            x, y = (int(value) for value in self.sources[index])
+                            image[y-radius:y+radius+1, x-radius:x+radius+1] = \
+                                moved[y-radius:y+radius+1, x-radius:x+radius+1]
+                        yield [half_index, axis, sign, angle, bias], image
+
+    def _probe_observe(self, image):
+        """Treffer (alle Bereiche) und Grobschaetzung eines Probenbilds; Bedingungen wie _second_attempt."""
+        config = self.config
+        first = self._match(image, (0, 0), ())
+        estimate = self._estimate_coarse(image)
+        offset = second = None
+        if (np.isfinite((estimate.dx, estimate.dy, estimate.response)).all()
+                and estimate.response > config.coarse_min_response
+                and np.hypot(estimate.dx, estimate.dy) <= config.max_shift_px + _COARSE_ERROR_MARGIN_PX):
+            offset = tuple(np.rint((estimate.dx, estimate.dy)).astype(int))
+            second = self._match(image, offset, ())
+        return first, estimate, offset, second
+
+    def _probe_update(self, image, first_matches, estimate, offset, second_matches, disabled):
+        """Genau update() fuer ein Probenbild mit Satz disabled, aus einmal bestimmten Treffern."""
+        self.last_coarse = None
+        self._probe_reset()
+        first = self._decide(image, *self._apply_matches(first_matches, disabled), False)
+        if first.reason not in {"rahmen_unstimmig", "zu_wenig_rahmenmerkmale", "rahmen_mehrdeutig"}:
+            return first
+        if offset is None or (offset == (0, 0) and first.reason != "rahmen_unstimmig"):
+            return first
+        self.last_coarse = replace(estimate, used=True)
+        self._probe_reset(offset)
+        return self._decide(image, *self._apply_matches(second_matches, disabled), True)
+
+    def _probe_reset(self, offset=(0, 0)):
+        self.last_regions = [
+            {'c': [float(x + offset[0]), float(y + offset[1])],
+             's': region.size, 'peak': 0.0, 'ok': False, 'res': None, 'vec': None}
+            for (x, y), region in zip(self.sources, self.proposal.regions, strict=True)]
+
+    def _probe_worst(self, sets, stop=None) -> dict:
+        """Schlechtester angenommener Quadfehler (px) und Fall je Satz, ein Durchgang ueber das Raster.
+
+        Treffer und Grobschaetzung haengen nicht vom Satz ab und werden je Bild
+        einmal bestimmt (alle Bereiche gesucht, Bedingungen wie _second_attempt).
+        """
+        worst = {frozenset(item): (0.0, None) for item in sets}
+        for key, image in self._probe_images(stop):
+            observation = self._probe_observe(image)
+            for disabled in worst:
+                result = self._probe_update(image, *observation, disabled)
+                if result.quad is not None:
+                    error = float(np.linalg.norm(np.asarray(result.quad) - self.quad, axis=1).max())
+                    if error > worst[disabled][0]:
+                        worst[disabled] = (error, key)
+        return worst
+
+    def bias_probe(self, base, target, *, stop=None) -> dict:
+        """Schutzprobe vor einer Stilllegung, rein und deterministisch (TB 2026-11-11, Review W1).
+
+        Vergleicht den neuen Satz target mit dem bisherigen Satz base am
+        Referenzbild (Halbseiten-Bias-Raster, _probe_observations), auch mit EINEM
+        weiteren ausfallenden Bereich j (Glanz, Verdeckung, Peak zu niedrig).
+        Ein Satz ist gefaehrlich, wenn ein angenommenes Quad mehr als
+        BIAS_PROBE_TOLERANCE_PX falsch ist. ok nur, wenn
+        * der neue Satz nicht gefaehrlich und hoechstens BIAS_PROBE_MARGIN_PX
+          schlechter als der bisherige ist, und
+        * fuer jedes j: ist target+j gefaehrlich, dann war base+j schon
+          gefaehrlich und target+j ist hoechstens BIAS_PROBE_MARGIN_PX schlechter.
+        Ein zusaetzlicher Ausfall wird durch die Stilllegung also weder haeufiger
+        noch schwerer gefaehrlich. Rechnet auf einer eigenen Tracker-Kopie; stop
+        bricht ab (_ProbeCancelled).
+        """
+        base, target = frozenset(base), frozenset(target)
+        probe = FrameTracker(self._reference_gray, self.quad, self.proposal, self.config)
+        extras = [i for i, patch in enumerate(self.patches) if patch is not None and i not in target]
+        first = probe._probe_worst([target, base, *(target | {j} for j in extras)], stop)
+        new, new_case = first[target]
+        old = first[base][0]
+        violations = []
+        if new > BIAS_PROBE_TOLERANCE_PX or new > old + BIAS_PROBE_MARGIN_PX:
+            violations.append({"extra": None, "base_px": round(old, 4), "new_px": round(new, 4), "case": new_case})
+        dangerous = [j for j in extras if first[target | {j}][0] > BIAS_PROBE_TOLERANCE_PX]
+        # Zweiter Durchgang nur fuer gefaehrliche Zusatzausfaelle: wie war es ohne Stilllegung?
+        before = probe._probe_worst([base | {j} for j in dangerous], stop) if dangerous else {}
+        extra = []
+        for j in extras:
+            new_j, case_j = first[target | {j}]
+            item = {"extra": j, "new_px": round(new_j, 4), "base_px": None}
+            if j in dangerous:
+                old_j = before[base | {j}][0]
+                item["base_px"] = round(old_j, 4)
+                if old_j <= BIAS_PROBE_TOLERANCE_PX or new_j > old_j + BIAS_PROBE_MARGIN_PX:
+                    violations.append({**item, "case": case_j})
+            extra.append(item)
+        return {"base": sorted(base), "disabled": sorted(target), "cases": 16 * len(BIAS_PROBE_ANGLES_DEG) * len(BIAS_PROBE_BIASES_PX), "passes": 2 if dangerous else 1,
+                "worst_error_px": round(new, 4), "worst_case": new_case, "base_worst_error_px": round(old, 4),
+                "extra": extra, "violations": violations, "tolerance_px": BIAS_PROBE_TOLERANCE_PX,
+                "margin_px": BIAS_PROBE_MARGIN_PX, "ok": not violations}
+
+    def disable_region(self, index, probe=None) -> bool:
+        """Bereich fuer den Rest des Laufs aus der Nachfuehrung nehmen.
+
+        Wirkung genau wie ein Vorschlag ohne diesen Bereich: er wird nicht mehr
+        gesucht, zaehlt weder als Treffer noch als Inlier; alle Pruefungen und
+        Grenzen bleiben unveraendert. Verlangt eine bestandene Schutzprobe
+        (bias_probe) fuer genau den neuen Satz. Liefert False, wenn eine harte
+        Grenze (disable_refusal) oder die Probe es verbietet; dann bleibt alles
+        wie es war.
+        """
+        if self.disable_refusal(index) is not None:
+            return False
+        target = self.disabled | {index}
+        if (not isinstance(probe, dict) or probe.get("ok") is not True
+                or probe.get("disabled") != sorted(target) or probe.get("base") != sorted(self.disabled)):
+            return False
+        self.disabled = target
+        return True
+
+    def _attach_residuals(self, first_regions):
+        # Reine Diagnose (TC): Residuen je Bereich aus Erst- und Zweitfit an
+        # den gemeldeten Feinversuch haengen. Wirkt auf keine Entscheidung und
+        # vertraegt Feinversuche, die last_regions nicht neu setzen.
+        regions = self.last_regions
+        if regions is None:
+            return
+        second = regions is not first_regions
+        earlier = (first_regions if first_regions is not None and len(first_regions) == len(regions)
+                   else [{}] * len(regions))
+        for region, before in zip(regions, earlier, strict=True):
+            region['res2'] = region.get('res') if second else None
+            region['res1'] = before.get('res')
+            region['v1'] = before.get('vec')
+        for region in regions:
+            region.pop('res', None)
+            region.pop('vec', None)
+
+    def _second_attempt(self, gray, first) -> TrackResult:
         if first.reason not in {"rahmen_unstimmig", "zu_wenig_rahmenmerkmale", "rahmen_mehrdeutig"}:
             return first
         estimate = self._estimate_coarse(gray)
@@ -1197,12 +1587,22 @@ class FrameTracker:
         self.last_coarse = replace(estimate, used=True)
         return self._fine_update(gray, offset, similarity=True)
 
+    def _note_residuals(self, indices, source, target, transform, translation):
+        # Nur Diagnose: Abstand JEDES gefundenen Bereichs (Inlier und
+        # Ausreisser) zu diesem Fit, eigene Rechnung auf Kopien. Die
+        # Pruefungen unten rechnen unveraendert mit ihren eigenen Werten.
+        offsets = target - (source @ transform.T + translation)
+        residuals = np.linalg.norm(offsets, axis=1)
+        for index, residual, offset in zip(indices, residuals, offsets, strict=True):
+            self.last_regions[index]['res'] = float(residual)
+            # TB: Richtung fuer die Gleichlaufpruefung (gefundene Lage minus Fit).
+            self.last_regions[index]['vec'] = [float(offset[0]), float(offset[1])]
+
     def _fine_update(self, gray, offset=(0, 0), *, similarity=False) -> TrackResult:
-        config = self.config
         # Immer nur der letzte Feinversuch; kein Befund des Vorbilds bleibt stehen.
         self.last_regions = [
             {'c': [float(x + offset[0]), float(y + offset[1])],
-             's': region.size, 'peak': 0.0, 'ok': False}
+             's': region.size, 'peak': 0.0, 'ok': False, 'res': None, 'vec': None}
             for (x, y), region in zip(self.sources, self.proposal.regions, strict=True)
         ]
 
@@ -1213,30 +1613,62 @@ class FrameTracker:
             return reject("bildgroesse_abweichend")
         if not self.proposal.ok:
             return reject("vorschlag_ungeeignet")
+        # Stillgelegt wirkt wie ein fehlender Patch: Vorschlag ohne diesen Bereich.
+        matches = self._match(gray, offset, self.disabled)
+        return self._decide(gray, *self._apply_matches(matches, self.disabled), similarity)
+
+    def _match(self, gray, offset, skip):
+        """Treffer je Bereich: (Art, Ziel, Peak) mit Art ok, mehrdeutig oder fehlt; skip wird nicht gesucht."""
+        config = self.config
         h, r = config.patch_size // 2, config.search_radius_px
-        indices, targets, peaks = [], [], []
-        ambiguous_count = 0
         centres = self.sources.astype(int)
         if offset != (0, 0):
             centres += offset
+        matches = {}
         for index, ((x, y), patch) in enumerate(zip(centres, self.patches, strict=True)):
             search = _window(gray, (x, y), h+r)
-            if patch is None or search is None:
+            if patch is None or search is None or index in skip:
                 continue
             position, peak, ambiguous = _peak(cv2.matchTemplate(search, patch, cv2.TM_CCOEFF_NORMED), config)
-            region = self.last_regions[index]
-            region['peak'] = float(peak)
             # Ein Randmaximum kann ausserhalb weiter steigen. Ohne beide
             # Nachbarn ist weder ein Peak noch seine Subpixelposition belegt.
             if peak < config.min_peak or np.any(position <= 0) or np.any(position >= 2*r):
+                matches[index] = ("fehlt", None, peak)
+            elif ambiguous:
+                matches[index] = ("mehrdeutig", None, peak)
+            else:
+                matches[index] = ("ok", position + (x-r, y-r), peak)
+        return matches
+
+    def _apply_matches(self, matches, skip):
+        """Treffer ohne skip in last_regions eintragen; liefert Indizes, Ziele, Peaks, Mehrdeutige."""
+        indices, targets, peaks, ambiguous_count = [], [], [], 0
+        for index in sorted(matches):
+            if index in skip:
                 continue
-            if ambiguous:
+            kind, target, peak = matches[index]
+            region = self.last_regions[index]
+            region['peak'] = float(peak)
+            if kind == "mehrdeutig":
                 ambiguous_count += 1
-                continue
-            region['ok'] = True
-            indices.append(index)
-            targets.append(position + (x-r, y-r))
-            peaks.append(peak)
+            elif kind == "ok":
+                region['ok'] = True
+                indices.append(index)
+                targets.append(target)
+                peaks.append(peak)
+        return indices, targets, peaks, ambiguous_count
+
+    def _decide(self, gray, indices, targets, peaks, ambiguous_count, similarity) -> TrackResult:
+        """Fit und alle Pruefungen auf gefundenen Lagen; unveraendert aus _fine_update ausgelagert.
+
+        Eigene Methode nur, damit die Schutzprobe (bias_probe) dieselbe Entscheidung
+        auf berechneten Lagen fahren kann, ohne Bilder zu erzeugen.
+        """
+        config = self.config
+
+        def reject(reason):
+            return TrackResult(None, 0.0, 0.0, 0.0, reason)
+
         if len(indices) < config.min_regions:
             return reject("rahmen_mehrdeutig" if ambiguous_count else "zu_wenig_rahmenmerkmale")
         source, target = self.sources[indices], np.asarray(targets)
@@ -1250,6 +1682,7 @@ class FrameTracker:
         if similarity and self.last_coarse is not None:
             self.last_coarse = replace(self.last_coarse, scale=scale)
         transform = scale*rotation if similarity else rotation
+        self._note_residuals(indices, source, target, transform, translation)
         if not _spread(source[inliers], self.normalised_quad, config):
             return reject("rahmen_unstimmig")
         # Jeder Inlier muss entbehrlich sein: geometrische Hebelwirkung direkt

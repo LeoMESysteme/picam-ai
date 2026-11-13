@@ -551,10 +551,12 @@ OUTPUT_CASES = [
 @pytest.mark.parametrize('config,transport', OUTPUT_CASES)
 def test_unified_service_output_contract(tmp_path, monkeypatch, config, transport):
     monkeypatch.setattr('serial.Serial', FakeSerial)
-    service = LiveService(FakeOwner(), tmp_path)
+    from dispread.bridge.hub import BridgeHub
+    service = LiveService(FakeOwner(), tmp_path, bridge_hub=BridgeHub('pi', tmp_path / 'audit'))
     service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
 
     def factory(owner, profile, settings, out_dir, **kwargs):
+        kwargs.pop('output_factory', None)  # contract fixture uses its controlled publisher
         return _session(tmp_path, [], out_dir=out_dir, output_factory=Publisher, **kwargs)
 
     monkeypatch.setattr('dispread.live.service.LiveSession', factory)
@@ -709,12 +711,13 @@ def test_bridge_stop_runs_once_and_always_closes_audit(tmp_path, stop_fails):
 
 
 @pytest.mark.parametrize('transport', ['uart', 'tcp'])
-def test_unified_session_keeps_real_publisher_dut_lock(tmp_path, monkeypatch, transport):
+def test_explicit_legacy_v1_demo_publisher_keeps_dut_lock(tmp_path, monkeypatch, transport):
     from dispread.gsv_transport import RELEASE_BLOCK, OutputPublisher
 
     # Echte Publisher-Logik und Audit, aber kein Port oder Socket im Test.
     monkeypatch.setattr(OutputPublisher, '_worker', lambda self: None)
-    session = _session(tmp_path, [embed('+ 1.2345 ')], output={'transport': transport})
+    session = _session(tmp_path, [embed('+ 1.2345 ')], output={'transport': transport},
+                       output_factory=OutputPublisher)
     session._config = replace(session._config, confirm_frames=1)
     session.start()
     try:
@@ -834,3 +837,336 @@ def test_formatter_comparison_includes_bridge_fixtures():
     invalid = record(status=ValueStatus.UNREADABLE)
     assert direct.format(invalid) is None
     assert BridgeFormatter(invalid_policy=InvalidValuePolicy.SEND_NAN, demo=True).format(invalid) == b'%NaN\r\n'
+
+
+def test_standalone_session_refuses_unconfigured_paired_output(tmp_path, monkeypatch):
+    from dispread.gsv_transport import OutputPublisher
+    from dispread.live.session import StartRefused
+    # RED guard: do not permit the old default to open a raw test listener.
+    monkeypatch.setattr(OutputPublisher, '_worker', lambda self: None)
+    session = _session(tmp_path, [], output={'transport': 'tcp'})
+    with pytest.raises(StartRefused, match='hub is not configured'):
+        session.start()
+
+
+def test_paired_client_loss_keeps_camera_and_record_audit_running(tmp_path):
+    from dispread.bridge.hub import BridgeHub
+    from dispread.bridge.publisher import PairedOutputPublisher
+    now = [0.0]
+    hub = BridgeHub('pi', tmp_path / 'bridge', clock=lambda: now[0])
+    hub.reserve_real_run('real-run')
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, output={'transport': 'tcp'},
+                       output_factory=lambda config, out_dir: PairedOutputPublisher(
+                           config, out_dir, hub=hub, run_id='real-run'))
+    session.bridge_run_id = 'real-run'
+    session._config = replace(session._config, confirm_frames=1)
+    session.start()
+    lease = hub.attach('pc', 'network')
+    try:
+        assert session.step().status.value == 'valid'
+        now[0] = 5.0
+        assert session.step().status.value == 'valid'
+        with pytest.raises(ValueError, match='expired'):
+            hub.exchange(lease.lease_id, dict(version=2, type='heartbeat', request_id='beat', pi_id='pi',
+                         client_id='pc', lease_id=lease.lease_id, run_id='real-run'))
+        assert session.step().status.value == 'valid'
+        records = [json.loads(line) for line in session.records_path.read_text().splitlines()]
+        assert len(records) == 3
+        assert session._output._latest.frame_sequence == records[-1]['frame_sequence']
+        assert session._output._pending is None
+        assert session.unified_output_status()['release_block']
+    finally:
+        session.stop()
+        hub.release_real_run('real-run')
+        hub.close()
+    assert json.loads(session.session_path.read_text())['run_id'] == 'real-run'
+
+
+# R1 (2026-11-09): Testfreigabe ueber die Bruecke nur nach ausdruecklicher Bestaetigung.
+def test_bridge_acknowledgement_is_explicit_bool_and_defaults_to_locked():
+    from dispread.live.output import normalize_output
+
+    assert normalize_output({'transport': 'uart'})['acknowledge_unaccepted'] is False
+    assert normalize_output({'transport': 'tcp', 'acknowledge_unaccepted': True})['acknowledge_unaccepted'] is True
+    for value in (None, 1, 'true'):
+        with pytest.raises(ValueError, match='acknowledge_unaccepted'):
+            normalize_output({'transport': 'uart', 'acknowledge_unaccepted': value})
+    off = normalize_output({'transport': 'off'})
+    assert off.get('acknowledge_unaccepted', False) is False
+
+
+def _bridge_session(tmp_path, *, ack, transport='tcp'):
+    from dispread.bridge.hub import BridgeHub
+    from dispread.bridge.publisher import PairedOutputPublisher
+
+    hub = BridgeHub('pi', tmp_path / 'bridge')
+    hub.reserve_real_run('real-run')
+    config = {'transport': transport, **({'acknowledge_unaccepted': True} if ack else {})}
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, output=config,
+                       output_factory=lambda cfg, out_dir, **kw: PairedOutputPublisher(
+                           cfg, out_dir, hub=hub, run_id='real-run', **kw))
+    session.bridge_run_id = 'real-run'
+    session.bridge_acknowledged_by = 'Leonhard Hentschke'
+    session._config = replace(session._config, confirm_frames=1)
+    return hub, session
+
+
+@pytest.mark.parametrize('ack', [False, True])
+def test_bridge_test_release_is_marked_in_status_and_session_json(tmp_path, ack):
+    from dispread.bridge.output_state import RELEASE_BLOCK
+    from dispread.live.output import BRIDGE_RELEASE_NOTE
+
+    hub, session = _bridge_session(tmp_path, ack=ack)
+    session.start()
+    lease = hub.attach('pc', 'network')
+    try:
+        status = session.unified_output_status()
+        assert status['acceptance'] == 'fehlt'
+        assert status['config']['acknowledge_unaccepted'] is ack
+        hello = hub._hello(lease, 'h')
+        session.step()
+        reply = hub.exchange(lease.lease_id, dict(version=2, type='poll', request_id='p', pi_id='pi',
+                                                  client_id='pc', lease_id=lease.lease_id, run_id='real-run'))
+        if ack:
+            assert status['release_block'] is None and status['release'] == 'test_unaccepted'
+            assert status['release_note'] == BRIDGE_RELEASE_NOTE
+            assert hello['release'] == 'test_unaccepted' and hello['release_block'] is None
+            assert (reply['type'], reply['demo'], reply['release']) == ('record', False, 'test_unaccepted')
+            assert reply['record']['raw_text'] == '+1.2345'
+        else:
+            assert status['release_block'] == RELEASE_BLOCK and status['release'] is None
+            assert 'release_note' not in status
+            assert 'release' not in hello and hello['release_block'] == RELEASE_BLOCK
+            assert reply['type'] == 'idle' and reply['release_block'] == RELEASE_BLOCK
+    finally:
+        session.stop()
+        hub.close()
+    data = json.loads(session.session_path.read_text())['output']
+    assert data['acceptance'] == 'fehlt'
+    assert data['acknowledged_unaccepted'] is ack
+    assert data['wire_transport'] == 'wss'
+    if ack:
+        assert data['release'] == 'test_unaccepted' and data['release_block'] is None
+        assert data['acknowledged_at_utc']
+        assert data['acknowledged_by'] == 'Leonhard Hentschke'
+        assert data['status']['release_note'] == BRIDGE_RELEASE_NOTE
+    else:
+        assert data['release_block'] == RELEASE_BLOCK and data['acknowledged_at_utc'] is None
+        assert data['acknowledged_by'] is None
+
+
+def test_acknowledged_session_refuses_publisher_that_ignores_release(tmp_path):
+    from dispread.live.session import StartRefused
+
+    with pytest.raises(StartRefused, match='Testfreigabe'):
+        _session(tmp_path, [], output={'transport': 'tcp', 'acknowledge_unaccepted': True},
+                 output_factory=lambda cfg, out_dir, **kw: Publisher(cfg, out_dir))
+
+
+def test_service_passes_confirmed_test_release_to_paired_publisher(tmp_path, monkeypatch):
+    from dispread.bridge.hub import BridgeHub
+    from dispread.live.output import BRIDGE_RELEASE_NOTE
+
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    service = LiveService(FakeOwner(), tmp_path, bridge_hub=hub)
+    service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+
+    def factory(owner, profile, settings, out_dir, **kwargs):
+        return _session(tmp_path, [], out_dir=out_dir, **kwargs)
+
+    monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    try:
+        service.start_run(reference=False, output={'transport': 'tcp', 'acknowledge_unaccepted': True})
+        assert hub.status()['release'] == 'test_unaccepted'
+        output = service.status()['output']
+        assert output['release_note'] == BRIDGE_RELEASE_NOTE and output['release_block'] is None
+    finally:
+        service.stop_run()
+    service.start_run(reference=False, output={'transport': 'tcp'})
+    try:
+        assert hub.status()['release'] is None and hub.status()['release_block']
+    finally:
+        service.stop_run()
+        service.close()
+
+
+def test_js_bridge_note_matches_python():
+    """Die JS-Konstante der Werkbank ist wortgleich BRIDGE_RELEASE_NOTE."""
+    import re
+    from pathlib import Path
+
+    from dispread.live.output import BRIDGE_RELEASE_NOTE
+
+    js = (Path(__file__).parents[1] / "src/dispread/workbench/static/live/run/output.js").read_text(encoding="utf-8")
+    match = re.search(r"BRIDGE_NOTE = ((?:'[^']*'(?: \+\n\s*)?)+);", js)
+    assert match
+    parts = re.findall(r"'([^']*)'", match.group(1))
+    assert "".join(parts) == BRIDGE_RELEASE_NOTE
+
+
+@pytest.mark.parametrize('options', [
+    {'format': '5ch'}, {'format': '4ch', 'rate_hz': 11}, {'format': '4ch', 'rate_hz': True},
+    {'format': '4ch', 'prefix': '#'}, {'format': '4ch', 'max_frame_age_ms': 0},
+])
+def test_four_channel_options_are_checked_before_port_access(options):
+    from dispread.live.output import validate_output
+
+    with pytest.raises(ValueError):
+        validate_output({'port': '/fake/output', **options})
+
+
+def test_four_channel_defaults_and_explicit_legacy_bytes(tmp_path, monkeypatch):
+    from test_userdefined_formatter import record
+
+    from dispread.live.output import LiveOutput, validate_output
+
+    config = validate_output({'port': '/fake/output', 'format': '4ch'})
+    assert config['rate_hz'] == 10
+    port = FakeSerial(write_timeout=1.0)
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: port)
+    out = LiveOutput({'port': '/fake/output', 'format': '1ch'}, tmp_path / 'tx.jsonl')
+    out.start()
+    try:
+        out.submit(record())
+        deadline = time.monotonic() + 3
+        while out.status()['sent'] < 1:
+            assert time.monotonic() < deadline
+            time.sleep(.005)
+    finally:
+        out.stop()
+    assert port.writes == [b'%+1.7643\r\n']
+
+
+def start_ticked_output(tmp_path, monkeypatch, port, *, rate=10):
+    from test_live_tick import Clocks
+
+    from dispread.live.clock import ClockLog
+    from dispread.live.output import LiveOutput
+    from dispread.live.tick import TickTimebase
+
+    clocks = Clocks()
+    log = ClockLog(measure=lambda: 1000, monotonic_ns=lambda: clocks.now)
+    log.sample()
+    timebase = TickTimebase(log, clock=clocks.read, ntp_status='no')
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: port)
+    out = LiveOutput({'port': '/fake/output', 'format': '4ch', 'rate_hz': rate}, tmp_path / 'tx.jsonl',
+                     clock_ns=lambda: clocks.now, timebase=timebase)
+    out.start(clock_log=log)
+    return out, clocks
+
+
+def wait_output_count(out, count):
+    deadline = time.monotonic() + 3
+    while out.status()['sent'] < count:
+        assert time.monotonic() < deadline
+        time.sleep(.005)
+
+
+def test_four_channel_sender_ticks_without_camera_and_never_catches_up(tmp_path, monkeypatch):
+    from test_live_tick import captured
+
+    port = FakeSerial(write_timeout=1.0)
+    out, clocks = start_ticked_output(tmp_path, monkeypatch, port)
+    try:
+        out.submit(captured(90_000_000))
+        assert port.writes == []
+        clocks.now = 100_000_000
+        out._wake.set()
+        wait_output_count(out, 1)
+        clocks.now = 455_000_000
+        out._wake.set()
+        wait_output_count(out, 2)
+        clocks.now = 500_000_000
+        out._wake.set()
+        wait_output_count(out, 3)
+    finally:
+        out.stop()
+    assert port.writes == [b'%+1.7643;1;1;1794397184.090000\r\n',
+                           b'%+1.7643;0;4;1794397184.400000\r\n',      # ungueltig: Kanal 1 haelt
+                           b'%+1.7643;0;5;1794397184.500000\r\n']
+    status = out.status()['tick']
+    assert (status['valid'], status['invalid'], status['missed']) == (1, 2, 2)
+    tx = [json.loads(line) for line in (tmp_path / 'tx.jsonl').read_text().splitlines()]
+    assert [r['tx_sequence'] for r in tx] == [1, 4, 5]
+    assert all(r['invalid_policy'] == 'mark_record' and r['provisional'] for r in tx)
+
+
+def test_four_channel_stop_mid_write_finishes_exactly_one_telegram(tmp_path, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+
+    class Partial(FakeSerial):
+        def write(self, data):
+            if not self.writes:
+                self.writes.append(data[:2])
+                entered.set()
+                assert release.wait(3)
+                return 2
+            return super().write(data)
+
+    port = Partial(write_timeout=1.0)
+    out, clocks = start_ticked_output(tmp_path, monkeypatch, port)
+    clocks.now = 100_000_000
+    out._wake.set()
+    assert entered.wait(3)
+    stopping = threading.Thread(target=out.stop)
+    stopping.start()
+    try:
+        clocks.now = 900_000_000
+        release.set()
+        stopping.join(3)
+        assert not stopping.is_alive()
+        assert b''.join(port.writes) == b'%99999999.0;0;1;1794397184.100000\r\n'
+        assert port.closed
+    finally:
+        release.set()
+        out.stop()
+
+
+@pytest.mark.parametrize('test_run,ack', [(None, False), ({'testlauf': True}, True)])
+def test_four_channel_release_refused_before_any_port_open(tmp_path, monkeypatch, test_run, ack):
+    from dispread.live.session import StartRefused
+
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Port ohne Freigabe'))
+    with pytest.raises(StartRefused):
+        _session(tmp_path, [], output={'port': '/fake/output', 'format': '4ch',
+                                      'acknowledge_unaccepted': ack}, test_run=test_run)
+
+
+# --- B2 (2026-11-11): Format und Takt auch fuer die Brueckenwege uart/tcp -------------
+
+@pytest.mark.parametrize('transport', ['uart', 'tcp'])
+def test_bridge_output_without_format_stays_exactly_single_channel(transport):
+    from dispread.bridge.baud import UART_BAUD
+    from dispread.live.output import bridge_config, normalize_output
+
+    config = normalize_output({'transport': transport, 'acknowledge_unaccepted': True})
+    # Baudrate aus der einzigen Quelle bridge/baud.py (feat/bruecke-ux), nicht mehr 115200.
+    assert config == {'transport': transport, 'serial_port': '/dev/ttyAMA0', 'baudrate': UART_BAUD,
+                      'tcp_host': '0.0.0.0', 'tcp_port': 5000, 'max_frame_age_ms': 1000,
+                      'acknowledge_unaccepted': True}
+    assert bridge_config(config).to_dict() == {k: v for k, v in config.items() if k != 'acknowledge_unaccepted'}
+
+
+@pytest.mark.parametrize('transport', ['uart', 'tcp'])
+def test_bridge_output_accepts_four_channel_tick(transport):
+    from dispread.live.output import bridge_config, bridge_tick_options, normalize_output
+
+    config = normalize_output({'transport': transport, 'format': '4ch', 'acknowledge_unaccepted': True})
+    assert config['format'] == '4ch' and config['rate_hz'] == 10
+    assert bridge_tick_options(config) == {'tick_rate_hz': 10, 'tick_max_frame_age_ns': 1_000_000_000}
+    assert 'format' not in bridge_config(config).to_dict()
+    slow = normalize_output({'transport': transport, 'format': '4ch', 'rate_hz': 2.5, 'max_frame_age_ms': 400})
+    assert bridge_tick_options(slow) == {'tick_rate_hz': 2.5, 'tick_max_frame_age_ns': 400_000_000}
+    one = normalize_output({'transport': transport, 'format': '1ch'})
+    assert one['format'] == '1ch' and 'rate_hz' not in one and bridge_tick_options(one) == {}
+
+
+@pytest.mark.parametrize('value', [
+    {'format': '2ch'}, {'format': '4ch', 'rate_hz': 0}, {'format': '4ch', 'rate_hz': 11},
+    {'format': '4ch', 'rate_hz': True}, {'format': '1ch', 'rate_hz': 10}, {'rate_hz': 10},
+])
+def test_bridge_tick_options_are_validated(value):
+    from dispread.live.output import normalize_output
+
+    with pytest.raises(ValueError):
+        normalize_output({'transport': 'uart', **value})

@@ -13,6 +13,8 @@
         640,
         360
       ],
+      "roi_source": null,
+      "end_check": null,
       "samples": [
         [
           48,
@@ -150,6 +152,8 @@
   },
   "diagnose_kopie": false,
   "last_mark": null,
+  "previous_region_hint": null,
+  "last_start_rejection": null,
   "output": {
     "transport": "off",
     "state": "off"
