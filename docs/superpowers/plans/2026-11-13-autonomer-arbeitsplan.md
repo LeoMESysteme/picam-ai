@@ -51,7 +51,7 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
        volle Suite (`DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/pytest -q -n 4`),
        committen, Merge nach `feat/integration`, Werkbank neu starten (Regeln oben).
 2. [x] `feat/integration` → `master` (Regeln oben).
-3. [ ] Kleine Backend-Punkte:
+3. [x] Kleine Backend-Punkte:
        - App-Zähler 123/124 im Empfangstest
        - Port je Zeile in `details.jsonl`, nur der aktuelle Start, Leerlauf zusammenfassen
        - Adapterwechsel ins Journal
@@ -97,3 +97,11 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
   aufgelöst. Der Push auf master löst den Doku-Workflow aus (Deploy prüfen).
   Punkt 3 vorbereitet: Handoff auf `fix/kleine-backend` (Worktree `.worktrees/kleine-backend`).
   Punkt 4: Claude-Subagent arbeitet auf `wip/bruecke-ux3`.
+- 2026-11-14 ~00:15: Rate-Limit 20:40–23:20 (Subagent EXE-Runde 3 brach ab, danach fortgesetzt).
+  **Punkt 3 erledigt** (bis auf „Erneut prüfen“, das zur EXE-Runde 3 gehört): Codex-Ergebnis
+  reviewt, `docs/status.md` erneut vor Überschreiben bewahrt, Windows-Suite 669 bestanden
+  (auch die 13 Sandbox-Fälle), Pi-Brückentests 164, ruff sauber. Merge `0c26a43` in
+  `feat/integration`. Die Textwünsche für die Journal-Ereignisse (`adapter_*`, `port_*`) und
+  den Zähler stehen in `docs/quellen/kleine-backend-2026-11-13/REPORT-codex.md` (für Runde 3).
+  Werkbank nicht neu gestartet: Die Pi-Seite ändert sich nur in `gsv_bridge.py`, und das läuft
+  in der Windows-App, nicht im Dienst.
