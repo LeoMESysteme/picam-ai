@@ -5,7 +5,7 @@
 - **Abnahme:** Herr Kaulitz hat am 2026-11-13 Werkbank und Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen. Grundlage: Smoketest und Windows-Prüfung UX2 ([Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)).
 - **Heute behoben (alle auf `feat/integration`):** EXE-Selbsttest unter Windows, Empfangstest im Format der Session und verlustfrei mit klarem Ende, Kanal 1 hält bei ungültigem Takt (Entscheidung Leonhard), Wiederverbinden nach LAN-Ausfall, Kopplung je Weg, Laufstart gibt UART-Empfang frei, Diagnose mit Zeit und UART-Fehlercodes, Doppelklick-Build `build-test.cmd`.
 - **Rahmen/Raster (Codex, von Claude reviewt, auf `feat/integration`):** Fokusprüfung am Laufstart zweiseitig, Band vorläufig 0,95–1,05, außerhalb wird der Start abgelehnt („neu einrichten“). Raster A1 (Leerzellengrenze) und B1 (zweite Unterkantenannahme) liefern 63/65 statt 58/65 Fits, kein alter Fit verloren. Details unten.
-- **Offen:** Fokusband am Aufbau kalibrieren (OQ-74), UART über Brücke mit Rahmenfehlern; EXE-Gestaltungsrunde 3; danach Installer/TUI. Reihenfolge und Details: [TODO.md](../TODO.md).
+- **Offen:** Fokusband am Aufbau kalibrieren (OQ-74), UART über Brücke mit Rahmenfehlern; EXE-Gestaltungsrunde 3 liegt fertig auf `wip/bruecke-ux3` (nicht gemergt), Sichtprüfung nach `windows/bridge/PRUEFUNG-UX3.md` am 18.11.; danach Installer/TUI. Reihenfolge und Details: [TODO.md](../TODO.md).
 
 ## Rahmenprüfung und Rasterbestimmung (13.11. abends)
 

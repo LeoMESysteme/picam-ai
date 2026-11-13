@@ -30,6 +30,9 @@ Leitsatz: **Werte sind Felder, Zustände sind Formen, Text ist die Ausnahme.**
 | Testsession merken | Der Haken „Getrennte GSVmulti-Testsession verwendet“ bleibt gesetzt, solange die App läuft. |
 | Portpaar-Prüfung | Die Meldung ist in beiden Reihenfolgen gleich: „Ports vorhanden und frei; Paar nicht geprüft“. Ein Seitentausch sieht nicht mehr wie ein Fehler aus. |
 | UART direkt | Die Kachel „Komponenten“ nennt nur den USB-Adapter, kein altes Portpaar. |
+| UART direkt, Schritt 2 | Die Verdrahtungskarte nennt wieder die Rate der GSVmulti-Session (115 200 Baud) statt der Brücken-UART-Rate. Das war ein Fehler aus dem WIP-Stand der Runde 3. |
+| Kopf | Die Abzeichen brechen um, statt bei 380 px eine waagrechte Bildlaufleiste zu erzwingen. Eine senkrechte Leiste im Kopf erscheint nur noch, wenn der Inhalt wirklich nicht passt. Wertfelder sind 30 statt 38 px hoch. |
+| Einstellungen | „Automatisch“ im Darstellungsschalter ist nicht mehr abgeschnitten. Die Baudraten heißen „Rate UART Pi ↔ Brücke“ und „Rate GSVmulti-Seite“; der Bezeichner „GSVmulti-Seite“ war vorher doppelt vergeben. |
 | Beenden-Dialog | Bei Testfreigabe oder Demo sagt er „Die Übertragung an GSVmulti endet“. Vorher stand dort fälschlich „es werden keine Werte übertragen“. |
 
 ## 0. Bauen
@@ -85,7 +88,9 @@ echte App gegen den Pi.
 | 21 | EXE | Während eines Empfangstests das LAN kurz ziehen | Journal: „Empfangstest unterbrochen: n von 600 übergeben“ mit Grund. Schritt 5 endet spätestens nach etwa 70 s mit „Unvollständig“ |
 | 22 | EXE | Echten Vierkanal-Lauf auf dem Pi starten (Testfreigabe) | Weitergabe-Kachel „n Takte“, der Zähler steigt. Passt die Session nicht zum Format, erscheint die Warnung aus Nr. 6 |
 | 23 | EXE | Brücke beenden, während die Testfreigabe überträgt | Dialog: „Die Übertragung an GSVmulti endet …“ mit „Weiter übertragen“ |
-| 24 | alle | Gesamteindruck hell und dunkel | Weniger Text? Ruhiger? Was stört noch? Freitext |
+| 24 | B1tr, Fenster 380 × 560 | Hauptfenster schmal ziehen | Die Abzeichen brechen in eine zweite Zeile um, keine waagrechte Bildlaufleiste |
+| 25 | D2 | Verdrahtung ansehen | Parameter „115200 Baud, 8N1“, nicht 460 800 |
+| 26 | alle | Gesamteindruck hell und dunkel | Weniger Text? Ruhiger? Was stört noch? Freitext |
 
 ## Bekannt offen (nicht Teil dieser Runde)
 

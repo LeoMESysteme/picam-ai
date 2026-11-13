@@ -7,8 +7,10 @@ import time
 from PySide6.QtCore import (
     QAbstractAnimation,
     QEasingCurve,
+    QPoint,
     QPointF,
     QPropertyAnimation,
+    QRect,
     QRectF,
     QSize,
     Qt,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QSizePolicy,
     QToolButton,
@@ -89,14 +92,71 @@ class Badge(QFrame):
         p.end()
 
 
+class FlowLayout(QLayout):
+    """Zeile, die bei Platzmangel umbricht (Abzeichen im Kopf: bei 380 px passen vier nicht nebeneinander und
+    erzwangen sonst eine waagrechte Bildlaufleiste)."""
+
+    def __init__(self, parent=None, spacing: int = 6):
+        super().__init__(parent)
+        self._items = []
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setSpacing(spacing)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, i):
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i):
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._place(QRect(0, 0, width, 0), apply=False)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._place(rect, apply=True)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for it in self._items:
+            size = size.expandedTo(it.minimumSize())
+        return size
+
+    def _place(self, rect, apply: bool) -> int:
+        x, y, line = rect.x(), rect.y(), 0
+        gap = self.spacing()
+        for it in self._items:
+            if it.widget() is not None and it.widget().isHidden():
+                continue
+            hint = it.sizeHint()
+            if x > rect.x() and x + hint.width() > rect.right() + 1:
+                x, y, line = rect.x(), y + line + gap, 0
+            if apply:
+                it.setGeometry(QRect(QPoint(x, y), hint))
+            x += hint.width() + gap
+            line = max(line, hint.height())
+        return y + line - rect.y()
+
+
 def badge_row(*badges: Badge) -> QWidget:
     w = QWidget()
-    lay = QHBoxLayout(w)
-    lay.setContentsMargins(0, 0, 0, 0)
-    lay.setSpacing(6)
+    lay = FlowLayout(w)
     for b in badges:
-        lay.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
-    lay.addStretch(1)
+        lay.addWidget(b)
     return w
 
 
@@ -302,9 +362,7 @@ class Header(QWidget):
         row2.addWidget(self.dut_info, 0, Qt.AlignmentFlag.AlignTop)
         lay.addLayout(row2)
         self.badges = QWidget()
-        self.badges_lay = QHBoxLayout(self.badges)
-        self.badges_lay.setContentsMargins(0, 0, 0, 0)
-        self.badges_lay.setSpacing(6)
+        self.badges_lay = FlowLayout(self.badges)
         self._badges_key: tuple = ()
         self.badges.hide()
         lay.addWidget(self.badges)
@@ -334,9 +392,8 @@ class Header(QWidget):
                 it.widget().deleteLater()
         for text, tip in items:
             b = Badge(text, tip, name='badge_' + text.replace(' ', '_'))
-            self.badges_lay.addWidget(b, 0)
+            self.badges_lay.addWidget(b)
             repolish(b)
-        self.badges_lay.addStretch(1)
         self.badges.setVisible(bool(items))
 
     def update_from(self, ctx, headline: texts.Headline, locked: bool, allow_switch=True, peer: str | None = None,

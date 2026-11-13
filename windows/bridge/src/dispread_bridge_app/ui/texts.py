@@ -593,7 +593,7 @@ FORMAT_NAME = {'1ch': 'Einkanal', '4ch': 'Vierkanal'}
 FORMAT_UNKNOWN = 'unbekannt'
 SESSION_MISMATCH = ('Session-Datei: {session}, Lauf: {run}. Mit unpassender Session kam in GSVmulti nichts an '
                     '(Prüfung 13.11.). Session für diesen Port neu erzeugen und in GSVmulti öffnen.')
-SESSION_MISMATCH_SHORT = 'Session {session}, Lauf {run} – Session neu erzeugen.'
+SESSION_MISMATCH_SHORT = 'Session {session}, Lauf {run}.'
 SESSION_REMAKE = 'Session neu erzeugen …'
 
 
@@ -1117,7 +1117,7 @@ SETUP: dict[str, dict] = {
         _AUTO], nxt='Fertig', ready=True),
     'E5short': _s(5, 'Test unvollständig', [
         ('info', 'err', 'Unvollständig: {written} von {count}, {missing} fehlen',
-         'Nicht alle Testwerte kamen bis zum COM-Port. Protokolle exportieren und den Test wiederholen.',
+         'Protokolle exportieren, dann den Test wiederholen.',
          (('Protokolle exportieren', 'export_diagnostics', True),)),
         ('check', 'Getrennte GSVmulti-Testsession verwendet', 'test_session_ok'),
         ('button', 'Test wiederholen', 'start_demo_check', True), _AUTO], nxt='Fertig', ready=True),

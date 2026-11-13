@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QComboBox, QFrame, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget
 
 from . import texts, theme
@@ -223,7 +224,8 @@ class SettingsWindow(ToolWindow):
             b = SegButton(text)
             b.setObjectName(f'theme_{mode}')
             b.setProperty('seg', True)
-            b.setMinimumWidth(80)
+            # gewählt = fett: Breite für die fette Schrift reservieren, sonst wird „Automatisch“ abgeschnitten
+            b.setMinimumWidth(max(80, QFontMetrics(theme.typo_font('body_strong')).horizontalAdvance(text) + 36))
             b.setCheckable(True)
             b.setChecked(mode == cur)
             group.addButton(b)
@@ -390,9 +392,9 @@ class SettingsWindow(ToolWindow):
                 inner.addWidget(self._note('adapter'))
                 self._error_line(inner, 'adapter')
         if c.uart_baud and not direct:
-            inner.addWidget(field('UART Pi ↔ Brücke', f'{c.uart_baud} Baud', copy=False))
-        if c.gsv_baud:
-            inner.addWidget(field('GSVmulti-Seite', f'{c.gsv_baud} Baud', copy=False))
+            inner.addWidget(field('Rate UART Pi ↔ Brücke', f'{c.uart_baud} Baud', copy=False))
+        if c.gsv_baud:      # eigener Bezeichner: „GSVmulti-Seite“ ist schon der Port
+            inner.addWidget(field('Rate GSVmulti-Seite', f'{c.gsv_baud} Baud', copy=False))
         body.addWidget(box)
 
     def _applied(self, kind: str, f: ValidatedField, value) -> None:
