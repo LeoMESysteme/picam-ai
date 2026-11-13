@@ -9,6 +9,53 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-13 — Zweite Unterkantenhypothese bei fehlender Startlage
+
+**Problem:** Eine Hough-Linie durch das Zeichenband kann die Richtung sämtlicher
+Startlagen fehlleiten. Ein pauschaler Ersatz der Unterkantenrichtung verliert
+bestehende Fits; die Messlinien in den Gegenproben laufen ebenfalls durch das
+Zeichenband.
+
+**Entscheidung:** Nur nach drei tatsächlichen `keine_startlage`-Ergebnissen
+sucht ein zweiter Lauf mit der Oberkantenrichtung als zusätzlicher Annahme.
+Alle Annahme- und Eindeutigkeitsprüfungen bleiben erhalten; frühere Fits und
+andere Ablehnungen werden unverändert zurückgegeben.
+
+**Alternativen:** Eine feste Differenz-, Längen- oder Zeichenbandgrenze ist
+nicht trennscharf belegt. Eine immer zusätzliche vollständige Suche könnte
+konkurrierende Fits auch bei alten Erfolgen erkennen, erhöht aber Kosten und
+kann bisherige Ergebnisse ändern. Diese Alternative wurde für diesen
+begrenzten Startsuch-Fallback nicht gewählt.
+
+**Konsequenz:** Bei einem bereits akzeptierten ersten Fit wird die zweite
+Hypothese nicht auf Konkurrenz geprüft. Die beschränkte Suche garantiert
+keine vollständige geometrische Eindeutigkeit; neue Fits erfordern
+unabhängige Gegenprüfung. Details im [Recherchepaket](quellen/raster-recherche-2026-11-13/README.md).
+
+---
+
+## 2026-11-13 — Randminimum an der Leerzellgrenze
+
+**Problem:** Zwei tiefe Quellkandidaten unmittelbar vor der Grenze zum
+Nachbarzeichen wurden der Leerzelle zugerechnet und verwarfen ein Raster.
+
+**Entscheidung:** Das letzte Viertel eines Punktabstands vor der nächsten
+Zelle zählt bei der Leerzellbelegung nicht zur Lückenspalte. Die beobachteten
+Abstände betragen 0,01–0,04 Spalten; die Mitte der Lückenspalte und
+zugewiesene Punkte der Leerzelle bleiben belegt.
+
+**Alternativen:** Größere Randzone erhöht die unüberwachte Fläche; eine
+punktgroße Glättung würde die Kandidatensuche selbst ändern und ihre
+Sicherheitsgrenzen neu zur Prüfung stellen. Beides wurde hier nicht
+übernommen. Die Startsuche und ihr Unterkantenfehler sind getrennt.
+
+**Konsequenz:** Ein Kandidat allein in dieser Randzone wird nicht als
+Leerzellenbeleg gewertet; eine allgemeine Garantie für beliebige Artefakte
+oder Geräte folgt nicht. Die Offline-Gegenproben stehen im
+[Recherchepaket](quellen/raster-recherche-2026-11-13/README.md).
+
+---
+
 ## 2026-11-11 — Session-Format je Lauf statt globaler Vorlagenaktivierung
 
 **Problem:** Die globale Aktivierung aus dem vorigen Katalogauftrag passt
@@ -2416,3 +2463,11 @@ und `json` in der stdlib ist — das vermeidet zwei weitere Abhängigkeiten, die
 Systempakete überschatten könnten.
 
 ---
+
+### 2026-11-13 — Vorläufige Fokusgleichheit am Laufstart
+
+Statt Messpfadgrenzen zu lockern, Bereiche je Bild auszuschließen oder eine
+ungeprüfte alte Lage zu halten, sperrt ein vorläufiger Schärfevergleich einen
+abweichenden Start. 95–105 % umfasst die engen beobachteten Laufstartwerte mit
+niedrigen Zweitversuchsanteilen, ist aber keine kalibrierte Grenze: Ein Lauf mit
+142 % hatte keine Zweitversuche. Maßstab und Zweitversuche sind nur Diagnose.

@@ -1742,6 +1742,9 @@ def test_r19b_session_zaehlt_zweiten_versuch_und_erfolg(tmp_path):
         summary = session.stop()
     assert summary['tracking_coarse_retries'] == 2
     assert summary['tracking_coarse_accepted'] == 2
+    assert summary['tracking_geometry']['retry_fraction'] == pytest.approx(2 / 5)
+    assert summary['tracking_geometry']['scale']['n'] == 2
+    assert summary['tracking_geometry']['scale']['median'] == pytest.approx(1.0, abs=0.005)
 
 
 def test_r19b_session_altes_profil_bekommt_nachfuehrung_ohne_neueinrichtung(tmp_path):
@@ -2325,3 +2328,34 @@ def test_probenprozess_laedt_den_code_dieses_prozesses(monkeypatch):
     handle = ProbeProcess({}, set(), 1, command=[sys.executable, '-c', code])
     handle._thread.join(20)
     assert handle._outcome == ('ok', dispread.__file__)
+
+
+def test_tracking_fraction_keeps_same_denominator_when_audit_fails(tmp_path, monkeypatch):
+    import numpy as np
+    from frame_tracking_helpers import reference_scene
+
+    image, _ = reference_scene()
+    moved = cv2.warpAffine(image, np.float32([[1, 0, 15], [0, 1, 0]]), image.shape[1::-1])
+    session, _ = _region_session(tmp_path, images=[moved, moved])
+    session.start()
+    session.step()
+    def fail(_record):
+        raise AuditFailed('Platte voll')
+    monkeypatch.setattr(session._sink, 'emit', fail)
+    with pytest.raises(AuditFailed):
+        session.step()
+    summary = session.stop()
+    assert summary['tracking_geometry']['observations'] == 2
+    assert summary['tracking_geometry']['retry_fraction'] == 1.0
+
+
+def test_tracking_scale_window_is_explicit_for_long_runs(tmp_path):
+    session = _session(tmp_path, [])
+    session.start()
+    session._tracking_scales.extend(range(10001))
+    session._tracking_scale_total = 10001
+    scale = session.stop()['tracking_geometry']['scale']
+    assert scale['n'] == 10000
+    assert scale['total'] == 10001
+    assert scale['window_limit'] == 10000
+    assert scale['min'] == 1

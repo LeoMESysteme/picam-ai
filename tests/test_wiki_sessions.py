@@ -814,3 +814,17 @@ def test_archived_runs_are_reevaluated_once_from_blocks_under_new_rules(tmp_path
     assert keys and all(k.endswith(":r2") for k in keys)
     # Unchanged afterwards: no further generation.
     assert w.Exporter(source, archive, idle=lambda: True, block_size=61).run() == new
+
+
+def test_export_skips_explicit_rejected_start_without_records(tmp_path):
+    source, archive = tmp_path / 'source', tmp_path / 'archive'
+    make_run(source)
+    rejected = source / 'session-a' / 'run-2'
+    rejected.mkdir()
+    (rejected / 'session.json').write_text(json.dumps({
+        'schema': 'live-start-rejection/1', 'ended_at_utc': '2026-10-28T12:00:00Z',
+        'run_id': 'abc', 'focus_check': {'status': 'FEHLER'},
+    }))
+    result = w.Exporter(source, archive, idle=lambda: True).run()
+    assert [run['id'] for run in catalog(result)['runs']] == ['session-a/run-1']
+    assert catalog(result)['errors'] == []

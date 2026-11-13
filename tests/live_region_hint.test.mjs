@@ -137,3 +137,23 @@ test('Einrichtung: Hinweistext nennt neue Nummer und Anteil', () => {
     'Bereich 5 liegt an einer Stelle, die im letzten Lauf dauerhaft unstimmig war (94 %). ' +
     'Die Einrichtung wählt solche Stellen künftig selbst ab; bei Bedarf hier entfernen.');
 });
+
+test('Nachführung zeigt Zweitversuche und Maßstab als Diagnose', () => {
+  const pane = {innerHTML: ''};
+  const status = {state: 'running', run: {summary: {tracking_geometry: {
+    retry_fraction: 0.65, scale: {n: 2, median: 1.0018}
+  }}}};
+  renderRunInspector(pane, status, 'Nachführung', {log: {rows: () => []}, hud: {}});
+  assert.match(pane.innerHTML, /65 %/);
+  assert.match(pane.innerHTML, /1,0018/);
+});
+
+test('Fokusvergleich und Zeitraum des Maßstabs sind sichtbar', () => {
+  const pane = host();
+  const status = {state: 'running', run: {focus_check: {text: 'Fokusvergleich: 104 % (95–105 %)'},
+    summary: {tracking_geometry: {retry_fraction: 0.5, observations: 20000,
+      scale: {median: 1.0018, n: 10000, total: 12000, window_limit: 10000}}}}};
+  renderRunInspector(pane, status, 'Nachführung', {log: {rows: () => []}, hud: {}});
+  assert.match(pane.innerHTML, /Fokusvergleich: 104 %/);
+  assert.match(pane.innerHTML, /10.000.*12.000/);
+});

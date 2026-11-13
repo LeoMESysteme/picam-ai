@@ -82,3 +82,17 @@ Nötige Belege vor jeder Änderung:
 - Replay der Läufe vom 11.11. (`103604Z`: 65 % Zweitversuche, `122753Z`: 38 %): War dort ebenfalls ein Maßstab ungleich 1 im Spiel?
   Wenn ja, sind die damals als „Glanz/Fase“ kalibrierten Schwellen (TB) neu zu bewerten.
 - Messreihe Fokuswert gegen Maßstab (Fokus 46…58, je ein Bild): bestätigt die Fokusatmung als Quelle der 0,18 %.
+
+## Nachtrag 2026-11-13: Offline-Gegenprobe und vorläufiges Startband
+
+Die Zahlen und Stichprobenbeschränkung stehen in [VALIDATION](../../VALIDATION.md).
+Der Replay `replay-rahmen.py` nimmt die drei Lauf-IDs als Argumente und liest
+nur `var/live`; keine Bilddaten werden kopiert. Die 11.11.-Stichproben zeigen
+Maßstäbe nahe eins trotz Zweitversuchen. Der 13.11.-Befund bestätigt den
+höheren Maßstab; Schärfe und Maßstab wurden nicht unabhängig variiert. 52
+Entwicklungs-`session.json` enthielten keinen Fokusstartvergleich.
+
+Das Startband 0,95–1,05 ist ein konservativer, unkalibrierter Gleichheitsfilter:
+Es umfasst 0,982–1,026 mit beobachteten Anteilen von 0,1–7,6 % und sperrt
+auch den guten Lauf 1,418/0 %. Fehlende Prüfung sperrt ebenfalls. Kein
+kausaler Schluss und keine Änderung der Fitgrenzen folgt daraus.

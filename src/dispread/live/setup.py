@@ -557,7 +557,8 @@ def quad_focus_reference(images: Any, quad: Any, size: tuple[int, int], *, sourc
 
     Am besten Einzelbilder (die Stabilitaetsaufnahme der Einrichtung), weil der
     Laufstart Einzelbilder misst. Ein Mittelbild hat weniger Rauschen und damit
-    eine kleinere Laplace-Varianz; es kann nur zu milde, nie zu strenge Urteile geben.
+    eine kleinere Laplace-Varianz. Das kann das Verhaeltnis nach oben verschieben
+    und beim zweiseitigen Startband auch zu einer Ablehnung fuehren.
     """
     width, height = size
     points = np.asarray(quad, dtype=float).reshape(-1, 2)
@@ -584,23 +585,36 @@ def check_focus_at_run_start(
     """OQ-74: Nach dem Kameraneustart am Laufstart die Schaerfe gegen die Einrichtung pruefen.
 
     ROI ist das bestaetigte Anzeige-Viereck (`quad_focus_reference`), Normierung
-    wie in der Einrichtung. Unter der Schwelle einmal von unten neu setzen;
-    bleibt sie darunter: WARNUNG mit sichtbarem Text. Der Lauf startet trotzdem,
-    die Freigabe bleibt unberuehrt. `None` ohne Referenz.
+    wie in der Einrichtung. Unter 0,6 einmal von unten neu setzen; danach
+    muss das Verhaeltnis im vorlaeufigen Band 0,95–1,05 liegen. `None` ohne Referenz.
     """
     if not reference:
         return None
+    for key in ("score", "roi_mean"):
+        value = reference.get(key)
+        if value is None or not np.isfinite(float(value)) or float(value) <= 0:
+            raise ValueError(f"ungültige Fokusreferenz: {key}")
     result, frames = _check_lens_after_restart(
         cam, tuple(reference["roi_box"]), int(target), float(reference["score"]), reference.get("roi_mean"),
         settle_s=settle_s, sleep=sleep, should_stop=None, info=None, label="Fokuspruefung Laufstart",
     )
     result.update(reference=deepcopy(reference), text=None)
-    if result["status"] == "WARNUNG":
-        result["text"] = (f"Bild nach Kamerastart unschärfer als bei der Einrichtung "
-                          f"({100 * result['reapproach']['ratio']:.0f} %) – Fokus prüfen")
+    final = result["reapproach"] or result["after_restart"]
+    ratio = final["ratio"]
+    # Vorlaeufiger Gleichheitsfilter aus den aufgezeichneten Laufstarts; keine
+    # Kalibrierung und kein Nachweis fuer eine Massstabsabweichung.
+    result["run_band_ratio"] = [0.95, 1.05]
+    if not np.isfinite(ratio) or not 0.95 <= ratio <= 1.05:
+        result["status"] = "FEHLER"
+        result["text"] = (f"Fokus weicht von der Einrichtung ab ({100 * ratio:.0f} %; "
+                          "zulässig 95–105 %) – Fokus prüfen und neu einrichten")
     elif result["reapproach"] is not None:
+        result["status"] = "OK"
         result["text"] = (f"Fokus nach Kamerastart neu gesetzt (vorher {100 * result['after_restart']['ratio']:.0f} %, "
-                          f"danach {100 * result['reapproach']['ratio']:.0f} % der Einrichtungsschärfe)")
+                          f"danach {100 * ratio:.0f} % der Einrichtungsschärfe)")
+    else:
+        result["text"] = (f"Fokusvergleich: {100 * ratio:.0f} % der Einrichtungsschärfe "
+                          "(vorläufiges Band 95–105 %)")
     return result, frames
 
 

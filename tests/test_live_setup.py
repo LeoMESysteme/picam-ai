@@ -1318,7 +1318,7 @@ def test_run_start_focus_check_ok_without_moving_lens(end_check_sharpness):
     cam = RestartFocusCamera()
     result, frames = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
                                                          sleep=lambda _s: None)
-    assert result["status"] == "OK" and result["reapproach"] is None and result["text"] is None
+    assert result["status"] == "OK" and result["reapproach"] is None and "Fokusvergleich" in result["text"]
     assert cam.controls == []
     assert set(frames) == {"nach_neustart"}
 
@@ -1338,8 +1338,8 @@ def test_run_start_focus_check_warns_visibly_with_value(end_check_sharpness):
     cam = RestartFocusCamera(lost=True, recover=False)
     result, _ = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
                                                     sleep=lambda _s: None)
-    assert result["status"] == "WARNUNG"
-    assert result["text"] == "Bild nach Kamerastart unschärfer als bei der Einrichtung (5 %) – Fokus prüfen"
+    assert result["status"] == "FEHLER"
+    assert "neu einrichten" in result["text"]
     assert sum(1 for controls in cam.controls for name, _ in controls if name == "focus_absolute") == 2
 
 
@@ -1353,3 +1353,27 @@ def test_run_start_focus_check_normalizes_brightness(end_check_sharpness):
 
 def test_run_start_focus_check_skipped_without_reference():
     assert live_setup.check_focus_at_run_start(FakeSetupCamera(None), None, target=48) is None
+
+
+@pytest.mark.parametrize('ratio', [0.65, 1.40])
+def test_run_start_rejects_focus_outside_reference_band(end_check_sharpness, ratio):
+    cam = RestartFocusCamera(best=600.0 * ratio)
+    result, _ = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
+                                                   sleep=lambda _s: None)
+    assert result['status'] == 'FEHLER'
+    assert 'neu einrichten' in result['text']
+
+
+@pytest.mark.parametrize('score', [0, float('nan'), float('inf')])
+def test_run_start_rejects_invalid_reference_score(end_check_sharpness, score):
+    with pytest.raises(ValueError, match='Fokusreferenz'):
+        live_setup.check_focus_at_run_start(RestartFocusCamera(), _run_reference(score=score), target=48,
+                                            settle_s=0, sleep=lambda _s: None)
+
+
+@pytest.mark.parametrize('ratio', [0.96, 1.0, 1.04])
+def test_run_start_accepts_focus_ratios_inside_band(end_check_sharpness, ratio):
+    cam = RestartFocusCamera(best=600.0 * ratio)
+    result, _ = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
+                                                   sleep=lambda _s: None)
+    assert result['status'] == 'OK'

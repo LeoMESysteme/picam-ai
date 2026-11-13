@@ -200,6 +200,7 @@ class LiveService:
         # OQ-74: Schaerfereferenz der bestaetigten Einrichtung und Pruefung am Laufstart.
         self._focus_reference: dict | None = None
         self._run_focus_check: dict | None = None
+        self._last_start_rejection: dict | None = None
         self._profile_info: dict | None = None
         self._run_dir: Path | None = None
         self._session: LiveSession | None = None
@@ -372,6 +373,7 @@ class LiveService:
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
                 "previous_region_hint": deepcopy(self._previous_region_hint),
+                "last_start_rejection": deepcopy(self._last_start_rejection),
                 "output": (self._session.unified_output_status()
                            if self._session is not None and hasattr(self._session, 'unified_output_status')
                            else {"transport": "off", "state": "off"}),
@@ -536,6 +538,7 @@ class LiveService:
             self._require_storage()
             with self._lock:
                 self._state, self._step, self._error = "setup_running", "start", None
+                self._last_start_rejection = None
                 self._setup_started_at = self._monotonic()
                 self._setup_elapsed_s = None
                 self._setup_step = "start"
@@ -603,24 +606,22 @@ class LiveService:
                 self._diagnostics_error = f"{path.name}: {type(exc).__name__}: {str(exc)[:160]}"
 
     def _check_run_start_focus(self, camera: CameraSettings, out_dir: Path) -> dict:
-        """OQ-74: Schaerfe nach dem Kameraneustart am Laufstart; der Lauf startet in jedem Fall.
-
-        Ergebnis geht nach session.json; eine WARNUNG mit Text erscheint im Laufstatus.
-        Ein Kamerafehler bei der Pruefung wird als WARNUNG gemeldet, nicht verschwiegen.
-        """
+        """Schaerfe nach dem Neustart pruefen; fehlende Evidenz sperrt den Lauf."""
         reference = self._focus_reference
         if not reference:
-            return {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz"}
+            return {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz",
+                    "run_band_ratio": [0.95, 1.05]}
         try:
             checked = live_setup.check_focus_at_run_start(
                 OwnerSetupCamera(self._owner), reference, target=camera.controls["focus_absolute"],
             )
-        except Exception as exc:  # noqa: BLE001 - Lauf startet trotzdem, Befund sichtbar
+        except Exception as exc:  # noqa: BLE001 - Fehler sperrt den Laufstart
             _LOG.warning("Fokuspruefung Laufstart fehlgeschlagen: %s", exc)
             return {"status": "WARNUNG", "text": f"Fokus beim Laufstart nicht geprüft: {str(exc)[:160]}",
-                    "reference": deepcopy(reference)}
+                    "reference": deepcopy(reference), "run_band_ratio": [0.95, 1.05]}
         if checked is None:
-            return {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz"}
+            return {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz",
+                    "run_band_ratio": [0.95, 1.05]}
         result, frames = checked
         box = tuple(reference.get("roi_box") or ()) or None
         for name, frame in frames.items():
@@ -1053,6 +1054,21 @@ class LiveService:
                     except RuntimeError as exc:
                         raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
                     focus_check = self._check_run_start_focus(camera, out_dir)
+                    (out_dir / "focus-check.json").write_text(
+                        json.dumps(focus_check, indent=2, ensure_ascii=False), encoding="utf-8")
+                    if focus_check.get("status") != "OK":
+                        rejection = {
+                            "schema": "live-start-rejection/1", "state": "start_abgelehnt",
+                            "ended_at_utc": self._wall().astimezone(UTC).isoformat(),
+                            "run_id": run_id, "run_dir": out_dir.name,
+                            "session_id": profile_path.parent.name,
+                            "profile": {"path": str(profile_path)}, "focus_check": focus_check,
+                        }
+                        (out_dir / "session.json").write_text(
+                            json.dumps(rejection, indent=2, ensure_ascii=False), encoding="utf-8")
+                        with self._lock:
+                            self._last_start_rejection = deepcopy(rejection)
+                        raise LiveError(focus_check.get("text") or "Fokus nicht prüfbar – bitte neu einrichten")
                 else:
                     focus_check = None
                 try:
@@ -1079,8 +1095,8 @@ class LiveService:
                     self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
                                                if getattr(s, 'diagnose_kopie', False)]
                     self._session, self._run_stop, self._state, self._error = session, stop, "running", None
-                    self._run_focus_check = (None if focus_check is None or focus_check.get("text") is None
-                                             else {"status": focus_check["status"], "text": focus_check["text"]})
+                    self._last_start_rejection = None
+                    self._run_focus_check = deepcopy(focus_check)
                     self._previous_region_hint = None
                     self._run_dir = out_dir
                     self._test_run = test_run

@@ -11,7 +11,7 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 **Abnahme:** Herr Kaulitz hat am 2026-11-13 die Werkbank und die Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen (Stand `feat/integration`, Pi-Dienst `5a31b41`, EXE gebaut 14:50 aus `c643f30`). Smoketest: [windows/bridge/SMOKETEST-2026-11-13.md](windows/bridge/SMOKETEST-2026-11-13.md); Prüfbericht: [docs/quellen/ux2-pruefung-2026-11-13](docs/quellen/ux2-pruefung-2026-11-13/ux2-bericht.md).
 
-1. **Fix Rahmenprüfung / Rasterbestimmung (Backend, an Codex übergeben):** [Handoff](docs/superpowers/handoffs/2026-11-13-codex-rahmen-raster.md). Danach Review durch Claude, dann Entscheidung mit Leonhard.
+1. ~~**Fix Rahmenprüfung / Rasterbestimmung**~~ erledigt 13.11. abends (Codex, von Claude reviewt, auf `feat/integration`): Fokusband 0,95–1,05 am Laufstart mit Ablehnung, Raster A1+B1 63/65 statt 58/65 Fits. [Bericht](docs/quellen/rahmen-raster-2026-11-13/REPORT-codex.md). **Offen:** Fokusband am Aufbau kalibrieren (OQ-74); Leonhard prüft am Mittwoch, ob die Ablehnung im Alltag zu oft greift (ein guter Lauf lag bei 1,418).
 2. **Überarbeitung der EXE (UI, Claude):** Gestaltungsrunde 3 auf `wip/bruecke-ux3` fertigstellen und nach `feat/integration` mergen, offene Punkte aus dem Prüfbericht (unten), Bildschirmfoto-Tour mit Leonhard.
 3. **Installer und TUI:** One-Line-Installer; TUI/CLI, die den Nutzer visuell durch das Setup des picam-Projekts im Terminal führt und von der aus man Status und Logs sieht sowie die Werkbank startet, stoppt, konfiguriert, Fehler sucht und aktualisiert. Ersetzt auch den umständlichen Windows-Testbau (siehe „Auslieferung der Windows-App vereinfachen“ unten).
 

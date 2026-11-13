@@ -655,6 +655,14 @@ class Exporter:
 
     def _import(self, directory):
         rid = directory.parent.name + "/" + directory.name
+        # Abgeschlossene Startablehnungen sind keine Messlaeufe und haben kein records.jsonl.
+        if not (directory / "records.jsonl").exists():
+            path = directory / "session.json"
+            identity = _identity(path)
+            meta = self._metadata(self._file(rid, "session.json", path, identity))
+            if meta.get("schema") == "live-start-rejection/1" and meta.get("ended_at_utc"):
+                self.validations.append((rid, [("session.json", path)], {"session.json": identity}))
+                return
         paths, warnings = self._paths(directory)
         identities = {name: _identity(path) for name, path in paths}
         signature = _dump({"files": identities, "rules": STATS_RULES})

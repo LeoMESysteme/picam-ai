@@ -3481,6 +3481,22 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Letztes Originalbild, alle vorhandenen Einstellungen/Texte/Fehler,
   Quellstand und Offline-Rezept gesichert. Fokusfenster und grüne
   Hinweisbox überschneiden sich im gespeicherten Bild nicht (OQ-74).
+* **Zwischenstand 2026-11-13:** A1 berücksichtigt Randminima nahe der
+  Nachbarzelle gesondert; die unabhängige automatische Startsuche blieb
+  in diesem Schritt offen. Bei `115232Z/still-versuch-1` liefert die Unterkanten-Houghlinie
+  0,0712 gegenüber 0,0217 oben; ein Ansatz vom Folgebild-Quad kann
+  dagegen verfeinert werden. Das Folgebild ist nur ein Geometrieanker,
+  sein serieller Maskentext enthält `?`. Belege und Offline-Auswertung:
+  [Rasterrecherche](quellen/raster-recherche-2026-11-13/README.md).
+* **Nachtrag 2026-11-13:** Eine alternative Unterkantenrichtung wird nach
+  drei erfolglosen Startdurchläufen zusätzlich gesucht; bestehende Fits und
+  andere Ablehnungen bleiben unberührt. Die zwei Problemaufnahmen liefern
+  damit in gezielten Tests einen Fit nahe den jeweiligen Vergleichsquads;
+  Bewegung zwischen Aufnahmen bleibt möglich. Im Offline-Korpus ergeben
+  B1 und A1+B1 66/74 bzw. 72/74 Fits; alle Baselinefits bleiben erhalten.
+  Drei Zusatzfits gegenüber A1 wurden einzeln geprüft; `130253Z/still`
+  behält dabei eine Offsetwarnung. Ein bestehender Fit wird nicht auf
+  konkurrierende Alternativhypothesen geprüft. Korpusprüfung und Ergebnisse: [Rasterrecherche](quellen/raster-recherche-2026-11-13/README.md).
 * **Antwort landet in:** `src/dispread/dotlattice.py`, zugehörigen
   Regressionstests und [Validierung](VALIDATION.md).
 
@@ -3708,6 +3724,13 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   * **Weiter offen:**
     * optisches Motorverhalten beim Neustart: erste echte Einrichtung, `restart_effect`
     * Kalibrierung der Schwelle
+
+* **Nachtrag 2026-11-13:** Der Laufstart sperrt fehlende oder ungültige
+  Referenzen und Schärfeverhältnisse außerhalb 0,95–1,05; das ist ein
+  vorläufiger Gleichheitsfilter, keine validierte Schärfe- oder Maßstabsgrenze.
+  Die Ursache der Unterschiede und die Kalibrierung bleiben offen. Ein Lauf
+  mit 1,418 hatte keine Zweitversuche; Schärfe allein beweist keinen Maßstab.
+  Details und Offline-Auswertung: [Nachführung](quellen/nachfuehrung-recherche-2026-11-13/README.md).
 
 <span id="oq-75"></span>
 
