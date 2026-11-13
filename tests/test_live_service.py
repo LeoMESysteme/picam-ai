@@ -3573,3 +3573,33 @@ def test_confirm_keeps_focus_reference_for_run_start(tmp_path, proposal):
     service.start_setup()
     assert service._focus_reference is None
     service._setup_thread.join(2)
+
+
+def test_run_on_other_path_releases_bridge_uart_listener(tmp_path, monkeypatch):
+    """13.11.2026 (C-10): UART direkt scheiterte an „serial port occupied“, weil der UART-Empfang
+    der Brücke noch /dev/ttyAMA0 hielt. Ein Lauf auf einem anderen Weg gibt ihn selbst frei."""
+    from dispread.bridge.hub import BridgeHub
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    stopped = []
+    monkeypatch.setattr(hub, 'status', lambda: {'uart_prepared': True, 'run_id': None, 'real_run': False})
+    monkeypatch.setattr(hub, 'stop_uart', lambda: stopped.append(True))
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._bridge_hub = hub
+    service.start_run(reference=False)                 # Weg „Aus“ (nicht UART über Brücke)
+    assert stopped == [True]
+    service.stop_run()
+
+
+def test_run_on_bridge_uart_keeps_listener(tmp_path, monkeypatch):
+    from dispread.bridge.hub import BridgeHub
+    hub = BridgeHub('pi', tmp_path / 'audit')
+    stopped = []
+    monkeypatch.setattr(hub, 'stop_uart', lambda: stopped.append(True))
+    monkeypatch.setattr(hub, 'status', lambda: {'uart_prepared': True})
+    service = _confirmed_service(tmp_path, monkeypatch)
+    service._bridge_hub = hub
+    try:
+        service.start_run(reference=False, output={'transport': 'uart'})
+    except Exception:
+        pass                                           # Weg UART: Start darf scheitern, Empfang bleibt
+    assert stopped == []

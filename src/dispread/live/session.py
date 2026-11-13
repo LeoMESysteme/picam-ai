@@ -477,6 +477,10 @@ class LiveSession:
                                           if self._output_config.get('format') == '4ch' else {}))
             except Exception as exc:
                 self.stop(reason='start_failed')
+                if 'serial port occupied' in str(exc):
+                    raise StartRefused('Ausgabe nicht gestartet: Der serielle Port ist belegt. Anderes Programm '
+                                       'bzw. den UART-Empfang der Brücke beenden (Brücke einrichten → '
+                                       'UART-Empfang beenden).') from exc
                 raise StartRefused(f'Ausgabe nicht gestartet: {exc}') from exc
         if self._reference_recorder is not None:
             try:

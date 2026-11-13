@@ -3,7 +3,7 @@
 // Ereignis markieren mit Text. Texte, Ablauf und POST-Koerper woertlich aus
 // der alten Live-Seite; window.confirm ist durch openModal ersetzt.
 import {openModal} from '../ui/modal.js';
-import {BAUDRATES, BRIDGE_ACK, CHECKLIST, CHECKLIST_TITLE, FORMATS, FORMAT_DEFAULTS, FORMAT_WARNING, RATE_ERROR, RATE_NOTE, rateValid, BRIDGE_NO_ACK, BRIDGE_NOTE, DEFAULTS, LOCK_NOTICE, NAMES, PATHS, SERIAL_ACK, SERIAL_NOTE, TEST_BLOCK, UART_RATE_NOTE, configText,
+import {BAUDRATES, BRIDGE_ACK, CHECKLIST, CHECKLIST_TITLE, FORMATS, FORMAT_DEFAULTS, FORMAT_WARNING, RATE_ERROR, RATE_NOTE, rateValid, BRIDGE_NO_ACK, BRIDGE_NOTE, DEFAULTS, LOCK_NOTICE, NAMES, PATHS, SERIAL_ACK, SERIAL_NOTE, SERIAL_4CH_NOTE, BRIDGE_4CH_NOTE, TEST_BLOCK, UART_RATE_NOTE, configText,
   loadChoice, outputBody, saveChoice} from './output.js';
 
 const TEXT = {
@@ -128,6 +128,8 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     part('fmt-box').hidden = mode === 'off' || format() !== '4ch';
     part('out-prefix').closest('div').querySelectorAll('[for="out-prefix"], #out-prefix').forEach((el) => { el.hidden = format() === '4ch'; });
     part('out-tcpbox').hidden = mode !== 'tcp';
+    part('out-note').textContent = format() === '4ch' ? SERIAL_4CH_NOTE : SERIAL_NOTE;
+    part('out-release-note').textContent = format() === '4ch' ? BRIDGE_4CH_NOTE : BRIDGE_NOTE;
     const bridge = ['uart', 'tcp'].includes(mode) && !running();
     part('out-release').hidden = !bridge;
     part('out-rate').hidden = mode !== 'uart' || running();

@@ -275,20 +275,22 @@ def analyse(pi_events, writes, attempts, gaps, pi_status, worker_status, enqueue
     fill_ok, tick_ok, fresh_ok = True, True, True
     max_age_ns = setup['max_age_ms'] * 1_000_000
     valid_frames = []
+    held = None   # Spec 3.5 (13.11.2026): Kanal 1 haelt den letzten geschriebenen gueltigen Wert
     for (_t, payload), seq in zip(lines, seqs, strict=True):
         nominal = nominal_unix_ns(origin, rate, seq)
         if kinds.get(seq) == 'tick':
             event = audited[seq]
             tick = Tick(seq, event['valid'], event['value_text'], event['time_unix_ns'], event['frame_sequence'])
-            tick_ok &= payload == formatter.format_tick(tick)
+            tick_ok &= payload == formatter.format_tick(tick, held)
             if tick.valid:
+                held = tick.value_text
                 valid_frames.append(tick.frame_sequence)
                 period = nominal_unix_ns(origin, rate, seq + 1) - nominal
                 # Bild erfasst vor dem Taktentscheid und jünger als die Altersgrenze.
                 fresh_ok &= tick.time_unix_ns < nominal + period and nominal - tick.time_unix_ns < max_age_ns
         else:
             fill_ok &= (kinds.get(seq) == 'fill'
-                        and payload == formatter.format_tick(Tick(seq, False, None, nominal, None)))
+                        and payload == formatter.format_tick(Tick(seq, False, None, nominal, None), held))
     n = pi_status['seq']
     filled = {seq for seq, kind in kinds.items() if kind == 'fill'}
     pi_written = {seq for seq, ack in acked.items() if ack['outcome'] == 'written'}

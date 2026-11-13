@@ -10,6 +10,13 @@ export const LOCK_NOTICE = 'DUT-Ausgabe gesperrt: Windows-Abnahme fehlt. Verbind
   'Messwerte werden noch nicht an GSVmulti ausgegeben.';
 export const SERIAL_NOTE = 'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Werte werden ausgelassen; ' +
   'GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
+// Vierkanal-Takt: wortgleich SERIAL_4CH_RELEASE_NOTE / BRIDGE_4CH_RELEASE_NOTE (dispread.live.output).
+export const SERIAL_4CH_NOTE = 'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. ' +
+  'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); ' +
+  'der Zeitkanal ist vorläufig.';
+export const BRIDGE_4CH_NOTE = 'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. ' +
+  'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); ' +
+  'verlorene Takte füllt die Brücken-App mit solchen Zeilen auf (höchstens 50). Der Zeitkanal ist vorläufig.';
 export const SERIAL_ACK = 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe';
 // Testfreigabe ueber die Bruecke (R1/R2): wortgleich BRIDGE_RELEASE_NOTE (dispread.live.output), per Test abgeglichen.
 export const BRIDGE_NOTE = 'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. Ungültige und veraltete Werte werden ' +
@@ -31,9 +38,10 @@ export const FORMAT_DEFAULTS = {format: '4ch', rateHz: 10};
 export const RATE_ERROR = 'Takt: ganze Zahl von 1 bis 10 Hz.';
 export const CHECKLIST_TITLE = 'In GSVmulti';
 export const CHECKLIST = [
-  'Vierkanal-Session aus der Windows-App, Kanäle 8_2–8_4 ausgeblendet',
+  'Vierkanal-Session aus der Windows-App, Kanäle 2–4 ausgeblendet (bei COM8: 8_2–8_4)',
   'Configure Recording → Advanced → „Record Hidden Channels“ einschalten (Pflicht, wird nicht in der Session gespeichert)',
-  'Für 8_1 Autoscale Y aus, Min/Max fest einstellen',
+  'Im Recorder die Kanäle der neuen Session wählen (GSVmulti behält sonst die alte Auswahl)',
+  'Für Kanal 1 Autoscale Y aus, Min/Max fest einstellen',
 ];
 export const rateValid = (value) => {
   if (value === null || value === '' || typeof value === 'boolean') return false;

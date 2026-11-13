@@ -1015,6 +1015,17 @@ class LiveService:
                     raise LiveError(BRIDGE_BUSY_TEXT) from exc
                 except ValueError as exc:
                     raise LiveError(str(exc)) from exc
+                if output['transport'] != 'uart':
+                    # Anderer Weg gewaehlt: einen noch offenen UART-Empfang der Bruecke
+                    # freigeben, sonst haelt er /dev/ttyAMA0 (13.11.2026, C-10: UART direkt
+                    # scheiterte an „serial port occupied“). Kein Lauf und keine Demo
+                    # laufen mehr, die Reservierung oben schliesst beides aus.
+                    try:
+                        if self._bridge_hub.status().get('uart_prepared'):
+                            self._bridge_hub.stop_uart()
+                    except Exception as exc:  # noqa: BLE001 - Laufstart meldet es verstaendlich
+                        self._bridge_hub.release_real_run(run_id)
+                        raise LiveError(f'UART-Empfang der Brücke ließ sich nicht beenden: {exc}') from exc
             try:
                 self._require_storage(diagnostics=diagnostics)
                 number = 1

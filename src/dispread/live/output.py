@@ -36,7 +36,8 @@ SERIAL_RELEASE_NOTE = (
 )
 SERIAL_4CH_RELEASE_NOTE = (
     'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
-    'Ungültige Takte werden mit 99999999.0 und Gültigkeit 0 markiert; der Zeitkanal ist vorläufig.'
+    'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); '
+    'der Zeitkanal ist vorläufig.'
 )
 # R1 (Nutzerentscheidung 2026-11-09): Testfreigabe ueber die Bruecke wie UART direkt.
 BRIDGE_RELEASE_NOTE = (
@@ -46,8 +47,8 @@ BRIDGE_RELEASE_NOTE = (
 # B2 (2026-11-11): Vierkanal-Takt ueber die Bruecke.
 BRIDGE_4CH_RELEASE_NOTE = (
     'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. '
-    'Ungültige Takte werden mit 99999999.0 und Gültigkeit 0 markiert; verlorene Takte füllt die '
-    'Brücken-App mit solchen Fehlwertzeilen auf (höchstens 50). Der Zeitkanal ist vorläufig.'
+    'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); '
+    'verlorene Takte füllt die Brücken-App mit solchen Zeilen auf (höchstens 50). Der Zeitkanal ist vorläufig.'
 )
 
 
