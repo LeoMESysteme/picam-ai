@@ -31,6 +31,8 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 Punkte 2 und 3 sind auf `wip/bruecke-ux3` (Gestaltungsrunde 3, 47/48 Tests grün) umgesetzt, aber nicht gemergt und unter Windows **nicht** nachgeprüft. Nächster Schritt: fertigstellen, nach `feat/integration` mergen, Bildschirmfoto-Tour (`windows/bridge/probes/ux_tour.py`) mit Leonhard.
 
+**Wiki:** Vergleich und Erklärung der drei Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt: Strecke, Hardware, Rate, Störverhalten, Rückmeldung, Einrichtung, Abnahmestand) als eigene Wiki-Seite eintragen. Vorlage: [docs/quellen/ausgabewege-vergleich-2026-11-13.md](docs/quellen/ausgabewege-vergleich-2026-11-13.md). Passt zur offenen Idee „UART-Anschluss als Grafik im Wiki“.
+
 Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlos), UART direkt (Kanal 1 hält, Laufstart gibt UART-Empfang frei), „Kanal 1 hält“ auf allen Wegen. Offen: C-04 (LAN ziehen ohne Lauf, Fix 53fbbd6) mit neuer EXE.
 
 - **Nachführung: Zweitdurchgang mit Münzwurf-Bereich (kritisch, Werkbank-Blocker).** Lauf `var/live/live-20261113T111848Z/run-01`: 60 % ungültige Takte, Abschnitte bis 10 s, 2297/7524 Bilder `tracking_lost:rahmen_unstimmig`. Gegenversuch `live-20261113T113119Z/run-01` (Diagnosebilder, Marken):
