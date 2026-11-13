@@ -50,7 +50,7 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
 1. [x] Codex-Report `.worktrees/rahmen-raster/REPORT-codex.md` reviewen, korrigieren,
        volle Suite (`DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/pytest -q -n 4`),
        committen, Merge nach `feat/integration`, Werkbank neu starten (Regeln oben).
-2. [ ] `feat/integration` → `master` (Regeln oben).
+2. [ ] **in Arbeit** `feat/integration` → `master` (Regeln oben).
 3. [ ] Kleine Backend-Punkte:
        - App-Zähler 123/124 im Empfangstest
        - Port je Zeile in `details.jsonl`, nur der aktuelle Start, Leerlauf zusammenfassen
