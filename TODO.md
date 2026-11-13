@@ -26,7 +26,11 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 Punkte 2 und 3 sind auf `wip/bruecke-ux3` (Gestaltungsrunde 3, 47/48 Tests grün) umgesetzt, aber nicht gemergt und unter Windows **nicht** nachgeprüft. Nächster Schritt: fertigstellen, nach `feat/integration` mergen, Bildschirmfoto-Tour (`windows/bridge/probes/ux_tour.py`) mit Leonhard.
 
-**Wiki:** Vergleich und Erklärung der drei Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt: Strecke, Hardware, Rate, Störverhalten, Rückmeldung, Einrichtung, Abnahmestand) als eigene Wiki-Seite eintragen. Vorlage: [docs/quellen/ausgabewege-vergleich-2026-11-13.md](docs/quellen/ausgabewege-vergleich-2026-11-13.md). Passt zur offenen Idee „UART-Anschluss als Grafik im Wiki“.
+**Wiki:** Vergleich und Erklärung der drei Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt: Strecke, Hardware, Rate, Störverhalten, Rückmeldung, Einrichtung, Abnahmestand) als eigene Wiki-Seite eintragen. Vorlage: [docs/quellen/ausgabewege-vergleich-2026-11-13.md](docs/quellen/ausgabewege-vergleich-2026-11-13.md). Passt zur offenen Idee „UART-Anschluss als Grafik im Wiki“. **Entwurf liegt vor (13.11. abends):** [docs/superpowers/specs/2026-11-13-wiki-ausgabewege-entwurf.md](docs/superpowers/specs/2026-11-13-wiki-ausgabewege-entwurf.md), Einhängen nach dem Merge der Wiki-Session (`feat/wiki-lebendig`).
+
+**Risiko UART über Brücke (13.11. abends, Code-Befund, nicht gemessen):** Die JSON-Zeilen haben keine Prüfsumme. Kippt ein Bit so, dass gültiges JSON bleibt (z. B. eine Ziffer im Wertfeld), schreibt die App einen falschen Wert als gültig an GSVmulti. Empfehlung: bis zur Prüfsumme diesen Weg nicht für Messungen verwenden. Spec-Entwurf mit CRC-32, Wiederholung und Gegentest mit 115 200 Baud: [docs/superpowers/specs/2026-11-13-uart-pruefsumme-design.md](docs/superpowers/specs/2026-11-13-uart-pruefsumme-design.md).
+
+**Entscheidung Leonhard: Freigabetexte nach der Abnahme.** Trotz Abnahme vom 13.11. zeigt die Oberfläche weiter „Testfreigabe – nicht abgenommen, keine Messfreigabe“, und `release_block` („DUT-Ausgabe gesperrt: Windows-Abnahme … fehlt“) sperrt die echte Ausgabe ohne Haken. Ob die Abnahme die Messfreigabe einschließt und welche Texte/Sperren fallen, ist eine Messpfad-Entscheidung; nicht autonom geändert.
 
 Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlos), UART direkt (Kanal 1 hält, Laufstart gibt UART-Empfang frei), „Kanal 1 hält“ auf allen Wegen. C-04 (LAN ziehen ohne Lauf) mit EXE 14:50 bestanden.
 
