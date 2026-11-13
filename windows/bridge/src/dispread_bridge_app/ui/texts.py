@@ -196,10 +196,11 @@ SESSION_FAILED = 'Session-Datei nicht erzeugt'
 SESSION_AGAIN = 'Neu erzeugen …'
 RECORD_HIDDEN = ('In GSVmulti: Configure Recording → Advanced → ‚Record Hidden Channels‘ einschalten. Diese '
                  'Einstellung steht nicht in der Session-Datei; ohne sie fehlen die ausgeblendeten Kanäle '
-                 '(Gültigkeit, Sequenz, Zeit) still in der Aufnahme.')
+                 '(Gültigkeit, Sequenz, Zeit) still in der Aufnahme. Kanal 1 hält bei Lesefehlern den letzten '
+                 'Wert; auswerten nur Zeilen mit Gültigkeit 1.')
 RECORD_HIDDEN_OK = 'Habe ich eingeschaltet'
-AUTOSCALE_HINT = ('Für Kanal {channel} ‚Autoscale Y‘ ausschalten und Min/Max fest einstellen, damit Fehlwerte '
-                  'sichtbar über den Rand gehen.')
+AUTOSCALE_HINT = ('Für Kanal {channel} ‚Autoscale Y‘ ausschalten und Min/Max fest einstellen, damit der '
+                  'Fehlwert vor dem ersten gültigen Wert die Skala nicht sprengt.')
 SINGLE_CHANNEL_WARNING = ('Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden '
                           'keine Zeilen gesendet. GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der '
                           'Aufnahme sind deshalb nicht genau.')

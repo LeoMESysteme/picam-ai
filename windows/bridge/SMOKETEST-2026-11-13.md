@@ -23,7 +23,7 @@
 * Erwartet in der App: Zustandssatz nennt die Testfreigabe, Kacheln Pi und Weitergabe ohne Fehler.
 * **Noch nicht in der Oberfläche:** Taktzähler (`ticks_written`, `ticks_invalid`, `ticks_filled`, `tick_disturbed`). Sie stehen im Protokollexport (`summary.json`, Abschnitt `worker`). Nach dem Lauf exportieren und prüfen: `ticks_written` ungefähr Laufdauer × 10 Hz, `tick_disturbed` false.
 * **Ebenfalls noch nicht sichtbar:** der Hinweis, wenn das Lauf-Format nicht zur Session passt. Deshalb Session-Format (Vierkanal) und Laufstart (Vierkanal-Takt) von Hand abgleichen.
-* In GSVmulti: 10 Hz Zeilen, Fehlwert 99999999.0 bei ungültigen Takten, Kanal 8_4 mit Zeit.
+* In GSVmulti: 10 Hz Zeilen. Ungültiger Takt: Kanal 8_2 = 0, Kanal 8_1 hält den letzten gültigen Wert (ab 13.11. mittags; vor dem ersten gültigen Wert 99999999.0). Kanal 8_4 mit Zeit.
 
 ## 5. Wenn es hakt
 * App: Symbolleiste „Protokolle exportieren“ (ZIP mit `summary.json` und `details.jsonl`, ohne Zugangsdaten).

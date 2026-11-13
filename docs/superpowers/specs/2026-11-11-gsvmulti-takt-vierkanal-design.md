@@ -40,7 +40,7 @@ GSVmulti selbst zu ändern ist ausgeschlossen, weil es ein zentrales Kundenprodu
 
 | Kanal | Feld | Inhalt |
 | --- | --- | --- |
-| 8_1 | `wert` | **Gültig:** der unveränderte Anzeigetext ohne Leerzellen, wie heute vom `UserDefinedFormatter` geprüft. Dezimal, **nie** Exponent. **Ungültig:** `99999999.0` |
+| 8_1 | `wert` | **Gültig:** der unveränderte Anzeigetext ohne Leerzellen, wie heute vom `UserDefinedFormatter` geprüft. Dezimal, **nie** Exponent. **Ungültig:** der letzte gültige Wert dieses Laufs, gehalten (Entscheidung Leonhard 2026-11-13, siehe 3.5); vor dem ersten gültigen Wert `99999999.0` |
 | 8_2 | `gültig` | `1` bei gültigem Wert, `0` sonst |
 | 8_3 | `takt` | Taktnummer ab Laufstart, beginnend bei 1, lückenlos auf Pi-Seite |
 | 8_4 | `zeit` | Erfassungszeit des Bildes, aus dem der Wert stammt, in Unix-Sekunden mit 6 Nachkommastellen (siehe 3.4). Bei ungültigem Takt die Taktzeit |
@@ -88,7 +88,15 @@ Nur die Kanäle 8_2–8_4 werden in GSVmulti ausgeblendet; sichtbar bleibt der M
 
 - **Session-Vorlage:** Die EXE (Session picam-ai-65, Vorlagenkatalog) liefert die Vierkanal-Vorlage mit 8_2–8_4 ausgeblendet. Umgeschaltet wird, sobald Pi und Brücke dieses Format senden.
 - **Pflichtschritt in App und Wiki:** Configure Recording → Advanced → **„Record Hidden Channels“**. Diese Einstellung steht nicht in der Session.
-- **Empfehlung:** Für 8_1 Autoscale Y aus und Min/Max fest einstellen, damit Fehlwerte über den Rand gehen und die Skala nicht sprengen.
+- **Empfehlung:** Für 8_1 Autoscale Y aus und Min/Max fest einstellen, damit der Fehlwert vor dem ersten gültigen Wert die Skala nicht sprengt.
+
+### 3.5 Gehaltener Wert in 8_1 (Nachtrag 2026-11-13)
+
+- **Anlass:** Zwei echte Läufe am 13.11. (GSVmulti 2.01 und 2.03 Pro) hatten 20 bzw. 24 % ungültige Takte, meist einzeln. Mit `99999999.0` in 8_1 sprang die Zahlenanzeige von GSVmulti bei jedem Lesefehler an den Bereichsrand und war nicht ablesbar.
+- **Entscheidung (Leonhard, 2026-11-13):** Bei ungültigem Takt trägt 8_1 den letzten gültigen Wert desselben Laufs. Die Markierung trägt allein 8_2 (`gültig = 0`). Vor dem ersten gültigen Wert gibt es nichts zu halten, dann steht `99999999.0`. Ein neuer Lauf beginnt ohne gehaltenen Wert. Auch die Windows-Füllzeilen (F2) halten den Wert vor der Lücke.
+- **Auswertung:** Nur Zeilen mit `gültig = 1` sind Messwerte. Ein gehaltener Wert ist nie eine Messung. Wer 8_1 ohne 8_2 auswertet, verwendet veraltete Werte; deshalb bleibt „Record Hidden Channels“ Pflicht.
+- **Ausnahme zu** [GSVMULTI_PROTOCOL.md](../../GSVMULTI_PROTOCOL.md) (gehaltener Wert kein zulässiger Ersatz): Sie gilt nur für dieses Vierkanal-Format, weil die Markierung in derselben Zeile in 8_2 steht.
+- **Zeitkanal:** 8_4 trägt bei gültigem Takt die Erfassungszeit des Bildes, bei ungültigem die Taktzeit (3.1). An Wechseln gültig/ungültig kann die Zeit deshalb um bis zu `max_frame_age_ms` rückwärts springen (13.11.: −5 ms bei Takt 223). Für eine Zeitachse die Taktnummer 8_3 verwenden, 8_4 nur für die Zuordnung gültiger Werte.
 - **Werkbank, Laufstart:** Takt (Hz) angeben. Hinweis „In GSVmulti dieselbe Frequenz einstellen“.
 
 ## 4. Was nicht geändert wird

@@ -477,7 +477,7 @@ def test_tick_is_written_as_four_channel_line_and_acknowledged(tmp_path):
     outcomes, com, acks = run_ticks(session, [tick_reply(1), tick_reply(2, valid=False)])
     assert outcomes == ["written", "written"]
     assert com.payloads == [b"%0.63956;1;1;1794397184.060000\r\n",
-                            b"%99999999.0;0;2;1794397184.160000\r\n"]
+                            b"%0.63956;0;2;1794397184.160000\r\n"]   # ungueltig: gueltig=0, Kanal 1 haelt
     assert [(a["seq"], a["outcome"], a["filled"]) for a in acks] == [(1, "written", 0), (2, "written", 0)]
     assert set(acks[0]) == {"version", "type", "request_id", "run_id", "seq", "outcome", "filled"}
     assert session.tick_stats() == dict(run_id="run-1", ticks_written=2, ticks_invalid=1, ticks_filled=0,
@@ -493,7 +493,7 @@ def test_sequence_jump_is_filled_with_nominal_time_invalid_lines(tmp_path):
     assert [line.split(";")[2] for line in lines] == ["1", "2", "3", "4", "5"]
     for seq in (2, 3, 4):
         micros = (nominal_unix_ns(ORIGIN, 10, seq) + 500) // 1000
-        assert lines[seq - 1] == f"%99999999.0;0;{seq};{micros // 1_000_000}.{micros % 1_000_000:06d}\r\n"
+        assert lines[seq - 1] == f"%0.63956;0;{seq};{micros // 1_000_000}.{micros % 1_000_000:06d}\r\n"   # haelt Takt 1
     assert acks[-1]["filled"] == 3
     assert [(row.seq, row.kind, row.outcome) for row in journal.tick_attempts()] == [
         (1, "tick", "written"), (2, "fill", "written"), (3, "fill", "written"),
@@ -641,3 +641,11 @@ def test_released_values_ignore_demo_format():
     with pytest.raises(BridgeError, match="DUT"):
         BridgeSession(demo_format=lambda: "4ch").exchange(link, com)
     assert not com.payloads
+
+
+def test_held_value_does_not_leak_into_the_next_run(tmp_path):
+    session, journal = tick_session(tmp_path, release_gate=lambda link, run: run in ("run-1", "run-2"))
+    run_ticks(session, [tick_reply(1)])
+    other = dict(tick_reply(2, valid=False), run_id="run-2")
+    _, com, _ = run_ticks(session, [other])
+    assert com.payloads[-1].startswith(b"%99999999.0;0;")   # neuer Lauf: noch nichts zu halten

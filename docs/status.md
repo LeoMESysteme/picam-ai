@@ -27,7 +27,7 @@ Triage (`.superpowers/sdd/2026-11-11-gsvmulti-takt/blocker-triage.md`): **keine 
 
 ## Weitere Arbeit seit 11.11.
 
-- **GSVmulti-Vierkanal-Takt:** Telegramm `%wert;gültig;takt;zeit` mit festem Takt bis 10 Hz und Fehlwert `99999999.0`. Spec und Plan unter `docs/superpowers/{specs,plans}/2026-11-11-gsvmulti-takt-vierkanal*`.
+- **GSVmulti-Vierkanal-Takt:** Telegramm `%wert;gültig;takt;zeit` mit festem Takt bis 10 Hz; ungültig = `gültig 0`, Kanal 1 hält seit 13.11. den letzten gültigen Wert (vorher Fehlwert `99999999.0`, Spec 3.5). Spec und Plan unter `docs/superpowers/{specs,plans}/2026-11-11-gsvmulti-takt-vierkanal*`.
   - Pi und alle drei Wege umgesetzt (B1, B2), Werkbank mit Formatwahl (U1), EXE-Vorgabe Vierkanal.
   - Brücken-UART auf 460 800 Baud.
   - Belegt sind nur die GSVmulti-Versuche vom 11.11.; ein Ende-zu-Ende-Lauf mit EXE steht aus.

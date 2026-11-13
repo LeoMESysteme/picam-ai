@@ -88,6 +88,7 @@ class BridgeSession:
         self.release_formatter = DirectFormatter(prefix="%")
         self.tick_formatter = TickFormatter()
         self.demo_format, self.wall_clock_ns = demo_format, wall_clock_ns
+        self._held = (None, None)      # (run_id, letzter geschriebener gueltiger Wert): Kanal 1 haelt ihn
         self._last_written = None
         self._tick_lock = threading.Lock()
         self._tick_stats = self._empty_tick_stats(None)
@@ -339,9 +340,10 @@ class BridgeSession:
             raise BridgeError("DUT-Ausgabe gesperrt: GSVmulti-Abnahme fehlt, keine Pi-Testfreigabe")
         if self.journal is None or self.pi_id is None:
             raise BridgeError("tick output requires the durable delivery journal")
+        held = self._held[1] if self._held[0] == run_id else None
         try:
             tick, origin, rate = self._parse_tick(reply)
-            payload = self.tick_formatter.format_tick(tick)
+            payload = self.tick_formatter.format_tick(tick, held)
         except (TypeError, ValueError) as exc:
             raise BridgeError(f"invalid tick: {exc}") from exc
         ack = {"version": 1, "type": "tick_ack", "request_id": request_id, "run_id": run_id, "seq": tick.seq}
@@ -371,7 +373,7 @@ class BridgeSession:
         else:
             for seq in range(last + 1, tick.seq):
                 fill = Tick(seq, False, None, nominal_unix_ns(origin, rate, seq), None)
-                lines.append(("fill", fill, self.tick_formatter.format_tick(fill)))
+                lines.append(("fill", fill, self.tick_formatter.format_tick(fill, held)))
         lines.append(("tick", tick, payload))
         filled = 0
         for kind, line, data in lines:
@@ -391,6 +393,8 @@ class BridgeSession:
                 self._count_tick(run_id, ticks_filled=1)
             else:
                 self._count_tick(run_id, ticks_written=1, ticks_invalid=int(not line.valid))
+                if line.valid:
+                    self._held = (run_id, line.value_text)
         self._event(**ack, outcome="written", filled=filled, wire_bytes_hex=payload.hex(),
                     completion_stage="com_driver_write", formatter=self.tick_formatter)
         try:

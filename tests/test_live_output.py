@@ -1082,8 +1082,8 @@ def test_four_channel_sender_ticks_without_camera_and_never_catches_up(tmp_path,
     finally:
         out.stop()
     assert port.writes == [b'%+1.7643;1;1;1794397184.090000\r\n',
-                           b'%99999999.0;0;4;1794397184.400000\r\n',
-                           b'%99999999.0;0;5;1794397184.500000\r\n']
+                           b'%+1.7643;0;4;1794397184.400000\r\n',      # ungueltig: Kanal 1 haelt
+                           b'%+1.7643;0;5;1794397184.500000\r\n']
     status = out.status()['tick']
     assert (status['valid'], status['invalid'], status['missed']) == (1, 2, 2)
     tx = [json.loads(line) for line in (tmp_path / 'tx.jsonl').read_text().splitlines()]

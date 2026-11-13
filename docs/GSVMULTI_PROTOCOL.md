@@ -588,7 +588,11 @@ ist damit **nicht** belegt:
 | Sender bei Fehler stoppen | Keine neuen Werte; rechtzeitige Kennzeichnung des Altwerts und sichere Beendigung der Auswertung bleiben nachzuweisen. |
 
 Weder `0` noch ein wiederholter letzter gültiger Wert sind ein zulässiger
-Ersatz für TRANSITION, UNREADABLE oder STALE. Bei einem mehrkanaligen Profil
+Ersatz für TRANSITION, UNREADABLE oder STALE. **Ausnahme (Entscheidung
+Leonhard, 2026-11-13):** Im Vierkanal-Takt (`gsvmulti_userdefined_4ch_v1`)
+hält Kanal 1 bei ungültigem Takt den letzten gültigen Wert des Laufs, weil
+Kanal 2 (`gültig = 0`) in derselben Zeile markiert; ausgewertet wird nur mit
+Kanal 2. Begründung und Grenzen: Vierkanal-Spec, Abschnitt 3.5. Bei einem mehrkanaligen Profil
 muss außerdem feststehen, ob ein ungültiger Teilwert den ganzen Frame sperrt.
 Eine Kalibrierauswertung darf ungültige Zeiträume nicht als aktuelle gültige
 Messung verwenden. Solange das nicht durchgängig gesichert ist, nur
