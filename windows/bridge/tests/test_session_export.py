@@ -183,3 +183,24 @@ def test_context_uses_cached_template_metadata_without_package_io(tmp_path, monk
 
     monkeypatch.setattr(templates, 'files', unexpected_io)
     assert controller.context().session_channels == 4
+
+
+def test_demo_check_uses_the_session_format_of_the_route(tmp_path):
+    """13.11.2026: Empfangstest einkanalig in eine Vierkanal-Session -> GSVmulti nahm 0 Byte auf."""
+    from test_app_controller import DeviceIdentity, FakeWorker, make, profile_bytes
+
+    identity = DeviceIdentity.load_or_create(tmp_path / 'id', 'ac-pi')
+
+    class Worker(FakeWorker):
+        demo_format = None
+
+    controller = make(tmp_path, worker_factory=Worker)
+    controller.set_port_pair('COM4', 'COM5')
+    controller.load_profile(profile_bytes(identity))
+    controller.connect('network')
+    source = controller._worker.demo_format
+    assert source() == '4ch'                                    # Vorgabe ohne erzeugte Session
+    controller.export_session_file(tmp_path / 'single.ucf', 'COM5', fmt='1ch')
+    assert source() == '1ch'                                    # erzeugte Einkanal-Session gilt
+    controller.export_session_file(tmp_path / 'four.ucf', 'COM5', fmt='4ch')
+    assert source() == '4ch'

@@ -221,6 +221,10 @@ class AppController:
     def _context_session_template(self):
         return session_template(self._session_format, catalog=self._session_catalog)
 
+    def _demo_session_format(self) -> str:
+        """Format der erzeugten bzw. vorgegebenen Session; dieselbe Quelle wie die Anzeige."""
+        return self._context_session_template().spec.fmt
+
     def _refresh_mode_state(self):
         self._setup_revision += 1
         self._setup_done = self._route_mode in self._configured_modes
@@ -842,6 +846,9 @@ class AppController:
             manager = self._manager_factory(self._profile_for_connect(mode), self.client_id, self._credentials,
                                             self._devices, emit=self._emit, **kwargs)
             worker = self._worker_factory(manager, self._com_open, self._journal_open(), self._emit)
+            if hasattr(worker, 'demo_format'):
+                # Empfangstest im Format der Session, die GSVmulti fuer diesen Weg/Port hat.
+                worker.demo_format = self._demo_session_format
             manager.set_worker(worker)
             self._manager, self._worker = manager, worker
             self._starter_cancel = cancel = threading.Event()

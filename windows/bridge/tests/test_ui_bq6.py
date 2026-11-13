@@ -344,10 +344,11 @@ def test_paired_window_offers_switch_only_when_free(fake_win):
 
 
 # ---- 5: GSVmulti-Einstellungen
-def test_step4_card_states_the_verified_settings():
-    spec = texts.setup_spec(_ctx("E4locked", 4, gsv_baud=115200))
+@pytest.mark.parametrize('channels, line', [(1, '1 – ein Wertestrom'), (4, '4 – Wert; gültig; Takt; Zeit')])
+def test_step4_card_states_the_verified_settings(channels, line):
+    spec = texts.setup_spec(_ctx("E4locked", 4, gsv_baud=115200, session_channels=channels))
     s = flat(spec)
-    for needle in ('UserDef', 'COM8', '115200 Baud, 8N1', '1 Kanal', 'mV/V', '10 Hz', '%',
+    for needle in ('UserDef', 'COM8', '115200 Baud, 8N1', line, 'mV/V', '10 Hz', '%',
                    'Muster: Session aus dem Testlauf vom 06.11.2026 (nur Port anpassen)',
                    'Legen Sie eine neue Testsession an und speichern Sie sie unter eigenem Namen.',
                    'In GSVmulti einstellen'):

@@ -612,3 +612,32 @@ def test_tick_stats_reset_on_new_run(tmp_path):
     run_ticks(session, [tick_reply(1, run_id="run-2")])
     assert session.tick_stats() == dict(run_id="run-2", ticks_written=1, ticks_invalid=0, ticks_filled=0,
                                         tick_disturbed=False)
+
+
+def test_demo_follows_four_channel_session():
+    """13.11.2026: Vierkanal-Session in GSVmulti, Empfangstest einkanalig -> 0 Byte aufgenommen."""
+    link, com, log = Link(reply()), Com(), io.StringIO()
+    session = BridgeSession(log=log, demo_format=lambda: "4ch", wall_clock_ns=lambda: 1_763_000_000_123_456_789)
+    session.exchange(link, com)
+    assert com.payloads == [b"%+0.12345;1;8;1763000000.123457\r\n"]   # Takt = frame_sequence 7 + 1
+    assert link.messages[-1]["outcome"] == "written"
+    assert json.loads(log.getvalue().splitlines()[-1])["format_id"] == "gsvmulti_userdefined_4ch_v1"
+
+
+def test_invalid_demo_in_four_channel_session_uses_error_value():
+    link, com = Link(reply(ValueStatus.UNREADABLE, barrier_id=12)), Com()
+    BridgeSession(demo_format=lambda: "4ch", wall_clock_ns=lambda: 2_000_000).exchange(link, com)
+    assert com.payloads == [b"%99999999.0;0;8;0.002000\r\n"]
+
+
+def test_single_channel_session_keeps_single_channel_demo():
+    link, com = Link(reply()), Com()
+    BridgeSession(demo_format=lambda: "1ch").exchange(link, com)
+    assert com.payloads == [b"%+0.12345\r\n"]
+
+
+def test_released_values_ignore_demo_format():
+    link, com = Link(reply(demo=False, release="test_release")), Com()
+    with pytest.raises(BridgeError, match="DUT"):
+        BridgeSession(demo_format=lambda: "4ch").exchange(link, com)
+    assert not com.payloads

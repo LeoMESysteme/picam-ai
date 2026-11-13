@@ -63,9 +63,15 @@ class BridgeSession:
     """One request at a time, with an independently logged COM write receipt."""
 
     def __init__(self, *, log=None, max_frame_age_ms=1000, timeout_s=1.0, clock=time.monotonic_ns,
-                 journal=None, pi_id=None, before_write=None, admit_write=None, release_gate=None):
+                 journal=None, pi_id=None, before_write=None, admit_write=None, release_gate=None,
+                 demo_format=None, wall_clock_ns=time.time_ns):
         """``release_gate(link, run_id)`` (R1) bestaetigt die Pi-Testfreigabe der
-        aktuellen Verbindung; ohne ihn bleiben echte Werte gesperrt."""
+        aktuellen Verbindung; ohne ihn bleiben echte Werte gesperrt.
+
+        ``demo_format()`` liefert das Format der GSVmulti-Session (``'1ch'``/``'4ch'``).
+        Bei ``'4ch'`` schreibt der Empfangstest Vierkanal-Zeilen (Takt = Demo-Index + 1,
+        Zeit = Windows-Uhr beim Schreiben, synthetisch); sonst verwirft GSVmulti jede
+        Einkanal-Zeile still (13.11.2026: 597 gesendet, 0 Byte aufgenommen)."""
         if max_frame_age_ms <= 0 or timeout_s <= 0:
             raise ValueError("positive age/timeout required")
         if journal is not None and (not isinstance(pi_id, str) or not pi_id):
@@ -81,6 +87,7 @@ class BridgeSession:
         self.release_gate = release_gate
         self.release_formatter = DirectFormatter(prefix="%")
         self.tick_formatter = TickFormatter()
+        self.demo_format, self.wall_clock_ns = demo_format, wall_clock_ns
         self._last_written = None
         self._tick_lock = threading.Lock()
         self._tick_stats = self._empty_tick_stats(None)
@@ -112,6 +119,12 @@ class BridgeSession:
             self.log.write(json.dumps(event, allow_nan=False) + "\n")
             self.log.flush()
 
+    def _demo_tick(self, record):
+        valid = record.status is ValueStatus.VALID
+        text = checked_value_text(record.raw_text) if valid else None
+        return self.tick_formatter.format_tick(
+            Tick(record.frame_sequence + 1, valid, text, self.wall_clock_ns(), record.frame_sequence))
+
     def exchange(self, link, com):
         request_id = uuid.uuid4().hex
         started = self.clock()
@@ -133,6 +146,9 @@ class BridgeSession:
                          or self.release_gate is None or not self.release_gate(link, reply.get("run_id"))):
             raise BridgeError("DUT-Ausgabe gesperrt: GSVmulti-Abnahme fehlt, keine Pi-Testfreigabe")
         formatter = self.release_formatter if released else self.formatter
+        demo_4ch = not released and self.demo_format is not None and self.demo_format() == "4ch"
+        if demo_4ch:
+            formatter = self.tick_formatter
         run_id = reply.get("run_id")
         barrier = reply.get("barrier_id")
         age = reply.get("frame_age_ns")
@@ -154,7 +170,7 @@ class BridgeSession:
                     raise ValueError("valid record must not carry barrier")
                 if record.status is not ValueStatus.VALID and (barrier is None or barrier <= 0):
                     raise ValueError("invalid record requires positive barrier")
-            payload = formatter.format(record)
+            payload = self._demo_tick(record) if demo_4ch else formatter.format(record)
             if payload is None and not released:
                 raise ValueError("invalid state must not be silently omitted")
         except (KeyError, TypeError, ValueError, AssertionError) as exc:

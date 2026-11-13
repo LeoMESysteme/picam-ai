@@ -900,8 +900,7 @@ SETUP: dict[str, dict] = {
         ('session', 'gsv_port'),
         ('card', 'In GSVmulti einstellen – ohne Session-Datei', (
             ('Gerät', 'UserDef (benutzerdefiniert)'), ('COM-Port', '{gsv_port}'), ('Übertragung', '{gsv_line}'),
-            ('Kanäle', '1 Kanal – ein „Kanal“ ist ein Messkanal der Session; die Brücke liefert einen einzigen '
-                       'Wertestrom.'),
+            ('Kanäle', '{channels_line}'),
             ('Präfix', '%'), ('Einheit', 'mV/V'), ('Frequenz', '10 Hz'))),
         ('text', 'Muster: Session aus dem Testlauf vom 06.11.2026 (nur Port anpassen).'),
         ('text', 'Legen Sie eine neue Testsession an und speichern Sie sie unter eigenem Namen.'),
@@ -1051,12 +1050,22 @@ def _step3_head(ctx, data) -> tuple[list, dict]:
     return pre, foot
 
 
+def channels_text(channels):
+    """Kanäle laut Session-Vorlage (eine Quelle mit Export und Empfangstest)."""
+    if channels == 4:
+        return '4 – Wert; gültig; Takt; Zeit (3 ausgeblendet, „Record Hidden Channels“ an)'
+    if channels == 1:
+        return '1 – ein Wertestrom'
+    return 'laut Session-Vorlage'
+
+
 def setup_spec(ctx, locked=False):
     """SETUP-Zustand mit Werten aus ctx (und ctx.setup.data) gefüllt."""
     m = dict(bridge_port=ctx.bridge_port, gsv_port=ctx.gsv_port, version=ctx.version, protocol=ctx.protocol,
              pi_name=ctx.pi_name, pi_id=ctx.pi_id, endpoint=ctx.endpoint, fingerprint=ctx.fingerprint,
              session_name=ctx.session_name, adapter_port=ctx.adapter_port,
-             uart_line=baud_text(ctx.uart_baud), gsv_line=baud_text(ctx.gsv_baud))
+             uart_line=baud_text(ctx.uart_baud), gsv_line=baud_text(ctx.gsv_baud),
+             channels_line=channels_text(ctx.session_channels))
     data = ctx.setup.data
     if data.get('gsv_baud') and not ctx.gsv_baud:
         m['gsv_line'] = baud_text(data['gsv_baud'])

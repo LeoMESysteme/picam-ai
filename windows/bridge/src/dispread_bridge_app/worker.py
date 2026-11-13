@@ -69,6 +69,7 @@ class BridgeWorker:
         self._released = False
         self._link = None
         self._session = None
+        self.demo_format = None        # Callable -> '1ch'|'4ch': Format der GSVmulti-Session fuer den Empfangstest
         self._wait = self._stop.wait   # Naht fuer Tests mit simulierter Uhr
         self._clock = time.monotonic
 
@@ -200,6 +201,10 @@ class BridgeWorker:
         return (state.peer in {'connecting', 'backoff', 'authenticated'}
                 or (state.peer == 'disconnected' and state.next_action == 'reconnect'))
 
+    def _demo_format(self):
+        source = self.demo_format
+        return source() if source is not None else None
+
     def _run(self):
         com = link = None
         recovering = False
@@ -209,7 +214,8 @@ class BridgeWorker:
         try:
             pi_id = self.connection.profile.pi_id
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
-                                    admit_write=self._admit_write, release_gate=self._release_gate)
+                                    admit_write=self._admit_write, release_gate=self._release_gate,
+                                    demo_format=self._demo_format)
             with self._lock:
                 self._session = session
             disturbed = None
