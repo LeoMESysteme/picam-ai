@@ -1,6 +1,6 @@
 # Kritischer Blocker: Workbench vor Bridge-/EXE-Weiterentwicklung stabilisieren
 
-**Offen, höchste Arbeitspriorität seit 2026-11-11.** Die wiederholt
+**Stand 2026-11-13: Werkbank und Ausgabewege von Herrn Kaulitz abgenommen.** Offene Restpunkte (Nachführung bei Fokusunterschied, Rasterbestimmung) stehen in [TODO.md](../TODO.md) und sind an Codex übergeben. Ursprünglicher Auftrag: **Offen, höchste Arbeitspriorität seit 2026-11-11.** Die wiederholt
 fehlschlagende Einrichtung, der gemeldete Fokusrückfall, fehlende Auswege
 und zeitweilige Verbindungsverlust blockieren Bridge-/EXE-Weiterentwicklung,
 ausführliche Systemtests und die geplante teilweise Abnahme durch Herrn

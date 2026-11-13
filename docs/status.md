@@ -1,14 +1,14 @@
-# Status und Übergabe — 2026-11-12
+# Status und Übergabe — 2026-11-13
 
 ## Kurzfassung
 
-- **Workbench-Blocker:** Alle offline behebbaren Punkte sind bearbeitet und im gemeinsamen Stand `feat/integration`. Der Pi-Dienst läuft darauf.
-- **Leonhards Test am Freitag 2026-11-13:** [windows/bridge/SMOKETEST-2026-11-13.md](../windows/bridge/SMOKETEST-2026-11-13.md).
-- **Keine Abnahme:** Die echte Hardware-Bestätigung der Fixes steht aus.
+- **Abnahme:** Herr Kaulitz hat am 2026-11-13 Werkbank und Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen. Grundlage: Smoketest und Windows-Prüfung UX2 ([Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)).
+- **Heute behoben (alle auf `feat/integration`):** EXE-Selbsttest unter Windows, Empfangstest im Format der Session und verlustfrei mit klarem Ende, Kanal 1 hält bei ungültigem Takt (Entscheidung Leonhard), Wiederverbinden nach LAN-Ausfall, Kopplung je Weg, Laufstart gibt UART-Empfang frei, Diagnose mit Zeit und UART-Fehlercodes, Doppelklick-Build `build-test.cmd`.
+- **Offen:** Nachführung (Fokuszustand Einrichtung/Lauf) und Rasterbestimmung (zwei Verfahrensfehler), beide an Codex übergeben; UART über Brücke mit Rahmenfehlern; EXE-Gestaltungsrunde 3; danach Installer/TUI. Reihenfolge und Details: [TODO.md](../TODO.md).
 
 ## Laufender Stand
 
-- **Dienst:** `dispread-werkbank-bruecke` (systemd-run `--user`) aus `.worktrees/bruecke-run`, detached auf `feat/integration` 29359e3, seit 2026-11-12 15:52. Adresse `https://100.122.154.35:8082`, Pi-Identität und Kopplung unverändert. Neustartbefehl siehe Projekt-Memory bzw. `systemctl --user show`.
+- **Dienst:** `dispread-werkbank-bruecke` (systemd-run `--user`) aus `.worktrees/bruecke-run`, detached auf `feat/integration` 5a31b41, seit 2026-11-13 ~13:55. Adresse `https://100.122.154.35:8082`, Pi-Identität und Kopplung unverändert. Neustartbefehl siehe Projekt-Memory bzw. `systemctl --user show`.
 - **Gemeinsamer Branch:** `feat/integration` = EXE-Stand `feat/bruecke-merge` (Session picam-ai-65, UX2) + `feat/bruecke-ui` (Werkbank, Brückentakt, Blocker-Fixes). Weitere EXE-Arbeit baut darauf auf.
 - **EXE:** muss Leonhard aus `feat/integration` bauen (`build-test.ps1`). Eine ältere EXE spricht weder Takt noch 460 800 Baud.
 

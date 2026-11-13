@@ -1,4 +1,4 @@
-# TODO — Stand 2026-11-12
+# TODO — Stand 2026-11-13 abends
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -7,22 +7,17 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
-## Zuerst: Smoketest Freitag, 2026-11-13 (Workbench-Blocker)
+## Zuerst: Reihenfolge nach der Abnahme vom 13.11.
 
-- **Ablauf:** [windows/bridge/SMOKETEST-2026-11-13.md](windows/bridge/SMOKETEST-2026-11-13.md), Abschnitte 1–8.
-- **Stand:** Branch `feat/integration`. Der Pi-Dienst läuft darauf (29359e3). Die EXE baut Leonhard aus demselben Branch.
-- **Was getestet wird:**
-  - Einrichtung ohne Handarbeit
-  - Fokus auf der Anzeige
-  - kein Sackgassen-Zustand
-  - Vierkanal-Takt über Netzwerk
-  - mindestens 75 % gültig bei aktiver Laständerung
-- **Hintergrund:** [docs/status.md](docs/status.md) und [docs/WORKBENCH_BLOCKER.md](docs/WORKBENCH_BLOCKER.md).
-- **Danach:** Den Lauf auswerten (Abschnitt 8) und den Blocker schließen oder nachbessern.
+**Abnahme:** Herr Kaulitz hat am 2026-11-13 die Werkbank und die Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen (Stand `feat/integration`, Pi-Dienst `5a31b41`, EXE gebaut 14:50 aus `c643f30`). Smoketest: [windows/bridge/SMOKETEST-2026-11-13.md](windows/bridge/SMOKETEST-2026-11-13.md); Prüfbericht: [docs/quellen/ux2-pruefung-2026-11-13](docs/quellen/ux2-pruefung-2026-11-13/ux2-bericht.md).
+
+1. **Fix Rahmenprüfung / Rasterbestimmung (Backend, an Codex übergeben):** [Handoff](docs/superpowers/handoffs/2026-11-13-codex-rahmen-raster.md). Danach Review durch Claude, dann Entscheidung mit Leonhard.
+2. **Überarbeitung der EXE (UI, Claude):** Gestaltungsrunde 3 auf `wip/bruecke-ux3` fertigstellen und nach `feat/integration` mergen, offene Punkte aus dem Prüfbericht (unten), Bildschirmfoto-Tour mit Leonhard.
+3. **Installer und TUI:** One-Line-Installer; TUI/CLI, die den Nutzer visuell durch das Setup des picam-Projekts im Terminal führt und von der aus man Status und Logs sieht sowie die Werkbank startet, stoppt, konfiguriert, Fehler sucht und aktualisiert. Ersetzt auch den umständlichen Windows-Testbau (siehe „Auslieferung der Windows-App vereinfachen“ unten).
 
 ## Befunde Smoketest 13.11. (offen)
 
-**Vollständiger Prüfbericht (Windows-Prüfung UX2, 13.11.):** `docs/quellen/ux2-pruefung-2026-11-13/ux2-pruefung.zip` mit `ux2-bericht.md` (Zusammenfassung, alle Prüf-IDs, Läufe-Tabelle) und `ux2-bericht-details.md` (chronologisch, Zitate, Messwerte), dazu Bilder, TDMS, Sessions, Protokollexporte. *Noch nicht hochgeladen; Leonhard legt das ZIP dort ab.* Top 5 laut Bericht:
+**Vollständiger Prüfbericht (Windows-Prüfung UX2, 13.11.):** `docs/quellen/ux2-pruefung-2026-11-13/ux2-pruefung.zip` mit `ux2-bericht.md` (Zusammenfassung, alle Prüf-IDs, Läufe-Tabelle) und `ux2-bericht-details.md` (chronologisch, Zitate, Messwerte), dazu Bilder, TDMS, Sessions, Protokollexporte. Reports entpackt daneben ([ux2-bericht.md](docs/quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)). Top 5 laut Bericht:
 1. UART über Brücke: `uart_frame_invalid` (Signalqualität), siehe unten.
 2. EXE-Einstellungen: Mausrad verstellt Ports, Neuaufbau, Fensterhöhe, Blitzfenster.
 3. EXE-Gestaltung: zu viel Text, Flackern.
@@ -33,7 +28,7 @@ Punkte 2 und 3 sind auf `wip/bruecke-ux3` (Gestaltungsrunde 3, 47/48 Tests grün
 
 **Wiki:** Vergleich und Erklärung der drei Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt: Strecke, Hardware, Rate, Störverhalten, Rückmeldung, Einrichtung, Abnahmestand) als eigene Wiki-Seite eintragen. Vorlage: [docs/quellen/ausgabewege-vergleich-2026-11-13.md](docs/quellen/ausgabewege-vergleich-2026-11-13.md). Passt zur offenen Idee „UART-Anschluss als Grafik im Wiki“.
 
-Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlos), UART direkt (Kanal 1 hält, Laufstart gibt UART-Empfang frei), „Kanal 1 hält“ auf allen Wegen. Offen: C-04 (LAN ziehen ohne Lauf, Fix 53fbbd6) mit neuer EXE.
+Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlos), UART direkt (Kanal 1 hält, Laufstart gibt UART-Empfang frei), „Kanal 1 hält“ auf allen Wegen. C-04 (LAN ziehen ohne Lauf) mit EXE 14:50 bestanden.
 
 - **Nachführung: Zweitdurchgang mit Münzwurf-Bereich (kritisch, Werkbank-Blocker).** Lauf `var/live/live-20261113T111848Z/run-01`: 60 % ungültige Takte, Abschnitte bis 10 s, 2297/7524 Bilder `tracking_lost:rahmen_unstimmig`. Gegenversuch `live-20261113T113119Z/run-01` (Diagnosebilder, Marken):
   - Hand neben dem Display bewegt: bis 41 % Nachführungsverlust je Sekunde.
