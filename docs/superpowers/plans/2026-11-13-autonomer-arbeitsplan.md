@@ -62,7 +62,7 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
        `TODO.md` („EXE, Gestaltung“) und dem Prüfbericht. Volle Windows-Suite, `ux_tour`
        hell und dunkel offscreen, `windows/bridge/PRUEFUNG-UX3.md` für Mittwoch. Branch
        pushen, nicht mergen.
-5. [ ] Specs:
+5. [x] Specs:
        - Wiki-Seite Ausgabewege (aus `docs/quellen/ausgabewege-vergleich-2026-11-13.md`;
          nur als Entwurf, die Wiki-Session nicht stören)
        - UART-Prüfsumme mit Wiederholung
