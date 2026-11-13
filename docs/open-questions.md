@@ -70,6 +70,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-73](#oq-73) | — | offen | Warum aktualisiert die Werkbank während der Einrichtung verzögert? |
 | [OQ-74](#oq-74) | — | offen | Warum wird das Bild nach erfolgreich geprüfter Fokussuche wieder unscharf? |
 | [OQ-75](#oq-75) | — | offen | Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus? |
+| [OQ-77](#oq-77) | — | offen | Was verursacht die drei UART-Timeouts beim Anmelden der Windows-Brücke? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3775,3 +3776,31 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Verweis:** [OQ-71](#oq-71) umfasst auch fehlendes Neu einrichten nach
   Bestätigung. [Originale und Bedienerkontext](quellen/workbench-positive-regression-2026-11-11.md).
 * **Antwort landet in:** OQ-71, Claude-Übergabe, Validierung und Laborjournal.
+
+<span id="oq-77"></span>
+
+## OQ-77 — Was verursacht die drei UART-Timeouts beim Anmelden der Windows-Brücke?
+
+* **Status:** offen (2026-11-13)
+* **Befund:** Windows-Prüfung vom 13.11.: dreimal `uart_timeout` vor erfolgreicher
+  Anmeldung. Die vorhandenen Exporte enthalten keinen zeitgleichen Beleg für
+  Listenerbereitschaft, Challenge-Empfang und Proof-Versand auf dem Pi.
+* **Softwareprüfung:** `test_uart_startup_hypotheses_against_listener_without_hardware`
+  verbindet den echten `SerialTransport` mit dem echten `UartListener` über eine
+  Byte-Attrappe. Fehlende Bereitschaft von Listener/Adapter und eine unvollständige
+  Zeile im Pi-Eingang erzeugen Timeout; alte App-Eingangsbytes erzeugen dagegen
+  `uart_frame_invalid`. Eine alte Pi-Sitzung wird durch eine neue Challenge gelöst.
+  Das reproduziert mögliche Mechanismen, belegt aber keine Ursache am Aufbau und
+  erklärt insbesondere nicht die Zahl drei.
+* **Nächster Beleg:** Beim nächsten autorisierten Aufbauversuch auf beiden Seiten
+  Portöffnung, `listening`, Challenge gesendet/empfangen, Proof gesendet/empfangen
+  und Auth-Abschluss zeitlich erfassen (lokale monotone Uhr samt Prozesskennung;
+  zusätzlich UTC zur Zuordnung, Unsicherheit unbekannt = `None`). Nur Ereignisart
+  und Bytezahl protokollieren, keine Rohtelegramme, Nonces oder Zugangsdaten.
+  Kernel-Fehlerzähler davor/danach sichern. Wiederholung mit frisch vorbereitetem
+  Listener und nach abgebrochener Sitzung trennt Bereitschaft von Pufferresten.
+  Adapter-Sendeverzögerung bei Bedarf elektrisch messen; keine Wartezeit raten.
+* **Verweis:** [Handoff, Aufgabe 4](superpowers/handoffs/2026-11-13-codex-kleine-backend.md),
+  [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md).
+* **Antwort landet in:** UART-Transport/Listener, Verbindungsdiagnose,
+  [Validierung](VALIDATION.md) und [Laborjournal](lab_journal.md).

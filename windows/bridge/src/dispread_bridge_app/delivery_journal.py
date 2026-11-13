@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -19,6 +20,11 @@ from pathlib import Path
 from dispread.bridge.types import BridgeEvent
 from dispread.gsv_bridge import DeliveryAlreadyAttempted, DeliveryBlockedError
 from dispread.records import TimeBaseKind
+
+from .types import valid_port_name
+
+_APP_START = uuid.uuid4().hex  # one anonymous identifier per process, shared by stores
+_CONTEXT_FIELDS = ('route', 'port', 'bridge_port', 'gsv_port')
 
 
 class JournalError(RuntimeError):
@@ -312,7 +318,9 @@ class DeliveryJournal:
 _PUBLIC_FIELDS = frozenset({'type', 'outcome', 'state', 'completion_stage', 'provisional',
                             'time_base', 't_ns', 'bytes', 'error_code', 'nested',
                             'kind', 'code', 'detail', 'demo_only', 'output_ready',
-                            'gsv_receipt_confirmed', 'count', 'release', 'ts'})
+                            'gsv_receipt_confirmed', 'count', 'release', 'ts',
+                            'route', 'port', 'bridge_port', 'gsv_port', 'usb_vid_pid',
+                            'app_start', 'first_ts', 'last_ts', 'ts_time_base'})
 
 
 _PUBLIC_VALUES = frozenset({
@@ -335,14 +343,26 @@ _PUBLIC_VALUES = frozenset({
     'pairing_required', 'peer_invalid', 'redirect_refused', 'run_changed', 'run_conflict',
     'selection_required', 'stale_ack', 'transport_unsupported', 'transport_write_uncertain',
     'uart_peer_unavailable', 'uart_timeout', 'uart_frame_invalid', 'uart_port_failed', 'uart_closed',
+    'unix_realtime',
+    'adapter', 'adapter_selected', 'adapter_changed', 'adapter_disappeared', 'adapter_returned',
+    'adapter_opening', 'port_pair_selected', 'port_pair_changed', 'port_disappeared', 'port_returned',
 })
 
 
-def _redacted(value):
+def _redacted(value, field=None):
+    # Field-specific grammars, never a generic allowance for arbitrary strings.
+    if field in ('port', 'bridge_port', 'gsv_port'):
+        return value if value is None or valid_port_name(value) else '[redacted]'
+    if field == 'app_start':
+        return value if isinstance(value, str) and re.fullmatch(r'[0-9a-f]{32}', value) else None
+    if field == 'usb_vid_pid':
+        return value if isinstance(value, str) and re.fullmatch(r'[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}', value) else None
+    if field == 'route':
+        return value if value in ('network', 'uart', None) else '[redacted]'
     if isinstance(value, BridgeEvent):
         value = asdict(value)
     if isinstance(value, dict):
-        return {key: _redacted(item) for key, item in value.items()
+        return {key: _redacted(item, key) for key, item in value.items()
                 if key in _PUBLIC_FIELDS}
     if isinstance(value, (list, tuple)):
         return [_redacted(item) for item in value]
@@ -364,12 +384,13 @@ class DiagnosticStore:
         self.path = Path(path)
         self.path.mkdir(parents=True, exist_ok=True)
         self.max_bytes, self.max_age_s, self.clock = max_bytes, max_age_s, clock
+        self.app_start = _APP_START
         self._lock = threading.RLock()
         self._active = None
         self.prune()
 
     def _files(self):
-        return sorted(self.path.glob('detail-*.jsonl'), key=lambda p: p.stat().st_mtime)
+        return sorted(self.path.glob('detail-*.jsonl'), key=lambda p: (p.stat().st_mtime, p.name))
 
     def prune(self, reserve=0, *, reserve_file=False):
         with self._lock:
@@ -389,6 +410,16 @@ class DiagnosticStore:
         record = _redacted(event)
         if isinstance(record, dict):
             record['ts'] = round(self.clock(), 3)    # Unix-Sekunden je Zeile; ohne Zeit kein Ablauf
+            record['app_start'] = self.app_start
+            # Context was captured by the controller at enqueue time, not here.
+            detail = record.get('detail')
+            if isinstance(detail, dict):
+                for key in _CONTEXT_FIELDS:
+                    if key in detail:
+                        record[key] = detail.pop(key)
+            record.setdefault('route', None)  # no selected route yet
+            record.setdefault('time_base', 'unix_realtime')
+            record['ts_time_base'] = 'unix_realtime'
         payload = (json.dumps(record, allow_nan=False) + '\n').encode('utf-8')
         if len(payload) > self.max_bytes:
             raise JournalError('diagnostic event exceeds retention budget')
@@ -398,7 +429,7 @@ class DiagnosticStore:
             if (path is None or not path.exists()
                     or path.stat().st_size + len(payload) > min(1024 * 1024, self.max_bytes)):
                 self.prune(len(payload), reserve_file=True)
-                path = self.path / f'detail-{uuid.uuid4().hex}.jsonl'
+                path = self.path / f'detail-{time.time_ns():020d}-{uuid.uuid4().hex}.jsonl'
                 self._active = path
             old_size = path.stat().st_size if path.exists() else 0
             # mtime represents the FIRST event in a segment. Appending cannot
@@ -429,11 +460,70 @@ class DiagnosticStore:
             return dict(bytes=sum(path.stat().st_size for path in self._files()),
                         max_bytes=self.max_bytes, max_age_s=self.max_age_s)
 
-    def export(self):
+    def _export_records(self):
         with self._lock:
             self.prune()
             events = []
             for path in self._files():
                 for line in path.read_text('utf-8').splitlines():
-                    events.append(json.dumps(_redacted(json.loads(line))))
-            return '\n'.join(events)
+                    record = _redacted(json.loads(line))
+                    if isinstance(record, dict):
+                        record.setdefault('app_start', None)  # legacy: start unknown
+                        record.setdefault('route', None)
+                    events.append(record)
+            return events
+
+    @staticmethod
+    def _compact(events):
+        """Only consecutive idle polls; errors and state changes remain individual."""
+        previous = key = None
+        for event in events:
+            # Extra error/state/nested fields exclude an event even if its main
+            # code says idle. Unknown shapes are never guessed to be harmless.
+            idle = False
+            if isinstance(event, dict):
+                meta = {'ts', 'time_base', 'ts_time_base', 'app_start', *_CONTEXT_FIELDS}
+                if event.get('type') == 'idle':
+                    idle = event.keys() <= meta | {'type'}
+                elif event.get('kind') == 'exchange' and event.get('code') == 'idle':
+                    detail = event.get('detail', {})
+                    idle = (event.keys() <= meta | {'kind', 'code', 'detail'}
+                            and isinstance(detail, dict) and detail.get('outcome') == 'idle'
+                            and detail.keys() <= {'outcome', 'provisional', 'demo_only',
+                                                   'gsv_receipt_confirmed', 'completion_stage', 'release'})
+            candidate = {k: v for k, v in event.items() if k != 'ts'} if idle else None
+            if candidate is not None and candidate == key:
+                previous['count'] = previous.get('count', 1) + 1
+                previous.setdefault('first_ts', previous.get('ts'))
+                previous['last_ts'] = event.get('ts')
+            else:
+                if previous is not None:
+                    yield previous
+                previous, key = event, candidate
+        if previous is not None:
+            yield previous
+
+    def _bounded_jsonl(self, events):
+        # Redaction/legacy normalization and aggregation can add bytes. Bound the
+        # exported representation too, retaining the newest complete lines.
+        from collections import deque
+        lines, size = deque(), 0
+        for event in events:
+            line = json.dumps(event, allow_nan=False)
+            lines.append(line)
+            size += len(line.encode('utf-8')) + 1
+            while lines and size > self.max_bytes:
+                size -= len(lines.popleft().encode('utf-8')) + 1
+        return '\n'.join(lines)
+
+    def export(self):
+        """All retained starts, for local callers; ZIP uses export_parts()."""
+        return self._bounded_jsonl(self._compact(self._export_records()))
+
+    def export_parts(self):
+        """Current process and older/legacy starts from a single retained snapshot."""
+        current, previous = [], []
+        for event in self._compact(self._export_records()):
+            target = current if isinstance(event, dict) and event.get('app_start') == self.app_start else previous
+            target.append(event)
+        return self._bounded_jsonl(current), self._bounded_jsonl(previous)

@@ -239,6 +239,11 @@ def test_uart_reconnect_tracks_unique_serial_across_com_renumbering(setup):
     factory.transports[0].close()
     wait_for(lambda: len(factory.transports) > 1 and manager.snapshot().peer == 'authenticated')
     assert seen_ports == ['COM6', 'COM9']
+    selected = [e for e in events if e.code == 'adapter_opening']
+    assert [e.detail['port'] for e in selected] == ['COM6', 'COM9']
+    assert all(e.detail['usb_vid_pid'] == '0403:6001' for e in selected)
+    assert all(e.detail['route'] == 'uart' for e in selected)
+    assert all('unique' not in str(e.detail) for e in selected)
     assert manager.data_link() is not first
     with pytest.raises(ConnectionError):
         manager.admit_write(first, lambda: pytest.fail('stale write admitted'))

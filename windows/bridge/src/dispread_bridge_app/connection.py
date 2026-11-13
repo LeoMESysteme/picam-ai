@@ -315,11 +315,14 @@ class ConnectionManager:
                 base = replace(base, peer='disconnected', output='unavailable', next_action='reconnect')
         return aggregate_readiness(base, None if worker is None else worker.status)
 
-    def _event(self, code, *, run_id=None, output=None, reason=None, generation=None):
+    def _event(self, code, *, run_id=None, output=None, reason=None, generation=None, device=None):
         detail = dict(version=2, demo_only=output != 'test_release', provisional=True,
                       gsv_receipt_confirmed=False)
         if output is not None:
             detail.update(output=output, reason=reason, generation=generation)
+        if device is not None:
+            from .port_inventory import usb_vid_pid
+            detail.update(route='uart', port=device.port, usb_vid_pid=usb_vid_pid(device))
         try:
             self._emit(BridgeEvent('connection', code, run_id, None, detail))
         except Exception:
@@ -458,6 +461,10 @@ class ConnectionManager:
                 device = None
                 if mode == 'uart':
                     device, identity = self._device(selected, reconnect=reconnect, identity=identity)
+                    with self._lock:
+                        if generation != self._generation or cancel.is_set():
+                            return
+                    self._event('adapter_opening', device=device)
                 credential = self._credentials.load(self.profile.pi_id, mode,
                                                     expected_pin=self.profile.certificate_sha256)
                 if cancel.is_set():

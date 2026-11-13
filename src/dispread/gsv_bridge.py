@@ -64,7 +64,7 @@ class BridgeSession:
 
     def __init__(self, *, log=None, max_frame_age_ms=1000, timeout_s=1.0, clock=time.monotonic_ns,
                  journal=None, pi_id=None, before_write=None, admit_write=None, release_gate=None,
-                 demo_format=None, wall_clock_ns=time.time_ns):
+                 demo_format=None, wall_clock_ns=time.time_ns, on_written=None):
         """``release_gate(link, run_id)`` (R1) bestaetigt die Pi-Testfreigabe der
         aktuellen Verbindung; ohne ihn bleiben echte Werte gesperrt.
 
@@ -88,6 +88,9 @@ class BridgeSession:
         self.release_formatter = DirectFormatter(prefix="%")
         self.tick_formatter = TickFormatter()
         self.demo_format, self.wall_clock_ns = demo_format, wall_clock_ns
+        # Local durable COM receipt, before the fallible ACK round trip. Re-ACKs
+        # never invoke this callback because they do not write another value.
+        self.on_written = on_written
         self._held = (None, None)      # (run_id, letzter geschriebener gueltiger Wert): Kanal 1 haelt ihn
         self._last_written = None
         self._tick_lock = threading.Lock()
@@ -301,6 +304,8 @@ class BridgeSession:
         self._last_written = key
         self._event(**ack, outcome="written", wire_bytes_hex=payload.hex(),
                     completion_stage="com_driver_write", formatter=formatter)
+        if self.on_written is not None:
+            self.on_written(released)
         try:
             link.send(dict(ack, outcome="written"))
         except Exception:
@@ -397,6 +402,8 @@ class BridgeSession:
                     self._held = (run_id, line.value_text)
         self._event(**ack, outcome="written", filled=filled, wire_bytes_hex=payload.hex(),
                     completion_stage="com_driver_write", formatter=self.tick_formatter)
+        if self.on_written is not None:
+            self.on_written(True)
         try:
             link.send(dict(ack, outcome="written", filled=filled))
         except Exception:

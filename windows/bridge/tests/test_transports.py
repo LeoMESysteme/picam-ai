@@ -523,3 +523,88 @@ def test_uart_receive_reports_distinct_causes():
         with pytest.raises(TransportError) as caught:
             transport(stream).receive()
         assert caught.value.code == code
+
+
+@pytest.mark.parametrize('fault,expected', [
+    ('none', None), ('old_session', None),
+    ('listener_not_ready', 'uart_timeout'),
+    ('adapter_not_ready', 'uart_timeout'),
+    ('partial_pi_input', 'uart_timeout'),
+    ('partial_app_input', 'uart_frame_invalid'),
+])
+def test_uart_startup_hypotheses_against_listener_without_hardware(tmp_path, monkeypatch, fault, expected):
+    """Characterize possible failures; this does not identify the real 13.11. fault."""
+    import threading
+    from types import SimpleNamespace
+
+    from dispread_bridge_app import transports
+    from dispread_bridge_app.types import DeviceInfo
+
+    from dispread.bridge.protocol import encode_v2
+    from dispread.bridge.types import BridgeProfile
+    from dispread.bridge.uart import UartListener
+
+    identity = _test_identity(tmp_path / 'identity', 'uart-startup')
+    auth = _ScopedTestAuth()
+    token = 'a' * 43
+    auth.tokens[token] = ('client', 'uart')
+    detached = []
+    listener = UartListener(SimpleNamespace(detach=detached.append), identity, auth,
+                            port_leases=object())  # never start()/open a device
+    if fault == 'old_session':
+        listener._lease = SimpleNamespace(lease_id='old-lease')
+        listener._client, listener._token = 'old-client', 'old-token'
+    if fault == 'partial_pi_input':
+        listener._decoder.feed(b'{"unfinished":')
+    now = [0.0]
+    monkeypatch.setattr(transports, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+
+    class Wire:
+        def __init__(self):
+            self.buffer = b'{"unfinished":' if fault == 'partial_app_input' else b''
+            self.closed = False
+
+        @property
+        def in_waiting(self):
+            return len(self.buffer)
+
+        def write(self, data):
+            if fault not in ('listener_not_ready', 'adapter_not_ready'):
+                try:
+                    for message in listener._decoder.feed(data):
+                        self.buffer += encode_v2(listener._message(message))
+                except ValueError:
+                    # Same discard/reset path as UartListener._worker.
+                    listener._reset()
+            return len(data)
+
+        def read(self, count):
+            data, self.buffer = self.buffer[:count], self.buffer[count:]
+            if not data:
+                now[0] += .1  # simulate serial timeout; no wall-clock/load race
+            return data
+
+        def close(self):
+            self.closed = True
+
+    profile = BridgeProfile(1, identity.pi_id, 'Pi', identity.certificate_pem, identity.fingerprint, (), 2)
+    device = DeviceInfo('adapter', 'COM6', 0x403, 0x6001, None, None, 0)
+    wire = Wire()
+    def connect():
+        return transports.SerialTransport(profile, 'client', token, device, threading.Event(),
+                                          opener=lambda **kw: wire)
+    if expected:
+        with pytest.raises(TransportError) as caught:
+            connect()
+        assert caught.value.code == expected
+        assert wire.closed
+        if expected == 'uart_timeout':
+            assert 2 <= now[0] < 2.2
+        # Once the modeled cause is gone, the next fresh challenge succeeds.
+        fault = 'none'
+        wire = Wire()
+    transport = connect()
+    assert transport.authenticated_token == token
+    if fault == 'old_session':
+        assert detached == ['old-lease']
+    transport.close()

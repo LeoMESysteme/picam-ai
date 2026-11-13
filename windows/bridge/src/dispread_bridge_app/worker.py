@@ -212,6 +212,11 @@ class BridgeWorker:
         source = self.demo_format
         return source() if source is not None else None
 
+    def _written(self, released):
+        with self._lock:
+            self._released = released
+        self._event('exchange', outcome='written')
+
     def _run(self):
         com = link = None
         recovering = False
@@ -226,7 +231,7 @@ class BridgeWorker:
                 raise BridgeAuditError('audit_failed reading journal') from exc
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
                                     admit_write=self._admit_write, release_gate=self._release_gate,
-                                    demo_format=self._demo_format)
+                                    demo_format=self._demo_format, on_written=self._written)
             with self._lock:
                 self._session = session
             disturbed = None
@@ -256,7 +261,7 @@ class BridgeWorker:
                         changed, self._released = self._released != released, released
                     # Wiederholtes idle/ended nur als Uebergang melden; alles
                     # andere (written, invalid, ...) bleibt ein Ereignis je Runde.
-                    if outcome not in _QUIET or outcome != last_outcome or changed:
+                    if outcome != 'written' and (outcome not in _QUIET or outcome != last_outcome or changed):
                         self._event('exchange', outcome=outcome)
                     ticks = session.tick_stats()
                     if ticks['tick_disturbed'] and disturbed != ticks['run_id']:

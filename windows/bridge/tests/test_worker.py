@@ -79,6 +79,20 @@ def test_partial_write_is_unknown_not_success(tmp_path):
         assert len(com.payloads) == 1
 
 
+def test_written_notification_counts_com_receipts_not_reacks(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    receipts, com = [], Com()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        s = session(db, on_written=receipts.append)
+        with pytest.raises(ConnectionError):
+            s.exchange(Link(fail_ack=True), com)
+        assert receipts == [False]
+        assert s.exchange(Link(), com) == 'written'
+        assert session(db, on_written=receipts.append).exchange(Link(), com) == 'written'
+        assert receipts == [False]
+        assert len(com.payloads) == 1
+
+
 def test_full_disk_before_intent_prevents_write():
     class FullDisk:
         def begin_attempt(self, *args):
@@ -172,6 +186,44 @@ def test_worker_stop_disconnects_and_closes_com(tmp_path):
         assert not w.is_active()
     assert connection.disconnected and com.closed
     assert events[-1].kind == 'stopped'
+
+
+@pytest.mark.parametrize('ack_received', [False, True])
+def test_abort_after_com_write_keeps_app_count_even_without_ack_reply(tmp_path, ack_received):
+    """The Pi can accept ACK, then the reply is lost: local COM evidence still counts."""
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    from test_app_controller import make
+
+    app = make(tmp_path / 'app')
+    ended = threading.Event()
+
+    class InterruptedLink(Link):
+        def send(self, msg):
+            if msg['type'] == 'ack':
+                if ack_received:
+                    self.messages.append(msg)
+                w.stop()
+                raise ConnectionError('ACK response lost on disconnect')
+            super().send(msg)
+
+    def emit(event):
+        app._emit(event)
+        if event.kind == 'stopped':
+            ended.set()
+
+    link, com = InterruptedLink(), Com()
+    try:
+        with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+            w = worker(Connection(link), com, db, emit)
+            w.start()
+            assert ended.wait(3)
+            w.stop()
+            assert db.attempts()[0].outcome == 'written'
+            assert app._written == 1
+            assert len(com.payloads) == 1
+            assert sum(m['type'] == 'ack' for m in link.messages) == int(ack_received)
+    finally:
+        app.request_exit(True)
 
 
 def test_worker_lease_loss_stops_without_opening_com(tmp_path):
