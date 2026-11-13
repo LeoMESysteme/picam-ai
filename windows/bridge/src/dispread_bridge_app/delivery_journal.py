@@ -312,7 +312,7 @@ class DeliveryJournal:
 _PUBLIC_FIELDS = frozenset({'type', 'outcome', 'state', 'completion_stage', 'provisional',
                             'time_base', 't_ns', 'bytes', 'error_code', 'nested',
                             'kind', 'code', 'detail', 'demo_only', 'output_ready',
-                            'gsv_receipt_confirmed', 'count', 'release'})
+                            'gsv_receipt_confirmed', 'count', 'release', 'ts'})
 
 
 _PUBLIC_VALUES = frozenset({
@@ -324,6 +324,17 @@ _PUBLIC_VALUES = frozenset({
     'written_summary', 'diagnostics', 'dropped',
     'omitted', 'test_unaccepted', 'test_release',
     'tick_disturbed', 'tick_gap_unfilled',
+    # Ereignisarten und Fehlercodes aus dem eigenen Code (feste Bezeichner, keine
+    # Transportdaten). 13.11.2026: ohne sie war die Ursache eines UART-Abbruchs im
+    # Export nicht erkennbar („[redacted]/[redacted]“).
+    'connection', 'activity', 'heartbeat', 'peer_output_changed', 'connecting', 'authenticated',
+    'backoff', 'disconnected', 'network', 'uart',
+    'adapter_driver_unavailable', 'adapter_required', 'adapter_unavailable', 'authentication_refused',
+    'cancelled', 'connection_lost', 'demo_rejected', 'demo_unconfirmed', 'invalid_legacy_request',
+    'lease_unavailable', 'network_unavailable', 'no_pending_poll', 'not_connected', 'pairing_refused',
+    'pairing_required', 'peer_invalid', 'redirect_refused', 'run_changed', 'run_conflict',
+    'selection_required', 'stale_ack', 'transport_unsupported', 'transport_write_uncertain',
+    'uart_peer_unavailable',
 })
 
 
@@ -375,7 +386,10 @@ class DiagnosticStore:
                     count -= 1
 
     def append(self, event):
-        payload = (json.dumps(_redacted(event), allow_nan=False) + '\n').encode('utf-8')
+        record = _redacted(event)
+        if isinstance(record, dict):
+            record['ts'] = round(self.clock(), 3)    # Unix-Sekunden je Zeile; ohne Zeit kein Ablauf
+        payload = (json.dumps(record, allow_nan=False) + '\n').encode('utf-8')
         if len(payload) > self.max_bytes:
             raise JournalError('diagnostic event exceeds retention budget')
         with self._lock:

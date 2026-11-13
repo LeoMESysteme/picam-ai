@@ -32,7 +32,9 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
   - Vorher nötig: Versuch mit Schärfeverhältnis nahe 100 % und bewegter Hand; Replay der Läufe vom 11.11. auf Maßstab; Messreihe Fokuswert gegen Maßstab.
 - **Leser:** 975 Bilder unlesbar (Zellen unlesbar, geringer Segmentabstand) im Lauf 1; eigenes Thema nach der Nachführung.
 - **EXE, Altlasten im Zustellprotokoll:** Ein alter `unknown`-Eintrag bleibt für immer stehen; die App kann ihn weder erklären noch auflösen. Seit 53fbbd6 sperrt er das Wiederverbinden nicht mehr.
-- **EXE, `details.jsonl`:** ohne Zeit und Port je Zeile, kumulativ über alle Starts (10 MB), Leerlauf nicht zusammengefasst, Zeilen komplett `[redacted]`.
+- **EXE, `details.jsonl`:** Zeit je Zeile und bekannte Codes seit 13.11. drin; offen: Port je Zeile, kumulativ über alle Starts (10 MB), Leerlauf nicht zusammengefasst.
+- **UART über Brücke, Empfangstest 3/600 (13.11. 12:58, Demo 92cac0f8):** Wert 4 ohne Quittung, Neuverbindung mit neuer Lease beendete die Demo. Ursache des gescheiterten UART-Austauschs (Bitfehler bei 460 800? Zeitlimit 2 s?) offen; mit neuer EXE wiederholen, dann zeigt `details.jsonl` den Code. Frage: Soll eine Demo eine Neuverbindung überleben? Werkbank zeigt Abbruch und Grund nicht an (UX).
+- **EXE, Bedienung Kopplung/Verbindung:** „Erneut prüfen“ nach Kopplungs-/Verbindungsfehler (heute nur über Portwechsel 6→0→6), Kopplungsstatus je Weg sichtbar, Haken „getrennte Testsession“ merken.
 - **EXE, Gestaltung (Runde 3, `wip/bruecke-ux3`):**
   - Schritt 5 bei Erfolg neutral („600 von 600 an COM8 übergeben“).
   - Pair-Check unabhängig von der Reihenfolge der Ports.

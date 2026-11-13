@@ -272,3 +272,18 @@ def test_expired_tick_can_later_be_filled_once(tmp_path):
         assert store.last_tick_written('pi', 'run') == 1
         with pytest.raises(DeliveryAlreadyAttempted):
             store.begin_tick('pi', 'run', 1, 'fill', False, b'%99999999.0;0;1;1.000000\r\n')
+
+
+def test_diagnostics_keep_time_and_known_error_codes_but_not_secrets(tmp_path):
+    """13.11.2026: UART-Abbruch im Export nur als „[redacted]/[redacted]“ ohne Zeit."""
+    import json
+
+    from dispread_bridge_app.delivery_journal import DiagnosticStore
+
+    from dispread.bridge.types import BridgeEvent
+    store = DiagnosticStore(tmp_path, clock=lambda: 1794398707.4388)
+    store.append(BridgeEvent('connection', 'uart_peer_unavailable', 'run-secret-id', None,
+                             dict(token='SECRET', outcome='unknown')))
+    line = json.loads(store.export())
+    assert (line['kind'], line['code'], line['ts']) == ('connection', 'uart_peer_unavailable', 1794398707.439)
+    assert 'SECRET' not in store.export() and 'run-secret-id' not in store.export()
