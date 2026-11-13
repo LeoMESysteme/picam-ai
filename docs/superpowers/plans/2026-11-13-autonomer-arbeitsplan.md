@@ -50,7 +50,7 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
 1. [x] Codex-Report `.worktrees/rahmen-raster/REPORT-codex.md` reviewen, korrigieren,
        volle Suite (`DISPREAD_DEV_DATA=/mnt/ssd/picam-dev ./.venv/bin/pytest -q -n 4`),
        committen, Merge nach `feat/integration`, Werkbank neu starten (Regeln oben).
-2. [ ] **in Arbeit** `feat/integration` → `master` (Regeln oben).
+2. [x] `feat/integration` → `master` (Regeln oben).
 3. [ ] Kleine Backend-Punkte:
        - App-Zähler 123/124 im Empfangstest
        - Port je Zeile in `details.jsonl`, nur der aktuelle Start, Leerlauf zusammenfassen
@@ -88,3 +88,12 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
   CHANGELOG.md und tests/docs-site.spec.ts. Das ist beim Merge der Wiki-Session zu beachten.
   Parallel aus Punkt 5 erledigt: Spec-Entwürfe Wiki-Seite Ausgabewege, UART-Prüfsumme (mit
   Befund „stiller Wertfehler möglich“), Installer/TUI inklusive Bestandsaufnahme L1–L11.
+- 2026-11-13 ~20:30: **Punkt 2 erledigt.** `master` = `d6d5ab5` (Merge von `feat/integration`,
+  Konflikte nur CHANGELOG.md beidseitig und docs/status.md mit Hosting-Abschnitt aus master).
+  Volle Suite auf dem Merge 4236 bestanden, strikter Doku-Build sauber. `feat/integration`
+  per Fast-Forward auf denselben Stand. **Hinweis für die Wiki-Session:** `feat/wiki-lebendig`
+  basiert auf b22d64a; beim Nachziehen von master berühren sich CHANGELOG.md und
+  tests/docs-site.spec.ts (dort hat die Wiki-Session uncommittete Änderungen). Nicht selbst
+  aufgelöst. Der Push auf master löst den Doku-Workflow aus (Deploy prüfen).
+  Punkt 3 vorbereitet: Handoff auf `fix/kleine-backend` (Worktree `.worktrees/kleine-backend`).
+  Punkt 4: Claude-Subagent arbeitet auf `wip/bruecke-ux3`.
