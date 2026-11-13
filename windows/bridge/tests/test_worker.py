@@ -1036,3 +1036,30 @@ def test_unknown_tick_line_blocks_worker_before_com_open(tmp_path):
         w.stop()
         assert w.failure.kind == 'blocked' and w.failure.code == 'unknown_delivery'
     assert not com.closed and com.payloads == []
+
+
+def test_old_unresolved_delivery_does_not_block_auto_recovery(tmp_path):
+    """13.11.2026 (C-04): LAN kurz gezogen, kein Lauf -> Brücke stoppte hart mit „Ergebnis unklar“,
+    weil irgendeine alte offene Zustellung im Journal lag. Nur Zustellungen dieser Sitzung sperren."""
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        db.begin_attempt('pi', 'old-run', 3, None, b'%+3.0\r\n')        # Altlast: offen (pending)
+    connection = RecoveringConnection(Link())
+    connection.peer, connection.action = 'backoff', 'network_unavailable'
+    com, recovering, resumed = Com(), threading.Event(), threading.Event()
+    def emit(event):
+        if event.kind == 'recovering':
+            recovering.set()
+        if event.kind == 'exchange':
+            resumed.set()
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(connection, com, db, emit)
+        w.start()
+        try:
+            assert recovering.wait(2)
+            connection.link = Link(message(sequence=50))
+            connection.peer, connection.action = 'authenticated', None
+            assert resumed.wait(2)
+            assert w.failure is None
+        finally:
+            w.stop()

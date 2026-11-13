@@ -69,6 +69,7 @@ class BridgeWorker:
         self._released = False
         self._link = None
         self._session = None
+        self._unresolved_at_start = frozenset()
         self.demo_format = None        # Callable -> '1ch'|'4ch': Format der GSVmulti-Session fuer den Empfangstest
         self._wait = self._stop.wait   # Naht fuer Tests mit simulierter Uhr
         self._clock = time.monotonic
@@ -181,12 +182,18 @@ class BridgeWorker:
                 raise DeliveryUncertainError('unknown tick delivery')
             # A COM failure can itself lose its failed ACK. That outer link
             # exception must never hide uncertain bytes and enable auto-resume.
-            if recovering and any(row.pi_id == pi_id for row in self.journal.unresolved()):
+            # Nur Zustellungen dieser Worker-Sitzung zaehlen: offene Altlasten
+            # lagen schon beim Start vor und wurden dort zugelassen; sonst sperrte
+            # jede LAN-Unterbrechung dauerhaft (13.11.2026, C-04 ohne Lauf).
+            if recovering and self._unresolved(pi_id) - self._unresolved_at_start:
                 raise DeliveryUncertainError('unknown delivery')
         except (DeliveryBlockedError, DeliveryUncertainError):
             raise
         except Exception as exc:
             raise BridgeAuditError('audit_failed reading journal') from exc
+
+    def _unresolved(self, pi_id):
+        return frozenset(row.attempt_id for row in self.journal.unresolved() if row.pi_id == pi_id)
 
     def _may_recover(self, error):
         # Local import avoids connection -> readiness -> worker import cycle.
@@ -213,6 +220,10 @@ class BridgeWorker:
         last_active = None
         try:
             pi_id = self.connection.profile.pi_id
+            try:
+                self._unresolved_at_start = self._unresolved(pi_id)
+            except Exception as exc:
+                raise BridgeAuditError('audit_failed reading journal') from exc
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
                                     admit_write=self._admit_write, release_gate=self._release_gate,
                                     demo_format=self._demo_format)
