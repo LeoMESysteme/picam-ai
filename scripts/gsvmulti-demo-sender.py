@@ -21,6 +21,7 @@ from typing import TextIO
 
 import serial
 
+from dispread.hardware_ports import DIRECT_UART_BAUD
 from dispread.records import TimeBaseKind, Timestamp, ValueRecord, ValueStatus
 from dispread.sink.protocol.userdefined import UserDefinedFormatter
 from dispread.sink.serial_out import SerialWriteError, write_complete
@@ -124,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--profile", choices=PROFILES, default="constant")
     parser.add_argument("--rate", type=positive_rate, default=10.0, help="Demo-Frames/s (Standard: 10)")
     parser.add_argument("--count", type=positive_count, default=600)
-    parser.add_argument("--baud", type=int, choices=BAUDRATES, default=115200)
+    parser.add_argument("--baud", type=int, choices=BAUDRATES, default=DIRECT_UART_BAUD)
     parser.add_argument("--prefix", default="%")
     parser.add_argument("--output", "--jsonl", default="-", help="JSONL-Datei; Standard - = stdout")
     parser.add_argument("--dry-run", action="store_true", help="Nur JSONL erzeugen, keinen Port öffnen")

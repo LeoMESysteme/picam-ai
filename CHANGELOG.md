@@ -5,6 +5,25 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-14: **Installer P0a, Aufgabe 1 (L1).** Die kommentierte Paketliste
+  `packaging/apt-packages.txt` deckt die aktiven Drittmodule und UVC-Werkzeuge ab.
+  Der Installer überspringt vorhandene Pakete/Editable-Installation, behält
+  Systempaket-venv und `--no-deps` bei und prüft Gruppen/Boot-Konfiguration nur
+  lesend. Tesseract bleibt optional; die Folgeschritte sind geordnet dokumentiert.
+* 2026-11-14: **Installer P0a, Aufgabe 2 (L10).** Die Kameradiagnose findet Python
+  über ihre Repo-Wurzel. Ein Wächter schützt Produktcode und Produktskripte vor
+  Entwickler-Home-/Benutzervorgaben; begründete Wartungs-/UI-Ausnahmen bleiben sichtbar.
+* 2026-11-14: **Installer P0a, Aufgabe 3 (L7).** UART-Datenport, direkte Baudrate,
+  Werkbank-/Live-/TLS-/Brückenpfade und Serve-Port haben gemeinsame Vorgaben.
+  Werte, CWD-Bezug und separate Brückenbaudraten bleiben unverändert.
+* 2026-11-14: **Installer P0a, Aufgabe 4 (L2).** `werkbank-dienst.sh` bietet
+  Start/Stop/Restart/Status/Logs für den bisherigen Benutzerdienst. Pflichtadresse
+  und -port, privater Socketordner, Stoppsperre, Timeout-Aufräumen und begrenzte
+  HTTPS-Prüfung werden mit Prozessattrappen getestet. Kein laufender Dienst geändert.
+* 2026-11-14: **Installer P0a, Aufgabe 5 (L8).** `init-tls` erzeugt nur mit
+  explizitem `--host`; `--show` liest SANs und UTC-Ablaufdatum. Bestehende
+  Zertifikate bleiben geschützt; Brückenidentität und Browser-TLS bleiben getrennt.
+
 * 2026-11-13: **Empfangstest zählt den dauerhaften COM-Beleg (Backend-Aufgabe 1).**
   Bisher fehlte der letzte Wert in der App, wenn nach dem COM-Schreiben die
   ACK-Antwort ausblieb; der Pi konnte die Quittung bereits verbucht haben.

@@ -17,6 +17,7 @@ from pathlib import Path
 from dispread.bridge.baud import UART_BAUD
 from dispread.bridge.output_state import RELEASE_BLOCK as RELEASE_BLOCK
 from dispread.bridge.output_state import OutputState
+from dispread.hardware_ports import GSV_UART_PORT
 
 MAX_MESSAGE_BYTES = 65536
 
@@ -55,7 +56,7 @@ class JsonLineReader:
 @dataclass(frozen=True)
 class OutputConfig:
     transport: str = "off"
-    serial_port: str = "/dev/ttyAMA0"
+    serial_port: str = GSV_UART_PORT
     baudrate: int = UART_BAUD
     tcp_host: str = "0.0.0.0"
     tcp_port: int = 5000
@@ -64,8 +65,8 @@ class OutputConfig:
     def __post_init__(self):
         if self.transport not in ("off", "uart", "tcp"):
             raise ValueError("Unbekannter Ausgabeweg")
-        if self.serial_port != "/dev/ttyAMA0":
-            raise ValueError("UART-Ausgang muss /dev/ttyAMA0 sein; Referenzport bleibt frei")
+        if self.serial_port != GSV_UART_PORT:
+            raise ValueError(f"UART-Ausgang muss {GSV_UART_PORT} sein; Referenzport bleibt frei")
         if type(self.baudrate) is not int or self.baudrate != UART_BAUD:
             raise ValueError(f"Brücke benötigt {UART_BAUD} Baud")
         if type(self.tcp_port) is not int or not 1 <= self.tcp_port <= 65535:

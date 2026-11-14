@@ -9,6 +9,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from dispread.defaults import BRIDGE_DIR, LIVE_DATA_DIR, SERVE_PORT, TLS_CERT, TLS_DIR, TLS_KEY, WORKBENCH_DATA_DIR
+
 
 def default_socket():
     return os.environ.get("DISPREAD_SOCKET", f"/tmp/dispread-{os.getuid()}/control.sock")
@@ -28,11 +30,8 @@ async def request(op, args=None, socket_path=None):
 def init_tls(directory, host):
     import ipaddress
 
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    cert, key = directory / "cert.pem", directory / "key.pem"
-    if cert.exists() or key.exists():
-        raise ValueError("Zertifikat/Schluessel existiert bereits; nicht ueberschrieben")
+    if not host or not host.strip():
+        raise ValueError('Adresse angeben, unter der Windows den Pi erreicht (--host <adresse>)')
     try:
         ipaddress.ip_address(host)
         san = "IP:" + host
@@ -40,6 +39,11 @@ def init_tls(directory, host):
         if not all(c.isalnum() or c in ".-" for c in host):
             raise ValueError("Ungueltiger Hostname") from None
         san = "DNS:" + host
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    cert, key = directory / "cert.pem", directory / "key.pem"
+    if cert.exists() or key.exists():
+        raise ValueError("Zertifikat/Schluessel existiert bereits; nicht ueberschrieben")
     subprocess.run(
         [
             "openssl",
@@ -64,6 +68,28 @@ def init_tls(directory, host):
     key.chmod(0o600)
     print(f"Zertifikat: {cert}\nVor Anmeldung auf Windows vertrauen. Fingerabdruck:")
     subprocess.run(["openssl", "x509", "-in", str(cert), "-noout", "-fingerprint", "-sha256"], check=True)
+
+
+def show_tls(directory):
+    """SANs und Ablaufzeit lesen, auch ohne Zugriff auf den privaten Schluessel."""
+    from cryptography import x509
+
+    cert_path = Path(directory) / 'cert.pem'
+    cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+    try:
+        names = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    except x509.ExtensionNotFound:
+        names = []
+    san = []
+    for name in names:
+        if isinstance(name, x509.DNSName):
+            san.append(f'DNS:{name.value}')
+        elif isinstance(name, x509.IPAddress):
+            san.append(f'IP:{name.value}')
+        elif isinstance(name, x509.UniformResourceIdentifier):
+            san.append(f'URI:{name.value}')
+    print(json.dumps({'certificate': str(cert_path), 'san': san,
+                      'not_after_utc': cert.not_valid_after_utc.isoformat(), 'time_basis': 'UTC'}, indent=2))
 
 
 def positive_days(value):
@@ -126,17 +152,17 @@ def parser():
     serve = sub.add_parser("serve")
     serve.add_argument("--pam-user", default=None, help="PAM-Konto; sonst DISPREAD_PAM_USER oder lokales Dienstkonto")
     serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8080)
+    serve.add_argument("--port", type=int, default=SERVE_PORT)
     serve.add_argument("--bridge-directory", help="Bestehende Pi-Identitaet als HTTPS-/Bridge-Identitaet laden; keine Provisionierung")
     serve.add_argument("--bridge-endpoint", action="append", default=[], help="Expliziter LAN-/Tailscale-HTTPS/WSS-Endpunkt fuer das Profil")
     serve.add_argument("--bridge-name", default="Dispread Pi")
     serve.add_argument("--bridge-discovery", action="store_true", help="Oeffentliche DNS-SD-Hinweise mit optionalem python3-zeroconf anbieten")
     serve.add_argument("--camera", type=int, default=0)
-    serve.add_argument("--data", default="var/workbench")
-    serve.add_argument("--live-data", default="var/live")
+    serve.add_argument("--data", default=str(WORKBENCH_DATA_DIR))
+    serve.add_argument("--live-data", default=str(LIVE_DATA_DIR))
     serve.add_argument("--socket", default=default_socket())
-    serve.add_argument("--cert", default="var/workbench/tls/cert.pem")
-    serve.add_argument("--key", default="var/workbench/tls/key.pem")
+    serve.add_argument("--cert", default=str(TLS_CERT))
+    serve.add_argument("--key", default=str(TLS_KEY))
     serve.add_argument("--simulate", action="store_true", help="Testbilder; kein Kamerazugriff")
     for name, kind in (("width", int), ("height", int), ("fps", float)):
         serve.add_argument("--" + name, type=kind)
@@ -147,7 +173,7 @@ def parser():
     sub.add_parser("stop", help="laufenden Dienst ueber den lokalen Socket sauber beenden")
     live = sub.add_parser("live", help="Live-Einrichtung lokal steuern; Bestaetigung und Laufstart auf /live")
     live_sub = live.add_subparsers(dest="action", required=True)
-    live_sub.add_parser("status")
+    live_sub.add_parser("status").add_argument('--socket', help='Sonst DISPREAD_SOCKET oder lokaler Standardsocket')
     live_setup = live_sub.add_parser("setup")
     live_setup.add_argument("--cell-text")
     live_setup.add_argument("--force", action="store_true")
@@ -168,18 +194,19 @@ def parser():
     camera.add_argument("key", nargs="?")
     camera.add_argument("value", nargs="?")
     tls = sub.add_parser("init-tls")
-    tls.add_argument("--directory", default="var/workbench/tls")
-    tls.add_argument("--host", default="127.0.0.1")
+    tls.add_argument("--directory", default=str(TLS_DIR))
+    tls.add_argument("--host", help="Adresse, unter der Windows den Pi erreicht; bei Erzeugung erforderlich")
+    tls.add_argument("--show", action="store_true", help="SAN-Adressen und Ablaufdatum des vorhandenen Zertifikats anzeigen")
     bridge = sub.add_parser("bridge", help="Pi-Identitaet und lokale Kopplung ohne Messstart")
     bridge_sub = bridge.add_subparsers(dest="action", required=True)
     for action in ('prepare-uart', 'stop-uart', 'status'):
         local = bridge_sub.add_parser(action)
         local.add_argument('--socket', default=default_socket())
     identity = bridge_sub.add_parser("identity")
-    identity.add_argument("--directory", default="var/workbench/bridge")
+    identity.add_argument("--directory", default=str(BRIDGE_DIR))
     identity.add_argument("--provision", action="store_true", help="Neue Identitaet nur bei fehlender Einrichtung erzeugen")
     export = bridge_sub.add_parser("export-profile")
-    export.add_argument("--directory", default="var/workbench/bridge")
+    export.add_argument("--directory", default=str(BRIDGE_DIR))
     export.add_argument("--output", required=True)
     export.add_argument("--name", required=True)
     export.add_argument("--endpoint", action="append", default=[])
@@ -187,7 +214,7 @@ def parser():
     export.add_argument("--transport", choices=["network", "uart"], default="network")
     export.add_argument("--client-id")
     revoke = bridge_sub.add_parser("revoke")
-    revoke.add_argument("--directory", default="var/workbench/bridge")
+    revoke.add_argument("--directory", default=str(BRIDGE_DIR))
     revoke.add_argument("client_id")
     return root
 
@@ -204,7 +231,10 @@ def main(argv=None):
             asyncio.run(serve(args))
             return 0
         if args.command == "init-tls":
-            init_tls(args.directory, args.host)
+            if args.show:
+                show_tls(args.directory)
+            else:
+                init_tls(args.directory, args.host)
             return 0
         if args.command == "tui":
             from .tui import WorkbenchTUI
@@ -243,7 +273,8 @@ def main(argv=None):
                 op, values = "focus", {"value": args.key == "on"}
             else:
                 op = {"auto-setup": "auto.start", "accept": "auto.accept", "cancel": "auto.cancel"}[args.action]
-        result = asyncio.run(request(op, values))
+        request_options = {'socket_path': args.socket} if getattr(args, 'socket', None) is not None else {}
+        result = asyncio.run(request(op, values, **request_options))
         print(json.dumps(result, indent=2, ensure_ascii=False))
         if op == 'live.aufraeumen' and result.get('failed'):
             return 1

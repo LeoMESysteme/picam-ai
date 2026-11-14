@@ -170,17 +170,13 @@ fi
 
 # --------------------------------------------------------- 6. Testbild ---
 sec "6. Testbild (cv2.VideoCapture, YUYV 1920x1080)"
-PYTHON_BIN=""
-if [ -x /home/me-systeme/picam-ai/.venv/bin/python ]; then
-    PYTHON_BIN=/home/me-systeme/picam-ai/.venv/bin/python
-elif [ -x ./.venv/bin/python ]; then
-    PYTHON_BIN=./.venv/bin/python
-fi
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
 
 if [ -z "$DEVICE" ]; then
     info "uebersprungen - kein Geraet aus Schritt 2"
-elif [ -z "$PYTHON_BIN" ]; then
-    bad "kein Python mit cv2 gefunden (/home/me-systeme/picam-ai/.venv/bin/python oder ./.venv/bin/python)"
+elif [ ! -x "$PYTHON_BIN" ]; then
+    bad "kein Projekt-Python mit cv2 gefunden ($PYTHON_BIN)"
 else
     mkdir -p "$DIAG_DIR"
     capture_err=$("$PYTHON_BIN" - "$DEVICE" "$TEST_IMAGE" <<'PYEOF' 2>&1

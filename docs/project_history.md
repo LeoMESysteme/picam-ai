@@ -9,6 +9,36 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-14 — Installer P0a ohne Pfad- oder Identitätsmigration
+
+**Problem:** Die Softwareeinrichtung ließ aktive Systempakete aus, kopierte
+Vorgaben und enthielt einen Entwicklerpfad. Der Dienstbefehl fehlte im Repo,
+TLS konnte versehentlich nur für die lokale Adresse erzeugt werden.
+
+**Entscheidung:** Ein kommentiertes apt-Manifest, unveränderte Konstanten in
+`defaults.py`/`hardware_ports.py`, ein Benutzerdienst-Skript und ein expliziter
+TLS-Host setzen den [P0a-Handoff](superpowers/handoffs/2026-11-14-codex-installer-p0.md)
+um. Der Dienst setzt seine Arbeitswurzel und lädt deren Quellen ausdrücklich.
+Unbekannter Live-Status sperrt Stop/Restart; `--force` bleibt eine bewusste
+Übersteuerung. Die Diagnosekopie wird ebenfalls geschützt.
+
+**Begründung:** Das lässt Installation und Betrieb prüfen, ohne die offenen
+Entscheidungen zu Installationsort, Diensttyp oder Konfiguration vorwegzunehmen.
+Der aktive Live-Leser braucht Tesseract nicht, daher bleibt dessen Installation
+optional. Das Paketmanifest deckt auch die dynamisch geladene Discovery ab.
+
+**Verworfene Alternativen:** `paths.py` sofort als Laufzeitwurzel zu verwenden
+würde bisher CWD-relative Aufrufe umlenken. Eine neue Konfigurationsdatei oder
+persistente System-Unit wäre die nächste Installerstufe. Das Brückenzertifikat
+mit `init-tls` zu ersetzen würde die gepinnte Identität ändern und ist ebenfalls
+außerhalb des Auftrags.
+
+**Konsequenz:** L6, Vorlagenlieferung und Kalibrierungsübernahme bleiben offen.
+Browser-TLS und Pi-Identitätszertifikat sind weiterhin getrennte Verträge.
+Prüfungen verwenden temporäre Dateien und Prozessattrappen; Installation,
+Neustart und Hardwareabnahme auf einem zweiten Pi stehen aus. Details und
+Entscheidungsvorlage stehen im Worktree-Bericht `REPORT-codex.md`.
+
 ## 2026-11-13 — COM-Zähler und Diagnoseexport der Windows-Brücke
 
 **Problem:** Beim UART-Abbruch standen 123 Werte in der App gegen 124 Pi-Quittungen.
