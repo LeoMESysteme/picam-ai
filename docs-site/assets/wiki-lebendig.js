@@ -25,11 +25,13 @@
       projekt: ["#ffe0c7", "#cfe0ff", "#e3d3ff"],
     },
     dark: {
-      start: ["rgb(64 110 230 / .30)", "rgb(130 90 230 / .26)", "rgb(40 170 140 / .18)"],
-      bedienen: ["rgb(40 170 140 / .24)", "rgb(64 110 230 / .22)", "rgb(90 170 80 / .16)"],
-      konfigurieren: ["rgb(64 110 230 / .32)", "rgb(80 130 240 / .2)", "rgb(120 100 230 / .2)"],
-      entwickeln: ["rgb(130 90 230 / .3)", "rgb(110 90 220 / .22)", "rgb(220 90 160 / .16)"],
-      projekt: ["rgb(230 140 70 / .2)", "rgb(64 110 230 / .24)", "rgb(140 100 230 / .2)"],
+      // Gedämpft: Alphawerte etwa halb so hoch wie zuerst, damit das Glas der
+      // Seitenleisten nicht königsblau wird.
+      start: ["rgb(64 110 230 / .16)", "rgb(130 90 230 / .14)", "rgb(40 170 140 / .1)"],
+      bedienen: ["rgb(40 170 140 / .13)", "rgb(64 110 230 / .12)", "rgb(90 170 80 / .09)"],
+      konfigurieren: ["rgb(64 110 230 / .17)", "rgb(80 130 240 / .11)", "rgb(120 100 230 / .11)"],
+      entwickeln: ["rgb(130 90 230 / .16)", "rgb(110 90 220 / .12)", "rgb(220 90 160 / .09)"],
+      projekt: ["rgb(230 140 70 / .11)", "rgb(64 110 230 / .13)", "rgb(140 100 230 / .11)"],
     },
   };
 

@@ -582,7 +582,9 @@ def collect(root: Path | str = ROOT, focus: str | None = None) -> dict:
         if lines is not None and size < 3_000_000:
             texts[path] = data.decode("utf-8", "ignore")
         cc = cs = fn = 0
-        if path.endswith(".py") and lines is not None and cat not in ("data", "vendor"):
+        # Funktionen nur aus Code und Tests: Python-Kopien unter docs/ (Korpus,
+        # Belege) sind Material, kein Projektcode.
+        if path.endswith(".py") and lines is not None and cat in (*CODE_CATS, "tests"):
             sources[path] = texts[path]
             funcs = analyse_python(texts[path], path, cat)
             functions.extend(funcs)
@@ -1080,12 +1082,12 @@ def render_markdown(repo: dict) -> str:
     lines += ["## Komplexität {#komplexitaet}", "",
               f"Von {de(m['fnTotal'])} Python-Funktionen außerhalb der Tests haben {de(m['over10'])} "
               f"({de(share, 1)} %) eine Komplexität über 10 und {de(m['over40'])} über 40. "
-              f"Die komplexeste ist {top[0]['n']} mit {de(top[0]['cc'])}." if top else
+              f"Die komplexeste ist `{top[0]['n']}` mit {de(top[0]['cc'])}." if top else
               "Keine Funktionen ermittelbar.", ""]
     if top:
         lines += [chart("Die zwölf komplexesten Funktionen", "Komplexität",
                         ["Funktion", "Komplexität", "Ort", "Zeilen"],
-                        [[f["n"], de(f["cc"]), f"`{f['p']}:{f['ln']}`", de(f["l"])] for f in top]), ""]
+                        [[f"`{f['n']}`", de(f["cc"]), f"`{f['p']}:{f['ln']}`", de(f["l"])] for f in top]), ""]
 
     # Zustand
     h = repo["health"]

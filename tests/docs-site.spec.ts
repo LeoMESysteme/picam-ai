@@ -1509,6 +1509,9 @@ function builtPages(dir: string): string[] {
 }
 
 test('Abbildungen zeigen nur Szenen, die es als Tour-Schritt gibt', async ({ browser }) => {
+  // Geht alle zehn Seiten mit Abbildungen durch (eigener Kontext, also in der
+  // Vorgabe „lebendig“); allein ~20 s, unter Last auf dem Pi mehr als 30 s.
+  test.setTimeout(60000);
   const site = join(process.cwd(), 'site');
   const tour = readFileSync(join(site, 'docs/uebersicht/projekt-tour.html'), 'utf8');
   const steps = new Set([...tour.matchAll(/<h3 id="([^"]+)"/g)].map((m) => m[1]));
@@ -2069,6 +2072,13 @@ test('Lebendige Darstellung: Linse gleitet bei Sofortnavigation und räumt auf',
   await page.goto('/docs/uebersicht/messpfad.html');
   await page.locator('.md-nav--primary a', { hasText: 'Kamera-Inbetriebnahme' }).click({ noWaitAfter: true });
   await expect(page.locator('.md-sidebar--primary .wiki-lens-geist')).toHaveCount(1);
+  // Der Geist startet am alten Eintrag, nicht schon am Ziel.
+  const abstand = await page.evaluate(() => {
+    const geist = document.querySelector('.wiki-lens-geist');
+    const ziel = [...document.querySelectorAll('.md-nav--primary a.md-nav__link--active')].pop();
+    return geist && ziel ? Math.abs(geist.getBoundingClientRect().top - ziel.getBoundingClientRect().top) : 0;
+  });
+  expect(abstand).toBeGreaterThan(4);
   await expect(page.locator('.wiki-lens-geist')).toHaveCount(0, { timeout: 3000 });
   await expect(page.locator('.md-nav--primary a.md-nav__link--active.wiki-lens-wartet')).toHaveCount(0);
   await expect(page.locator('.wiki-atmo')).toHaveCount(1);
@@ -2109,4 +2119,135 @@ test('Lebendige Darstellung bleibt schmal ohne horizontales Scrollen', async ({ 
     await expect(page.locator('.wiki-look-switch')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), path).toBe(true);
   }
+});
+
+test('Sonderseiten lebendig: Glasbedienung, schmal ohne Querscrollen, Wechsel zurück zu ruhig', async ({ page }) => {
+  test.setTimeout(60000);
+  await lebendig(page);
+  await mockSessionArchive(page);
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const path of ['/docs/uebersicht/projekt-tour.html', '/docs/ROADMAP.html', '/docs/FORTSCHRITT.html', '/docs/session-explorer.html']) {
+    await page.goto(path);
+    await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'lebendig');
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), path).toBe(true);
+    expect(await page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').length), path).toBe(0);
+  }
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/docs/uebersicht/projekt-tour.html');
+  const chapters = page.locator('.tour-chapters');
+  const current = page.locator('.tour-chapter-button[aria-current="step"]');
+  await expect(chapters).toHaveCSS('border-top-left-radius', '24px');
+  expect(await current.evaluate(e => getComputedStyle(e).boxShadow)).not.toBe('none');
+  await page.getByRole('switch', { name: 'Lebendige Darstellung' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'ruhig');
+  await expect(chapters).toHaveCSS('border-top-left-radius', '0px');
+  await expect(current).toHaveCSS('box-shadow', 'none');
+  await page.getByRole('switch', { name: 'Lebendige Darstellung' }).click();
+  await expect(chapters).toHaveCSS('border-top-left-radius', '24px');
+
+  await page.goto('/docs/ROADMAP.html');
+  await expect(page.locator('.roadmap-node').first()).toHaveCSS('border-top-left-radius', '18px');
+  await expect(page.locator('.md-sidebar--secondary')).toBeHidden();
+});
+
+test('Sonderseiten lebendig: Text auf Glas hält Kontrast in beiden Themes', async ({ page }) => {
+  await lebendig(page);
+  await mockSessionArchive(page);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+    for (const [path, selectors] of [
+      ['/docs/uebersicht/projekt-tour.html', ['.tour-chapter-button:not([aria-current])', '.tour-count']],
+      ['/docs/session-explorer.html', ['.session-switch button:not([aria-selected="true"])', '.session-matrix thead th']],
+      ['/docs/FORTSCHRITT.html', ['.fs-legend-item']],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.locator(selectors[0]).first()).toBeVisible();
+      // Glas liegt zwischen Lesefläche und Atmosphärengrund; beide Grenzen prüfen.
+      const ratios = await page.evaluate((list) => {
+        const probe = document.createElement('i');
+        document.body.append(probe);
+        const rgba = (value: string) => { probe.style.color = value; return (getComputedStyle(probe).color.match(/[\d.]+/g) || []).map(Number); };
+        const over = (top: number[], bottom: number[]) => { const a = top.length > 3 ? top[3] : 1; return [0, 1, 2].map(i => top[i] * a + bottom[i] * (1 - a)); };
+        const lum = (c: number[]) => { const [r, g, b] = c.map(v => { const x = v / 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }); return .2126 * r + .7152 * g + .0722 * b; };
+        const ratio = (a: number[], b: number[]) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + .05) / (y + .05); };
+        const style = getComputedStyle(document.body);
+        const ground = rgba(style.getPropertyValue('--lb-ground'));
+        const paper = over(rgba(style.getPropertyValue('--lb-paper')), ground);
+        const result: Record<string, number> = {};
+        for (const selector of list) {
+          const color = rgba(getComputedStyle(document.querySelector(selector)!).color);
+          result[selector] = Math.min(ratio(over(color, ground), ground), ratio(over(color, paper), paper));
+        }
+        probe.remove();
+        return result;
+      }, [...selectors]);
+      for (const [selector, value] of Object.entries(ratios)) expect(value, `${scheme} ${selector}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
+test('Lebendige Diagramme: Fokus hebt den Balken hervor, Darstellungswechsel ohne doppelte Knoten', async ({ page }) => {
+  await lebendig(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/docs/VALIDATION.html');
+  const first = page.locator('.wiki-chart').nth(0);
+  await expect(first.locator('.wiki-chart-pill')).toHaveCount(3);
+  await expect(first.locator('.wiki-chart-track')).toHaveCount(3);
+  await expect(page.locator('.wiki-chart svg linearGradient')).toHaveCount(2);
+  const ids = await page.locator('.wiki-chart svg linearGradient').evaluateAll(nodes => nodes.map(node => node.id));
+  expect(new Set(ids).size).toBe(2);
+  const bars = first.locator('g[data-hint="chart"]');
+  await bars.nth(0).focus();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('Fehllesungen: 0/715');
+  await expect(bars.nth(0).locator('.wiki-chart-growth')).toHaveCSS('opacity', '1');
+  await expect(bars.nth(1).locator('.wiki-chart-growth')).toHaveCSS('opacity', '0.32');
+  await expect(bars.nth(1).locator('.wiki-chart-pill text')).toHaveCSS('opacity', '1');
+  await page.keyboard.press('Escape');
+  const toggle = page.getByRole('switch', { name: 'Lebendige Darstellung' });
+  for (const look of ['ruhig', 'lebendig', 'ruhig'] as const) {
+    await toggle.click();
+    await expect(page.locator('html')).toHaveAttribute('data-wiki-look', look);
+    await expect(page.locator('.wiki-chart svg')).toHaveCount(2);
+    await expect(page.locator('.wiki-chart-figure')).toHaveCount(2);
+    await expect(page.locator('details.wiki-chart-table')).toHaveCount(2);
+    await expect(first.locator('g[data-hint="chart"]')).toHaveCount(3);
+    await expect(page.locator('.wiki-chart').nth(1).locator('g[data-hint="chart"]')).toHaveCount(5);
+    // Lebendig: 3 Pillen und 3 Spuren im Balkendiagramm, Glanz auf allen 8 Marken.
+    await expect(page.locator('.wiki-chart-pill, .wiki-chart-track, .wiki-chart-gloss')).toHaveCount(look === 'ruhig' ? 0 : 14);
+  }
+  await bars.nth(0).focus();
+  await expect(bars.nth(1).locator('.wiki-chart-growth')).toHaveCSS('opacity', '1');
+});
+
+test('Lebendige Kette: Puls wandert, fehlt bei reduzierter Bewegung und verschwindet in ruhig', async ({ page }) => {
+  await lebendig(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/docs/anleitung/01-kette-verstehen.html');
+  const chain = page.locator('.wiki-kette');
+  await chain.scrollIntoViewIfNeeded();
+  await expect(chain.locator('.wiki-kette-schiene')).toHaveCount(1);
+  const running = () => page.evaluate(() => document.getAnimations()
+    .filter(animation => (animation.effect as KeyframeEffect | null)?.target?.closest?.('.wiki-kette')
+      && animation.playState === 'running').length);
+  await expect.poll(running).toBe(8);
+  const ocr = chain.locator('.wiki-kette-node[data-stufe="ocr"]');
+  await ocr.focus();
+  await expect(page.locator('#wiki-hint[data-open="true"]')).toContainText('Wert lesen · ocr/');
+  await expect.poll(() => ocr.evaluate(node => new DOMMatrix(getComputedStyle(node).transform).a)).toBeGreaterThan(1.01);
+  await page.keyboard.press('Escape');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(running).toBe(0);
+  await expect(chain.locator('.wiki-kette-puls')).toBeHidden();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect.poll(running).toBe(8);
+  await page.getByRole('switch', { name: 'Lebendige Darstellung' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'ruhig');
+  await expect(chain.locator('.wiki-kette-schiene')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.getAnimations()
+    .filter(animation => (animation.effect as KeyframeEffect | null)?.target?.closest?.('.wiki-kette')).length)).toBe(0);
+  await expect(chain.locator('.wiki-kette-node')).toHaveCount(7);
+  await expect(chain.locator('.wiki-kette-figure')).toHaveCount(1);
 });

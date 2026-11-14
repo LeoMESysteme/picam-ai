@@ -138,6 +138,10 @@
   gap: .3rem;
 }
 
+/* Bedien-Symbole (tour.js, controlIcon): Linien-SVG statt Unicode-Zeichen. */
+.tour-control { display: inline-flex; align-items: center; justify-content: center; gap: .3em; }
+.tour-icon { flex: none; width: 1.05em; height: 1.05em; }
+
 .tour-control {
   min-width: 2.2rem;
   height: 2.2rem;
@@ -652,4 +656,172 @@
   text-align: left;
   font-style: normal;
   color: var(--md-default-fg-color--light);
+}
+
+/* ================================= Lebendige Darstellung (wiki-look) ==== */
+/* Alles hier wirkt nur unter html[data-wiki-look="lebendig"]; die ruhige
+ * Darstellung oben bleibt unverändert. Bühne und Bedienung sprechen die
+ * Glas-Sprache der Codebase-Bühne: Kapitelwahl als Glasband mit Linse unter
+ * dem aktuellen Kapitel, Steuerung als zweites Glasband, die Bühne als ruhige
+ * Schale in der Lesefläche. Gegenstände (tp-*) und die Farbsprache für
+ * Fluss, gültig, geplant und abgelehnt bleiben, wie sie sind. */
+
+[data-wiki-look="lebendig"] .tour,
+[data-wiki-look="lebendig"] .tour-figure {
+  --tour-ink: var(--lb-ink);
+  --tour-muted: var(--lb-ink2);
+  --tour-faint: var(--lb-line);
+  --tour-panel: var(--lb-paper);
+  --tour-stage: var(--lb-ground);
+  --tour-stage-grid: color-mix(in srgb, var(--lb-line) 45%, transparent);
+  --tour-atmo:
+    radial-gradient(60% 70% at 12% 18%, rgb(188 215 255 / .55), transparent 72%),
+    radial-gradient(56% 66% at 88% 8%, rgb(220 203 255 / .5), transparent 72%),
+    radial-gradient(72% 70% at 55% 100%, rgb(201 242 227 / .5), transparent 72%);
+}
+
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .tour,
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .tour-figure {
+  --tour-atmo:
+    radial-gradient(60% 70% at 12% 18%, rgb(70 100 200 / .22), transparent 72%),
+    radial-gradient(56% 66% at 88% 8%, rgb(120 90 200 / .18), transparent 72%),
+    radial-gradient(72% 70% at 55% 100%, rgb(40 140 120 / .14), transparent 72%);
+}
+
+/* Bühne: Schale in der Lesefläche, kein schwebendes Glas. */
+[data-wiki-look="lebendig"] .tour-stage {
+  border: 1px solid var(--lb-line);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 3px rgb(40 60 150 / .1);
+}
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .tour-stage {
+  box-shadow: inset 0 1px 3px rgb(0 0 12 / .45);
+}
+[data-wiki-look="lebendig"] .tour-progress span { border-radius: 0 3px 3px 0; }
+
+/* Kapitelwahl und Steuerung: zwei Glasbänder. */
+[data-wiki-look="lebendig"] .tour-chapters,
+[data-wiki-look="lebendig"] .tour-bar {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 5px;
+  background: var(--lb-glass), color-mix(in srgb, var(--lb-ground) 55%, transparent);
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 24px;
+  box-shadow: var(--lb-glass-light), var(--lb-drop);
+}
+[data-wiki-look="lebendig"] .tour-chapters { gap: 2px; }
+[data-wiki-look="lebendig"] .tour-count { margin-left: auto; }
+/* Vollseite mit Spalte: beide Bänder füllen die Spalte gleich breit. */
+@media (min-width: 60em) and (min-aspect-ratio: 4/3) {
+  [data-wiki-look="lebendig"] .tour-page .tour-chapters,
+  [data-wiki-look="lebendig"] .tour-page .tour-bar { width: auto; }
+}
+[data-wiki-look="lebendig"] .tour-bar { gap: .3rem .5rem; padding-right: .8rem; }
+
+[data-wiki-look="lebendig"] .tour-chapter-button {
+  min-height: 2.1rem;
+  padding: .2rem .9rem;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  background: none;
+  color: var(--lb-ink2);
+  transition: color .3s, background-color .2s;
+}
+[data-wiki-look="lebendig"] .tour-chapter-button:hover {
+  border-color: transparent;
+  color: var(--lb-ink);
+  background: color-mix(in srgb, var(--lb-ink) 6%, transparent);
+}
+[data-wiki-look="lebendig"] .tour-chapter-button--planned {
+  border: 1px dashed color-mix(in srgb, var(--lb-ink2) 45%, transparent);
+}
+/* Linse unter dem aktuellen Kapitel. */
+[data-wiki-look="lebendig"] .tour-chapter-button[aria-current="step"] {
+  background: var(--lb-lens);
+  border-color: var(--lb-glass-edge);
+  box-shadow: var(--lb-lens-shadow);
+  color: var(--lb-ink);
+  font-weight: 600;
+}
+
+[data-wiki-look="lebendig"] .tour-controls { gap: 0; }
+[data-wiki-look="lebendig"] .tour-control {
+  min-width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: none;
+  color: var(--lb-ink);
+  transition: background-color .2s, box-shadow .2s;
+}
+[data-wiki-look="lebendig"] .tour-control:hover:not(:disabled) {
+  border-color: var(--lb-glass-edge);
+  color: var(--lb-ink);
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+}
+[data-wiki-look="lebendig"] .tour-control[aria-pressed="true"] {
+  border-color: var(--lb-glass-edge);
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+}
+
+/* Schrittpunkte: der aktuelle wird zur kurzen Linse. */
+[data-wiki-look="lebendig"] .tour-dots { gap: .35rem; align-items: center; }
+[data-wiki-look="lebendig"] .tour-dot {
+  border-color: color-mix(in srgb, var(--lb-ink2) 55%, transparent);
+  transition: width .45s var(--lb-spring), background-color .2s;
+}
+[data-wiki-look="lebendig"] .tour-dot--seen { background: color-mix(in srgb, var(--lb-ink2) 45%, transparent); }
+[data-wiki-look="lebendig"] .tour-dot[aria-current="step"] {
+  width: 1.5rem;
+  border-radius: .4rem;
+  border-color: var(--lb-ink);
+  background: var(--lb-ink);
+  transform: none;
+}
+[data-wiki-look="lebendig"] .tour-count { color: var(--lb-ink2); }
+
+[data-wiki-look="lebendig"] .tour-ui :focus-visible,
+[data-wiki-look="lebendig"] .tour-figure-ui :focus-visible {
+  outline-color: var(--md-accent-fg-color);
+}
+[data-wiki-look="lebendig"] .tour-chapter-button:focus-visible,
+[data-wiki-look="lebendig"] .tour-control:focus-visible { outline-offset: 1px; }
+
+/* „Mehr dazu“: weicher Kasten statt Randbalken. */
+[data-wiki-look="lebendig"] .tour-more {
+  border: 1px solid var(--lb-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--lb-ground) 70%, transparent);
+  padding: .55rem .85rem;
+}
+
+/* Vollbild: eigene Atmosphäre, weil die feste Schicht dort fehlt. */
+[data-wiki-look="lebendig"] .tour-ui:fullscreen {
+  background: var(--tour-atmo), var(--lb-ground);
+  color: var(--lb-ink);
+}
+
+/* Tour als Abbildung in Textseiten: „Nochmal“ als kleine Glaspille. */
+[data-wiki-look="lebendig"] .md-typeset .tour-figure-replay {
+  width: auto;
+  height: 2rem;
+  padding: 0 .9rem;
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 999px;
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+}
+
+@media (max-width: 30em) {
+  [data-wiki-look="lebendig"] .tour-chapter-button { min-height: 2rem; padding: .15rem .65rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-wiki-look="lebendig"] .tour-chapter-button,
+  [data-wiki-look="lebendig"] .tour-control,
+  [data-wiki-look="lebendig"] .tour-dot { transition: none; }
 }

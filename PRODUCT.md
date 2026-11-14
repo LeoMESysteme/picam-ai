@@ -79,9 +79,9 @@ sie zu glätten.
 
 ## Capabilities and Constraints
 
-- Das aktuelle Grunddesign des Zensical-Wikis bleibt erhalten. Es soll
-  moderner und professioneller wirken, gewünscht sind mehr Informationen beim
-  Überfahren (Pop-ups), mehr Animationen, Grafiken und dynamische Diagramme.
+- Das Grunddesign des Zensical-Wikis bleibt als Darstellung „ruhig“
+  erhalten; „lebendig“ ist die modernere Fassung mit Glas, Übergängen,
+  bewegten Diagrammen und mehr Informationen beim Überfahren (Pop-ups).
 - Inhalte ohne JavaScript bleiben lesbar; interaktive Ansichten haben eine
   Quell- oder Textfassung, reduzierte Bewegung wird respektiert.
 - Anime.js 4.5.0 liegt lokal unter `docs-site/assets/vendor/`; kein CDN.
@@ -92,9 +92,14 @@ sie zu glätten.
 
 ## Brand Commitments
 
-Das bestehende Zensical-Grunddesign (Schrift, Theme, Navigation,
-Statusfarben) ist verbindlich; Verbesserungen bauen darauf auf, statt es zu
-ersetzen.
+Das Zensical-Gerüst (Navigation, Theme-Mechanik, Statusfarben) ist
+verbindlich. Darauf gibt es seit 2026-11-13 zwei Darstellungen, umschaltbar
+im Kopf: „ruhig“ ist das bisherige Grunddesign (Systemschrift, Haarlinien,
+ein Schatten) und gilt auch ohne JavaScript; „lebendig“ trägt die Glas-Welt
+der Codebase-Bühne (Atmosphäre, Glasflächen, Bricolage Grotesque, Onest,
+Martian Mono, Bewegung) und ist Vorgabe für Erstbesucher. Beide halten
+dieselben Inhalte, dieselbe Navigation und dieselbe Lesbarkeit; Änderungen
+an einer Darstellung dürfen die andere nicht verschieben.
 
 ## Evidence on Hand
 

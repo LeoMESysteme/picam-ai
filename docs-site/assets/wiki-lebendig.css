@@ -222,7 +222,10 @@
   }
 }
 @media screen and (min-width: 60em) {
-  [data-wiki-look="lebendig"] .md-sidebar--secondary .md-sidebar__scrollwrap {
+  /* Glas am inneren Block: so hoch wie das Inhaltsverzeichnis, nicht wie
+   * der Bildschirm (die Höhe des Scrollbereichs setzt Zensical inline). */
+  [data-wiki-look="lebendig"] .md-sidebar--secondary .md-sidebar__inner {
+    padding-bottom: .4rem;
     background: var(--lb-glass);
     backdrop-filter: blur(14px) saturate(180%);
     -webkit-backdrop-filter: blur(14px) saturate(180%);
@@ -235,17 +238,60 @@
 
 /* Kopfzeile der Seitenleisten: Milchglas statt deckender Fläche. */
 [data-wiki-look="lebendig"] .md-sidebar .md-nav__title {
-  background: none;
+  background: color-mix(in srgb, var(--md-default-bg-color) 72%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-radius: 14px;
-  box-shadow: none;
+  box-shadow: 0 6px 12px -10px rgb(40 60 150 / .4);
 }
+
+/* Fußzeile: kein harter Balken, sondern ein Glasband über der Atmosphäre. */
+[data-wiki-look="lebendig"] .md-footer {
+  background: var(--lb-glass), color-mix(in srgb, var(--md-default-bg-color) 55%, transparent);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border-top: 1px solid var(--lb-glass-edge);
+  color: var(--lb-ink);
+}
+[data-wiki-look="lebendig"] .md-footer__link { color: var(--lb-ink); }
+[data-wiki-look="lebendig"] .md-footer__direction { color: var(--lb-ink2); opacity: 1; }
+[data-wiki-look="lebendig"] .md-footer-meta {
+  background: transparent;
+  border-top: 1px solid var(--lb-line);
+  color: var(--lb-ink2);
+}
+[data-wiki-look="lebendig"] .md-footer-meta a { color: var(--lb-ink); }
 
 /* Schmal: Lesefläche mit Luft zum Rand, kleinere Rundung. */
 @media screen and (max-width: 59.984em) {
   [data-wiki-look="lebendig"] .md-content { margin: 0 .4rem 1.2rem; border-radius: 18px; }
   [data-wiki-look="lebendig"] .md-main__inner { margin-top: .6rem; }
+}
+
+/* Breit: Lesefläche hält immer Abstand zum Rand, auch auf Seiten ohne
+ * Seitenleisten (Tour, Roadmap). */
+@media screen and (min-width: 60em) {
+  [data-wiki-look="lebendig"] .md-content { margin-inline: .6rem; }
+}
+
+/* Seitenleisten: Text stößt im Ruhezustand nicht an die runden Kanten. Das
+ * Inhaltsverzeichnis blendet beim Scrollen oben und unten weich aus; die
+ * Maske liegt am Scrollbereich, das Glas am inneren Block. */
+@media screen and (min-width: 76.25em) {
+  [data-wiki-look="lebendig"] .md-sidebar--primary .md-sidebar__scrollwrap { padding-block: .5rem; }
+}
+@media screen and (min-width: 60em) {
+  [data-wiki-look="lebendig"] .md-sidebar--secondary .md-sidebar__scrollwrap {
+    -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 18px), transparent 100%);
+  }
+}
+
+/* Dunkel: Glas nur leicht sättigen, sonst färbt die Atmosphäre die Leisten
+ * königsblau („gedämpft“, kein Neon-Dunkel). */
+[data-wiki-look="lebendig"] body[data-md-color-scheme="slate"] :is(.md-header, .md-footer, .md-sidebar--primary .md-sidebar__scrollwrap, .md-sidebar--secondary .md-sidebar__inner) {
+  backdrop-filter: blur(14px) saturate(112%);
+  -webkit-backdrop-filter: blur(14px) saturate(112%);
 }
 
 /* Linse unter dem aktiven Eintrag; gleitet beim Seitenwechsel (wiki-lebendig.js). */
@@ -262,7 +308,8 @@
 .wiki-lens-geist {
   position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none; border-radius: 12px;
   background: var(--lb-lens); box-shadow: var(--lb-lens-shadow);
-  transition: transform .6s var(--lb-spring), width .6s var(--lb-spring), height .6s var(--lb-spring);
+  /* Etwas ruhiger als die Feder der Bühne, damit das Gleiten sichtbar bleibt. */
+  transition: transform .75s cubic-bezier(.22, 1.12, .36, 1), width .75s cubic-bezier(.22, 1.12, .36, 1), height .75s cubic-bezier(.22, 1.12, .36, 1);
 }
 
 /* ----------------------------------------------------------- Pop-up ---- */

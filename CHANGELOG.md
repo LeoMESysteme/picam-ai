@@ -5,6 +5,24 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-14: Wiki „lebendig“, Stufe 4 und Abschlussprüfung. Diagramme
+  (`wiki-chart.js`) wachsen beim Sichtbarwerden, heben den gewählten Balken
+  hervor und zeigen den Wert als Glaspille; die Kette (`wiki-kette.js`) hat
+  Glasknoten mit wanderndem Puls. Tour, Roadmap, Fortschritt und
+  Session-Explorer haben je eine Glas-Schicht in ihrer CSS-Datei. Behobene
+  Altfehler, die beide Darstellungen betreffen: Diagrammachsen zeigten
+  krumme Marken wie „33,333“ (jetzt runde Schritte, überlappende
+  Beschriftungen entfallen); Kategorien wurden mit der Schrift der zuletzt
+  angelegten Messung vermessen und liefen in den Balken (gemeinsamer Canvas,
+  Schrift wird jetzt je Messung gesetzt); Tour-Bedienknöpfe waren
+  Unicode-Zeichen (jetzt Linien-SVG). `scripts/codebase-facts.py` zählt
+  Funktionen nur noch in Code und Tests, nicht in Python-Kopien unter
+  `docs/`. Abschlussprüfung des Looks: Inhaltsverzeichnis-Glas endet nach dem
+  letzten Eintrag, dunkles Glas gedämpft, Lesefläche hält auch ohne
+  Seitenleisten Randabstand, Linse gleitet sichtbar. Konsequenz: DESIGN.md
+  und PRODUCT.md beschreiben beide Darstellungen; der Suchdialog bleibt als
+  Shadow-DOM-Komponente des Themes unverändert.
+
 * 2026-11-13: Wiki: Codebase-Seite und zweite Darstellung „lebendig“.
   Problem: Eine Codebase-Übersicht (Glass-Artefakt) lag nur als eingefrorener
   Schnappschuss mit englischen Texten und fest eingetragenen Zahlen vor; das

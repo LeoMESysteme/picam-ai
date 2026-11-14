@@ -249,3 +249,110 @@
 .roadmap-portal-frame, .roadmap-depth-boundary, .roadmap-edge-particles { will-change: opacity; }
 .roadmap[data-roadmap-view="entering"] .roadmap-node,
 .roadmap[data-roadmap-view="leaving"] .roadmap-node { will-change: opacity; }
+
+/* ================================= Lebendige Darstellung (wiki-look) ==== */
+/* Nur unter html[data-wiki-look="lebendig"]; „ruhig“ bleibt wie oben.
+ * Die Karte liegt als ruhige Schale in der Lesefläche, Meilenstein- und
+ * Schrittkarten sind Glasscheiben darauf, Linien in --lb-line. Was über der
+ * Karte schwebt (Navigation, Übersicht) und was man bedient (Suche,
+ * Ansichtswahl), ist echtes Glas mit Unschärfe. Statusfarben bleiben.
+ * Die rechte Leiste bleibt ausgeblendet, das Raster bleibt weit. */
+[data-wiki-look="lebendig"] .roadmap-page {
+  --roadmap-surface: #f8faff;
+  --roadmap-stage: var(--lb-ground);
+  --roadmap-dot: color-mix(in srgb, var(--lb-ink2) 22%, transparent);
+  --roadmap-line: color-mix(in srgb, var(--lb-line), var(--lb-ink2) 28%);
+  --roadmap-edge: var(--lb-line);
+  --roadmap-ink: var(--lb-ink);
+  --roadmap-muted: var(--lb-ink2);
+  --roadmap-link: var(--md-typeset-a-color);
+  --roadmap-faint: color-mix(in srgb, var(--lb-ink) 6%, transparent);
+}
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"].roadmap-page {
+  --roadmap-surface: #161d36;
+}
+
+[data-wiki-look="lebendig"] .roadmap-viewport {
+  border-radius: 20px;
+  box-shadow: inset 0 1px 3px rgb(40 60 150 / .1);
+}
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .roadmap-viewport {
+  box-shadow: inset 0 1px 3px rgb(0 0 12 / .45);
+}
+[data-wiki-look="lebendig"] .roadmap-viewport:fullscreen,
+[data-wiki-look="lebendig"] .roadmap-viewport--expanded { border-radius: 0; }
+
+/* Karten: Glasscheibe mit Innenlicht und weicher Tiefe; keine Unschärfe,
+ * weil darunter nur die ruhige Schale liegt und die Welt gezoomt wird. */
+[data-wiki-look="lebendig"] .roadmap-node,
+[data-wiki-look="lebendig"] .roadmap-step {
+  background: var(--lb-glass), var(--roadmap-surface);
+  border-color: var(--lb-glass-edge);
+  border-radius: 18px;
+  box-shadow: var(--lb-glass-light), 0 18px 34px -24px rgb(40 60 150 / .5), 0 2px 6px -3px rgb(40 60 150 / .16);
+}
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] :is(.roadmap-node, .roadmap-step) {
+  box-shadow: var(--lb-glass-light), 0 18px 34px -22px rgb(0 0 12 / .8), 0 2px 6px -3px rgb(0 0 12 / .5);
+}
+[data-wiki-look="lebendig"] .roadmap-node--optional { border-color: var(--roadmap-line); }
+[data-wiki-look="lebendig"] .roadmap-node:hover,
+[data-wiki-look="lebendig"] .roadmap-step:hover {
+  border-color: var(--roadmap-node-color);
+  box-shadow: var(--lb-glass-light), 0 22px 40px -22px color-mix(in srgb, var(--roadmap-node-color) 60%, transparent), 0 2px 6px -3px rgb(40 60 150 / .16);
+}
+[data-wiki-look="lebendig"] .roadmap[data-roadmap-view="entering"] .roadmap-node,
+[data-wiki-look="lebendig"] .roadmap[data-roadmap-view="leaving"] .roadmap-node { box-shadow: none; }
+[data-wiki-look="lebendig"] :is(.roadmap-enter, .roadmap-node-content) { border-radius: 18px; }
+[data-wiki-look="lebendig"] .roadmap-number { border-radius: 11px; }
+[data-wiki-look="lebendig"] .roadmap-connections path { stroke-width: 2; stroke-linecap: round; }
+
+/* Bedienung über der Karte: Glas mit Unschärfe, Linse für gewählte Ansicht. */
+[data-wiki-look="lebendig"] .roadmap-navigation,
+[data-wiki-look="lebendig"] .roadmap-minimap {
+  background: var(--lb-glass), color-mix(in srgb, var(--roadmap-surface) 55%, transparent);
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  border-color: var(--lb-glass-edge);
+  box-shadow: var(--lb-glass-light), var(--lb-drop);
+}
+[data-wiki-look="lebendig"] .roadmap-navigation { border-radius: 22px; padding: 5px; gap: 2px; }
+[data-wiki-look="lebendig"] .roadmap-minimap { border-radius: 16px; }
+[data-wiki-look="lebendig"] .roadmap-control { border-radius: 50%; }
+[data-wiki-look="lebendig"] .roadmap-control:hover { background: color-mix(in srgb, var(--lb-ink) 7%, transparent); }
+[data-wiki-look="lebendig"] .roadmap-control[aria-pressed="true"] {
+  color: var(--lb-ink);
+  background: var(--lb-lens);
+  border-color: var(--lb-glass-edge);
+  box-shadow: var(--lb-lens-shadow);
+}
+[data-wiki-look="lebendig"] .roadmap-views {
+  padding: 3px;
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 22px;
+  background: var(--lb-glass), color-mix(in srgb, var(--lb-ground) 55%, transparent);
+  box-shadow: var(--lb-glass-light);
+}
+[data-wiki-look="lebendig"] .roadmap-search-wrap {
+  border-color: color-mix(in srgb, var(--lb-ink2) 50%, transparent);
+  border-radius: 20px;
+  padding: 7px 14px;
+  background: var(--md-default-bg-color);
+  box-shadow: inset 0 1px 2px rgb(40 60 150 / .1);
+}
+[data-wiki-look="lebendig"] .roadmap-search { caret-color: var(--md-accent-fg-color); }
+[data-wiki-look="lebendig"] .roadmap :focus-visible,
+[data-wiki-look="lebendig"] .roadmap-search-wrap:focus-within { outline-color: var(--md-accent-fg-color); }
+[data-wiki-look="lebendig"] .roadmap ::selection { background: #2f6df6; color: #fff; }
+
+/* Schmal: Phasenkontext liegt über der Karte, also ebenfalls Glas. */
+@media (max-width: 959px) {
+  [data-wiki-look="lebendig"] .md-typeset details.roadmap-phase-context {
+    padding: 4px 10px 6px 4px;
+    border: 1px solid var(--lb-glass-edge);
+    border-radius: 16px;
+    background: var(--lb-glass), color-mix(in srgb, var(--roadmap-surface) 82%, transparent);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    box-shadow: var(--lb-glass-light), var(--lb-drop);
+  }
+}

@@ -254,3 +254,135 @@ body:has(#session-dashboard) .md-content__inner > :is(p, ul, ol) { max-width: 40
   .md-typeset .session-matrix .session-detail-row > td { display: block; }
   .session-viewer iframe { min-height: 600px; }
 }
+
+/* ================================= Lebendige Darstellung (wiki-look) ==== */
+/* Nur unter html[data-wiki-look="lebendig"]; „ruhig“ bleibt wie oben.
+ * session-page sitzt wie data-wiki-look am <html>. Glas bekommt, was man
+ * bedient (Schalter, Knöpfe, Filter) oder was schwebt (Wertanzeige); Zahlen,
+ * Diagramme und Tabelle bleiben ruhig lesbar. Der eingebettete
+ * Records-Explorer behält seine eigene Darstellung. */
+[data-wiki-look="lebendig"].session-page .md-content :is(.session-controls, .session-field) :is(select, input) {
+  border-color: color-mix(in srgb, var(--lb-ink2) 70%, transparent);
+  border-radius: 12px;
+  padding: .4rem .65rem;
+  background: var(--md-default-bg-color);
+  box-shadow: inset 0 1px 2px rgb(40 60 150 / .1);
+}
+[data-wiki-look="lebendig"].session-page .md-content button {
+  border-color: var(--lb-glass-edge);
+  border-radius: 999px;
+  padding: .3rem .8rem;
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+  color: var(--lb-ink);
+  transition: box-shadow .2s, color .2s;
+}
+[data-wiki-look="lebendig"].session-page .md-content button:hover:not(:disabled) { border-color: var(--lb-glass-edge); color: var(--md-typeset-a-color); }
+[data-wiki-look="lebendig"].session-page .md-content button:disabled {
+  border-color: color-mix(in srgb, var(--lb-ink2) 40%, transparent);
+  background: none;
+  box-shadow: none;
+  color: var(--lb-ink2);
+}
+/* Verweisknöpfe bleiben Text. */
+[data-wiki-look="lebendig"].session-page .md-content :is(button.session-runlink, button.session-textbutton) {
+  border: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--md-typeset-a-color);
+}
+[data-wiki-look="lebendig"].session-page .md-content button.session-textbutton { padding: .1rem 0; }
+[data-wiki-look="lebendig"].session-page .md-content :focus-visible { outline-color: var(--md-accent-fg-color); }
+[data-wiki-look="lebendig"].session-page .md-content ::selection { background: #2f6df6; color: #fff; }
+
+/* Diagrammwahl: Glasband, Linse unter dem gewählten Diagramm. */
+[data-wiki-look="lebendig"] .session-switch {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 22px;
+  background: var(--lb-glass), color-mix(in srgb, var(--lb-ground) 55%, transparent);
+  box-shadow: var(--lb-glass-light), var(--lb-drop);
+}
+[data-wiki-look="lebendig"].session-page .md-content .session-switch button {
+  min-height: 2.1rem;
+  border-color: transparent;
+  border-radius: 18px;
+  padding: .25rem .9rem;
+  background: none;
+  box-shadow: none;
+  color: var(--lb-ink2);
+}
+[data-wiki-look="lebendig"].session-page .md-content .session-switch button:hover { color: var(--lb-ink); }
+[data-wiki-look="lebendig"].session-page .md-content .session-switch button[aria-selected="true"] {
+  border-color: var(--lb-glass-edge);
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+  color: var(--lb-ink);
+}
+
+/* Lagebild und Kennzahlen: Linien in der Glasfarbe. */
+[data-wiki-look="lebendig"] .md-typeset .session-verdict { border-color: var(--lb-line); }
+[data-wiki-look="lebendig"] .md-typeset .session-brief-col + .session-brief-col,
+[data-wiki-look="lebendig"] .session-metrics > div,
+[data-wiki-look="lebendig"] .md-typeset ul.session-notable > li,
+[data-wiki-look="lebendig"] .md-typeset .session-file { border-color: var(--lb-line); }
+[data-wiki-look="lebendig"] .session-strip { border-radius: 4px; }
+[data-wiki-look="lebendig"] .session-key { border-color: var(--lb-line); border-radius: 999px; padding: .1rem .55rem; }
+[data-wiki-look="lebendig"] .session-key--baseline { border-color: color-mix(in srgb, var(--lb-ink2) 40%, transparent); }
+
+/* Schwebender Wert über dem Diagramm: Glas wie das Pop-up. */
+[data-wiki-look="lebendig"] .session-tip {
+  background: linear-gradient(180deg, rgb(255 255 255 / .94), rgb(255 255 255 / .82));
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid #fff;
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 #fff, 0 18px 40px -18px rgb(40 60 150 / .55), 0 2px 6px rgb(40 60 150 / .12);
+  color: var(--lb-ink);
+}
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .session-tip {
+  background: linear-gradient(180deg, rgb(24 31 58 / .95), rgb(17 23 44 / .9));
+  border-color: rgb(255 255 255 / .14);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .12), 0 18px 40px -18px rgb(0 0 0 / .8);
+}
+
+/* Laufmatrix: Kopf als flaches Glasband mit runden Enden (einfarbig, damit
+ * keine Zellfugen im Verlauf sichtbar werden). */
+[data-wiki-look="lebendig"] .md-typeset table.session-matrix { border-collapse: separate; border-spacing: 0; }
+[data-wiki-look="lebendig"] .md-typeset .session-matrix thead th {
+  padding-top: .45rem;
+  padding-bottom: .45rem;
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--lb-ground) 80%, transparent);
+  box-shadow: inset 0 1px 0 var(--lb-glass-edge), inset 0 -1px 0 var(--lb-line);
+  color: var(--lb-ink2);
+  vertical-align: middle;
+}
+[data-wiki-look="lebendig"] .md-typeset .session-matrix thead th:first-child { border-radius: 12px 0 0 12px; }
+[data-wiki-look="lebendig"] .md-typeset .session-matrix thead th:last-child { border-radius: 0 12px 12px 0; }
+[data-wiki-look="lebendig"] .md-typeset .session-matrix tbody :is(th, td) { border-top-color: var(--lb-line); }
+[data-wiki-look="lebendig"] .md-typeset .session-matrix tbody tr:first-child > * { padding-top: .7rem; }
+[data-wiki-look="lebendig"] .md-typeset .session-detail-row > td {
+  background: color-mix(in srgb, var(--lb-ground) 65%, transparent);
+  border-radius: 0 0 14px 14px;
+}
+
+/* Einzelansicht: Rahmen in der Glas-Sprache, Inhalt (Records-Explorer) unverändert. */
+[data-wiki-look="lebendig"] .session-viewer iframe {
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 18px;
+  box-shadow: var(--lb-glass-light), var(--lb-drop);
+}
+
+@media (max-width: 700px) {
+  [data-wiki-look="lebendig"] .session-matrix tr.session-row { border-top-color: var(--lb-line); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-wiki-look="lebendig"].session-page .md-content button { transition: none; }
+}

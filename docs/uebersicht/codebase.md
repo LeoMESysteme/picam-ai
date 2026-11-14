@@ -21,11 +21,11 @@ in der ruhigen Darstellung bleiben die Tabellen die Quelle.
 <div id="codebase-stage" class="wiki-codebase-stage"></div>
 
 <!-- CODEBASE-FACTS:BEGIN -->
-Stand: Commit `0708cee` auf `feat/integration`, erzeugt am 13.11.2026.
+Stand: Commit `623853d` auf `feat/integration`, erzeugt am 14.11.2026.
 
 ## Wachstum {#wachstum}
 
-Der Bestand wuchs von 2.322 Zeilen am 07.09.2026 auf 208.725 Zeilen in 724 Dateien; davon sind 65.531 Code (Kern, Werkbank, Brücke, Skripte), 66.599 Tests und 75.780 Doku. Daten- und Fremddateien zählen nicht mit.
+Der Bestand wuchs von 2.322 Zeilen am 07.09.2026 auf 215.493 Zeilen in 794 Dateien; davon sind 65.870 Code (Kern, Werkbank, Brücke, Skripte), 67.477 Tests und 81.326 Doku. Daten- und Fremddateien zählen nicht mit.
 
 <div class="wiki-chart" data-chart="bar" data-title="Zeilen am Ende jeder Kalenderwoche" data-unit="Zeilen" markdown="1">
 
@@ -39,14 +39,14 @@ Der Bestand wuchs von 2.322 Zeilen am 07.09.2026 auf 208.725 Zeilen in 724 Datei
 | KW 42 (ab 12.10.) | 92.428 |
 | KW 43 (ab 19.10.) | 108.554 |
 | KW 44 (ab 26.10.) | 133.531 |
-| KW 45 (ab 02.11.) | 188.308 |
-| KW 46 (ab 09.11.) | 208.725 |
+| KW 45 (ab 02.11.) | 163.187 |
+| KW 46 (ab 09.11.) | 215.493 |
 
 </div>
 
 ## Branches {#branches}
 
-Neben `master` und dem Fokus `feat/integration` gibt es 41 Refs: 9 still, 6 offen und 26 gemergt. Insgesamt enthält die Historie 645 Commits und 42 Merges.
+Neben `master` und dem Fokus `feat/integration` gibt es 43 Refs: 9 still, 7 offen und 27 gemergt. Insgesamt enthält die Historie 669 Commits und 47 Merges.
 
 | Branch | Zustand | Commits (nicht im Fokus) | letzter Commit |
 | --- | --- | --- | --- |
@@ -55,22 +55,23 @@ Neben `master` und dem Fokus `feat/integration` gibt es 41 Refs: 9 still, 6 offe
 | `docs/oq22-rp2040-wedge` | still | 3 | 24.09.2026 |
 | `docs/zensical-prototyp` | still | 1 | 24.09.2026 |
 | `codex/MEM-6-c2-scripts-pi-housekeeping-py-bericht-und-freigegebenes-aufr-umen` | still | 1 | 14.10.2026 |
-| `wip/haupt-checkout-2026-10-21` | still | 1 | 21.10.2026 |
 | `exp/r13-fenster-tracker` | still | 1 | 22.10.2026 |
+| `wip/haupt-checkout-2026-10-21` | still | 1 | 21.10.2026 |
 | `feat/messpfad-live` | still | 1 | 22.10.2026 |
 | `worktree-feat-messpfad-live` | still | 1 | 22.10.2026 |
+| `feat/installer-p0` | offen | 2 | 14.11.2026 |
+| `feat/wiki-lebendig` | offen | 1 | 14.11.2026 |
+| `wip/bruecke-ux3` | offen | 5 | 14.11.2026 |
 | `docs/workbench-critical-2026-11-11` | offen | 2 | 11.11.2026 |
 | `feat/gsvmulti-bridge` | offen | 1 | 11.11.2026 |
-| `feat/wiki-lebendig` | offen | 6 | 12.11.2026 |
-| `fix/wiki-export-master` | offen | 7 | 11.11.2026 |
-| `wip/bruecke-ux3` | offen | 1 | 11.11.2026 |
+| `fix/wiki-export-master` | offen | 2 | 11.11.2026 |
 | `fix/session-explorer-test-wackelt` | offen | 1 | 04.11.2026 |
 | `exp/r13-randpruefung-grob` | gemergt | 0 | 22.10.2026 |
 | `codex/session-explorer` | gemergt | 0 | 28.10.2026 |
 | `docs/gsvmulti-userdefined` | gemergt | 0 | 28.10.2026 |
+| `feat/r13-display-haertung` | gemergt | 0 | 30.10.2026 |
 | `feat/session-explorer` | gemergt | 0 | 30.10.2026 |
 | `fix/hinweis-test-ohne-scroll` | gemergt | 0 | 30.10.2026 |
-| `feat/r13-display-haertung` | gemergt | 0 | 30.10.2026 |
 | `fix/r13-24-aehnlichkeit-kleiner-versatz` | gemergt | 0 | 30.10.2026 |
 | `merge/r13-nach-master` | gemergt | 0 | 30.10.2026 |
 | `fix/kamera-neustart-protokoll` | gemergt | 0 | 31.10.2026 |
@@ -83,18 +84,19 @@ Neben `master` und dem Fokus `feat/integration` gibt es 41 Refs: 9 still, 6 offe
 | `feat/bruecke-merge` | gemergt | 0 | 11.11.2026 |
 | `feat/bruecke-takt` | gemergt | 0 | 11.11.2026 |
 | `feat/bruecke-ux` | gemergt | 0 | 11.11.2026 |
+| `fix/blocker-oq69` | gemergt | 0 | 12.11.2026 |
 | `fix/blocker-oq70` | gemergt | 0 | 12.11.2026 |
 | `fix/blocker-oq71` | gemergt | 0 | 12.11.2026 |
+| `fix/blocker-oq72` | gemergt | 0 | 12.11.2026 |
 | `fix/blocker-oq74` | gemergt | 0 | 12.11.2026 |
 | `tmp/bruecke-merge` | gemergt | 0 | 11.11.2026 |
 | `feat/bruecke-ui` | gemergt | 0 | 12.11.2026 |
-| `fix/blocker-oq69` | gemergt | 0 | 12.11.2026 |
-| `fix/blocker-oq72` | gemergt | 0 | 12.11.2026 |
+| `fix/kleine-backend` | gemergt | 0 | 13.11.2026 |
 | `fix/rahmen-raster` | gemergt | 0 | 13.11.2026 |
 
 ## Rhythmus {#rhythmus}
 
-Freitag ist mit 205 von 645 Commits (32 %) der stärkste Tag, die Spitzenstunde liegt bei 14 Uhr (91 Commits). An 38 von 68 Tagen gab es Commits (Zeiten in Berlin).
+Freitag ist mit 222 von 669 Commits (33 %) der stärkste Tag, die Spitzenstunde liegt bei 14 Uhr (91 Commits). An 39 von 69 Tagen gab es Commits (Zeiten in Berlin).
 
 <div class="wiki-chart" data-chart="bar" data-title="Commits je Wochentag" data-unit="Commits" markdown="1">
 
@@ -102,52 +104,52 @@ Freitag ist mit 205 von 645 Commits (32 %) der stärkste Tag, die Spitzenstunde 
 | --- | --- | --- |
 | Montag | 77 | 12 % |
 | Dienstag | 67 | 10 % |
-| Mittwoch | 189 | 29 % |
+| Mittwoch | 189 | 28 % |
 | Donnerstag | 93 | 14 % |
-| Freitag | 205 | 32 % |
-| Samstag | 9 | 1 % |
+| Freitag | 222 | 33 % |
+| Samstag | 16 | 2 % |
 | Sonntag | 5 | 1 % |
 
 </div>
 
 ## Struktur {#struktur}
 
-Die 724 Dateien verteilen sich auf sieben Bereiche; am größten ist „Doku“ mit 75.780 Zeilen. Auf Tests kommen 1,02 Zeilen je Codezeile.
+Die 794 Dateien verteilen sich auf sieben Bereiche; am größten ist „Doku“ mit 81.326 Zeilen. Auf Tests kommen 1,02 Zeilen je Codezeile.
 
 <div class="wiki-chart" data-chart="bar" data-title="Zeilen je Bereich" data-unit="Zeilen" markdown="1">
 
 | Bereich | Zeilen | Dateien | größte Datei (Zeilen) |
 | --- | --- | --- | --- |
-| Kern | 13.316 | 64 | `src/dispread/benchmark.py` (954) |
-| Werkbank & Live | 23.226 | 79 | `src/dispread/live/frame_tracking.py` (1.720) |
-| Windows-Brücke | 13.288 | 53 | `windows/bridge/src/dispread_bridge_app/app_controller.py` (1.278) |
-| Skripte | 15.701 | 54 | `scripts/sync-record.py` (1.619) |
-| Tests | 66.599 | 178 | `tests/test_live_service.py` (3.605) |
-| Doku | 75.780 | 175 | `docs/VALIDATION.md` (6.702) |
-| Infrastruktur | 815 | 20 | `zensical.toml` (183) |
+| Kern | 13.342 | 64 | `src/dispread/benchmark.py` (954) |
+| Werkbank & Live | 23.288 | 79 | `src/dispread/live/frame_tracking.py` (1.720) |
+| Windows-Brücke | 13.482 | 53 | `windows/bridge/src/dispread_bridge_app/app_controller.py` (1.354) |
+| Skripte | 15.758 | 54 | `scripts/sync-record.py` (1.619) |
+| Tests | 67.477 | 181 | `tests/test_live_service.py` (3.628) |
+| Doku | 81.326 | 205 | `docs/VALIDATION.md` (6.764) |
+| Infrastruktur | 820 | 20 | `zensical.toml` (183) |
 
 </div>
 
 ## Komplexität {#komplexitaet}
 
-Von 2.348 Python-Funktionen außerhalb der Tests haben 279 (11,9 %) eine Komplexität über 10 und 26 über 40. Die komplexeste ist Controller.command mit 91.
+Von 2.359 Python-Funktionen außerhalb der Tests haben 281 (11,9 %) eine Komplexität über 10 und 26 über 40. Die komplexeste ist `Controller.command` mit 91.
 
 <div class="wiki-chart" data-chart="bar" data-title="Die zwölf komplexesten Funktionen" data-unit="Komplexität" markdown="1">
 
 | Funktion | Komplexität | Ort | Zeilen |
 | --- | --- | --- | --- |
-| Controller.command | 91 | `src/dispread/workbench/controller.py:480` | 319 |
-| BridgeSession.exchange | 78 | `src/dispread/gsv_bridge.py:129` | 181 |
-| chips | 76 | `windows/bridge/src/dispread_bridge_app/ui/texts.py:507` | 149 |
-| _auto_fit | 72 | `src/dispread/dotlattice.py:532` | 196 |
-| LiveSession.step | 68 | `src/dispread/live/session.py:501` | 146 |
-| run | 67 | `scripts/import-harvest.py:385` | 376 |
-| validate | 63 | `src/dispread/workbench/profiles.py:67` | 98 |
-| compare | 61 | `scripts/r13-coarse-eval.py:106` | 82 |
-| FrameTrackingConfig.__post_init__ | 56 | `src/dispread/live/frame_tracking.py:338` | 46 |
-| evaluate_records | 54 | `src/dispread/live/reference_eval.py:41` | 112 |
-| LiveService.status | 52 | `src/dispread/live/service.py:267` | 131 |
-| AppController._load_state | 52 | `windows/bridge/src/dispread_bridge_app/app_controller.py:357` | 66 |
+| `Controller.command` | 91 | `src/dispread/workbench/controller.py:480` | 319 |
+| `BridgeSession.exchange` | 79 | `src/dispread/gsv_bridge.py:132` | 183 |
+| `chips` | 76 | `windows/bridge/src/dispread_bridge_app/ui/texts.py:507` | 149 |
+| `_auto_fit` | 75 | `src/dispread/dotlattice.py:545` | 202 |
+| `LiveSession.step` | 69 | `src/dispread/live/session.py:504` | 150 |
+| `run` | 67 | `scripts/import-harvest.py:385` | 376 |
+| `validate` | 63 | `src/dispread/workbench/profiles.py:67` | 98 |
+| `compare` | 61 | `scripts/r13-coarse-eval.py:106` | 82 |
+| `FrameTrackingConfig.__post_init__` | 56 | `src/dispread/live/frame_tracking.py:338` | 46 |
+| `evaluate_records` | 54 | `src/dispread/live/reference_eval.py:41` | 112 |
+| `LiveService.status` | 52 | `src/dispread/live/service.py:268` | 132 |
+| `AppController._load_state` | 52 | `windows/bridge/src/dispread_bridge_app/app_controller.py:390` | 66 |
 
 </div>
 
@@ -160,7 +162,7 @@ Die Suche findet 8 ungenutzte Definitionen (43 Zeilen), 0 verwaiste Skripte, 9 s
 | Ungenutzte Definitionen | 8 | Top-Level-Funktionen und -Klassen (per ast, ohne Decorator, ohne test_*, main und dunder) in Kern, Werkbank, Brücke und Skripten, deren Name im gesamten getrackten Repo-Text nur an der Definition vorkommt. |
 | Verwaiste Skripte | 0 | Dateien direkt unter scripts/, deren Dateiname (bei Python-Modulen auch der Modulname) in keiner anderen getrackten Textdatei vorkommt. |
 | Stille Branches | 9 | Lokale und Remote-Refs außer Haupt- und Fokus-Branch. still: Commits, die nicht im Fokus-Branch sind, und seit mindestens 14 Tagen kein neuer Commit (gemessen am Commit-Datum der Fokus-Spitze); offen: dasselbe, aber jünger; gemergt: Ref liegt vollständig im Fokus-Branch. |
-| Gemergte Refs | 26 | Lokale und Remote-Refs außer Haupt- und Fokus-Branch. still: Commits, die nicht im Fokus-Branch sind, und seit mindestens 14 Tagen kein neuer Commit (gemessen am Commit-Datum der Fokus-Spitze); offen: dasselbe, aber jünger; gemergt: Ref liegt vollständig im Fokus-Branch. |
+| Gemergte Refs | 27 | Lokale und Remote-Refs außer Haupt- und Fokus-Branch. still: Commits, die nicht im Fokus-Branch sind, und seit mindestens 14 Tagen kein neuer Commit (gemessen am Commit-Datum der Fokus-Spitze); offen: dasselbe, aber jünger; gemergt: Ref liegt vollständig im Fokus-Branch. |
 | Riesen (> 800 Zeilen) | 15 | Quelldateien (py, js, mjs, ts, css) in Kern, Werkbank, Brücke und Skripten mit mehr als 800 Zeilen. |
 | TODO-Marker | 5 | Vorkommen der Marker TODO, FIXME und XXX in den Quelldateien dieser vier Bereiche. |
 

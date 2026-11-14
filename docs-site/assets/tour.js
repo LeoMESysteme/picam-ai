@@ -1326,6 +1326,27 @@
 
   // Was Tour und Abbildung gemeinsam haben: Links von der Bühne in die Doku.
   // Erwartet this.ui als Container für den unsichtbaren Hilfslink.
+  // Bedien-Symbole als Linien-SVG (1.8 px, runde Enden, currentColor) statt
+  // Unicode-Zeichen; Name und Zustand trägt aria-label.
+  const CONTROL_ICONS = {
+    zurueck: "M15 5l-7 7 7 7",
+    weiter: "M9 5l7 7-7 7",
+    abspielen: "M8 5.5v13l10.5-6.5z",
+    pause: "M9 5.5v13M15 5.5v13",
+    wiederholen: "M4 4v5h5M4.6 9A8 8 0 1 1 4 13",
+    vollbild: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
+  };
+  function controlIcon(name) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    for (const [key, value] of Object.entries({ viewBox: "0 0 24 24", width: "1em", height: "1em", fill: "none",
+      stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round",
+      "aria-hidden": "true", class: "tour-icon" })) svg.setAttribute(key, value);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", CONTROL_ICONS[name]);
+    svg.append(path);
+    return svg;
+  }
+
   class StageHost {
     // Macht einen Bühnenteil zum Link auf eine Doku-Seite (Pfad ab der
     // Wurzel der Seite). `mark` setzt ein "↗" an diese Stelle.
@@ -1440,13 +1461,13 @@
 
       const bar = make("div", "tour-bar");
       const controls = make("div", "tour-controls");
-      this.prevButton = this.controlButton("‹", "Zurück", () => this.step(-1));
+      this.prevButton = this.controlButton("zurueck", "Zurück", () => this.step(-1));
       this.playButton = this.controlButton("", "", () => this.togglePlay());
-      this.nextButton = this.controlButton("›", "Weiter", () => this.step(1));
-      this.replayButton = this.controlButton("↺", "Schritt wiederholen", () => this.go(this.ci, this.si, false));
+      this.nextButton = this.controlButton("weiter", "Weiter", () => this.step(1));
+      this.replayButton = this.controlButton("wiederholen", "Schritt wiederholen", () => this.go(this.ci, this.si, false));
       controls.append(this.prevButton, this.playButton, this.nextButton, this.replayButton);
       if (document.fullscreenEnabled) {
-        this.fullButton = this.controlButton("⛶", "Vollbild", () => this.toggleFullscreen());
+        this.fullButton = this.controlButton("vollbild", "Vollbild", () => this.toggleFullscreen());
         controls.append(this.fullButton);
       }
       this.dots = make("div", "tour-dots");
@@ -1475,8 +1496,9 @@
       this.updatePlayButton();
     }
 
-    controlButton(text, title, handler) {
-      const button = make("button", "tour-control", text);
+    controlButton(icon, title, handler) {
+      const button = make("button", "tour-control");
+      if (icon) button.append(controlIcon(icon));
       button.type = "button";
       if (title) {
         button.title = title;
@@ -1705,7 +1727,7 @@
 
     updatePlayButton() {
       const label = this.playing ? "Automatisch weiter: an" : "Automatisch weiter: aus";
-      this.playButton.textContent = this.playing ? "❚❚" : "▶";
+      this.playButton.replaceChildren(controlIcon(this.playing ? "pause" : "abspielen"));
       this.playButton.title = label;
       this.playButton.setAttribute("aria-label", label);
       this.playButton.setAttribute("aria-pressed", String(this.playing));
@@ -1792,7 +1814,8 @@
       [this.stage, this.svg] = buildStage(title);
       this.stage.dataset.scene = API.scenes[this.id] || SCENES[this.id] ? this.id : "fehlt";
       const bar = make("div", "tour-figure-bar");
-      const replay = make("button", "tour-control tour-figure-replay", "↺ Nochmal");
+      const replay = make("button", "tour-control tour-figure-replay");
+      replay.append(controlIcon("wiederholen"), " Nochmal");
       replay.type = "button";
       replay.title = "Abbildung nochmal abspielen";
       replay.addEventListener("click", () => this.play());
