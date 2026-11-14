@@ -89,6 +89,22 @@ const hint = fields({
   kind: choice('anzeige_bewegt', 'rahmen_verdeckt', 'unbekannt'), since_s: nonnegative,
   shift_px: nullable(number), rotation_deg: nullable(number), region_shift_px: nullable(number),
 });
+// TC 2026-11-11: Rahmenbereich dauerhaft unstimmig (reine Diagnose).
+const regionHint = fields({
+  regions: array(fields({ number: positive, index: integer, centre: point, share: number,
+                          median_px: number, frames: integer })),
+  rest_median_px: number, frames: integer, limit_px: number,
+});
+// TB 2026-11-11: automatisch stillgelegte Rahmenbereiche, in Reihenfolge der Stilllegung.
+const regionDeactivated = fields({
+  number: positive, index: integer, centre: point, share: number, median_px: number,
+  frame_sequence: integer, rest_median_px: number,
+});
+const previousRegionHint = fields({
+  session_id: nullable(string), run: nullable(string),
+  quad: nullable(array(point)),
+  regions: array(fields({ number: positive, centre: point, max_share: number, flagged_evaluations: integer })),
+});
 const causes = fields({
   window_s: number, frames: integer, limited: boolean,
   causes: array(fields({ reason: string, count: integer, fraction: number })),
@@ -116,6 +132,8 @@ function run(v, p) {
     tracking: object, tracking_hint: nullable(hint), rejection_causes: causes,
   })(v, p);
   optional(v, 'output', object, p);
+  optional(v, 'region_hint', nullable(regionHint), p);
+  optional(v, 'region_deactivated', array(regionDeactivated), p);
 }
 function referenceEval(v, p) {
   fields({ state: choice('running', 'done', 'error') })(v, p);
@@ -139,6 +157,7 @@ const root = fields({
     latest: nullable(fields({ cell_text: string, raw: string, value: number, age_s: nonnegative })),
     schedule_step: nullable(fields({ index: integer, factor: number, since_s: nonnegative })),
   }), reference_eval: nullable(referenceEval),
+  previous_region_hint: nullable(previousRegionHint),
 });
 
 /** Throws TypeError with a field path if required status fields have a wrong shape. */

@@ -64,3 +64,12 @@ class ConfirmedRegionLocator:
             return ()
         self.last_reason = None
         return (DisplayCandidate(quad=result.quad, score=result.score, locator_id=self.locator_id, role_hint="main"),)
+
+    def component_extra(self) -> dict[str, str]:
+        """Additiv fuer component_versions: stillgelegte Bereiche (TB 2026-11-11).
+
+        Nummern 1-basiert wie in der Werkbank, aufsteigend, kommagetrennt. Leer,
+        solange alle Bereiche aktiv sind; dann bleiben die Records bytegleich.
+        """
+        disabled = sorted(getattr(self._tracker, "disabled", ()) or ())
+        return {"locator_regions_disabled": ",".join(str(index + 1) for index in disabled)} if disabled else {}

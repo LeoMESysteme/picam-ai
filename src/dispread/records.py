@@ -322,6 +322,8 @@ class InvalidValuePolicy(StrEnum):
 
     #: Datensatz gar nicht senden.
     OMIT_RECORD = "omit_record"
+    #: Explizite Fehlwertzeile mit Gueltigkeitskanal senden.
+    MARK_RECORD = "mark_record"
     #: NaN als Wert senden.
     SEND_NAN = "send_nan"
     #: Wert weglassen, aber ein Statusfeld mitsenden.
@@ -337,7 +339,7 @@ class TxReceipt:
     nicht mehr belegen, welche Zeit welche war.
     """
 
-    frame_sequence: int
+    frame_sequence: int | None
     tx_sequence: int
     format_id: str
     #: Beabsichtigte Telegrammbytes; bei Abbruch/Verwerfen ggf. nur teilweise

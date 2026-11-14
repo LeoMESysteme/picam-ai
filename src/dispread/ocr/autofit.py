@@ -18,7 +18,7 @@ Nachstimmen und Bewerten am selben Bild).
 Bewusst ohne Abhaengigkeit von `dispread.workbench.controller`: Task 5 laesst
 den Controller `fit_layout` importieren. Wuerde dieses Modul umgekehrt aus dem
 Controller importieren, entstuende ein Kreisimport. Deshalb reimplementiert
-`_crop_box` unten die dortige `crop_box`-Logik lokal, statt sie zu importieren.
+`crop_box` unten die dortige `crop_box`-Logik lokal, statt sie zu importieren.
 """
 
 from __future__ import annotations
@@ -32,11 +32,10 @@ import numpy as np
 from dispread.layout import DisplayLayout
 from dispread.ocr.sevenseg import SevenSegmentReader
 
-__all__ = ["AutofitResult", "parse_expected", "fit_layout"]
+__all__ = ["AutofitResult", "CROP_SIZE", "crop_box", "parse_expected", "fit_layout"]
 
-#: Zielgroesse des Leserausschnitts. Muss zu
-#: `dispread.workbench.controller.CROP_SIZE` passen - beide skalieren auf das
-#: Format, gegen das der 7-Segment-Leser sein Raster abtastet.
+#: Zielgroesse des Leserausschnitts. Das Format,
+#: gegen das der 7-Segment-Leser sein Raster abtastet; einzige Quelle.
 CROP_SIZE = (400, 160)
 
 #: Kandidaten je Parameter. Bewusst fest aufgezaehlt statt kontinuierlich
@@ -104,12 +103,8 @@ def parse_expected(text: str) -> tuple[str, bool, int, int]:
     return digits, minus, len(digits), len(fraction) if "." in body else 0
 
 
-def _crop_box(image: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:
-    """Normierten Innenausschnitt schneiden und auf Leserformat skalieren.
-
-    Lokale Nachbildung von `dispread.workbench.controller.crop_box` - siehe
-    Modul-Docstring, warum das keine Abhaengigkeit von dort werden darf.
-    """
+def crop_box(image: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:
+    """Normierten Innenausschnitt schneiden und auf Leserformat skalieren."""
     height, width = image.shape[:2]
     x, y, box_width, box_height = box
     left, top = int(round(x * width)), int(round(y * height))
@@ -138,7 +133,7 @@ def _evaluate(
     gedachte Trennschaerfe.
     """
     try:
-        reader_crop = _crop_box(crop, box)
+        reader_crop = crop_box(crop, box)
     except ValueError:
         return _NO_MATCH
     trial_layout = replace(base, **params)

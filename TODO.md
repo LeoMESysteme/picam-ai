@@ -1,4 +1,4 @@
-# TODO — Stand 2026-11-06
+# TODO — Stand 2026-11-13 abends
 
 Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
 weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
@@ -6,6 +6,82 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
+
+## Zuerst: Reihenfolge nach der Abnahme vom 13.11.
+
+**Abnahme:** Herr Kaulitz hat am 2026-11-13 die Werkbank und die Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen (Stand `feat/integration`, Pi-Dienst `5a31b41`, EXE gebaut 14:50 aus `c643f30`). Smoketest: [windows/bridge/SMOKETEST-2026-11-13.md](windows/bridge/SMOKETEST-2026-11-13.md); Prüfbericht: [docs/quellen/ux2-pruefung-2026-11-13](docs/quellen/ux2-pruefung-2026-11-13/ux2-bericht.md).
+
+1. ~~**Fix Rahmenprüfung / Rasterbestimmung**~~ erledigt 13.11. abends (Codex, von Claude reviewt, auf `feat/integration`): Fokusband 0,95–1,05 am Laufstart mit Ablehnung, Raster A1+B1 63/65 statt 58/65 Fits. [Bericht](docs/quellen/rahmen-raster-2026-11-13/REPORT-codex.md). **Offen:** Fokusband am Aufbau kalibrieren (OQ-74); Leonhard prüft am Mittwoch, ob die Ablehnung im Alltag zu oft greift (ein guter Lauf lag bei 1,418).
+2. **Überarbeitung der EXE (UI, Claude):** Gestaltungsrunde 3 auf `wip/bruecke-ux3` fertigstellen und nach `feat/integration` mergen, offene Punkte aus dem Prüfbericht (unten), Bildschirmfoto-Tour mit Leonhard.
+3. **Installer und TUI:** One-Line-Installer; TUI/CLI, die den Nutzer visuell durch das Setup des picam-Projekts im Terminal führt und von der aus man Status und Logs sieht sowie die Werkbank startet, stoppt, konfiguriert, Fehler sucht und aktualisiert. Ersetzt auch den umständlichen Windows-Testbau (siehe „Auslieferung der Windows-App vereinfachen“ unten).
+
+## Befunde Smoketest 13.11. (offen)
+
+**Vollständiger Prüfbericht (Windows-Prüfung UX2, 13.11.):** `docs/quellen/ux2-pruefung-2026-11-13/ux2-pruefung.zip` mit `ux2-bericht.md` (Zusammenfassung, alle Prüf-IDs, Läufe-Tabelle) und `ux2-bericht-details.md` (chronologisch, Zitate, Messwerte), dazu Bilder, TDMS, Sessions, Protokollexporte. Reports entpackt daneben ([ux2-bericht.md](docs/quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)). Top 5 laut Bericht:
+1. UART über Brücke: `uart_frame_invalid` (Signalqualität), siehe unten.
+2. EXE-Einstellungen: Mausrad verstellt Ports, Neuaufbau, Fensterhöhe, Blitzfenster.
+3. EXE-Gestaltung: zu viel Text, Flackern.
+4. 20–60 % ungültige Takte durch die Nachführung, siehe unten.
+5. Bedienfallen zwischen Werkbank und Brücke (Kopplung je Weg, Port-Belegung, Moduswechsel).
+
+Punkte 2 und 3 sind auf `wip/bruecke-ux3` (Gestaltungsrunde 3, 47/48 Tests grün) umgesetzt, aber nicht gemergt und unter Windows **nicht** nachgeprüft. Nächster Schritt: fertigstellen, nach `feat/integration` mergen, Bildschirmfoto-Tour (`windows/bridge/probes/ux_tour.py`) mit Leonhard.
+
+**Wiki:** Vergleich und Erklärung der drei Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt: Strecke, Hardware, Rate, Störverhalten, Rückmeldung, Einrichtung, Abnahmestand) als eigene Wiki-Seite eintragen. Vorlage: [docs/quellen/ausgabewege-vergleich-2026-11-13.md](docs/quellen/ausgabewege-vergleich-2026-11-13.md). Passt zur offenen Idee „UART-Anschluss als Grafik im Wiki“. **Entwurf liegt vor (13.11. abends):** [docs/superpowers/specs/2026-11-13-wiki-ausgabewege-entwurf.md](docs/superpowers/specs/2026-11-13-wiki-ausgabewege-entwurf.md), Einhängen nach dem Merge der Wiki-Session (`feat/wiki-lebendig`).
+
+**Risiko UART über Brücke (13.11. abends, Code-Befund, nicht gemessen):** Die JSON-Zeilen haben keine Prüfsumme. Kippt ein Bit so, dass gültiges JSON bleibt (z. B. eine Ziffer im Wertfeld), schreibt die App einen falschen Wert als gültig an GSVmulti. Empfehlung: bis zur Prüfsumme diesen Weg nicht für Messungen verwenden. Spec-Entwurf mit CRC-32, Wiederholung und Gegentest mit 115 200 Baud: [docs/superpowers/specs/2026-11-13-uart-pruefsumme-design.md](docs/superpowers/specs/2026-11-13-uart-pruefsumme-design.md).
+
+**Entscheidung Leonhard: Freigabetexte nach der Abnahme.** Trotz Abnahme vom 13.11. zeigt die Oberfläche weiter „Testfreigabe – nicht abgenommen, keine Messfreigabe“, und `release_block` („DUT-Ausgabe gesperrt: Windows-Abnahme … fehlt“) sperrt die echte Ausgabe ohne Haken. Ob die Abnahme die Messfreigabe einschließt und welche Texte/Sperren fallen, ist eine Messpfad-Entscheidung; nicht autonom geändert.
+
+Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlos), UART direkt (Kanal 1 hält, Laufstart gibt UART-Empfang frei), „Kanal 1 hält“ auf allen Wegen. C-04 (LAN ziehen ohne Lauf) mit EXE 14:50 bestanden.
+
+- **Nachführung: Zweitdurchgang mit Münzwurf-Bereich (kritisch, Werkbank-Blocker).** Lauf `var/live/live-20261113T111848Z/run-01`: 60 % ungültige Takte, Abschnitte bis 10 s, 2297/7524 Bilder `tracking_lost:rahmen_unstimmig`. Gegenversuch `live-20261113T113119Z/run-01` (Diagnosebilder, Marken):
+  - Hand neben dem Display bewegt: bis 41 % Nachführungsverlust je Sekunde.
+  - Simulator drehen: höchstens 7 %; Hand ruhig: 0 %.
+  - **Ursache laut Recherche (13.11., Fable-Teammate), nicht Licht/Schatten:** Fokuszustand zwischen Einrichtungsbild und Lauf verschieden (Fokus am Laufstart neu gesetzt; Laufbild 140 % bzw. 65 % der Einrichtungsschärfe). Folge: Maßstab 1,0018 gegen die Referenz, der starre Erstdurchgang scheitert in fast jedem Bild; im Zweitdurchgang hat ein schärfeempfindlicher Fasenbereich (Lauf B: Nr. 6) einen festen Versatz von 0,62 px bei Grenze 0,65 px, also Münzwurf. Mit einem Laufbild als Referenz bestehen alle 216 Diagnosebilder den Erstdurchgang. Helligkeitsunterschied abgelehnt/angenommen < 0,5 Graustufen.
+  - Belege: `session.json` (`summary.tracking_region_hint`), `run-01/diagnose/images.jsonl`; Bericht [docs/quellen/nachfuehrung-recherche-2026-11-13](docs/quellen/nachfuehrung-recherche-2026-11-13/README.md).
+  - Stilllegung von Bereich 6 in Lauf A hat die Schutzprobe zu Recht abgelehnt (sonst 2,19 px falsche Lage möglich).
+  - Empfehlung: (1) Fokuszustand von Referenz und Lauf angleichen und sichtbar machen (Schärfeprüfung am Laufstart zweiseitig, heute nur Untergrenze 0,6; Maßstab und Anteil Zweitversuche als Hinweis), 1–2 Tage, keine Messpfadgrenze ändert sich. (2) Schärfeprobe bei der Bereichsauswahl, Bedienhinweis auf maßstabsbereinigte Residuen umstellen, 1–2 Tage plus Neukalibrierung. Nicht: k Ausreißer ausschließen, letztes Quad halten.
+  - Vorher nötig: Versuch mit Schärfeverhältnis nahe 100 % und bewegter Hand; Replay der Läufe vom 11.11. auf Maßstab; Messreihe Fokuswert gegen Maßstab.
+- **Einrichtung scheitert an der Rasterbestimmung (`keine_startlage`, 13.11. 14:02, `live-20261113T130253Z`; kritisch, Werkbank-Blocker).** Recherche (Fable-Teammate, [Bericht](docs/quellen/raster-recherche-2026-11-13/README.md)): zwei Verfahrensfehler, beide lehnen nur ab, keiner erzeugt einen falschen Fit. (A) Leerzellenregel zählt Randminima am linken Stamm des Nachbarzeichens (Lückenspalte, < 0,3 px vor der Zellgrenze) zur Leerzelle 8 (`dotlattice.py` 407–413); hängt von Schärfe/Subpixellage ab, nicht vom Anzeigewert; 5 von 12 heutigen Standbildern betroffen. (B) nur still.png: eine schräge Hough-Linie durch die Ziffern gibt der Startsuche eine falsche Unterkanten-Neigung (0,0467 statt 0,0015), alle Startlagen ≥ 13 px daneben. Vorschlag: A1 Randabstand ~0,25 Spalten an der Zellgrenze (65 Standbilder: +5 Fits, kein bisheriger Fit wandert > 1 px); B1 Unterkante nur bei Plausibilität bzw. beide Annahmen durchsuchen (pauschal Unterkante = Oberkante bricht zwei Einrichtungen vom 26.10.). Etwa 1 Tag mit Tests; vorher volle Suite mit Entwicklungsdaten, OQ-69-Fehlraster mit A1 allein, 65 Bilder je Änderung getrennt. Ausweg am Aufbau: Einrichtung wiederholen (anderer Anzeigewert oder Hinweisbox hilft laut Recherche nicht).
+- **Leser:** 975 Bilder unlesbar (Zellen unlesbar, geringer Segmentabstand) im Lauf 1; eigenes Thema nach der Nachführung.
+- **EXE, Altlasten im Zustellprotokoll:** Ein alter `unknown`-Eintrag bleibt für immer stehen; die App kann ihn weder erklären noch auflösen. Seit 53fbbd6 sperrt er das Wiederverbinden nicht mehr.
+- **EXE, `details.jsonl`:** Zeit je Zeile und bekannte Codes seit 13.11. drin; offen: Port je Zeile, kumulativ über alle Starts (10 MB), Leerlauf nicht zusammengefasst.
+- **UART über Brücke: unlesbare Rahmen belegt (13.11. 15:10).** Export mit neuen Codes: Abbrüche im Lauf sind `uart_frame_invalid`, Neuverbindung nach ~2,5 s, Takt bleibt lückenlos (Auffüllung). Pi-Kernelzähler `ttyAMA0`: fe 232, brk 105, kein Überlauf (seit Boot, nicht je Test getrennt). Ursache Signalqualität, nicht CPU-Last. Vorschlag: Prüfsumme je UART-Zeile plus gezielte Wiederholung statt Neuanmeldung (Protokolleingriff, Review); elektrisch: Kabel/Masse prüfen, ggf. niedrigere Rate. Außerdem beim Verbinden dreimal `uart_timeout` (2 s), bevor die Anmeldung klappt: klären, ob der Pi-Empfang noch nicht bereit ist.
+- **UART direkt:** Halten belegt (325/325). Nach Abziehen des USB-Adapters am PC schrieb der Pi bis zum Bedienerstopp weiter (er kann es über TX allein nicht merken); GSVmulti muss nach erneutem Einstecken die Messung neu starten (in Anleitung/Checkliste). App: Adapter-Wechsel (fehlt/steckt) ins Journal.
+- **UART über Brücke, Empfangstest bricht ab (13.11.: 3/600 um 12:58, 124/600 um 14:35):** Pi-Audit: alle Werte quittiert, danach keine Abfrage; Abbruch 0,17 s nach dem letzten Wert (kein Zeitlimit). Seit 13.11. nennt der Export den UART-Code (`uart_frame_invalid` usw.); bei `uart_frame_invalid` wäre ein Rahmenschutz (Prüfsumme, Wiederholung) oder eine niedrigere Rate zu prüfen. Zähler der App 123 statt 124 (Off-by-one klären). Alt:  Wert 4 ohne Quittung, Neuverbindung mit neuer Lease beendete die Demo. Ursache des gescheiterten UART-Austauschs (Bitfehler bei 460 800? Zeitlimit 2 s?) offen; mit neuer EXE wiederholen, dann zeigt `details.jsonl` den Code. Frage: Soll eine Demo eine Neuverbindung überleben? Werkbank zeigt Abbruch und Grund nicht an (UX).
+- **EXE, Bedienung Kopplung/Verbindung:** „Erneut prüfen“ nach Kopplungs-/Verbindungsfehler (heute nur über Portwechsel 6→0→6), Kopplungsstatus je Weg sichtbar, Haken „getrennte Testsession“ merken.
+- **EXE, Gestaltung (Runde 3, `wip/bruecke-ux3`):**
+  - Schritt 5 bei Erfolg neutral („600 von 600 an COM8 übergeben“).
+  - Pair-Check unabhängig von der Reihenfolge der Ports.
+  - Strecke als Bild (Brücke → COM4 ⇄ COM5 → GSVmulti).
+  - Schritt 4 mit Ordner und „Ordner öffnen“.
+  - Kachel-Zweitzeilen kürzen.
+  - Journal zeigt Abbruch und Stopp.
+  - Warnung, wenn die Session nicht zum Port passt.
+  - Puls langsamer.
+  - Taktzähler und Format-Hinweis sichtbar.
+  - UART direkt: Kachel „Komponenten“ zeigt ein altes Portpaar (COM7 ↔ COM6); dort gehört nur der Adapter hin.
+- **Nachprüfen unter Windows:** C-04 (LAN ziehen ohne Lauf, 53fbbd6) und „UART über Brücke“ koppeln (eef2991).
+
+## Danach offen (Brücke)
+
+- **Merge:** `feat/bruecke-ui` nach `master`, erst mit Leonhards OK nach dem Test.
+- **UART kompakter kodieren:** Für 10 Hz über UART muss das Protokoll kompakter werden. Das ist ein Eingriff ins Protokoll mit Review.
+- **Tracking-Tests:** 15 Tests in `tests/test_frame_tracking.py` (R19b, R19c, R25) schlagen fehl, sobald `var/` vorhanden ist. Das gilt auch auf `master`; ohne `var/` werden sie übersprungen, ihr Fehlschlag blieb deshalb bisher unbemerkt. Ursache klären.
+- **Wackelnde Integrationstests:** `windows/bridge/tests/test_app_controller_integration.py` wackelt unter starker CPU-Last.
+- **Statuswörter:** Die ergänzten Wörter („Unbekannt“, „Keine Weitergabe“, „nicht verbunden“, „Testfreigabe“) in die Spec §10 übernehmen.
+- **Alter Controller (OQ-61):** S1, S2 und S4 sind umgesetzt; S3 und S5–S9 folgen erst nach dem Test. Der Datensatz-Sammelmodus bleibt, weil er für die invertierten GSV-Anzeigen gebraucht wird. Siehe Audit in `.superpowers/sdd/2026-11-06-bruecke-ui/oq61-audit.md`.
+- **Abnahmegates:** N1, N2 und N3 auf Windows (Paket, Treiber, Sessionexport) bleiben offen.
+- **Auslieferung der Windows-App vereinfachen (Leonhard, 2026-11-11):** Der Testbau ist zu umständlich und hat zu viele Bruchstellen (Branch in Forgejo wählen, ZIP laden und entpacken, Skriptordner suchen, ExecutionPolicy umgehen, 3–4 min Build, EXE suchen). Für Prod soll der Bediener nur noch einen Installer herunterladen. Ziel:
+  1. Ein Windows-Runner (Forgejo-Runner auf einem Labor-PC) baut `Setup.exe` bei Tag/Merge und legt sie als Release-Anhang ab.
+  2. Die Werkbank bietet im Brücken-Dialog Schritt 1 genau diesen zum Pi-Stand passenden Installer zum Download an.
+  3. Die App prüft beim Verbinden die Protokoll-/Versionspassung und sagt, wenn sie veraltet ist.
+  - Übergangslösung erledigt (13.11.): `windows/bridge/build-test.cmd` als Doppelklick-Starter (ruft PowerShell mit `-ExecutionPolicy Bypass`, findet Python 3.13 über `py -3.13` und öffnet am Ende den Ausgabeordner). Unter Windows noch nicht gelaufen.
+- **Keine aufblitzenden Konsolenfenster in der Windows-App (Leonhard, 2026-11-11):** Läuft die Werkbank nicht, öffnet sich bei jedem Verbindungsversuch (alle paar Sekunden) kurz ein Kommandozeilenfenster. Ursache: `windows/bridge/src/dispread_bridge_app/devices.py` `_execute()` startet für die PnP-Inventur `powershell.exe` per `subprocess.run` ohne `creationflags=subprocess.CREATE_NO_WINDOW`, und das bei jedem Versuch.
+  - Fix: Flag setzen (Backend, Codex).
+  - Inventur nicht bei jedem Wiederholversuch neu abfragen.
+  - Test, dass jeder Subprozess der App ohne Fenster startet.
+  - Gehört zum späteren Design-Polish der EXE: Leonhard will das evtl. an seinem Windows-PC machen, damit die EXE unter echten Bedingungen mit /impeccable geprüft wird.
 
 ---
 
@@ -82,7 +158,7 @@ In dieser Reihenfolge:
    6. Danach Anlernen eines neuen Sensors: GSV-2TSD-DI.
 
 **Windows-Einrichtung der GSVmulti-Brücke vereinfachen** (Nutzervorgabe
-2026-11-06, später; [OQ-62](docs/open-questions.md#oq-62)): Die Wahl einer
+2026-11-06, nun zur Umsetzung freigegeben; [OQ-62](docs/open-questions.md#oq-62)): Die Wahl einer
 GSVmulti-Ausgabe in der Werkbank führt zu einer passenden Verbindungsanleitung.
 Bevorzugt lädt die Person eine fertige Windows-EXE herunter, die benötigte
 Komponenten installiert und einrichtet. Eine einfache GUI bietet UART oder
@@ -101,10 +177,12 @@ Python-/Visual-Studio-Installationen erhalten. Frisch-PC-Tests decken sowohl
 Netzerkennung und überprüfte Kopplung mehrerer Pi sowie Verhalten bei
 Netzwechseln in [OQ-64](docs/open-questions.md#oq-64) klären. Nutzer erlaubt
 Downloads während der Ersteinrichtung; Offline-Installationspaket derzeit
-keine Pflicht. Architektur gewählt: bestehender Python-Kern + Qt-GUI +
-Windows-Installer. [Designentwurf](docs/superpowers/specs/2026-11-06-windows-bruecke-design.md) ist
-unabhängig auf Planungslücken geprüft (keine wichtigen offenen Fragen);
-Dokumentfreigabe vor Implementierung noch ausstehend.
+keine Pflicht. Architektur und [Spezifikation](docs/superpowers/specs/2026-11-06-windows-bruecke-design.md)
+sind am 06.11. freigegeben: bestehender Python-Kern + Qt-GUI + Windows-Installer.
+[Umsetzungsplan](docs/superpowers/plans/2026-11-06-windows-bruecke.md) mit drei
+Teilplänen und zwölf Aufgaben liegt vor. Nachweise vor GUI-Ausbau;
+Ausführung durch Codex mit Subagents freigegeben; EXE-GUI und sichtbare
+Workbench-Anbindung bleiben Claude vorbehalten.
 Sessionformat und unterstützte GSVmulti-Versionen vorher nachweisen
 ([OQ-53](docs/open-questions.md#oq-53)); Installation und einfacher Verbindungsstatus
 ersetzen keine Messfreigabe oder Empfänger-Abnahme. Umsetzung nach den
@@ -391,6 +469,18 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 ---
 
 ## Die Aufgaben, in Reihenfolge
+
+### Windows-Brücke v2 (aktiv, Nutzerfreigabe 2026-11-06)
+
+Backend und testbare Paketierung im isolierten Zweig `codex/windows-bridge-core`
+fortführen. [OQ-62](docs/open-questions.md#oq-62),
+[OQ-64](docs/open-questions.md#oq-64),
+[OQ-65](docs/open-questions.md#oq-65) und
+[Umsetzungsplan](docs/superpowers/plans/2026-11-06-windows-bruecke.md) führen
+Technik und offene echte Windows-Gates. P1/N1/N2/N3/P2 als technische
+Grundlagen geprüft; laufende Schritte und nächste Aufgaben in
+[Status](docs/status.md). UI/Anleitung/Bereitschaftsdarstellung für Claude
+vorbereiten, keine Veröffentlichung oder DUT-Entsperrung daraus ableiten.
 
 ### Messpfad live (aktiv)
 

@@ -6,7 +6,7 @@ import {esc} from '../shell.js';
 import {dotHTML} from './steps.js';
 
 // Anzeigenamen der Pruefschluessel (live/setup.py setup_checks), Woerter wie im Mock.
-const CHECK_LABELS = {kontrast: 'Kontrast', kanten: 'Kanten', rahmen: 'Rahmen', glanz: 'Glanz',
+const CHECK_LABELS = {fokus: 'Fokus', kontrast: 'Kontrast', kanten: 'Kanten', rahmen: 'Rahmen', glanz: 'Glanz',
   belichtung: 'Belichtung', aufloesung: 'Auflösung', raster: 'Raster', stabilitaet: 'Stabilität',
   rasterversatz: 'Rasterversatz', gegenlesen: 'Gegenlesen', displayfehler: 'Displayfehler',
   nachfuehrung: 'Nachführung'};

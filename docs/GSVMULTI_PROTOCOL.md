@@ -7,6 +7,20 @@ weg: entwickeln
 **Vorher lesen:** [Messpfad und Freigabe](uebersicht/messpfad.md#ausgabe-und-fehlersuche)
 und [Zeitstempel richtig lesen](uebersicht/zeitstempel.md#von-aufnahme-bis-gsvmulti).
 
+**Session-Format (2026-11-11):** Die Werkbank bestimmt pro Lauf Einkanal
+(`record`, ohne `format`) oder Vierkanal (`tick`, `format: '4ch'`). Der
+Windows-Export bietet `single` und `4ch`; allein `DEFAULT_SESSION_FORMAT` in
+`windows/bridge/src/dispread_bridge_app/session_templates.py` bestimmt die
+Vorgabe, bis zum Einspielen von U1 auf dem Pi weiterhin `single`. Die neue
+[Vierkanalvorlage mit mV/V](quellen/gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf)
+ist SHA-gepinnt und ersetzt Versuch 2b im Paket, dessen Beleg bleibt erhalten.
+Format und Sessionpfad werden je Weg/Port gespeichert; der Controller meldet
+zusätzlich das aus validierten Nachrichten erkannte Lauf-Format (unbekannt bei
+Laufwechsel/ohne Lauf), damit die Oberfläche Abweichungen anzeigen kann.
+Kanalzahl folgt der erzeugten Session, sonst der Vorgabe; „Record Hidden
+Channels“ bleibt bei Vierkanal erforderlich. Export und Abgleich sind keine
+GSVmulti-Empfangsabnahme.
+
 ## Stand: Software-Prototyp gebaut, nicht freigegeben; Brücken-DUT-Ausgabe gesperrt {#stand-das-format-ist-unbekannt}
 
 **Stand 2026-10-30:** Das bereitgestellte PDF samt Beispiel-ZIP reicht als Grundlage für einen
@@ -37,6 +51,17 @@ Messfreigabe“ gekennzeichnet und startet nur nach ausdrücklicher Bestätigung
 dieses Hinweises (`acknowledge_unaccepted`). Ungültige Werte werden dort
 ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter
 ([OQ-06](open-questions.md#oq-06)).
+
+**Technischer Stand 2026-11-06, Arbeitszweig Windows-Brücke:** Der v2-Hub
+bindet jeden echten Lauf an eine frische ID, auch bei Ausgabe Aus/direkt.
+`tcp` wählt im Produkt den gekoppelten WSS-Weg am ausdrücklich eingerichteten
+HTTPS-Dienst; UART benötigt lokale Vorbereitung, Identitätsnachweis und
+transportgebundene Kopplung. Direkte Ausgabe und Brückenlistener teilen
+dieselbe Portbelegung. Ohne Hub wird die Brückenausgabe abgewiesen; rohe
+v1-Sockets bleiben benannten Demowerkzeugen vorbehalten. Dies ändert weder
+die folgenden historischen Windows-Belege noch die fehlende EXE-/Treiber-/
+Sessionabnahme. [V2-Vertrag](BRIDGE_PROTOCOL_V2.md),
+[Umsetzungsstand](status.md), [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
 
 **Echte DUT-Ausgabe über die Brücke bleibt strukturell gesperrt.** Der Pi beantwortet
 Brücken-Live-Abfragen ohne DUT-Zahlen; die Windows-Brücke lehnt nichtsynthetische
@@ -348,8 +373,11 @@ benötigt, TX jeweils zum RX der Gegenseite. VCC, CTS und RTS bleiben frei.
 Der Pi-Ausgang ist `/dev/ttyAMA0`, nicht `/dev/serial0`; die konkreten
 GPIO-Pins gegen das [Hardwareprofil](HARDWARE_PROFILE.md) und die aktive
 Konfiguration prüfen. Der Referenzport `/dev/ttyUSB0` bleibt unberührt.
-115200 Baud, 8N1 und kein Handshake sind die Prototypvorgaben. Eine neue
-Verdrahtung wurde in dieser Software-Session nicht vorgenommen.
+Die Pi↔Brücke-Strecke verwendet seit UX2 `dispread.bridge.baud.UART_BAUD`
+(460800 Baud), 8N1 und keinen Handshake; v2 exportiert die Rate im Profil.
+Die GSVmulti-Seite bleibt bei der Baudrate ihrer Session (115200 Baud in
+der belegten COM8-Vorlage). Alte Kabeltests unten dokumentieren ihren
+damaligen Stand. Eine neue Verdrahtung wurde nicht vorgenommen.
 
 ### Weiterlaufen, Wiederanlauf und Historie
 
@@ -560,7 +588,11 @@ ist damit **nicht** belegt:
 | Sender bei Fehler stoppen | Keine neuen Werte; rechtzeitige Kennzeichnung des Altwerts und sichere Beendigung der Auswertung bleiben nachzuweisen. |
 
 Weder `0` noch ein wiederholter letzter gültiger Wert sind ein zulässiger
-Ersatz für TRANSITION, UNREADABLE oder STALE. Bei einem mehrkanaligen Profil
+Ersatz für TRANSITION, UNREADABLE oder STALE. **Ausnahme (Entscheidung
+Leonhard, 2026-11-13):** Im Vierkanal-Takt (`gsvmulti_userdefined_4ch_v1`)
+hält Kanal 1 bei ungültigem Takt den letzten gültigen Wert des Laufs, weil
+Kanal 2 (`gültig = 0`) in derselben Zeile markiert; ausgewertet wird nur mit
+Kanal 2. Begründung und Grenzen: Vierkanal-Spec, Abschnitt 3.5. Bei einem mehrkanaligen Profil
 muss außerdem feststehen, ob ein ungültiger Teilwert den ganzen Frame sperrt.
 Eine Kalibrierauswertung darf ungültige Zeiträume nicht als aktuelle gültige
 Messung verwenden. Solange das nicht durchgängig gesichert ist, nur

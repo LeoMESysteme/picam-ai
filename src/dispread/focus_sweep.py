@@ -27,6 +27,12 @@ class FocusMeasurements(list[tuple[int, float]]):
         super().__init__()
         self.focus_method = focus_method
         self.focus_verify: dict[str, int | float | str] | None = None
+        # OQ-74: mittlere ROI-Helligkeit je Suchprobe (fuer die helligkeits-
+        # normierte Endpruefung) und das Bild der Endpruefung vor dem
+        # Kameraneustart. Nur vom Aufrufer mit Kamera befuellt.
+        self.roi_means: dict[int, float] = {}
+        self.verify_frame = None
+        self.verify_roi_mean: float | None = None
 
 
 def climb_focus(

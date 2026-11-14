@@ -1,7 +1,7 @@
 """Vierpunktquad der beleuchteten LCD-Glasflaeche finden (Ernte Phase 1,
 Nachbesserung zu Task 3, docs/superpowers/plans/2026-09-23-ernte-phase1.md).
 
-`dispread.workbench.vision.lcd_quad_in_region` trennt Glas vom Rahmen ueber
+`dispread.detect.vision.lcd_quad_in_region` trennt Glas vom Rahmen ueber
 eine reine Saettigungsschwelle - das reicht bei den beiden bislang gemessenen
 Geraeten (siehe dortige Docstring-Messwerte), scheitert aber am GSV-2AS: sein
 Gehaeuse ist selbst gesaettigt-blaeulich. Gemessen an

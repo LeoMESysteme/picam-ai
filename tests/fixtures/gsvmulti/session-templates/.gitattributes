@@ -1,0 +1,4 @@
+# Preserve byte-for-byte archived CRLF originals on every checkout.
+# CR at EOL is legitimate; actual trailing blanks/tabs remain errors.
+*.ucf -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+*.txt -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

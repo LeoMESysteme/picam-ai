@@ -17,9 +17,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from dispread.detect.vision import DetectionConfig, find_display_candidates, fit_ocr_box, fit_quad_in_region
 from dispread.frames.replay_source import CLIP_SCHEMA_VERSION
 from dispread.layout import SEGMENT_NAMES, SEGMENT_SAMPLE_POINTS, DisplayLayout
-from dispread.ocr.autofit import fit_layout
+from dispread.ocr.autofit import CROP_SIZE, crop_box, fit_layout
 from dispread.ocr.sevenseg import SevenSegmentReader
 from dispread.ocr.tesseract_cli import TesseractReader
 from dispread.records import TimeBaseKind
@@ -30,12 +31,9 @@ from dispread.validate import GateConfig, ReleaseGate
 from .dataset_capture import CaptureRegistry
 from .datasets import DatasetStore
 from .profiles import DEFAULT, atomic_json, profile_name, quad_from_roi, roi_from_quad, validate
-from .vision import DetectionConfig, find_display_candidates, fit_ocr_box, fit_quad_in_region
 
 #: Zielgroesse des entzerrten Ausschnitts. Fest, weil der Segmentleser gegen
 #: das Profilraster abtastet - schwankende Groessen verschieben die Punkte.
-CROP_SIZE = (400, 160)
-
 FEED_INTERVAL_S = 0.2
 
 #: Harte Obergrenze fuer Geometrie-Neuaufbauten je Bootsitzung. Beobachtet:
@@ -105,18 +103,6 @@ def roi_quad(image, config):
     if normalized is None:
         raise ValueError("Keine ROI bestaetigt")
     return tuple((float(x * width), float(y * height)) for x, y in normalized)
-
-
-def crop_box(image, box):
-    """Normierten Innenausschnitt schneiden und auf Leserformat skalieren."""
-    height, width = image.shape[:2]
-    x, y, box_width, box_height = box
-    left, top = int(round(x * width)), int(round(y * height))
-    right, bottom = int(round((x + box_width) * width)), int(round((y + box_height) * height))
-    cropped = image[max(0, top) : min(height, bottom), max(0, left) : min(width, right)]
-    if cropped.size == 0:
-        raise ValueError("OCR-Rahmen ist leer")
-    return cv2.resize(cropped, CROP_SIZE, interpolation=cv2.INTER_LINEAR)
 
 
 def grid_geometry(layout_data):

@@ -1,7 +1,7 @@
 """`dispread.glassquad` - Nachbesserung zu Task 3 aus
 docs/superpowers/plans/2026-09-23-ernte-phase1.md.
 
-`lcd_quad_in_region` (dispread.workbench.vision) filtert nur auf Saettigung -
+`lcd_quad_in_region` (dispread.detect.vision) filtert nur auf Saettigung -
 das reicht nicht, wenn das Geraetegehaeuse um das Glas herum ebenfalls
 gesaettigt ist (gemessen an frame_000412.jpg des GSV-2AS: das blaeuliche
 Gehaeuse hat dort selbst hohe Saettigung). `glass_quad_in_region` schraenkt

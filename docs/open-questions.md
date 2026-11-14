@@ -7,6 +7,9 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 
 | OQ | Fokus | Status | Titel |
 | --- | --- | --- | --- |
+| [OQ-62](#oq-62) | Jetzt | in Arbeit | Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet? |
+| [OQ-64](#oq-64) | Jetzt | in Arbeit | Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale? |
+| [OQ-65](#oq-65) | Jetzt | offen | Wie werden Windows-Releases signiert, aktualisiert und gegen Rückstufung geschützt? |
 | [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
 | [OQ-07](#oq-07) | Jetzt | teilweise geklärt | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-06](#oq-06) | Jetzt | teilweise geklärt | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
@@ -57,9 +60,16 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-49](#oq-49) | — | offen | Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt? |
 | [OQ-56](#oq-56) | — | teilweise geklärt | Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel? |
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
-| [OQ-62](#oq-62) | — | offen | Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet? |
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
-| [OQ-64](#oq-64) | — | offen | Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale? |
+| [OQ-67](#oq-67) | — | offen | Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test? |
+| [OQ-68](#oq-68) | — | offen | Auf welchem Windows-Rechner wird der Installer der Brücke automatisch gebaut? |
+| [OQ-69](#oq-69) | — | offen | Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage? |
+| [OQ-70](#oq-70) | — | teilweise geklärt | Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen? |
+| [OQ-71](#oq-71) | — | offen | Wie kann ein fehlerhafter Einrichtungsvorschlag abgebrochen oder neu gestartet werden? |
+| [OQ-72](#oq-72) | — | offen | Warum lehnt die Kantenprüfung die letzte Ziffer der neuen Aufstellung ab? |
+| [OQ-73](#oq-73) | — | offen | Warum aktualisiert die Werkbank während der Einrichtung verzögert? |
+| [OQ-74](#oq-74) | — | offen | Warum wird das Bild nach erfolgreich geprüfter Fokussuche wieder unscharf? |
+| [OQ-75](#oq-75) | — | offen | Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -71,6 +81,8 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-45](#oq-45) | — | geklärt | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 | [OQ-46](#oq-46) | — | geklärt | Warum scheitert der Live-Rahmenfit trotz korrekter Grobverschiebung? |
 | [OQ-54](#oq-54) | — | geklärt | Welche GSV-Bibliotheksversionen lädt die getestete Windows-Installation? |
+| [OQ-66](#oq-66) | — | geklärt | Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag? |
+| [OQ-76](#oq-76) | — | geklärt | Warum verliert ein Lauf nach bestätigter Einrichtung sämtliche Rahmenmerkmale? |
 
 <!-- OQ-INDEX:END -->
 
@@ -233,6 +245,15 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   den letzten Wert rechtzeitig als veraltet kennzeichnet. Anzeige,
   Aufzeichnung und Kalibrierauswertung gemeinsam prüfen; ungültige Zeiträume
   dürfen keine Messfreigabe erhalten. [Prüffälle](GSVMULTI_PROTOCOL.md#ungultige-werte).
+
+* **Testfreigabe mit Bestätigung seit 2026-11-09 (Nutzerentscheidung), keine
+  Abnahme:** Echte Werte dürfen auch über die GSVmulti-Brücke (UART und
+  Netzwerk) laufen, wenn der Pi-Bediener den Lauf mit
+  `acknowledge_unaccepted: true` startet – wie bei UART direkt. Ungültige und
+  veraltete Werte werden ausgelassen (`omit_record`, Brücke quittiert
+  `omitted`); GSVmulti zeigt dann den letzten Wert unmarkiert weiter, genau so
+  steht es im Hinweis. Diese Frage bleibt damit offen.
+  [BRIDGE_PROTOCOL_V2.md](BRIDGE_PROTOCOL_V2.md#testfreigabe-echter-werte-seit-2026-11-09-additiv-v2-bleibt-v2)
 
 * **Teilantwort 2026-11-04:** Lauf 08: 30,000983790 s absichtliche
   UART-Sendepause (HOST_MONOTONIC), Screenshot zeigt timeout! bei gestarteter
@@ -2457,6 +2478,12 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 * **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs; zuvor offen (Stand 2026-10-30).
 
+* **Testfreigabe mit Bestätigung seit 2026-11-09 (Nutzerentscheidung), keine
+  Abnahme:** Die Brücke gibt echte Werte nach ausdrücklicher Bestätigung je
+  Lauf weiter (UART und Netzwerk), nur VALID an COM, Bytes wie UART direkt.
+  Ende zu Ende nur auf Linux belegt (pty-Kabel, lokales TLS, Fake-COM); kein
+  Windows-Treiber, kein GSVmulti, kein Altwertverhalten geprüft.
+
 * **Live-Prototyp (2026-10-30):** P4-3 hat höchstens einen offenen
   Senderauftrag, verwirft neue Frames bei Stau mit Tx-Beleg und liefert sie
   nicht nach. Begonnene Telegramme werden mit 1 s Gesamtfrist vervollständigt,
@@ -2742,6 +2769,14 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   bei UserDefined bleiben offen; mit GSVmulti-Entwicklung anhand des
   [Reproduktionsfalls](GSVMULTI_PROTOCOL.md#userdefined-ungueltig-repro) klären.
   [Messbeleg und Antwort](VALIDATION.md#uart-demo-20261104-10).
+* **Beleg mit echten Werten 2026-11-11:** Brückenlauf über Netzwerk mit Testfreigabe,
+  555 s. Die TDMS enthält genau die 7 389 vom Pi quittierten Werte, ohne Abweichung, mit festem
+  äquidistanter Zeitachse (`dt mode = tf`, Handbuch S. 73): GSVmulti zählt Werte statt Zeit.
+  Ausgelassene ungültige Abschnitte (längste 6,9 s) verschwinden ohne Zeitlücke. Lücken können
+  nur als Wert im Telegramm überleben; Versuche dazu: `windows/bridge/GSVMULTI-VERSUCHE.md`. Eine Änderung an GSVmulti ist unwahrscheinlich (zentrales Kundenprodukt, Leonhard
+  2026-11-11). Deshalb zuerst prüfen, ob sich in GSVmulti selbst etwas einstellen lässt; sonst
+  Ausgleich auf unserer Seite (fester Sendetakt, Nachberechnung aus Pi-/Windows-Journal).
+  [Beleg](quellen/bruecke-testlauf-2026-11-11/README.md).
 * **Blockiert:** Erhaltung und sichere Auswertung ungültiger Abschnitte,
   zusammen mit OQ-06; direkte synthetische Zahlenversuche bleiben möglich.
 * **Klärung:** Identische NaN-Folge wie Lauf 09 mit ausschließlich dieser
@@ -2826,6 +2861,13 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   A-Präfix mit Filter aus (Lauf16) bleibt ebenfalls durchgehend auf Timeout.
   Keine allgemeine Kodierung oder interne Parserursache daraus bewiesen.
   [Antwort und Beleg](VALIDATION.md#uart-demo-20261104-14).
+* **Beleg 2026-11-06 (Windows-Brücke):** Die Session aus dem ersten Windows-
+  Testlauf empfing Demo-Werte über das com0com-Paar auf COM8. Sie weicht von
+  der Lauf-11-Vorlage nur in `ComNr`, `Name` und `ComNo` ab, plus einem von
+  GSVmulti ergänzten `[CopyPaste]`-Abschnitt mit Standardwerten; Separator=256,
+  10 Hz und mV/V sind unverändert. Das zeigt, welche Felder ein Portwechsel
+  betrifft. Es ist kein Generator-Roundtrip und klärt die Separator-Kodierung
+  nicht. [Beleg](quellen/bruecke-testlauf-2026-11-06/README.md).
 * **Blockiert:** belastbaren Ein-Variablen-Vergleich des Filtermodus und
   späteres automatisiertes Übernehmen dieser Sessioneinstellung. Die zuvor
   belegte gültige Filter-ein-Konfiguration (OQ-01) bleibt davon unberührt.
@@ -3124,7 +3166,7 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-62 — Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet?
 
-* **Status:** offen · erkannt 2026-11-06 bei der Einrichtung auf einem neuen Windows-PC
+* **Status:** in Arbeit · erkannt 2026-11-06 bei der Einrichtung auf einem neuen Windows-PC
 * **Nutzervorgabe:** Wahl der GSVmulti-Ausgabe in der Werkbank bietet eine
   Verbindungsanleitung. Bevorzugt fertige Windows-EXE, die benötigte Komponenten
   installiert/einrichtet, UART und Netzwerk auswählbar macht und in einer
@@ -3143,9 +3185,16 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Einrichtung statt eines Python-Tracebacks.
 * **Architekturwahl 2026-11-06:** Leonhard wählt Python-Brückenkern + Qt-GUI
   + Windows-Installer; Online-Downloads bei Einrichtung sind erlaubt.
-  [Designentwurf](superpowers/specs/2026-11-06-windows-bruecke-design.md) wird vor Umsetzung geprüft und zur
-  Freigabe vorgelegt. Architekturwahl klärt nicht Treiberzulassung,
+  [Spezifikation](superpowers/specs/2026-11-06-windows-bruecke-design.md) ist
+  am 06.11. freigegeben; [Umsetzungsplan](superpowers/plans/2026-11-06-windows-bruecke.md)
+  ist zur Ausführung freigegeben. EXE-GUI und sichtbare Workbench-Anbindung
+  bleiben auf Nutzerwunsch Claude vorbehalten. Architekturwahl klärt nicht Treiberzulassung,
   Sessionformat oder produktive Messfreigabe.
+* **Umsetzung 2026-11-06:** Verbindungs-/Bereitschaftskern, geschützter
+  CredentialStore, COM-Journal und portable Installeradapter sind lokal
+  integriert. Native Windows-Provider und Qualifikation fehlen weiterhin;
+  EXE-/Workbench-Oberflächen folgen durch Claude gemäß
+  [Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md).
 * **Offen:** Paketierung und Verteilung, benötigte Treiber und virtuelle
   Portpaare, Installation mit den erforderlichen Windows-Rechten, sichere
   Zuordnung/Erkennung von USB- und virtuellen Ports, Netzwerk-Verbindung
@@ -3186,6 +3235,39 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   aufzeichnen, Erst-/Zweitfit-Gründe vergleichen und UI-Semantik spezifizieren.
   OQ-26 bleibt die allgemeine Hardware-Validierung; OQ-59 betrifft spätere
   Bildaufzeichnung/Nachberechnung.
+* **Teilbefund 2026-11-11 (Brückentest, Lauf `live-20261111T103604Z/run-01`):** Ein einzelner nicht starrer
+  Rahmenbereich (Glanzlinie der Fase, in der Werkbank Bereich 6) lässt den Erstfit scheitern; 23 von 25 erst
+  im Zweitfit angenommenen Diagnosebildern scheiterten im Erstfit an ihm. Das ist ein konkreter Mechanismus für
+  „dauerhaft zweiter Fit nötig“. [Bericht](quellen/bruecke-testlauf-2026-11-11/README.md).
+* **Diagnose je Bereich seit 2026-11-11 (reine Diagnose):** `last_regions` trägt je Bereich das Residuum zum
+  Erst- und Zweitfit (`res1`/`res2`, px, auch Ausreißer und abgelehnte Bilder), `diagnose/images.jsonl` schreibt
+  es je Bild mit. Ein Fenster über 300 Bilder meldet einen Bereich als dauerhaft unstimmig, wenn er in ≥ 30 %
+  seiner Bilder die Grenze 0,65 px reißt und der Rest im Median < 0,4 px liegt (`run.region_hint`,
+  `summary.tracking_region_hint`). Die Werkbank zeigt den Hinweis ruhig im Lauf und markiert den Bereich in der
+  Bereichsbearbeitung der Neueinrichtung. Freigabe, Schwellen und Entscheidungen bleiben bitgleich (Tests auf
+  den 222 Diagnosebildern). Offen bleibt die Einrichtungsregel, solche Bereiche gar nicht erst zu wählen.
+* **Einrichtungsregel und Stilllegung seit 2026-11-11 (TB, Freigabe Leonhard):**
+  * *Einrichtung:* Die automatische Auswahl schließt Kandidaten aus, deren Autokorrelationsgipfel flach ist
+    (Krümmung < 0,08) **und** deren Lage unter festen Lichtproben (Gamma, Glanz, Hell) um > 0,12 px wandert.
+    Kalibriert an 55 Einrichtungen: Die belegt unstimmigen Glanz- und Fasenbereiche aus 103604Z, 122753Z und
+    095426Z werden nicht mehr gewählt; alle 53 zuvor geeigneten Einrichtungen bleiben geeignet (≥ 6 Bereiche
+    je Achsenseite). Mit den neuen Vorschlägen bestehen offline 221 von 222 Diagnosebildern in 103604Z und in
+    122753Z (vorher 113 bzw. 112). Die Laufzeitprüfung bleibt unverändert.
+  * *Stilllegung im Lauf:* Reißt ein einzelner Bereich über ein volles Fenster von 300 Bildern in ≥ 50 % die
+    Grenze, liegt der Rest im Median < 0,4 px und läuft er mit keinem anderen Bereich gleich, wird er für den
+    Rest des Laufs aus der Nachführung genommen. Grenzen: höchstens 3 Bereiche bzw. 15 %, Mindestzahl,
+    Streuung und Reserve wie bei der Einrichtung, dazu eine Schutzprobe am Referenzbild (Halbseiten-Bias-Raster,
+    kein angenommenes Quad > 1,0 px falsch, höchstens 0,05 px schlechter als vorher; seit dem Review auch mit
+    einem weiteren ausfallenden Bereich nicht häufiger oder schwerer gefährlich). Ohne diese Probe wäre die
+    Stilllegung unsicher: Im Fixture setzt eine ganze Seite ohne Bereich 2 oder 11 eine 3,5 px falsche Lage
+    durch, und nach {0, 5, 15} würde ein Zusatzausfall von 8/16/17/19 gefährlich (1,46 px). Die Probe läuft in
+    einem eigenen Prozess (nice 19, an 1080p 31 s CPU, 41 s bis zur Stilllegung). Jede Stilllegung steht in
+    `tracking_events.jsonl`, in `summary.tracking_region_hint.deactivated` und additiv in
+    `component_versions.locator_regions_disabled`. Offline auf den Diagnosebildern der alten Profile wird
+    Bereich 6 stillgelegt (103604Z: 200/222 statt 113/222; 122753Z: 187/222, mit Bereich 1 218/222).
+  * *Zweiter Fit:* Auf den Diagnosebildern sinkt die Zahl der Zweitversuche nach der Stilllegung von 134 auf
+    52 (103604Z, Bereich 6 aus) bzw. von 143 auf 46 (122753Z, Bereiche 1 und 6 aus). Die UI-Frage zu
+    „Korrektur läuft“ bleibt offen.
 * **Antwort landet in:** [Laufauswertung](quellen/werkbank-t13-2026-11-06.md),
   [VALIDATION](VALIDATION.md) und einer späteren UI-/Tracking-Spezifikation.
 
@@ -3196,19 +3278,19 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-64 — Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale?
 
-* **Status:** offen · erkannt 2026-11-06 beim Entwurf der Windows-Einrichtung
+* **Status:** in Arbeit · erkannt 2026-11-06 beim Entwurf der Windows-Einrichtung
 * **Nutzerauftrag:** automatische Installation sowie Verbindung per UART
   oder Netzwerk ohne fest angenommene Pi-IP; verschiedene Pi und Netze,
   mit und ohne Tailscale und nachvollziehbare Fehlerbehandlung. Download
   während der Ersteinrichtung ist ausdrücklich erlaubt; ein vollständiges
   Offline-Installationspaket ist aktuell keine Pflicht.
-* **Codebefund:** `OutputPublisher` öffnet für TCP einen Socket mit eigenem
+* **Codebefund vor v2-Umsetzung:** `OutputPublisher` öffnet für TCP einen Socket mit eigenem
   Port (Vorgabe 5000) ohne TLS oder Anwendungskopplung. Workbench-CLI hat eine
   konkrete Tailscale-Adresse als Host-Vorgabe; PAM-Anmeldung verwendet
   aktuell den Benutzer `me-systeme`. Für einen allgemeinen Geräteeinsatz
   brauchen auch Pi-Dienst, Identität und Erstkonfiguration eine Spezifikation.
   Der bestehende Messgeräte-`device_id` ersetzt keine eindeutige Pi-Identität.
-* **Vorschläge, noch nicht freigegeben:** generische Windows-Anwendung mit
+* **Freigegebener Entwurf 2026-11-06:** generische Windows-Anwendung mit
   gebündelter Laufzeit; universeller Installer und getrenntes Verbindungsprofil
   aus der Workbench; stabile Pi-Identität mit überprüfter Kopplung. LAN-Suche
   per DNS-SD/mDNS plus Host-/Adressfallback, optional Tailscale-FQDN; bei
@@ -3223,7 +3305,14 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Discovery entdeckt Kandidaten; sie ersetzt weder Erreichbarkeit noch
   Identitätsprüfung. Ohne Route zwischen getrennten Netzen kann eine EXE
   keine Verbindung allein durch eine bekannte IP herstellen.
-* **Klärung:** technische Varianten mit Leonhard auswählen; dann Kopplungs-,
+* **Umsetzung 2026-11-06:** Geräteidentität, widerrufbare Kopplung, v2-
+  Dienst/Discovery sowie Windows-WSS-/UART-Kern sind lokal integriert.
+  Wiederanlauf prüft dieselbe Pi-Identität und neue Lease, ohne Demo-/
+  Zahlenwiederholung; Zertifikatswechsel verlangt neue Kopplung. Auswahl
+  des konkreten Endpunkts und Erstkonfiguration bleiben App-/Dienstaufgaben.
+  Keine reale Zwei-Pi-/Netzwechselabnahme daraus ableiten.
+  [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
+* **Klärung:** Freigegebenen Entwurf umsetzen, Kopplungs-,
   Berechtigungs- und Zustandsvertrag spezifizieren. Tests mit zwei Pi,
   DHCP-/Netzwechsel, gesperrtem Multicast, Ausfall/Neustart und falscher
   Identität; Altwerte/Doppelausgabe strukturell verhindern. OQ-62 führt den
@@ -3237,3 +3326,452 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Antwort landet in:** spätere Windows-Brücken-Spezifikation,
   [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md), [Abhängigkeiten](dependencies.md)
   und [Geplante Funktionen](../PLANNED_FEATURES.md).
+
+
+---
+
+<span id="oq-65"></span>
+
+## OQ-65 — Wie werden Windows-Releases signiert, aktualisiert und gegen Rückstufung geschützt?
+
+* **Status:** offen · erkannt 2026-11-06 beim Installer-/Updatekern W3
+* **Befund:** Der portable Updatekern prüft ein begrenztes, signiertes
+  Manifest, Artefakthashes und explizit konfigurierte HTTPS-Herkünfte. Er
+  enthält keinen produktiven Vertrauensschlüssel, Release-Host oder nativen
+  Deploymentanbieter. Eine gültige Signatur allein legt noch keine aktuelle
+  freigegebene Version bzw. erlaubte Rückstufung fest.
+* **Offen:** verantwortlicher Release-Kanal, Bereitstellung und Wechsel des
+  Vertrauensschlüssels, Behandlung alter signierter Manifeste, Mindestversion
+  und ausdrücklich freigegebene Rückkehr zur Vorgängerversion. Die dafür
+  nötigen Kanal-/Versionsdaten sind noch nicht festgelegt. Anwendungssignatur
+  und Treibersignatur brauchen zusätzlich echte Windows-Nachweise.
+* **Grenze:** Ohne diese Provisionierung und Nachweise bleibt der Produkt-
+  Release gesperrt. Interne Probe-Installer und Unit-Tests mit Testschlüsseln
+  sind kein verteilter Vertrauensanker. Aktive Ausgabe blockiert Updates;
+  vorhandene Konfiguration und Audits dürfen nicht still verloren gehen.
+* **Antwort landet in:** [Windows-Spec §4](superpowers/specs/2026-11-06-windows-bruecke-design.md#4-installation-und-wiederholung),
+  [Abhängigkeiten und Buildgrenzen](dependencies.md#windows-installer-und-updatevertrage);
+  im Repository zusätzlich `windows/bridge/README.md` und
+  `windows/bridge/src/dispread_bridge_app/updates.py`.
+
+
+---
+
+<span id="oq-66"></span>
+
+## OQ-66 — Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag?
+
+* **Status:** geklärt (2026-11-06) · erkannt 2026-11-06 beim Doku-Regressionslauf der Windows-Brücke
+* **Beobachtung:** Gesamtlauf `playwright.docs.config.ts`: 90 bestanden,
+  ein Fehler in „Session-Dateidownload bleibt bytegleich; Tastatur und
+  Wiki-Theme erreichen den Explorer“. Nach Fokus auf das Diagramm erwartet
+  der Test den zuletzt gewählten 23.10.2026, 10:00 UTC, der Tooltip zeigt
+  stattdessen 28.10.2026, 10:00 UTC. Es handelt sich um Testfixtures, nicht
+  um eine Messung. Die Brückenänderungen berühren weder Test noch Explorer-
+  Assets; unabhängige Wiederholungen grenzten die Testvorbedingung ein.
+* **Eingegrenzt 2026-11-06:** Diagrammfokus übernimmt eine gültige aktuelle
+  Auswahl; Tabellen-Fokus und Pointerenter können sie vorher ändern. Der
+  bisherige Test prüfte diese Voraussetzung nach Download/Scrollen nicht.
+  Die genaue alte Pointerfolge ist nicht aufgezeichnet, ein UI-Fehler ist
+  nicht nachgewiesen.
+* **Korrektur:** Maus außerhalb parken, gewünschte Tabellensteuerung
+  ausdrücklich fokussieren und aktive Zeile prüfen, danach die unveränderten
+  Übernahme-/End-/Home-Prüfungen. Drei echte Wiederholungen bestanden;
+  unabhängiges Review ohne Befund. Abschließender Gesamtlauf: 91 bestanden
+  in 6,7 Minuten. Keine Änderung am Explorer-Oberflächenverhalten.
+* **Antwort 2026-11-06:** Die Prüfung braucht eine ausdrücklich kontrollierte
+  aktuelle Auswahl vor dem Diagrammfokus. Diese Voraussetzung ist im Test
+  hergestellt; die frühere genaue Pointerfolge bleibt unbeobachtet und wird
+  nicht als nachgewiesener UI-Fehler ausgegeben.
+* **Antwort liegt in:** `tests/docs-site.spec.ts`, Commit `8efe4a7`;
+  Prüfzusammenfassung in [Status](status.md).
+
+
+---
+
+<span id="oq-67"></span>
+
+## OQ-67 — Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test?
+
+* **Status:** offen · erkannt 2026-11-06 beim abschließenden Backendtest
+* **Beobachtung:** Ein neu erweiterter lokaler TLS-/Fake-COM-Test
+  `test_dut_stays_locked_after_successful_pairing` lief nach DUT → Aus → Demo
+  beim zusätzlich erwarteten numerischen `written`-Ereignis in sein Zeitlimit.
+  Zwischenlauf: 59 bestanden, ein Fehler. DUT-Sperre und öffentliche
+  Statusassertionen waren dabei bereits erfüllt. Für diesen ersten Fehler
+  fehlen genaue Worker-/Journal-Zustandsdaten; keine Hardwaremessung.
+* **Eingrenzung:** Nach fester Zustandsdiagnose fünf isolierte Wiederholungen
+  und derselbe 60-Test-Satz bestanden. Daraus folgt keine nachgewiesene
+  Ursache oder Produktfehlerfreiheit. Keine Produktionsfrist erhöht und kein
+  Worker-/Transportworkaround eingebaut.
+* **Prüfgrenze:** Die finale Zustandsregression verwendet eine ausdrücklich
+  leere synthetische Demo, ursprüngliche DUT-Leerausgabe bleibt geprüft.
+  Numerische Übergaben prüfen die getrennten unveränderten TLS-/Barriere-/
+  Latest-Tests. Abschließender betroffener Lauf: 430 bestanden, vier native
+  Windows-Gates übersprungen; unabhängige Nachprüfung akzeptiert diese
+  Trennung als Zustandsprüfung, nicht als Diagnose des ersten Timeouts.
+* **Klärung:** Bei erneuter Reproduktion feste Worker-/Snapshot-/Journal-
+  Zustände und Ereignisfolge sichern; bei physischer G1-Abnahme Zustandswechsel
+  und numerische Übergaben gemeinsam aufzeichnen. Unklaren COM-Erfolg weder
+  wiederholen noch als sicher erfolgreich darstellen.
+* **Antwort landet in:** `tests/test_bridge_end_to_end.py` und
+  [Claude-Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md);
+  tatsächliche Windows-/Hardwarebelege später in [VALIDATION](VALIDATION.md).
+
+
+---
+
+<span id="oq-68"></span>
+
+## OQ-68 — Auf welchem Windows-Rechner wird der Installer der Brücke automatisch gebaut?
+
+* **Status:** offen · erkannt 2026-11-11 beim Testbau für den Brückentest
+* **Befund:** Der Testbau ist für den Bediener zu umständlich und hat viele
+  Bruchstellen: Branch in Forgejo wählen, ZIP laden und entpacken,
+  Skriptordner suchen, ExecutionPolicy umgehen, 3–4 min Build, EXE suchen.
+  Die EXE lässt sich nur unter Windows bauen; der Pi kann das nicht
+  übernehmen.
+* **Offen:** Gibt es einen Windows-Rechner, der dauerhaft im Labornetz
+  erreichbar ist und als Forgejo-Runner `Setup.exe` bei Tag/Merge baut und
+  als Release-Anhang ablegt? Wer betreut ihn?
+* **Ziel danach:** Die Werkbank bietet im Brücken-Dialog Schritt 1 genau
+  den zum Pi-Stand passenden Installer an; die App meldet beim Verbinden,
+  wenn sie veraltet ist. Übergang bis dahin: `build.cmd` als
+  Doppelklick-Starter. Signatur und Updatekanal: [OQ-65](#oq-65).
+* **Antwort landet in:** `TODO.md` (Abschnitt „Danach offen (Brücke)“),
+  `windows/bridge/README.md`.
+
+---
+
+<span id="oq-69"></span>
+
+## OQ-69 — Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Befund:** Einrichtung `live-20261111T154459Z` im laufenden Worktree
+  `bruecke-run` auf `08ac9b9`: Fokus und Belichtung abgeschlossen, danach
+  alle drei Startversuche `keine_startlage`. Das gespeicherte Bild zeigt
+  eine scharfe, ausreichend große, leicht gedrehte GSV-2AS-Anzeige mit Plus.
+  `fit_lattice` reproduziert den Fehler offline mit der automatisch gefundenen
+  grünen Hinweisbox. Es entsteht kein Einrichtungsvorschlag.
+* **Offen:** Welche Startkandidaten oder nachfolgenden Prüfungen verwerfen
+  diese Geometrie? Die pauschale Empfehlung „näher heran“ ist durch das Bild
+  nicht belegt. Ein Zusammenhang mit der Windows-EXE ist nicht erkennbar;
+  der Abbruch liegt vor der Ausgabe.
+* **Belege:** lokal `var/live/live-20261111T154459Z/setup/` mit `still.png`,
+  `failure.json`, `cell-text.json` und `camera-settings.json`.
+* **Eingrenzung 2026-11-11:** Erster Suchdurchgang erzeugt 1.274 Punktkandidaten,
+  wählt einen Plus-Anker bei (484,89; 553,56) außerhalb der grünen Anzeige und
+  verwirft alle 32 verfeinerten Kandidaten (7 `plus_nicht_gefunden`,
+  23 `leerzelle_belegt`, 2 `zu_wenige_punkte`). Engere Hinweisbox sowie
+  reine Offline-Versuche mit auf die Grünkontur begrenzten Plus-Ankern
+  reichen nicht zur Behebung. Kein Beleg für eine einzelne bereits gefundene
+  Korrektur; keine Schranke geändert oder Rastersicherheit umgangen.
+  Diagnosekopie: `var/diagnostics/raster-20261111-live-154459Z/`.
+* **Sicherung 2026-11-11:** [Belegpaket mit Quellcode und Offline-Rezept](quellen/setup-failures-2026-11-11.md).
+  Zusätzlich `live-20261111T154403Z` (drei Mal `startlage_mehrdeutig`) und
+  `live-20261111T155404Z` (erster Fit `keine_startlage`, danach Abbruch)
+  gesichert. Alle drei erhaltenen Fehlerbilder liefern auf dem archivierten
+  Quellstand erneut ihre protokollierten Ablehnungen. Der Rastererfolg in der
+  anderen Aufstellung ist ein gesonderter Vergleichsfall; sein Nachführfehler
+  steht unter [OQ-70](#oq-70). Frühere Einzelbilder und Rohstapel fehlen;
+  Grenzen der Reproduzierbarkeit sind im Belegpaket ausdrücklich beschrieben.
+* **Weitere Aufstellung 2026-11-11:** `live-20261111T162902Z` ebenfalls drei
+  Mal `keine_startlage`; [eigenes Standalone-Paket und Claude-Übergabe](quellen/setup-new-position-2026-11-11-162902.md).
+  Letztes Originalbild, alle vorhandenen Einstellungen/Texte/Fehler,
+  Quellstand und Offline-Rezept gesichert. Fokusfenster und grüne
+  Hinweisbox überschneiden sich im gespeicherten Bild nicht (OQ-74).
+* **Zwischenstand 2026-11-13:** A1 berücksichtigt Randminima nahe der
+  Nachbarzelle gesondert; die unabhängige automatische Startsuche blieb
+  in diesem Schritt offen. Bei `115232Z/still-versuch-1` liefert die Unterkanten-Houghlinie
+  0,0712 gegenüber 0,0217 oben; ein Ansatz vom Folgebild-Quad kann
+  dagegen verfeinert werden. Das Folgebild ist nur ein Geometrieanker,
+  sein serieller Maskentext enthält `?`. Belege und Offline-Auswertung:
+  [Rasterrecherche](quellen/raster-recherche-2026-11-13/README.md).
+* **Nachtrag 2026-11-13:** Eine alternative Unterkantenrichtung wird nach
+  drei erfolglosen Startdurchläufen zusätzlich gesucht; bestehende Fits und
+  andere Ablehnungen bleiben unberührt. Die zwei Problemaufnahmen liefern
+  damit in gezielten Tests einen Fit nahe den jeweiligen Vergleichsquads;
+  Bewegung zwischen Aufnahmen bleibt möglich. Im Offline-Korpus ergeben
+  B1 und A1+B1 66/74 bzw. 72/74 Fits; alle Baselinefits bleiben erhalten.
+  Drei Zusatzfits gegenüber A1 wurden einzeln geprüft; `130253Z/still`
+  behält dabei eine Offsetwarnung. Ein bestehender Fit wird nicht auf
+  konkurrierende Alternativhypothesen geprüft. Korpusprüfung und Ergebnisse: [Rasterrecherche](quellen/raster-recherche-2026-11-13/README.md).
+* **Antwort landet in:** `src/dispread/dotlattice.py`, zugehörigen
+  Regressionstests und [Validierung](VALIDATION.md).
+
+<span id="oq-70"></span>
+
+## OQ-70 — Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen?
+
+* **Status:** teilweise geklärt (2026-11-12) · **Priorität:** kritisch, Workbench-Blocker
+* **Befund:** Nutzer meldet nach anderer Aufstellung erneut eine gescheiterte
+  Einrichtung. `live-20261111T155557Z` hat einen Vorschlag mit Raster,
+  Rasterversatz und Gegenlesen jeweils `OK`, aber `nachfuehrung=FEHLER`:
+  „rahmenbereiche nicht ausreichend verteilt“. Der gesicherte Vorschlag ist
+  bereits manuell bearbeitet; die ursprüngliche automatische Auswahl ist
+  nicht als eigene Vorschlagsrevision gespeichert.
+* **Offen:** Liegt die unzureichende Verteilung an fehlender nutzbarer
+  Bildstruktur, Bandermittlung, Auswahlstrategie oder Bedienung? Gültiges
+  Raster und erfolgreiche einzelne Bereichsprüfungen ersetzen die räumliche
+  Verteilung und Reserve nicht. Keine Grenzen allein zum Durchlassen ändern.
+* **Belege:** vollständige vorhandene Setup-Dateien, Bereichsänderungsliste,
+  Kameraregler und Live-Status im [Belegpaket](quellen/setup-failures-2026-11-11.md).
+  Acht ursprüngliche Stabilitäts-Einzelbilder wurden nicht auf Platte
+  gespeichert; Zweitmittelbild und ursprüngliche Prüfkennzahlen sind vorhanden.
+* **Antwort landet in:** `src/dispread/live/frame_tracking.py`,
+  `src/dispread/live/setup.py`, Regressionstests und [Validierung](VALIDATION.md).
+* **Ursache (2026-11-12, offline belegt):** Schon der automatische Vorschlag ist einseitig,
+  `[[2,7],[12,7]]` (Seiten −x, −y / +x, +y), keine Reserve. Die Bedienung ist nicht die Ursache.
+  Das Raumlicht hellt die untere rechte Fase auf. Sie fällt aus der dunklen Rahmenkomponente
+  heraus und hinterlässt eine Kerbe (Tiefe 46 px bei (954,690)). Die Solidität sinkt dadurch
+  auf 0,9605 < 0,97, und die Bandermittlung fällt auf das feste Band zurück. Bei diesem kleinen
+  Quad (548 px) reicht das feste Band links nur von x ≈ 600 bis 654. Dort liegen nur die
+  Glasecken; die Fasenstruktur bei x ≈ 575 liegt außerhalb. Die Eckenschwelle im festen Band
+  (2 % des Maximums der Glaskanten) lässt die schwache Fasentextur ohnehin nicht zu. Ein
+  breiteres festes Band hilft nachweislich nicht (Endrand 140 statt 100 px: −x bleibt 2).
+* **Umgesetzt 2026-11-12 (Branch `fix/blocker-oq70`):**
+  * Die Soliditätsgrenze 0,97 bleibt. Unterschreitet eine Komponente sie, wird die
+    Rahmenkontur je Quadseite aus Strahlen gemessen: alle ≤ 4 px eine Normale nach außen,
+    Austritt aus der gefüllten Kontur. Das 0,75-Quantil je Seite (`bezel_notch_quantile`, nur
+    Einrichtung) ergibt eine quadparallele Kontur.
+  * Liegt außerhalb dieser Kontur eine Fläche, die ein ganzes Such- und Patchfenster
+    (41 × 41 px) trägt, bleibt es beim Rückfall `rahmenform_unplausibel`. Das betrifft
+    Balken, Kabel und Schatten. Sonst gilt die Komponente innerhalb der Kontur als Rahmen,
+    und die Kerbe bleibt außerhalb des Bandes. Kennzahl: `band_kerbe_kontur_px`.
+  * `155557Z` ergibt jetzt `[[9,10],[10,10]]` mit Reserve.
+  * Auf 63 Einrichtungsbildern ändert sich das Urteil nur bei den drei bisherigen
+    Rückfällen mit Kerbe: `155557Z`, `124851Z` (vorher `[[6,12],[10,7]]`, jetzt
+    `[[10,10],[10,10]]`) und `20261028T150539Z`. Alle übrigen 60 Vorschläge bleiben
+    bitgleich, auch die vier Review-Balken (60/90 px an `124226Z`/`172340Z`). Diese
+    fallen weiter zurück, ohne Bereich auf dem Balken.
+  * Die Laufprüfung ist unverändert, und das neue Feld bindet keinen Laufstart.
+  * Bleibt ein Vorschlag einseitig, nennt die Einrichtung jetzt „nachfuehrbereiche zu
+    einseitig verteilt; Kamera leicht drehen oder verschieben und neu einrichten“.
+* **Offen:**
+  * Am echten Aufbau ist das nicht erprobt.
+  * Die Stabilität ist nur mit dem gespeicherten Zweitmittelbild nachgerechnet, nicht mit
+    acht Einzelbildern.
+  * Ein dunkler Gegenstand, der mehr als ein Viertel einer Rahmenseite außen anliegt,
+    verschiebt das Quantil und zählt dann als Rahmen. Das entspricht der bisherigen
+    Annahme für Komponenten mit Solidität ≥ 0,97.
+
+<span id="oq-71"></span>
+
+## OQ-71 — Wie kann ein fehlerhafter Einrichtungsvorschlag abgebrochen oder neu gestartet werden?
+
+* **Status:** offen (2026-11-11) · **Priorität:** hoch, Bedienablauf blockiert · **Priorität:** kritisch, Workbench-Blocker
+* **Bedienermeldung:** Bei der aktuellen Einrichtung wird Bestätigen angeboten,
+  der Server lehnt den fehlerhaften Vorschlag korrekt ab. Danach fehlen
+  Abbrechen und Neu einrichten. Die Meldung gehört zum Zustand
+  `setup_ready` mit `setup.overall=FEHLER`, nicht zu `setup_failed`.
+* **Codebefund auf `08ac9b9`:** `live/shell.js:titleActions` bietet in
+  `setup_ready` nur Bestätigen. `setup/confirm.js:fieldsReady` berücksichtigt
+  das Fehlerurteil nicht. `LiveService.confirm` lehnt `FEHLER` ab;
+  `cancel_setup` akzeptiert ausschließlich `setup_running`. Ein zusätzlicher
+  Abbrechen-Knopf allein würde deshalb noch keinen vollständigen Ausweg bieten.
+* **Erforderliche Korrektur:** Fehlerhafte Vorschläge im Browser nicht als
+  bestätigbar darstellen; Vorschlag verwerfen und Neueinrichtung erreichbar
+  machen, mit passender Zustandsbehandlung im Backend. Dabei Diagnosebelege
+  erhalten, laufende Einrichtung/Laufzustände korrekt sperren und die
+  Ablehnung fehlerhafter Messfreigaben beibehalten. Regressionsprüfung mit
+  `setup_ready + FEHLER` vor und nach abgelehnter Bestätigung sowie mit
+  `OK`/`WARNUNG` und laufender Einrichtung.
+* **Beleg und Einstieg:** [Belegpaket](quellen/setup-failures-2026-11-11.md),
+  gesicherter Vorschlag `live-20261111T155557Z`, Nutzerbeobachtung dieser Session.
+  Offline mit tatsächlichen UI-Funktionen und Service-Vorbedingungen
+  reproduziert (`replay.py --ui`): nur Bestätigen aktiv, beide Aktionen
+  abgelehnt, Zustand bleibt `setup_ready`. Kein Browser-/Hardwarelauf.
+* **Antwort landet in:** `src/dispread/workbench/static/live/shell.js`,
+  `setup/confirm.js`, `src/dispread/live/service.py` und UI-/API-Regressionstests.
+
+* **Ergänzung nach Nutzerklärung 2026-11-11:** Auch nach erfolgreicher
+  Bestätigung fehlt direktes „Neu einrichten“. Nutzer musste erst einen
+  Lauf starten und stoppen, um eine neue Aufstellung einrichten zu können
+  (`165234Z/run-01`). Das ist der Bedien-Umweg, kein zusätzlicher bewiesener
+  Lauf-/Trackingfehler (OQ-76 geklärt). Abbruch bei fehlerhaftem Vorschlag
+  und direkter Neueinstieg nach Bestätigung müssen beide funktionieren.
+* **Umgesetzt 2026-11-12 (Branch `fix/blocker-oq71`, gemergt in `feat/bruecke-ui`):**
+  * Bei FEHLER ist Bestätigen gesperrt, für Knopf und Enter; der Grund steht sichtbar daneben.
+  * „Neu einrichten“ ist aus dem Vorschlag und nach der Bestätigung erreichbar, nach der Bestätigung mit Rückfrage.
+  * Die Belege der verworfenen Einrichtung bleiben erhalten; der Setup-Ordner ist bei Starts in derselben Sekunde eindeutig.
+  * Am echten Aufbau ist das noch nicht erprobt.
+
+<span id="oq-72"></span>
+
+## OQ-72 — Warum lehnt die Kantenprüfung die letzte Ziffer der neuen Aufstellung ab?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Befund:** Nach dem ausdrücklich beauftragten Workbench-Neustart scheitert
+  `live-20261111T161702Z` in der Vorprüfung: `kanten (Zelle 7)`; Stabilitätsprüfung
+  nicht gestartet. Fokus und Belichtung abgeschlossen. Erster Rasterversuch
+  `keine_startlage`, zweiter `ok`. Die Kantenprüfung untersucht Helligkeitsstufen,
+  nicht ausschließlich Fokus oder Bildschärfe. Der Zellindex 7 bezeichnet
+  die letzte Zahlzelle des angezeigten Texts `+0.69551`.
+* **Offen:** Tatsächliche Reflex-/Helligkeitskante, Geometrie-/Entzerrungseffekt
+  oder Fehlalarm der Vorprüfung? Die Rastererfolge ersetzen die Vorprüfung
+  nicht; deren Grenzen nicht ohne positiven und negativen Beleg lockern.
+* **Belege:** Standbild, Kameraregler, Zellentexte, Fehler und Status unter
+  `var/diagnostics/setup-followup-20261111/live-20261111T161702Z/`.
+  Wiederholung `live-20261111T161955Z` mit demselben Abbruch ebenfalls
+  gesichert. [Zusatzarchiv und Offline-Rezept](quellen/setup-followup-2026-11-11.md).
+  Erster Fall offline reproduziert: Raster `ok`, belegte Zelle 7 mit
+  Helligkeitsschritt 29,8053 gegenüber Fehlergrenze 20.
+* **Antwort landet in:** `src/dispread/setup_checks.py`, Regressionstests
+  und [Validierung](VALIDATION.md).
+
+* **Zusatz 2026-11-11:** Neuester Fall `170836Z`: erster Rasterfit OK; Kanten-FEHLER in Leerzellen 14/15, keine Stabilitätsmessung. Anderer Zelltyp als Zelle 7; getrennt prüfen.
+  [Originale und Rezept](quellen/setup-focus-failure-2026-11-11-170836.md).
+* **Befund und Teilbehebung 2026-11-12 (Branch `fix/blocker-oq72`):**
+  * **Was die Prüfung schützt:** `_edge_check` (`setup_checks.py`) misst Helligkeitsstufen des Glases über 8 px, in
+    Leerzellen auf einer Grauwert-Schließung, in belegten Zellen auf einer oberen Helligkeitshülle. Gemeint sind
+    Spiegelkanten wie `ab2` (2026-09-29): ein Reflex- oder Schattenrand in einer Zelle, an dem die Hintergrundschätzung
+    des Lesers kippen kann. In Leerzellen 13–15 droht dann `leerzelle_gestoert`, also Ablehnung, in Zahlzellen eine
+    falsch normierte Glyphe.
+  * **`161702Z`/`161955Z` Zelle 7: echter Reflex, Grund (a).** Im Bild liegen ein Glanzfleck rechts oben neben der
+    „1“ (Glas etwa 132 statt 107) und eine hellere Glasfläche ab der Grenze Zelle 7/8. Die Stufe 29,8 setzt sich aus
+    diesem Reflex und einem Strukturanteil zusammen. Der Strukturanteil entsteht, weil die Hülle einer Ziffer vor der
+    leeren Trennzelle ansteigt. Er erreicht auch bei guten Aufstellungen 14–15 (`164508Z`, `165234Z`, `165754Z`).
+    Glyphenrobuste Gegenmaße trennen schlechter, der Reflex wäre dort nur knapp über den positiven Fällen. Am
+    Standbild liest der Leser Zelle 7 noch mit üblichem Abstand (0,99). Ob der Reflex im Lauf über die Ziffer
+    wandert, ist offline nicht prüfbar.
+  * **`170836Z` Zellen 14/15: echte dunkle Spiegelung, Grund (a).** Ein gekrümmter dunkler Streifen liegt über den
+    rechten Leerzellen. Leerzelle 15 hat beim Leser den Abstand 1,35, bei allen anderen 11 Aufstellungen höchstens
+    0,96. Das Lesen verliert dort messbar Reserve.
+  * **Kanten-WARNUNG an Zelle 13/14 der positiven Fälle** (6,5–7,0 gegen 6): schwache Reflexe am rechten Glasrand,
+    Zellabstände des Lesers unauffällig.
+  * **Geändert:** Die Grenzen bleiben. `kanten` liefert `flagged_cells` und einen Bedienertext mit Zelle, Lage,
+    Stufe, Grenze und Abhilfe, z. B. „Reflex- oder Schattenkante über der Anzeige: Zelle 7 (Zahl) mit Stufe 29,8,
+    Fehlergrenze 20. Licht abschatten, spiegelnde Gegenstände entfernen oder Kamera leicht drehen …“. Die
+    Abbruchmeldung der Vorprüfung trägt ihn mit. Urteile auf 12 Aufstellungen und 6 historischen Kontrollen sind
+    bitgleich. Regression: `tests/test_setup_checks.py` (`test_oq72_*`).
+  * **Weiter offen:**
+    * Wandert der Reflex im Lauf über die Ziffern? Nur am echten Aufbau prüfbar.
+    * Strukturanteil der Belegtmessung an der letzten Ziffer: Eine Neukalibrierung braucht positive und negative
+      Laufbelege und wird hier nicht vorgezogen.
+    * Wirkung des OQ-74-Fokusfixes auf diese Fälle: nicht nachstellbar, die Bilder sind schon aufgenommen.
+
+<span id="oq-73"></span>
+
+## OQ-73 — Warum aktualisiert die Werkbank während der Einrichtung verzögert?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Bedienermeldung:** Einrichtung etwas langsamer als sonst; Aktualisierung
+  der Oberfläche verzögert, Kamerafeed ausdrücklich nicht betroffen.
+* **Bisher geprüft:** Nach dem Abbruch `live-20261111T161702Z` antworten warme
+  lokale Unix-Socket-Abfragen in etwa 1,7–6,6 ms. Erster Aufruf inklusive
+  Clientinitialisierung etwa 172,8 ms. Intervalle auf derselben Host-Uhr
+  `HOST_MONOTONIC`, Unsicherheit unbekannt. Dies misst weder HTTP-/Browser-
+  Reaktion unter Setup-Last noch Kamera-/Frame-Latenz.
+* **Offen:** Statusabruf, Browser-Rendering und CPU-/Lock-/Eventloop-Verhalten
+  während einer tatsächlichen Einrichtung getrennt beobachten. Keine neue
+  Einrichtung allein für diese erste Diagnose gestartet. Ein Zusammenhang
+  mit dem Kantenabbruch ist nicht belegt.
+* **Belege:** `status-and-local-response-times.json` im selben Diagnoseordner
+  wie OQ-72; Quellprüfung des 500-ms-Pollings und des Service-Statuslocks.
+  [Zusatzarchiv](quellen/setup-followup-2026-11-11.md) mit den Herkunftsgrenzen
+  der Messung; während der betroffenen Einrichtung keine Browsermessung.
+* **Antwort landet in:** Live-Client/-Service, gezielter Lastprüfung und
+  [Validierung](VALIDATION.md).
+
+<span id="oq-74"></span>
+
+## OQ-74 — Warum wird das Bild nach erfolgreich geprüfter Fokussuche wieder unscharf?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Bedienermeldung:** Werkbank findet den richtigen scharfen Fokus und
+  wechselt danach sichtbar wieder auf eine unscharfe Lage. Nutzer fragt
+  zugleich nach dem tatsächlich verwendeten Worktree.
+* **Belegter Stand:** Dienst auf `bruecke-run`, Commit `08ac9b9`; kein
+  automatisches Update beim Neustart. Neuere Workbench-Änderungen in
+  `feat/bruecke-ui` fehlen dort. Die vier Fokus-/Kameramodule sind im
+  laufenden Quellbaum und den geprüften Zweigen `bruecke-ui`, `bruecke-takt`
+  und `bruecke-ux` jedoch byte-identisch. Die alten Fokuskorrekturen R13-9
+  und R13-12 sind Vorfahren des laufenden Commits.
+* **Jüngster Versuch:** `live-20261111T161955Z`, Zielwert 60, beste Schärfe
+  734,45, Endprüfung 727,41; Anfahrt von unten protokolliert. Spätere Regler-
+  Rückmeldung weiterhin 60, Autofokus aus. Ein zurückgesprungener numerischer
+  Fokuswert ist damit nicht belegt; optische Unschärfe ist die Nutzerbeobachtung.
+* **Offen:** Nach der Fokus-Endprüfung startet `_run_setup` die Kamera neu
+  und setzt den Fokus erneut über die UVC-Quelle. Ob diese Grenze die
+  verifizierte optische Endlage verliert (z. B. Motorhysterese), muss mit
+  Bildern und Reglerereignissen vor/nach Neustart geprüft werden. Keine
+  alleinige Ursache aus dem älteren Worktree ableiten; kein Wechsel allein
+  auf Basis des Commit-Datums.
+* **Belege:** Worktree-/Dateihashvergleich und aktuelle Reglerrückmeldungen
+  unter `var/diagnostics/setup-followup-20261111/`, dort zusätzlich
+  Setup-Dateien der beiden neuen Versuche.
+  [Zusatzarchiv](quellen/setup-followup-2026-11-11.md). Passender Interpreter,
+  Prozessumgebung und Arbeitsordner lösen `service`, `setup` und
+  `focus_sweep` tatsächlich unter `bruecke-run/src` auf (`PYTHONPATH=src`).
+* **Zusatzbefund `162902Z`:** Im erhaltenen Bild liegt die LCD-Hinweisbox
+  bei ungefähr (538,3; 144,6; 800,4; 110,0) px, Fokusfenster bei
+  (640; 360; 640; 360) px, Schnittfläche 0. Ziel 46, Endprüfung als
+  erfolgreich protokolliert. Fokuszeitpunkt selbst hat kein Bild;
+  optische Schärfe und unveränderte Aufstellung über den Kameraneustart
+  sind damit nicht unabhängig nachgewiesen. Originale und Geometrieauswertung
+  im [neuen Paket](quellen/setup-new-position-2026-11-11-162902.md).
+* **Antwort landet in:** Kamera-/Fokus-/Setup-Übergang, Regressionstests,
+  [Validierung](VALIDATION.md) und dokumentierter Betriebs-Quellstand.
+
+* **Zusatz 2026-11-11:** Neuester Fall `170836Z`: Nutzer sieht erneut schlechteren Fokus als möglich. Ziel/Rückmeldung 56; beste protokollierte Schärfe 522,219448, Endprüfung 517,933823. Keine Fokus-Bildfolge, numerischer Rücksprung nicht belegt.
+  [Originale und Rezept](quellen/setup-focus-failure-2026-11-11-170836.md).
+* **Teilbehebung 2026-11-12 (Branch `fix/blocker-oq74`, gemergt in `feat/bruecke-ui`):**
+  * **Fokus-ROI:** aus der grünen LCD-Hinweisbox, vorab auf dem neuesten Vorschaubild gesucht, mit 5 % Rand. Ohne Box gilt das mittlere Drittel, und `fokus` meldet WARNUNG. Auf allen sieben Paketbildern überdeckt die ROI die Box zu ≥ 90 %, vorher 0 bzw. 45–53 %.
+  * **Endprüfung nach dem letzten Kameraneustart** gegen die beste Suchprobe, helligkeitsnormiert. Unter 0,6 (Vorabwert) wird der Fokus einmal von unten neu gesetzt, sonst gibt es eine WARNUNG.
+  * **Laufstart:** dieselbe Prüfung gegen die Einrichtungsreferenz. Bleibt die Schärfe zu gering, erscheint eine sichtbare WARNUNG, der Lauf startet trotzdem. Das Ergebnis steht in `session.json`.
+  * **Neue Diagnose:** `still-versuch-N.png`, Fokusausschnitte vor und nach dem Neustart, `focus_end_check`.
+  * **Weiter offen:**
+    * optisches Motorverhalten beim Neustart: erste echte Einrichtung, `restart_effect`
+    * Kalibrierung der Schwelle
+
+* **Nachtrag 2026-11-13:** Der Laufstart sperrt fehlende oder ungültige
+  Referenzen und Schärfeverhältnisse außerhalb 0,95–1,05; das ist ein
+  vorläufiger Gleichheitsfilter, keine validierte Schärfe- oder Maßstabsgrenze.
+  Die Ursache der Unterschiede und die Kalibrierung bleiben offen. Ein Lauf
+  mit 1,418 hatte keine Zweitversuche; Schärfe allein beweist keinen Maßstab.
+  Details und Offline-Auswertung: [Nachführung](quellen/nachfuehrung-recherche-2026-11-13/README.md).
+
+<span id="oq-75"></span>
+
+## OQ-75 — Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus?
+
+* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Teil des Workbench-Blockers
+* **Bedienermeldung:** Kamerabild und Verbindung zur Workbench gleichzeitig
+  ungefähr sieben Sekunden weg. Dauer vom Nutzer geschätzt, nicht gemessen;
+  exakter Beginn und Ende unbekannt. Erste Agent-Prüfung 17:41:15 MEZ.
+* **Logs/Status:** PID 3321848, Start 17:16:36 MEZ, `NRestarts=0`, weiterhin
+  active/running. Keine zugeordnete neue Kamera-/Dienststartmeldung im
+  Anwendungsjournal beim berichteten Ausfall. Kamera später laufend,
+  nicht als stalled markiert. Dies widerlegt einen vorübergehenden Ausfall nicht.
+* **Weitere Belege:** Kernel meldet USB-U1-/xHCI-Warnungen um 17:29 bei den
+  protokollierten früheren Setup-Kameraneustarts. Tailscale-Journal enthält
+  Peer-/DERP-/Endpunktwechsel im erfassten Zeitraum. Keine dieser Meldungen
+  ist ohne genaues Ereignisfenster als Ursache nachgewiesen. CPU-/IO-/
+  Speicherdruckdateien fehlen auf diesem System; Firmware-Abfrage scheiterte,
+  Fehlerausgaben sind erhalten.
+* **Belege:** `var/diagnostics/workbench-outage-20261111/` mit ursprünglichem
+  Anwendungs-/Kerneljournal in Text und JSON, Netzwerkjournal, Service-/
+  Kamera-/Speicherstatus, Befehlen, Exitcodes und Quellen der Zeitangaben.
+  [Logpaket](quellen/workbench-outage-2026-11-11.md).
+* **Antwort landet in:** Dienst-/Kamera-/Verbindungsdiagnose, Fehlerbehebung,
+  Regressionen und [Validierung](VALIDATION.md). Nicht allein durch Neustart
+  oder einen inzwischen wieder funktionierenden Status als geklärt markieren.
+
+
+<span id="oq-76"></span>
+
+## OQ-76 — Warum verliert ein Lauf nach bestätigter Einrichtung sämtliche Rahmenmerkmale?
+
+* **Status:** geklärt (2026-11-11)
+* **Befund:** `live-20261111T165234Z/run-01` enthält 28 UNREADABLE,
+  28 Trackingverluste (`zu_wenig_rahmenmerkmale`), 0 VALID. Originale erhalten.
+* **Antwort:** Der Nutzer erklärt am 2026-11-11 ausdrücklich: Der kurze
+  Start-/Stopp-Lauf war sein Umweg, um nach bestätigter Einrichtung für
+  eine neue Aufstellung wieder einrichten zu können. Dafür fehlte ein
+  direkter Knopf. Dieser absichtlich gestartete Lauf bei Aufstellungswechsel
+  ist kein unabhängiger Beleg eines Trackingfehlers am eingerichteten Aufbau.
+  Die Einordnung als eigenständiger Trackingblocker wird zurückgenommen.
+* **Verweis:** [OQ-71](#oq-71) umfasst auch fehlendes Neu einrichten nach
+  Bestätigung. [Originale und Bedienerkontext](quellen/workbench-positive-regression-2026-11-11.md).
+* **Antwort landet in:** OQ-71, Claude-Übergabe, Validierung und Laborjournal.

@@ -324,7 +324,7 @@
     T.label(camArea, 193, 150, "Kamerabild", "t-label t-strong", { "text-anchor": "middle" });
     T.label(camArea, 193, 176, "StreamCam · gemeinsamer CameraOwner", "t-small", { "text-anchor": "middle" });
     T.label(camArea, 193, 198, "/live · Einrichtung → Lauf", "t-small", { "text-anchor": "middle", style: MONO });
-    // Log rechts, Shell-Tabs unten.
+    // Log rechts.
     const log = T.group(browser, "log");
     T.panel(log, 352, 84, 160, 170, "t-panel");
     T.label(log, 432, 108, "Log", "t-small t-strong", { "text-anchor": "middle" });

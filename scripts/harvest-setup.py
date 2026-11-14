@@ -59,7 +59,7 @@ einen Offline-Zellentext fuer die Rasterversatzpruefung.
 Vorgabe ist `dispread.glassquad.glass_quad_in_region`: hue-eingeschraenkte
 Segmentierung (Referenzfarbton aus dem Zentrum der Hinweisbox geschaetzt) plus
 echter Vierpunktquad-Fit (Kantengeraden ausgeglichen, kein `minAreaRect`).
-`dispread.workbench.vision.lcd_quad_in_region` (reine Saettigungsschwelle,
+`dispread.detect.vision.lcd_quad_in_region` (reine Saettigungsschwelle,
 `minAreaRect`-Hypothese) bleibt nur als **dokumentierter Rueckfall** hinter
 `--detector saturation-only` erreichbar: am GSV-2AS ist auch das Gehaeuse
 gesaettigt-blaeulich (gemessen an frame_000412.jpg), die Saettigungsmaske
@@ -105,6 +105,7 @@ from dispread.camera_settings import (
     load_camera_settings,
 )
 from dispread.charcells import CharGrid, source_dot_column_px
+from dispread.detect.vision import lcd_quad_in_region
 from dispread.dotlattice import evaluate_quad, fit_lattice
 from dispread.frames.uvc_source import (
     UvcError,
@@ -124,7 +125,6 @@ from dispread.live.setup import (
 )
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.setup_checks import RESOLUTION_ERROR_PX
-from dispread.workbench.vision import lcd_quad_in_region
 
 
 def _parse_float_list(value: str, count: int, name: str) -> list[float]:

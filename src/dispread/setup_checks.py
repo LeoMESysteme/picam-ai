@@ -147,7 +147,7 @@ def display_defect_check(images: Sequence[np.ndarray], quad, *, grid: CharGrid =
     des Setup-Zellentexts. Dieser muss fuer alle Standbilder gelten;
     wechselnde/unbekannte Zellen bleiben '?', niemals Leerzeichen.
     """
-    from dispread.workbench.fields import DISPLAY_DEFECT_HINT
+    from dispread.live.texts import DISPLAY_DEFECT_HINT
 
     if not images:
         raise ValueError('Displayfehlerpruefung braucht mindestens ein Standbild')
@@ -260,10 +260,56 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
     severe = any((scores[k] > EDGE_ERROR if peak[k] < blank_limit
                   else occupied_scores[k] > EDGE_OCCUPIED_ERROR) for k in flagged)
     status = 'FEHLER' if severe else 'WARNUNG' if flagged else 'OK'
+    details = []
+    for k in flagged:
+        blank = peak[k] < blank_limit
+        value = scores[k] if blank else occupied_scores[k]
+        error_limit = EDGE_ERROR if blank else EDGE_OCCUPIED_ERROR
+        warning_limit = EDGE_WARNING if blank else EDGE_OCCUPIED_WARNING
+        details.append({'cell': k, 'art': 'leer' if blank else 'belegt', 'stufe': value,
+                        'status': 'FEHLER' if value > error_limit else 'WARNUNG',
+                        'grenze': error_limit if value > error_limit else warning_limit})
     return CheckResult(status, {'cell_step': scores, 'cell_occupied_step': occupied_scores,
                                 'cell_highpass': peak, 'blank_limit': blank_limit,
-                                'max_blank_step': max((scores[k] for k in flagged if peak[k] < blank_limit), default=0.0)},
-                       flagged)
+                                'max_blank_step': max((scores[k] for k in flagged if peak[k] < blank_limit), default=0.0),
+                                'flagged_cells': details},
+                       flagged, _edge_reason(status, details))
+
+
+# OQ-72: Lage der Zellen im GSV-2AS-Format (Zahlenblock 0-7, Trennzelle 8,
+# Einheit 9-12, Rest 13-15), nur fuer den Bedienertext.
+def _cell_position(cell: int) -> str:
+    if cell == 0:
+        return 'Vorzeichen'
+    if cell <= 7:
+        return 'Zahl'
+    if cell == 8:
+        return 'Trennzelle'
+    return 'Einheit' if cell <= 12 else 'rechts der Einheit'
+
+
+def _edge_reason(status: str, details: list[dict]) -> str | None:
+    """Bedienertext zur Kantenpruefung mit Zellen, Messwert, Grenze und Abhilfe (OQ-72).
+
+    Die Pruefung misst eine Helligkeitsstufe des Glases ueber 8 px. Sie
+    unterscheidet nicht, ob ein heller Reflex oder ein dunkler Schatten bzw.
+    eine Spiegelung die Kante erzeugt; der Text nennt deshalb beides.
+    """
+    if status not in ('FEHLER', 'WARNUNG'):
+        return None
+    parts = []
+    for detail in details:
+        relation = 'Fehlergrenze' if detail['status'] == 'FEHLER' else 'Warngrenze'
+        value = f"{detail['stufe']:.1f}".replace('.', ',')
+        parts.append(f"Zelle {detail['cell']} ({_cell_position(detail['cell'])}) mit Stufe {value}, "
+                     f"{relation} {detail['grenze']:g}")
+    where = '; '.join(parts)
+    if status == 'FEHLER':
+        return (f'Reflex- oder Schattenkante über der Anzeige: {where}. Licht abschatten, spiegelnde '
+                'Gegenstände entfernen oder Kamera leicht drehen, bis keine Kante mehr über den Zellen liegt, '
+                'dann neu einrichten')
+    return (f'Schwache Reflex- oder Schattenkante: {where}. Im Bild prüfen; besser Licht abschatten '
+            'oder Kamerawinkel ändern')
 
 
 def _border_check(sampled: SampledImage) -> CheckResult:

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createCorrectionChip, createEffects, mountEffects, TEXT_MS} from '../src/dispread/workbench/static/live/viewer/effects.js';
-import {createAlerts, LOST_TITLE, STALL_TITLE, watchAlerts} from '../src/dispread/workbench/static/live/run/alerts.js';
+import {createAlerts, FOCUS_RUN_TITLE, LOST_TITLE, STALL_TITLE, watchAlerts} from '../src/dispread/workbench/static/live/run/alerts.js';
 import {effectState} from '../src/dispread/workbench/static/live/model.js';
 
 const scene = (name) => JSON.parse(readFileSync(new URL(`./fixtures/live/scene-${name}.json`, import.meta.url), 'utf8'));
@@ -478,4 +478,51 @@ test('correction chip shows after the animation and hides 2 s after correcting e
   assert.equal(chip.update(false, 9500), true);
   assert.equal(chip.update(false, 11100), false);
   assert.equal(chip.update(true, 11200), false);
+});
+
+test('alerts: Fokuspruefung am Laufstart zeigt die Warnung stehend, einmal je Lauf', () => {
+  const h = harness();
+  const alerts = createAlerts(h.deps);
+  const text = 'Bild nach Kamerastart unschärfer als bei der Einrichtung (31 %) – Fokus prüfen';
+  const running = {state: 'running', session_id: 's1', run: {dir: 'run-01', focus_check: {status: 'WARNUNG', text}}};
+  alerts.update(running);
+  const shown = h.toasts.get('fokus-lauf');
+  assert.equal(shown.level, 'warn');
+  assert.equal(shown.title, FOCUS_RUN_TITLE);
+  assert.equal(shown.text, text);
+  assert.equal(shown.sticky, true);
+  h.toasts.delete('fokus-lauf');
+  alerts.update(running);
+  assert.equal(h.toasts.has('fokus-lauf'), false, 'nicht bei jedem Abruf neu');
+  // Neu gesetzt und wieder scharf: nur ein kurzer Hinweis.
+  alerts.update({state: 'running', session_id: 's1', run: {dir: 'run-02',
+    focus_check: {status: 'OK', text: 'Fokus nach Kamerastart neu gesetzt (vorher 5 %, danach 98 % der Einrichtungsschärfe)'}}});
+  assert.equal(h.toasts.get('fokus-lauf').level, 'info');
+  assert.notEqual(h.toasts.get('fokus-lauf').sticky, true);
+});
+
+test('abgelehnter Start bleibt nach erneutem Statusabruf getrennt sichtbar', () => {
+  const h = harness();
+  const status = {state: 'stopped', session_id: 's', run: {dir: 'run-01'},
+    last_start_rejection: {run_id: 'new', run_dir: 'run-02', focus_check: {text: 'Fokus prüfen'}}};
+  createAlerts(h.deps).update(status);
+  assert.equal(h.toasts.get('start-abgelehnt').text, 'Fokus prüfen');
+  h.toasts.clear();
+  createAlerts(h.deps).update(status);
+  assert.equal(h.toasts.get('start-abgelehnt').title, 'Letzter Start abgelehnt');
+});
+
+test('erledigte Startablehnung schließt Hinweis bei Erfolg oder neuer Einrichtung', () => {
+  for (const next of [{state: 'running', run: {dir: 'run-02', focus_check: {status: 'OK', text: 'Fokus OK'}}},
+    {state: 'setup_running'}]) {
+    const h = harness();
+    const alerts = createAlerts(h.deps);
+    alerts.update({state: 'stopped', last_start_rejection: {run_id: 'old', focus_check: {text: 'neu einrichten'}}});
+    assert.ok(h.toasts.has('start-abgelehnt'));
+    alerts.update({...next, last_start_rejection: null});
+    assert.equal(h.toasts.has('start-abgelehnt'), false);
+    const fresh = harness();
+    createAlerts(fresh.deps).update({...next, last_start_rejection: null});
+    assert.equal(fresh.toasts.has('start-abgelehnt'), false);
+  }
 });

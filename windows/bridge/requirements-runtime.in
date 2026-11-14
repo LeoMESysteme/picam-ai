@@ -1,0 +1,13 @@
+# Resolution INPUT ONLY. Not installable release locks; no combination tested yet.
+# Resolve for the chosen explicit Python >=3.13 Windows 11 x64 runtime.
+PySide6
+pyserial
+
+# Candidate only; Windows qualification and hash locks still required.
+cryptography==50.0.1
+
+# Optional DNS-SD discovery; candidate only, qualify on Windows first.
+zeroconf
+
+# Exact tested client connector API; Windows qualification/hashed locks pending.
+aiohttp==3.14.3

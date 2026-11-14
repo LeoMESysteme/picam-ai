@@ -96,10 +96,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import cv2  # noqa: E402
 
+from dispread.detect.vision import lcd_quad_in_region  # noqa: E402
 from dispread.records import to_boottime_ns  # noqa: E402
 from dispread.rectify import rectify  # noqa: E402
 from dispread.session_profile import SessionProfile  # noqa: E402
-from dispread.workbench.vision import lcd_quad_in_region  # noqa: E402
 
 CROP_SIZE = (400, 160)  # wie src/dispread/workbench/controller.py:CROP_SIZE
 DEFAULT_HALF_WINDOW_S = 0.6

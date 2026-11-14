@@ -23,11 +23,16 @@ from aiohttp import web
 from dispread.charcells import CharGrid
 from dispread.gsv_transport import RELEASE_BLOCK
 from dispread.live import RELEASE_NOTICE
-from dispread.live.output import SERIAL_RELEASE_NOTE, normalize_output, require_output_acknowledgement
+from dispread.live.output import (
+    BRIDGE_RELEASE_NOTE,
+    SERIAL_RELEASE_NOTE,
+    normalize_output,
+    require_output_acknowledgement,
+)
 from dispread.live.preview import PreviewFrame
 from dispread.live.service import OVERLAYS
+from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.records import TimeBaseKind, Timestamp
-from dispread.workbench.fields import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.workbench.server import make_app
 
 HOST = "127.0.0.1"
@@ -36,7 +41,9 @@ FIXTURES = Path(__file__).parent / "fixtures" / "live"
 SCENES = (
     "idle", "setup_focus", "setup_focus_done", "setup_standbilder", "setup_ready_warnung",
     "running_valid", "running_transition", "running_rahmen_verdeckt", "running_stalled",
-    "running_anzeige_bewegt", "stopped",
+    "running_anzeige_bewegt", "stopped", "running_bereich_unstimmig", "setup_ready_nach_lauf",
+    "setup_ready_nach_lauf_rauschen", "setup_ready_nach_lauf_neu", "running_bereich_stillgelegt",
+    "setup_ready_fehler",
 )
 # Aus live-20261030T133635Z/setup; keine Laufzeitabhaengigkeit von var/.
 FOCUS_SAMPLES = [[48, 630.3558194010419], [56, 273.53271242939513], [40, 201.1113182858314],
@@ -48,6 +55,31 @@ REGION_CENTRES = [[873, 385], [915, 737], [1256, 422], [1485, 658], [829, 411], 
 # Bereiche rechts der Anzeige (Rahmen verdeckt von rechts, Ecken oben/unten rechts).
 RIGHT_REGIONS = {3, 6, 7, 11}
 QUAD = [[810, 511], [1369, 511], [1377, 580], [814, 591]]
+# TC 2026-11-11: Bereich 6 (Index 5) dauerhaft unstimmig, Zahlen wie im Lauf
+# live-20261111T103604Z (Erstfit-Residuen, dispread.live.region_hint).
+REGION_HINT = {"regions": [{"number": 6, "index": 5, "centre": [822.0, 737.0], "share": 0.917,
+                            "median_px": 1.332, "frames": 205}],
+               "rest_median_px": 0.175, "frames": 210, "limit_px": 0.65}
+# Neueinrichtung: derselbe Ort heisst im neuen Vorschlag Bereich 5 (Index 4, 829,411).
+PREVIOUS_REGION_HINT = {"session_id": "live-20261111T103604Z", "run": "run-01", "quad": [list(map(float, p)) for p in QUAD],
+                        "regions": [{"number": 6, "centre": [830.0, 413.0], "max_share": 0.937,
+                                     "flagged_evaluations": 3}]}
+# T3: Rauschen im Status des letzten Laufs: nur Bereich 5 (829,411) liegt im neuen Vorschlag
+# an einer dauerhaft unstimmigen Stelle; der Rest liegt woanders oder war nur kurz markiert.
+NOISE_REGIONS = [{"number": 1 + i, "centre": [100.0 + 40 * i, 60.0], "max_share": 0.5,
+                  "flagged_evaluations": 4} for i in range(8)] + [
+    {"number": 9, "centre": [829.0, 411.0], "max_share": 0.62, "flagged_evaluations": 3},
+    {"number": 10, "centre": [1256.0, 422.0], "max_share": 0.36, "flagged_evaluations": 1}]
+# TB 2026-11-11: Bereich 6 (Index 5) automatisch stillgelegt, Zahlen wie in der
+# Offline-Nachstellung von live-20261111T103604Z (dispread.live.region_hint).
+REGION_DEACTIVATED = [{"event": "rahmenbereich_stillgelegt", "frame_sequence": 1213,
+                       "utc": "2026-11-11T10:37:10+00:00", "number": 6, "index": 5, "centre": [822.0, 737.0],
+                       "share": 0.911, "median_px": 1.31, "frames": 296, "rest_median_px": 0.169,
+                       "coordination_ratio": 0.919, "window_frames": 300, "disabled_count": 1,
+                       "disabled_limit": 3, "probe": {"disabled": [5], "cases": 288, "accepted": 24,
+                                                     "worst_error_px": 0.901, "worst_case": None,
+                                                     "tolerance_px": 1.0, "ok": True},
+                       "hint_history": None}]
 CAMERA_SOURCE = {"model": "logitech_streamcam", "usb_id": "046d:0893", "size": [1920, 1080],
                  "fourcc": "YUYV", "fps": 30, "device": "/dev/video0", "controls": {
                      "focus_absolute": 48, "exposure_time_absolute": 300,
@@ -62,6 +94,34 @@ def scene_state(name):
         raise ValueError(f"Unbekannte Szene: {name}")
     if name == "idle":
         return {"state": name}
+    if name == "running_bereich_unstimmig":
+        state = scene_state("running_valid")
+        state["run"]["region_hint"] = copy.deepcopy(REGION_HINT)
+        return state
+    if name == "running_bereich_stillgelegt":
+        state = scene_state("running_valid")
+        state["run"]["region_deactivated"] = copy.deepcopy(REGION_DEACTIVATED)
+        return state
+    if name == "setup_ready_fehler":
+        # OQ-71: Vorschlag mit Gesamturteil FEHLER (Gegenlesen), Bestaetigen muss gesperrt sein.
+        state = scene_state("setup_ready_warnung")
+        state["setup"]["checks"]["gegenlesen"] = "FEHLER"
+        state["setup"]["check_reasons"] = {"gegenlesen": "Zelle 3: gelesen 7, Referenz 1"}
+        state["setup"]["overall"] = "FEHLER"
+        return state
+    if name == "setup_ready_nach_lauf":
+        state = scene_state("setup_ready_warnung")
+        state["previous_region_hint"] = copy.deepcopy(PREVIOUS_REGION_HINT)
+        return state
+    if name == "setup_ready_nach_lauf_rauschen":
+        state = scene_state("setup_ready_warnung")
+        state["previous_region_hint"] = {**copy.deepcopy(PREVIOUS_REGION_HINT), "regions": copy.deepcopy(NOISE_REGIONS)}
+        return state
+    if name == "setup_ready_nach_lauf_neu":
+        # Neue Aufstellung: Anzeige-Viereck deutlich verschoben, alte Stellen zaehlen nicht.
+        state = scene_state("setup_ready_nach_lauf_rauschen")
+        state["previous_region_hint"]["quad"] = [[x + 60.0, y + 40.0] for x, y in QUAD]
+        return state
     if name == "stopped":
         # Wie der echte Dienst: die Sitzung bleibt nach dem Stopp stehen,
         # run traegt Zusammenfassung und Endgrund (kein Wert ist mehr frisch).
@@ -85,7 +145,7 @@ def scene_state(name):
     setup = {
         "grid": None,
         "step": step, "elapsed_s": 5.0 if focus else 36.4,
-        "focus": {"method": "climb", "roi": [640, 360, 640, 360],
+        "focus": {"method": "climb", "roi": [640, 360, 640, 360], "roi_source": None, "end_check": None,
                   "samples": copy.deepcopy(FOCUS_SAMPLES[:3] if name == "setup_focus" else FOCUS_SAMPLES),
                   "verify": None if name == "setup_focus" else {
                       "score": 624.465370104453, "threshold": 0.85 * FOCUS_SAMPLES[0][1]}},
@@ -126,6 +186,9 @@ def scene_state(name):
                     "transition_display_changing": 12, "frames_read": 858, "tolerance_frames": 0,
                     "frames_skipped": 2, "frame_gaps": 0, "frame_gaps_owner_total": 0, "audit_errors": 0,
                     "tracking_lost": 4, "tracking_coarse_retries": 0, "tracking_coarse_accepted": 0,
+                    "tracking_geometry": {"observations": 858, "retry_fraction": 0.0,
+                                          "scale": {"n": 0, "total": 0, "window_limit": 10000,
+                                                    "min": None, "median": None, "max": None}},
                     "tracking_lost_reasons": {}, "tracking_hints": {"count": 0,
                         "by_kind": {"anzeige_bewegt": 0, "rahmen_verdeckt": 0, "unbekannt": 0}, "max_shift_px": None},
                     "track_score": {"min": 0.43, "median": 0.93, "max": 0.98, "n": 858},
@@ -194,11 +257,6 @@ class FakeController:
         return {"live": False}
 
 
-class FakeTerminals:
-    def list(self):
-        return []
-
-
 class FakeLiveService:
     def __init__(self, image_path):
         self._lock = threading.Lock()
@@ -229,7 +287,8 @@ class FakeLiveService:
                 "system": {"cpu_percent": 37.5, "cpu_window_s": 1.0},
                 "step": None, "simulate": False, "profile": None, "run_block": None, "test_run": None,
                 "diagnostics": {"enabled": False, "reason": "kein Diagnoselauf"},
-                "diagnose_kopie": False, "last_mark": None,
+                "diagnose_kopie": False, "last_mark": None, "previous_region_hint": None,
+                "last_start_rejection": None,
                 "output": {"transport": "off", "state": "off"},
                 "reference": {"enabled": False, "reason": "kein Referenzlauf",
                               "latest": None, "schedule_step": None}, "reference_eval": None,
@@ -252,7 +311,7 @@ class FakeLiveService:
             cv2.imwrite(str(self._image_path), self._scene_image)
             self._frame_due = 0.0
 
-    def set_output(self, state, error=None):
+    def set_output(self, state, error=None, tick=None):
         # Test-Haken: Zustand des laufenden Ausgabewegs setzen (Form wie der echte Status).
         with self._lock:
             output = self._status['output']
@@ -260,6 +319,8 @@ class FakeLiveService:
                 raise ValueError('Kein Ausgabeweg gewaehlt')
             output['state'] = state
             output['error'] = error
+            if tick is not None:
+                output['tick'] = tick
 
     def bump_revision(self):
         from dispread.live.service import LiveError
@@ -279,12 +340,23 @@ class FakeLiveService:
                 data["cause_texts"] = LIVE_CAUSE_TEXT.copy()
             if data.get("run") is not None:
                 data["run"].setdefault("tracking_hint", None)
+                data["run"].setdefault("region_hint", None)
+                data["run"].setdefault("region_deactivated", [])
+                data["run"].setdefault("focus_check", None)
                 window = data["run"].setdefault("rejection_causes",
                     {"window_s": 10.0, "frames": 0, "limited": False, "causes": []})
                 window["causes"] = [live_cause(c) for c in window["causes"]]
             return data
 
     def start_setup(self, *, cell_text=None):
+        from dispread.live.service import LiveError
+
+        with self._lock:
+            state = self._status.get("state")
+        if state == "running":
+            raise LiveError("Lauf zuerst beenden")
+        if state == "setup_running":
+            raise LiveError("Einrichtung laeuft bereits")
         self.set_scene("setup_focus")
 
     def cancel_setup(self):
@@ -350,6 +422,8 @@ class FakeLiveService:
             if (session_id != self._status["session_id"]
                     or ("proposal_revision" in kwargs and kwargs["proposal_revision"] != setup.get("proposal_revision"))):
                 raise LiveError("Vorschlag hat sich geaendert — bitte neu pruefen")
+            if setup.get("overall") == "FEHLER":
+                raise LiveError("Einrichtung meldet FEHLER - nicht bestaetigbar")
             self._status["state"] = "confirmed"
 
     def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False, output=None):
@@ -365,12 +439,19 @@ class FakeLiveService:
         transport = config['transport']
         self.set_scene("running_valid")
         with self._lock:
+            released = transport in ('uart', 'tcp') and config['acknowledge_unaccepted'] is True
             self._status['output'] = ({'transport': 'off', 'state': 'off'} if transport == 'off' else {
                 'transport': transport, 'state': 'serial_ready' if transport == 'serial' else 'waiting',
-                'config': config, 'error': None, 'release_block': None if transport == 'serial' else RELEASE_BLOCK,
+                'config': config, 'error': None,
+                'release_block': None if transport == 'serial' or released else RELEASE_BLOCK,
                 'last_ack': None, 'acceptance': 'fehlt',
                 'ack_scope': 'lokale Annahme' if transport == 'serial' else 'COM driver write, not GSVmulti reception',
                 **({'release_note': SERIAL_RELEASE_NOTE} if transport == 'serial' else {}),
+                **({'release': 'test_unaccepted' if released else None} if transport != 'serial' else {}),
+                **({'release_note': BRIDGE_RELEASE_NOTE} if released else {}),
+                # Vierkanal: Taktstatistik wie tick_status (B1/B2); per /test/output ueberschreibbar.
+                **({'tick': {'rate_hz': config['rate_hz'], 'seq': 0, 'total': 0, 'valid': 0, 'invalid': 0, 'missed': 0}}
+                   if config.get('format') == '4ch' else {}),
             })
             self._status["diagnostics"] = {"enabled": diagnostics, "saved": 0,
                         "bytes": 0, "dropped_queue": 0, "dropped_limit": 0, "dropped_memory": 0,
@@ -455,7 +536,7 @@ class FakeLiveService:
 
 def make_test_app(image_path):
     live = FakeLiveService(image_path)
-    app = make_app(FakeController(), FakeTerminals(), verifier=lambda p: p == "test-only", live=live)
+    app = make_app(FakeController(), verifier=lambda p: p == "test-only", live=live)
 
     async def state(request):
         live.set_state(await request.json())
@@ -499,7 +580,7 @@ def make_test_app(image_path):
 
     async def set_output(request):
         data = await request.json()
-        live.set_output(data["state"], data.get("error"))
+        live.set_output(data["state"], data.get("error"), data.get("tick"))
         return web.json_response({"ok": True})
 
     async def delay(request):
@@ -521,6 +602,71 @@ def make_test_app(image_path):
         else:
             online.set()
         return web.json_response({"ok": True})
+
+    # --- Fake-Bruecke (BW1): Routen wie src/dispread/bridge/routes.py, Zustand per /test/bridge schaltbar. ---
+    bridge = {"hub": True, "connected": False, "transport": None, "uart_state": "unprepared", "uart_error": None,
+              "release_block": "DUT-Ausgabe gesperrt: Windows-Abnahme fehlt.", "prepare_409": False,
+              "expires_in_s": 300, "offers": 0}
+
+    def bridge_status():
+        return {"pi_id": "pi-test-0001", "run_id": None, "real_run": False, "transport": bridge["transport"],
+                "connected": bridge["connected"], "uart_prepared": bridge["uart_state"] == "listening",
+                "uart_state": bridge["uart_state"], "uart_error": bridge["uart_error"],
+                "release_block": bridge["release_block"]}
+
+    def bridge_down():
+        return web.Response(status=503, text="Bridge hub unavailable")
+
+    async def bridge_hook(request):
+        data = await request.json()
+        for key in bridge:
+            if key in data:
+                bridge[key] = data[key]
+        return web.json_response({"ok": True, "offers": bridge["offers"]})
+
+    async def bridge_profile(_request):
+        body = json.dumps({"schema": 1, "pi_id": "pi-test-0001", "name": "Werkbank-Pi",
+                           "certificate_pem": "-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n",
+                           "certificate_sha256": "0123456789abcdef" * 4, "endpoints": [], "protocol_version": 2})
+        return web.Response(text=body, content_type="application/json",
+                            headers={"Content-Disposition": 'attachment; filename="pi.dispread"'})
+
+    async def bridge_offers(request):
+        data = await request.json()
+        if data.get("transport") not in ("network", "uart"):
+            return web.Response(status=400, text="bad transport")
+        bridge["offers"] += 1
+        return web.json_response({"offer": f"TESTCODE-{bridge['offers']}-{data['transport']}",
+                                  "expires_in_s": bridge["expires_in_s"]})
+
+    async def bridge_clients_delete(_request):
+        return web.json_response({"ok": True})
+
+    async def bridge_get_status(_request):
+        return web.json_response(bridge_status()) if bridge["hub"] else bridge_down()
+
+    async def bridge_prepare(_request):
+        if not bridge["hub"]:
+            return bridge_down()
+        if bridge["prepare_409"]:
+            return web.Response(status=409, text="UART unavailable or occupied; release its owner first")
+        bridge["uart_state"], bridge["uart_error"] = "listening", None
+        return web.json_response(bridge_status())
+
+    async def bridge_release(_request):
+        if not bridge["hub"]:
+            return bridge_down()
+        bridge["uart_state"] = "stopped"
+        return web.json_response(bridge_status())
+
+    app.router.add_post("/test/bridge", bridge_hook)
+    app.router.add_get("/live/bridge/profile", bridge_profile)
+    app.router.add_post("/live/bridge/offers", bridge_offers)
+    app.router.add_delete("/live/bridge/clients/{client_id}", bridge_clients_delete)
+    app.router.add_get("/live/bridge/status", bridge_get_status)
+    app.router.add_post("/live/bridge/prepare", bridge_prepare)
+    app.router.add_delete("/live/bridge/prepare", bridge_release)
+    # --- Ende Fake-Bruecke ---
 
     # Hinter dem bestehenden Sitzungs-, Origin- und CSRF-Schutz.
     app.middlewares.append(controls)

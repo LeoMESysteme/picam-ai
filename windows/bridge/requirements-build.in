@@ -1,0 +1,6 @@
+# Resolution INPUT ONLY. Build refuses these files as installation inputs.
+-r requirements-runtime.in
+PyInstaller
+setuptools
+pip
+pytest

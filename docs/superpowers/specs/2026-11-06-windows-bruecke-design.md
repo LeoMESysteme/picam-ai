@@ -1,6 +1,6 @@
 # Windows-Brücke für GSVmulti: Installation, Verbindung und Betrieb
 
-Stand: 2026-11-06. **Entwurf zur Freigabe, keine Umsetzungsfreigabe.**
+Stand: 2026-11-06. **Von Leonhard am 06.11.2026 freigegeben.**
 Leonhard hat die Architekturvariante Python-Brückenkern + Qt-GUI +
 Windows-Installer gewählt. Die folgenden technischen Vorgaben sind, soweit
 nicht ausdrücklich als Nutzervorgabe bezeichnet, Vorschläge des Entwurfs.
@@ -413,9 +413,11 @@ Planungsfragen gemeldet. Er prüfte den Entwurf auf Annahmen, deren falsche
 Wahl die Umsetzung wesentlich verändern würde. Technische Machbarkeits-
 und Hardware-Nachweise sind damit nicht erbracht.
 
-Architekturwahl durch Leonhard liegt vor; Freigabe dieses vollständigen
-Dokuments steht aus. Danach folgt ein Umsetzungsplan mit den oben genannten
-Machbarkeitsnachweisen vor dem größeren GUI-Ausbau.
+Architektur und vollständiges Dokument sind von Leonhard am 06.11.2026
+freigegeben. Der [Umsetzungsplan](../plans/2026-11-06-windows-bruecke.md)
+ordnet die Machbarkeitsnachweise vor dem größeren GUI-Ausbau an.
+Planprüfung und Wahl der Ausführungsmethode sind der nächste Schritt;
+Produktcode ist damit noch nicht implementiert.
 
 ## Quellen und vorhandene Belege
 

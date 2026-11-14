@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import os
 import pwd
 import re
@@ -13,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 import cv2
-from aiohttp import WSMsgType, web
+from aiohttp import web
 
 from dispread.camera_settings import preview_settings
 from dispread.frames import open_source
@@ -22,12 +21,11 @@ from dispread.live import LIVE_CV_THREADS, LIVE_DATA_DIR
 from dispread.live.camera import CameraOwner
 from dispread.live.service import LiveError, LiveService
 
-from .auth import Sessions, authenticate
+from .auth import Sessions, authenticate, pam_username
 from .controller import Controller
 from .datasets import zip_export
 from .fields import actions, rows
 from .live_api import add_live_routes
-from .terminals import Terminals
 
 _TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
 
@@ -39,11 +37,23 @@ def same_origin(request):
     return request.headers.get("Origin") == f"https://{request.host}"
 
 
-def make_app(controller, terminals, verifier=authenticate, live=None):
+def make_app(controller, verifier=authenticate, live=None, *,
+             bridge_identity=None, bridge_pairing_store=None, bridge_hub=None,
+             bridge_endpoints=(), bridge_name="Dispread Pi"):
+    bridge_public_paths = frozenset()
+    if bridge_identity is not None:
+        from dispread.bridge.routes import PUBLIC_PATHS, add_bridge_routes
+        bridge_public_paths = PUBLIC_PATHS
+
     sessions = Sessions()
 
     @web.middleware
     async def guard(request, handler):
+        bridge_public = request.path in bridge_public_paths
+        if bridge_public:
+            # These TLS endpoints enforce their own scoped credential/offer auth;
+            # browser cookies and browser CSRF do not authorize them.
+            return await handler(request)
         public = request.path in ("/login", "/static/login.css", "/static/login.js")
         session = sessions.get(request.cookies.get(COOKIE))
         if not public and not session:
@@ -107,7 +117,6 @@ def make_app(controller, terminals, verifier=authenticate, live=None):
     async def status(request):
         result = controller.snapshot()
         result["csrf"] = sessions.get(request.cookies.get(COOKIE))["csrf"]
-        result["terminals"] = terminals.list()
         result["setup"] = {"rows": rows(result), "actions": actions(result)}
         return web.json_response(result)
 
@@ -183,62 +192,6 @@ def make_app(controller, terminals, verifier=authenticate, live=None):
             pass
         return response
 
-    async def new_terminal(_):
-        return web.json_response({"id": terminals.create().id})
-
-    async def close_terminal(request):
-        terminal = terminals.items.pop(request.match_info["id"])
-        await terminal.close()
-        return web.json_response({"ok": True})
-
-    async def websocket(request):
-        if not same_origin(request):
-            raise web.HTTPForbidden(text="Origin rejected")
-        terminal = terminals.items[request.match_info["id"]]
-        ws = web.WebSocketResponse(heartbeat=15, max_msg_size=32768)
-        await ws.prepare(request)
-        token = request.cookies.get(COOKIE)
-
-        async def output():
-            position = terminal.offset
-            await ws.send_json({"reset": True, "truncated": terminal.offset > 0})
-            while not ws.closed and sessions.get(token) and not terminal.closed:
-                if position < terminal.offset:
-                    position = terminal.offset
-                    await ws.send_json({"reset": True, "truncated": True})
-                start = position - terminal.offset
-                data = bytes(terminal.buffer[start : start + 65536])
-                if data:
-                    await ws.send_bytes(data)
-                    position += len(data)
-                elif terminal.exit_code is not None:
-                    await ws.send_json({"exit_code": terminal.exit_code})
-                    break
-                await asyncio.sleep(0.03)
-            await ws.close()
-
-        task = asyncio.create_task(output())
-        try:
-            async for message in ws:
-                if not sessions.get(token):
-                    break
-                if message.type == WSMsgType.BINARY:
-                    await terminal.write(message.data)
-                elif message.type == WSMsgType.TEXT:
-                    data = json.loads(message.data)
-                    if data.get("type") == "resize":
-                        terminal.resize(int(data["cols"]), int(data["rows"]))
-                elif message.type == WSMsgType.ERROR:
-                    break
-        except (ValueError, OSError):
-            pass
-        finally:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, ConnectionError):
-                await task
-            await ws.close()
-        return ws
-
     app.router.add_route("GET", "/login", login)
     app.router.add_route("POST", "/login", login)
     app.router.add_post("/logout", logout)
@@ -249,18 +202,64 @@ def make_app(controller, terminals, verifier=authenticate, live=None):
     app.router.add_get("/dataset/captures/{token}.jpg", dataset_capture_preview)
     app.router.add_get("/dataset/exports/{id}.zip", dataset_export_download)
     app.router.add_get("/stream.mjpg", stream)
-    app.router.add_post("/terminals", new_terminal)
-    app.router.add_delete("/terminals/{id}", close_terminal)
-    app.router.add_get("/terminals/{id}/ws", websocket)
     app.router.add_static("/static", STATIC)
     if live is not None:
         add_live_routes(app, live, csrf_of=lambda request: sessions.get(request.cookies.get(COOKIE))["csrf"])
+    if bridge_identity is not None:
+        if bridge_pairing_store is None:
+            raise ValueError("Bridge identity requires its pairing store")
+
+        def authorize_operator(request):
+            session = sessions.get(request.cookies.get(COOKIE))
+            if session is None:
+                raise web.HTTPUnauthorized()
+            if request.method not in ("GET", "HEAD"):
+                if not same_origin(request) or request.headers.get("X-CSRF-Token") != session["csrf"]:
+                    raise web.HTTPForbidden(text="CSRF rejected")
+
+        add_bridge_routes(app, bridge_identity, bridge_pairing_store, bridge_hub,
+                          authorize_operator, endpoints=bridge_endpoints, name=bridge_name)
     return app
 
 
-async def handle_local_op(op, args, controller, live):
+def service_pam_user(configured=None):
+    username = pam_username(configured)
+    if os.geteuid() == 0 or pwd.getpwuid(os.geteuid()).pw_name != username:
+        raise ValueError("Workbench ohne sudo unter dem konfigurierten PAM-Konto starten")
+    return username
+
+
+def bridge_service_config(args):
+    """Explicit opt-in: load existing identity, never provision or replace TLS."""
+    directory = getattr(args, "bridge_directory", None)
+    if directory is None:
+        if getattr(args, "bridge_endpoint", ()) or getattr(args, "bridge_discovery", False):
+            raise ValueError("Bridge endpoints/discovery require --bridge-directory")
+        return {}, None
+    from dispread.bridge.identity import DeviceIdentity, local_hardware_id
+    from dispread.bridge.pairing import PairingStore
+
+    identity = DeviceIdentity.load(Path(directory), local_hardware_id())
+    return dict(bridge_identity=identity, bridge_pairing_store=PairingStore(identity.directory / "pairing"),
+                bridge_endpoints=tuple(getattr(args, "bridge_endpoint", ())),
+                bridge_name=getattr(args, "bridge_name", "Dispread Pi")), identity.tls_context()
+
+
+async def handle_local_op(op, args, controller, live, bridge_hub=None):
     """Lokale Live-Steuerung; Bestaetigung und Laufstart bleiben auf /live."""
     try:
+        if op.startswith('bridge.'):
+            if bridge_hub is None:
+                raise ValueError('Bridge hub not configured')
+            if args:
+                raise ValueError('Bridge local action takes no arguments')
+            if op == 'bridge.prepare-uart':
+                return web.json_response(await asyncio.to_thread(bridge_hub.prepare_uart))
+            if op == 'bridge.stop-uart':
+                return web.json_response(await asyncio.to_thread(bridge_hub.stop_uart))
+            if op == 'bridge.status':
+                return web.json_response(bridge_hub.status())
+            raise ValueError('Unknown bridge action')
         if not op.startswith("live."):
             return web.json_response(controller.command(op, args))
         if op == "live.status":
@@ -291,8 +290,8 @@ async def handle_local_op(op, args, controller, live):
 
 
 async def serve(args):
-    if os.geteuid() == 0 or pwd.getpwuid(os.geteuid()).pw_name != "me-systeme":
-        raise ValueError("Workbench als me-systeme starten, nicht mit sudo")
+    username = service_pam_user(getattr(args, "pam_user", None))
+    bridge_config, bridge_tls = bridge_service_config(args)
     import signal
 
     stop = asyncio.Event()
@@ -321,7 +320,16 @@ async def serve(args):
         owner = CameraOwner(lambda: open_source("synthetic://seven-seg"), max_fps=10)
     else:
         owner = CameraOwner(lambda: UvcSource(preview_settings(), apply_controls=False))
-    live = LiveService(owner, Path(getattr(args, "live_data", LIVE_DATA_DIR)), simulate=args.simulate)
+    bridge_hub = None
+    if bridge_config:
+        from dispread.bridge.hub import BridgeHub
+        bridge_hub = BridgeHub(bridge_config['bridge_identity'].pi_id,
+                               Path(getattr(args, 'live_data', LIVE_DATA_DIR)) / 'bridge',
+                               identity=bridge_config['bridge_identity'],
+                               pairing_store=bridge_config['bridge_pairing_store'])
+        bridge_config['bridge_hub'] = bridge_hub
+    live = LiveService(owner, Path(getattr(args, "live_data", LIVE_DATA_DIR)),
+                       simulate=args.simulate, bridge_hub=bridge_hub)
     controller = Controller(args.data, args.camera, args.simulate, owner=owner)
     data = controller.snapshot()["config"]
     for name in ("width", "height", "fps"):
@@ -332,8 +340,9 @@ async def serve(args):
             data["detection"][name] = getattr(args, name)
     if data != controller.config:
         controller._change(data)
-    terminals = Terminals(Path.cwd(), socket_path)
-    runner = web.AppRunner(make_app(controller, terminals, live=live), access_log=None)
+    runner = web.AppRunner(make_app(controller, live=live,
+                                   verifier=lambda password: authenticate(password, username=username),
+                                   **bridge_config), access_log=None)
     local = web.Application()
 
     async def control(request):
@@ -342,7 +351,7 @@ async def serve(args):
             if data["op"] == "server.stop":
                 stop.set()
                 return web.json_response({"stopping": True})
-            return await handle_local_op(data["op"], data.get("args"), controller, live)
+            return await handle_local_op(data["op"], data.get("args"), controller, live, bridge_hub)
         except (ValueError, KeyError, TypeError, OSError) as error:
             return web.json_response({"error": str(error)}, status=400)
 
@@ -358,50 +367,58 @@ async def serve(args):
             await asyncio.sleep(0.5)
 
     watcher = None
+    publication = None
     try:
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context = bridge_tls
+        if context is None:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(args.cert, args.key)
         context.set_alpn_protocols(["http/1.1"])
-        context.load_cert_chain(args.cert, args.key)
         await runner.setup()
         await unix.setup()
         await web.UnixSite(unix, str(socket_path)).start()
         os.chmod(socket_path, 0o600)
         await web.TCPSite(runner, args.host, args.port, ssl_context=context).start()
+        if getattr(args, "bridge_discovery", False):
+            from dispread.bridge.discovery import publish_service
+            try:
+                publication = await asyncio.to_thread(
+                    publish_service, bridge_config["bridge_identity"], bridge_config["bridge_endpoints"],
+                    name=bridge_config["bridge_name"],
+                )
+            except (ImportError, OSError, ValueError) as error:
+                controller.log("error", f"Bridge discovery unavailable: {type(error).__name__}; configured endpoints remain usable")
         controller.start()
         try:
             owner.start(reason="serverstart")
         except Exception as error:  # noqa: BLE001 - Server laeuft weiter, Seite zeigt den Fehler
             controller.log("error", f"Kamera: {error}")
         watcher = asyncio.create_task(watch())
-        print(f"Workbench: https://{args.host}:{args.port} | Anmeldung: me-systeme", flush=True)
+        print(f"Workbench: https://{args.host}:{args.port} | Anmeldung: {username}", flush=True)
         await stop.wait()
     finally:
+        if publication is not None:
+            # Optional discovery must not prevent camera/socket shutdown.
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(publication.close)
         if watcher:
             watcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await watcher
-        # Reihenfolge ist sicherheitsrelevant fuer ein saubers Beenden: solange
-        # runner/unix noch Verbindungen annehmen, kann "POST /terminals" (oder
-        # der lokale Steuersocket) zwischen SIGINT und hier eine neue Shell
-        # anlegen, die terminals.close() nie zu Gesicht bekommt. Ihr
-        # Reap-Task (asyncio.to_thread(subprocess.wait)) haengt dann fuer
-        # immer in einem Worker-Thread des Default-Executors - und genau den
-        # joint asyncio.run() beim eigenen, unterbrechungsfreien Abbau nach
-        # dem Ende dieser Funktion. Ergebnis: der Prozess reagiert auf kein
-        # weiteres Ctrl+C mehr, weil der Event-Loop und sein Signal-Handler zu
-        # diesem Zeitpunkt schon weg sind (beobachteter Bug: eine ueber die
-        # Werkbank-Oberflaeche angelegte Shell blieb so als Zombie-Aufnahme
-        # zurueck). Erst wenn runner/unix nichts mehr annehmen, ist
-        # terminals.close() garantiert vollstaendig.
+        # Erst die Server schliessen, dann Controller und Live-Dienst abbauen.
         await runner.cleanup()
         await unix.cleanup()
-        await terminals.close()
         await asyncio.to_thread(controller.close)
         try:
             await asyncio.to_thread(live.close)
         except Exception as error:  # noqa: BLE001 - Kamera und Socket trotzdem freigeben
             controller.log("error", f"Live: {error}")
+        if bridge_hub is not None:
+            try:
+                await asyncio.to_thread(bridge_hub.close)
+            except Exception:
+                controller.log('error', 'Bridge cleanup failed')
         await asyncio.to_thread(owner.stop)
         socket_path.unlink(missing_ok=True)
         lockfile.close()

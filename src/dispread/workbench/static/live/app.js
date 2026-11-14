@@ -19,11 +19,13 @@ import {mountConfirm} from './setup/confirm.js';
 import {drawSetupTimeline, setupTimelineModel} from './setup/timeline.js';
 import {referenceModel, renderResult} from './run/result.js';
 import {runDockHTML, runTitle} from './run/dock.js';
-import {RUN_TABS, createRecordLog, renderRunInspector, runBadges, trackingModeText} from './run/inspector.js';
+import {RUN_BADGE_TONE, RUN_TABS, createRecordLog, renderRunInspector, runBadges, trackingModeText} from './run/inspector.js';
 import {createTimeline} from './run/timeline.js';
+import {mountBridgeDialog} from './run/bridge-dialog.js';
 import {mountMarkPopover, mountStartPopover} from './run/start-popover.js';
 import {mountEffects} from './viewer/effects.js';
 import {closeToast, mountToasts, toast} from './ui/toasts.js';
+import {openModal} from './ui/modal.js';
 import {watchAlerts} from './run/alerts.js';
 import {createScenario} from './practice/scenario.js';
 import {createFrameComposer} from './practice/frames.js';
@@ -255,7 +257,7 @@ function renderInspector(host, status, ui) {
     `<button type="button" role="tab" data-scope="${key}" data-tab="${esc(tab)}" aria-controls="inspector-panel" ` +
     `aria-selected="${tab === current}" tabindex="${tab === current ? 0 : -1}">${esc(tab)}` +
     `${tab === 'Prüfungen' && warnings ? ` <span class="cnt">${warnings}</span>` : ''}` +
-    `${badges[tab] ? ` <span class="cnt err-t">${badges[tab]}</span>` : ''}</button>`).join(''));
+    `${badges[tab] ? ` <span class="cnt ${RUN_BADGE_TONE[tab] || 'err-t'}">${badges[tab]}</span>` : ''}</button>`).join(''));
   const pane = (name) => host.querySelector(`[data-pane="${name}"]`);
   for (const el of host.querySelectorAll('[data-pane]')) {
     el.hidden = runPhase ? el.dataset.pane !== 'run' : el.dataset.pane !== current;
@@ -374,6 +376,17 @@ if (typeof document !== 'undefined') {
     setup: (cellText) => act('/live/setup', {cell_text: cellText || null}),
     // Im Uebungslauf beantwortet das Szenario den Abbruch (client.useSource), nie der Server.
     cancelSetup: () => act('/live/setup/cancel'),
+    // Neu einrichten aus Vorschlag und Bestaetigung (OQ-71); eine Bestaetigung wird erst nach Rueckfrage verworfen.
+    // Der Server behaelt Bilder, Vorschlag und Pruefergebnisse im bisherigen Ordner.
+    resetup: async () => {
+      if (status?.state === 'confirmed') {
+        const answer = await openModal({title: 'Neu einrichten', tone: 'warn',
+          text: 'Bestätigte Einrichtung verwerfen und neu einrichten?\n\nDie bisherigen Bilder und Prüfergebnisse bleiben im Ordner der Einrichtung erhalten.',
+          actions: [{label: 'Abbrechen', value: false, escape: true}, {label: 'Verwerfen und neu einrichten', value: true, primary: true, cls: 'danger', icon: 'redo'}]});
+        if (!answer) return null;
+      }
+      return act('/live/setup', {cell_text: null});
+    },
     confirm: () => confirmUi?.submit(),
     // Optionen und Bestaetigungen im Pop-up (Referenz, Diagnosebilder, Werteplan, Testmodus).
     runStart: () => startPop.start(),
@@ -385,7 +398,15 @@ if (typeof document !== 'undefined') {
     canStart: startPop.canStart(), runOptionsOpen: startPop.isOpen(), markOpen: markPop.isOpen()});
   const titlebar = nodes.titleActions.closest('.titlebar');
   const startPop = mountStartPopover(titlebar, client, {onStart: (body) => act('/live/run/start', body),
-    onChange: () => renderTitle(status, titleView(), handlers)});
+    onChange: () => renderTitle(status, titleView(), handlers),
+    onBridgeSetup: (choice, running, format) => bridgeUi.open({choice, running, output: running ? status?.output : {transport: choice, config: {format}}})});
+  const bridgeUi = mountBridgeDialog(client);
+  // Im Lauf lesend aus der Ausgabeanzeige (Dock) erreichbar; Klick-Weg ueber Delegation, weil das Dock neu gezeichnet wird.
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest?.('[data-act="bridge-setup"]')) return;
+    const output = status?.output;
+    bridgeUi.open({choice: output?.transport, running: status?.state === 'running', output});
+  });
   const markPop = mountMarkPopover(titlebar, client);
 
   // Datensatz des gezeigten Bilds in die Wert-Tabelle, mit dem gerade gueltigen Referenztext.
@@ -591,6 +612,7 @@ if (typeof document !== 'undefined') {
   const alertRun = {stop: () => act('/live/run/stop'), setup: () => act('/live/setup', {cell_text: null})};
   client.start((next) => {
     status = next;
+    if (bridgeUi.isOpen()) bridgeUi.open({running: next.state === 'running', output: next.state === 'running' ? next.output : undefined});
     render();
     effects.update(next, undefined);
     // Ein Waechter je Quelle: sein letzter Stand (prev) gehoert nur zu ihr. So meldet die

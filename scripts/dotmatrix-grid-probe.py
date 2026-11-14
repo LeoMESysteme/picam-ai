@@ -40,7 +40,7 @@ from _devdata import input_path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from dispread.workbench.vision import lcd_quad_in_region  # noqa: E402
+from dispread.detect.vision import lcd_quad_in_region  # noqa: E402
 
 DEVICE_ID = "87564e345aa047338f954c045bc9df02"
 SAMPLES_ROOT = Path("var/workbench/datasets/samples")

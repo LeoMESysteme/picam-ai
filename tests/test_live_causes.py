@@ -36,7 +36,7 @@ def test_window_is_bounded_even_at_unrealistic_frame_rate():
 
 
 def test_german_cause_explains_cell_and_preserves_machine_reason():
-    from dispread.workbench.fields import live_cause
+    from dispread.live.texts import live_cause
 
     cause = live_cause({'reason': 'leser:leerzelle_gestoert:14', 'count': 1, 'fraction': 0.25})
     assert cause['cell'] == 14

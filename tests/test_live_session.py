@@ -1,6 +1,8 @@
 import hashlib
 import json
+import os
 import threading
+from pathlib import Path
 
 import cv2
 import pytest
@@ -1740,6 +1742,9 @@ def test_r19b_session_zaehlt_zweiten_versuch_und_erfolg(tmp_path):
         summary = session.stop()
     assert summary['tracking_coarse_retries'] == 2
     assert summary['tracking_coarse_accepted'] == 2
+    assert summary['tracking_geometry']['retry_fraction'] == pytest.approx(2 / 5)
+    assert summary['tracking_geometry']['scale']['n'] == 2
+    assert summary['tracking_geometry']['scale']['median'] == pytest.approx(1.0, abs=0.005)
 
 
 def test_r19b_session_altes_profil_bekommt_nachfuehrung_ohne_neueinrichtung(tmp_path):
@@ -1852,3 +1857,505 @@ def test_output_disabled_keeps_legacy_bytes(tmp_path, monkeypatch, options):
     actual = actual.replace(str(tmp_path), '<root>')
     assert actual == (fixture / 'session.json').read_text()
     assert not (session.records_path.parent / 'tx.jsonl').exists()
+
+
+def test_tc_bereichshinweis_status_und_zusammenfassung_ohne_wirkung_auf_records(tmp_path, monkeypatch):
+    """TC 2026-11-11: reine Diagnose; Records bleiben bitgleich zu einem Lauf ohne Hinweis."""
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from dispread.live import region_hint as rh
+    from dispread.live.frame_tracking import FrameTrackingConfig
+
+    monkeypatch.setattr(rh, 'MIN_FRAMES', 3)
+    monkeypatch.setattr(rh, 'EVALUATE_EVERY', 1)
+    centres = [[100.0 + 40 * i, 200.0] for i in range(6)]
+
+    def run(directory, *, with_tracker):
+        directory.mkdir()
+        session = _session(directory, [embed('+ 1.2345 ')] * 5)
+        session.start()
+        pipeline = session._pipeline
+        process = pipeline.process
+
+        def injected(frame, **kwargs):
+            if with_tracker:
+                pipeline.locator._tracker = SimpleNamespace(
+                    config=FrameTrackingConfig(), sources=np.asarray(centres),
+                    last_regions=[{'c': c, 's': 15, 'peak': 0.9, 'ok': i != 4,
+                                   'res1': 1.3 if i == 4 else 0.2, 'res2': None}
+                                  for i, c in enumerate(centres)])
+            return process(frame, **kwargs)
+
+        pipeline.process = injected
+        assert session.region_hint() is None
+        for _ in range(5):
+            session.step()
+        hint = session.region_hint()
+        session.stop()
+        records = [{k: v for k, v in json.loads(line).items() if k not in ('trace', 'emitted_at_utc', 'result_timestamp')}
+                   for line in session.records_path.read_text().splitlines()]
+        return session, hint, records
+
+    session, hint, records = run(tmp_path / 'a', with_tracker=True)
+    assert hint['regions'][0]['number'] == 5 and hint['regions'][0]['share'] == 1.0
+    summary = json.loads(session.session_path.read_text())['summary']['tracking_region_hint']
+    assert summary['limit_px'] == FrameTrackingConfig().max_inlier_residual_px
+    assert [region['number'] for region in summary['regions']] == [5]
+    assert summary['last']['regions'][0]['centre'] == [260.0, 200.0]
+    # Nach dem Stopp bleibt der letzte Hinweis abrufbar (Lauf beendet, Bediener richtet neu ein).
+    assert session.region_hint() == hint
+
+    plain, none, plain_records = run(tmp_path / 'b', with_tracker=False)
+    assert none is None
+    # Ohne Rahmenbereich-Nachfuehrung bleibt session.json byte-kompatibel: kein Feld.
+    assert 'tracking_region_hint' not in json.loads(plain.session_path.read_text())['summary']
+    assert records == plain_records
+
+
+def test_tc_ausfall_der_bereichsdiagnose_bricht_lauf_nicht_ab(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from dispread.live.frame_tracking import FrameTrackingConfig
+    from dispread.live.region_hint import RegionConsistency
+
+    def broken(self, residuals):
+        raise RuntimeError('kaputt')
+
+    monkeypatch.setattr(RegionConsistency, 'observe', broken)
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3)
+    session.start()
+    session._pipeline.locator._tracker = SimpleNamespace(
+        config=FrameTrackingConfig(), sources=np.zeros((2, 2)),
+        last_regions=[{'c': [0, 0], 's': 15, 'peak': 0.9, 'ok': True, 'res1': 0.1, 'res2': None}] * 2)
+    try:
+        statuses = [session.step().status for _ in range(3)]
+        assert statuses[-1] is ValueStatus.VALID
+        assert len(session.records_path.read_text().splitlines()) == 3
+        assert session.region_hint() is None
+    finally:
+        session.stop()
+
+
+class _TbTracker:
+    """Rahmen-Tracker-Attrappe fuer die Stilllegung (TB): Bereich 5 (Index 4) zittert nicht starr."""
+
+    def __init__(self, probe_ok=True):
+        import numpy as np
+
+        from dispread.live.frame_tracking import FrameTrackingConfig
+
+        self.config = FrameTrackingConfig()
+        self.sources = np.asarray([[100.0 + 40 * i, 200.0] for i in range(8)])
+        self.disabled = frozenset()
+        self.probe_ok = probe_ok
+        self.probes = []
+        self._rng = np.random.default_rng(5)
+        self.last_regions = None
+
+    def update(self):
+        import numpy as np
+
+        rows = []
+        for index, centre in enumerate(self.sources):
+            if index in self.disabled:
+                rows.append({'c': list(centre), 's': 15, 'peak': 0.0, 'ok': False,
+                             'res1': None, 'res2': None, 'v1': None})
+                continue
+            if index == 4:
+                angle, size = self._rng.uniform(0, 2*np.pi), self._rng.uniform(0.9, 1.6)
+                vector = [size*np.cos(angle), size*np.sin(angle)]
+            else:
+                vector = list(self._rng.normal(0, 0.1, 2))
+            rows.append({'c': list(centre), 's': 15, 'peak': 0.9, 'ok': True,
+                         'res1': float(np.hypot(*vector)), 'res2': None, 'v1': vector})
+        self.last_regions = rows
+
+    def disable_limit(self):
+        return 3
+
+    def disable_refusal(self, index):
+        return 'bereits_stillgelegt' if index in self.disabled else None
+
+    def bias_probe(self, base, target):
+        self.probes.append(sorted(target))
+        return {'base': sorted(base), 'disabled': sorted(target), 'cases': 288, 'worst_error_px': 0.9,
+                'base_worst_error_px': 0.9, 'worst_case': None, 'extra': [], 'violations': [],
+                'tolerance_px': 1.0, 'margin_px': 0.05, 'ok': self.probe_ok}
+
+    def disable_region(self, index, probe=None):
+        if not (probe and probe['ok'] and probe['disabled'] == sorted(self.disabled | {index})
+                and probe['base'] == sorted(self.disabled)):
+            return False
+        self.disabled = self.disabled | {index}
+        return True
+
+
+def _tb_session(tmp_path, monkeypatch, tracker, frames=14):
+    from dispread.live import region_hint as rh
+
+    for name, value in (('WINDOW_FRAMES', 6), ('DEACTIVATE_MIN_WINDOW', 6), ('MIN_FRAMES', 3),
+                        ('EVALUATE_EVERY', 1)):
+        monkeypatch.setattr(rh, name, value)
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * frames)
+    session.start()
+    pipeline = session._pipeline
+    process = pipeline.process
+
+    def injected(frame, **kwargs):
+        pipeline.locator._tracker = tracker
+        tracker.update()
+        return process(frame, **kwargs)
+
+    pipeline.process = injected
+
+    def step():
+        record = session.step()
+        probe = session._region_probe
+        if probe is not None and hasattr(probe, 'thread'):
+            probe.thread.join(5)  # Attrappe: Schutzprobe im Thread
+        return record
+
+    return session, step
+
+
+def test_tb_stilllegung_im_lauf_auditiert_und_wirkt_ab_naechstem_bild(tmp_path, monkeypatch):
+    tracker = _TbTracker()
+    session, step = _tb_session(tmp_path, monkeypatch, tracker)
+    try:
+        for _ in range(12):
+            step()
+        assert tracker.disabled == frozenset({4})
+        assert tracker.probes == [[4]]  # genau eine Probe fuer genau diesen Satz
+        lines = (session._out_dir / 'tracking_events.jsonl').read_text().splitlines()
+        (event,) = [json.loads(line) for line in lines]
+        assert event['event'] == 'rahmenbereich_stillgelegt'
+        assert event['index'] == 4 and event['number'] == 5 and event['share'] >= 0.5
+        assert isinstance(event['frame_sequence'], int) and event['median_px'] > 0.65
+        assert event['rest_median_px'] < 0.4 and event['coordination_ratio'] > 0.5
+        assert event['probe']['ok'] and event['disabled_count'] == 1 and event['disabled_limit'] == 3
+        deactivated = session.region_deactivations()
+        assert [item['index'] for item in deactivated] == [4]
+        assert session.region_hint() is None or 4 not in [r['index'] for r in session.region_hint()['regions']]
+        # Werkbank-HUD: nur der stillgelegte Bereich traegt 'off' (kein roter Verlust im Bild).
+        regions = session.frame_info()['track']['regions']
+        assert regions[4]['off'] is True and all('off' not in r for i, r in enumerate(regions) if i != 4)
+    finally:
+        session.stop()
+    hint = json.loads(session.session_path.read_text())['summary']['tracking_region_hint']
+    assert [item['frame_sequence'] for item in hint['deactivated']] == [event['frame_sequence']]
+    # Fuer die naechste Einrichtung kein "bitte entfernen" mehr fuer den stillgelegten Bereich.
+    assert all(region['index'] != 4 for region in hint['regions'])
+
+
+def test_tb_ohne_bestandene_schutzprobe_keine_stilllegung(tmp_path, monkeypatch):
+    tracker = _TbTracker(probe_ok=False)
+    session, step = _tb_session(tmp_path, monkeypatch, tracker)
+    try:
+        for _ in range(12):
+            step()
+        assert tracker.disabled == frozenset()
+        assert tracker.probes == [[4]]  # nicht bei jeder Auswertung neu
+        assert not (session._out_dir / 'tracking_events.jsonl').exists()
+        refused = session._region_consistency.summary()['deactivation_refused']
+        assert [(item['index'], item['reason']) for item in refused] == [(4, 'schutzprobe_verletzt')]
+    finally:
+        session.stop()
+
+
+def test_tb_ohne_audit_keine_stilllegung_und_lauf_geht_weiter(tmp_path, monkeypatch):
+    tracker = _TbTracker()
+    session, step = _tb_session(tmp_path, monkeypatch, tracker)
+    (session._out_dir / 'tracking_events.jsonl').mkdir()  # Schreiben scheitert
+    try:
+        statuses = [step().status for _ in range(12)]
+        assert statuses[-1] is ValueStatus.VALID
+        assert tracker.disabled == frozenset()
+        assert len(session.records_path.read_text().splitlines()) == 12
+    finally:
+        session.stop()
+    # Review G3: genau ein Versuch, kein wiederholtes oder halbes Ereignis; Fehler gezaehlt.
+    summary = json.loads(session.session_path.read_text())['summary']['tracking_region_hint']
+    assert summary['deactivation_errors'] == 1 and summary['deactivated'] == []
+
+
+_TB_FAKE_PROBE = ("import os, pickle, sys; payload, base, target = pickle.loads(sys.stdin.buffer.read()); "
+                  "sys.stdout.buffer.write(pickle.dumps(('ok', {'base': base, 'disabled': target, "
+                  "'payload': sorted(payload), 'nice': os.nice(0)})))")
+
+
+def _tb_wait(handle, seconds=30):
+    import time
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        outcome = handle.poll()
+        if outcome is not None:
+            return outcome
+        time.sleep(0.05)
+    raise AssertionError('Probe ohne Ergebnis')
+
+
+def test_tb_schutzprobe_laeuft_im_eigenen_prozess_und_ist_abbrechbar():
+    import sys
+
+    from dispread.live.session import ProbeProcess
+
+    handle = ProbeProcess({'reference': 1, 'quad': 2}, {3}, 4, command=[sys.executable, '-c', _TB_FAKE_PROBE])
+    assert handle.pid != os.getpid()
+    kind, result = _tb_wait(handle)
+    assert kind == 'ok' and result['base'] == [3] and result['disabled'] == [3, 4]
+    assert result['payload'] == ['quad', 'reference']
+    sleeping = ProbeProcess({}, set(), 1, command=[sys.executable, '-c', 'import time; time.sleep(60)'])
+    assert sleeping.poll() is None
+    sleeping.cancel()  # Laufende: Prozess wird beendet, keine Last fuer den naechsten Lauf
+    assert sleeping._process.poll() is not None and sleeping.poll() == ('error', 'abgebrochen')
+    broken = ProbeProcess({}, set(), 1, command=[sys.executable, '-c', 'raise SystemExit(3)'])
+    assert _tb_wait(broken)[0] == 'error'
+
+
+def test_tb_probenprozess_modul_rechnet_mit_niedriger_prioritaet(monkeypatch):
+    """Echter Kindprozess (python -m dispread.live.region_probe) mit kleinem Auftrag."""
+    import cv2
+    import numpy as np
+
+    from dispread.live import region_probe
+    from dispread.live.frame_tracking import FrameTracker, FrameTrackingConfig, propose_regions
+    from dispread.live.session import ProbeProcess
+
+    fixtures = Path(__file__).parent / 'fixtures' / 'r13'
+    reference = cv2.imread(str(fixtures / 'reference.jpg'))
+    quad = np.asarray(json.loads((fixtures / 'r13-fixtures.json').read_text())['quad'])
+    tracker = FrameTracker(reference, quad, propose_regions(reference, quad, FrameTrackingConfig()))
+    # Aufbau aus dem Payload im selben Prozess, Probe ersetzt (die echte dauert rund eine Minute).
+    monkeypatch.setattr(FrameTracker, 'bias_probe',
+                        lambda self, base, target, stop=None: {'n': len(self.sources), 'base': base, 'disabled': target})
+    assert region_probe.run(tracker.probe_payload(), [], [7]) == {'n': len(tracker.sources), 'base': [], 'disabled': [7]}
+    # Ungueltiger Auftrag im echten Kindprozess: Fehler statt Ergebnis, keine Stilllegung.
+    handle = ProbeProcess({'config': {}}, set(), 1)
+    kind, text = _tb_wait(handle)
+    assert kind == 'error' and 'ValueError' in text
+
+
+class _TbManualProbe:
+    def __init__(self, base, index):
+        self.base, self.index, self.outcome, self.cancelled = frozenset(base), index, None, False
+
+    def poll(self):
+        return self.outcome
+
+    def cancel(self):
+        self.cancelled = True
+
+
+def test_tb_probe_laeuft_waehrend_der_vorschlag_wechselt(tmp_path, monkeypatch):
+    """Review G6: Probe fuer Bereich 5 endet erst, nachdem das Fenster Bereich 3 vorschlaegt."""
+    tracker = _TbTracker()
+    session, step = _tb_session(tmp_path, monkeypatch, tracker, frames=30)
+    started = []
+    session._probe_runner = lambda trk, base, index: started.append(_TbManualProbe(base, index)) or started[-1]
+    try:
+        for _ in range(8):
+            step()
+        assert [probe.index for probe in started] == [4] and tracker.disabled == frozenset()
+        original = tracker.update
+
+        def moved_glint():
+            original()
+            tracker.last_regions[4], tracker.last_regions[2] = tracker.last_regions[2], tracker.last_regions[4]
+            for index in (2, 4):
+                tracker.last_regions[index]['c'] = list(tracker.sources[index])
+
+        tracker.update = moved_glint
+        for _ in range(8):
+            step()
+        assert session._region_consistency.deactivation_candidate()['index'] == 2
+        started[0].outcome = ('ok', {'ok': True, 'base': [], 'disabled': [4]})
+        step()
+        # Ergebnis fuer 4 kommt an, das Fenster schlaegt aber 2 vor: 4 bleibt aktiv, Probe fuer 2 startet.
+        assert tracker.disabled == frozenset()
+        assert [probe.index for probe in started] == [4, 2]
+        session.stop()
+        assert started[-1].cancelled  # Laufende bricht die offene Probe ab
+    finally:
+        session.stop()
+
+
+def test_tb_off_erst_ab_dem_bild_nach_der_stilllegung(tmp_path, monkeypatch):
+    """Review G3: Das Ereignisbild wurde noch mit dem Bereich bewertet."""
+    tracker = _TbTracker()
+    session, step = _tb_session(tmp_path, monkeypatch, tracker)
+    try:
+        while not tracker.disabled:
+            step()
+            regions = session.frame_info()['track']['regions']
+            if tracker.disabled:
+                assert all('off' not in region for region in regions)
+        step()
+        assert session.frame_info()['track']['regions'][4]['off'] is True
+    finally:
+        session.stop()
+
+
+def test_tb_stillgelegte_bereiche_in_component_versions_und_bilddiagnose():
+    from types import SimpleNamespace
+
+    from dispread.live.tracking import ConfirmedRegionLocator
+    from dispread.pipeline import Pipeline
+
+    locator = ConfirmedRegionLocator.__new__(ConfirmedRegionLocator)
+    locator._tracker = SimpleNamespace(disabled=frozenset())
+    assert locator.component_extra() == {}
+    pipeline = Pipeline(source=SimpleNamespace(source_id='synthetic'), locator=locator,
+                        reader=SimpleNamespace(backend_id='dotmatrix'), gate=None, sinks=[], config=None)
+    plain = pipeline.component_versions()
+    assert 'locator_regions_disabled' not in plain  # ohne Stilllegung bytegleich
+    locator._tracker.disabled = frozenset({5, 0})
+    assert pipeline.component_versions() == {**plain, 'locator_regions_disabled': '1,6'}
+
+
+def ticked_session(tmp_path, monkeypatch):
+    from test_live_output import FakeSerial
+    from test_live_tick import Clocks
+
+    from dispread.live.tick import TickTimebase
+
+    port = FakeSerial(write_timeout=1.0)
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: port)
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 3,
+                       output={'port': '/fake/output', 'format': '4ch', 'rate_hz': 5,
+                               'acknowledge_unaccepted': True})
+    clocks = Clocks()
+    session._output._clock_ns = lambda: clocks.now
+    session._output._timebase = TickTimebase(session._clock, clock=clocks.read, ntp_status='yes')
+    return session, clocks, port
+
+
+def test_four_channel_session_has_frozen_time_mapping_and_tick_stats(tmp_path, monkeypatch):
+    import time
+
+    session, clocks, port = ticked_session(tmp_path, monkeypatch)
+    session.start()
+    try:
+        before = json.loads(session.session_path.read_text())['output']['tick']
+        assert before['rate_hz'] == 5 and before['valid'] == before['invalid'] == before['missed'] == 0
+        assert before['ntp_synchronized'] == 'yes'
+        assert before['time_uncertainty_ns'] is None and before['provisional'] is True
+        clocks.now = 200_000_000
+        session._output._wake.set()
+        deadline = time.monotonic() + 3
+        while session.output_status()['sent'] < 1:
+            assert time.monotonic() < deadline
+            time.sleep(.005)
+        clocks.wall_offset += 5_000_000_000  # NTP-Schritt kurz vor Laufende
+    finally:
+        session.stop()
+    after = json.loads(session.session_path.read_text())['output']['tick']
+    assert after['realtime_minus_monotonic_ns'] == before['realtime_minus_monotonic_ns']
+    assert after['realtime_jump_detected'] is True
+    assert after['realtime_max_deviation_ns'] == 5_000_000_000
+    assert (after['total'], after['valid'], after['invalid'], after['missed']) == (1, 0, 1, 0)
+    assert port.writes == [b'%99999999.0;0;1;1794397184.200000\r\n']
+    assert session.unified_output_status()['tick'] == after
+
+
+def test_reserved_display_text_becomes_unreadable_in_audit(tmp_path, monkeypatch):
+    from test_live_tick import captured
+
+    session, clocks, port = ticked_session(tmp_path, monkeypatch)
+    session.start()
+    try:
+        monkeypatch.setattr(session._pipeline, 'process', lambda *a, **kw: captured(
+            190_000_000, raw_text='99999999.0', value=99999999.0))
+        record = session.step()
+        assert record.status is ValueStatus.UNREADABLE and record.value is None
+        assert record.reject_reasons == ('reserved_output_value',)
+        audit = json.loads(session.records_path.read_text().splitlines()[0])
+        assert audit['status'] == 'unreadable' and audit['raw_text'] == '99999999.0'
+        clocks.now = 200_000_000
+        session._output._wake.set()
+        from test_live_output import wait_output_count
+
+        wait_output_count(session._output, 1)
+    finally:
+        session.stop()
+    assert port.writes == [b'%99999999.0;0;1;1794397184.200000\r\n']
+
+
+def test_four_channel_release_note_describes_marked_invalid_ticks(tmp_path, monkeypatch):
+    session, _, _ = ticked_session(tmp_path, monkeypatch)
+    session.start()
+    try:
+        status = session.unified_output_status()
+        assert '99999999.0' in status['release_note']
+    finally:
+        session.stop()
+
+
+def test_four_channel_session_records_tick_origin(tmp_path, monkeypatch):
+    session, _, _ = ticked_session(tmp_path, monkeypatch)
+    session.start()
+    try:
+        assert session.unified_output_status()['tick']['start_monotonic_ns'] == 0
+    finally:
+        session.stop()
+
+
+def test_session_json_records_run_start_focus_check(tmp_path):
+    session = _session(tmp_path, [embed('+ 1.2345 ')] * 2)
+    check = {"status": "WARNUNG", "text": "Bild nach Kamerastart unschärfer als bei der Einrichtung (31 %) – Fokus prüfen"}
+    session.focus_check = check
+    session.start()
+    try:
+        assert json.loads(session.session_path.read_text())["focus_check"] == check
+    finally:
+        session.stop()
+
+
+def test_probenprozess_laedt_den_code_dieses_prozesses(monkeypatch):
+    """Ohne PYTHONPATH darf das Kind nicht auf eine andere dispread-Kopie ausweichen."""
+    import sys
+
+    import dispread
+    from dispread.live.session import ProbeProcess
+
+    monkeypatch.delenv('PYTHONPATH', raising=False)
+    code = ('import pickle,sys,dispread; sys.stdin.buffer.read(); '
+            'sys.stdout.buffer.write(pickle.dumps(("ok", dispread.__file__)))')
+    handle = ProbeProcess({}, set(), 1, command=[sys.executable, '-c', code])
+    handle._thread.join(20)
+    assert handle._outcome == ('ok', dispread.__file__)
+
+
+def test_tracking_fraction_keeps_same_denominator_when_audit_fails(tmp_path, monkeypatch):
+    import numpy as np
+    from frame_tracking_helpers import reference_scene
+
+    image, _ = reference_scene()
+    moved = cv2.warpAffine(image, np.float32([[1, 0, 15], [0, 1, 0]]), image.shape[1::-1])
+    session, _ = _region_session(tmp_path, images=[moved, moved])
+    session.start()
+    session.step()
+    def fail(_record):
+        raise AuditFailed('Platte voll')
+    monkeypatch.setattr(session._sink, 'emit', fail)
+    with pytest.raises(AuditFailed):
+        session.step()
+    summary = session.stop()
+    assert summary['tracking_geometry']['observations'] == 2
+    assert summary['tracking_geometry']['retry_fraction'] == 1.0
+
+
+def test_tracking_scale_window_is_explicit_for_long_runs(tmp_path):
+    session = _session(tmp_path, [])
+    session.start()
+    session._tracking_scales.extend(range(10001))
+    session._tracking_scale_total = 10001
+    scale = session.stop()['tracking_geometry']['scale']
+    assert scale['n'] == 10000
+    assert scale['total'] == 10001
+    assert scale['window_limit'] == 10000
+    assert scale['min'] == 1
