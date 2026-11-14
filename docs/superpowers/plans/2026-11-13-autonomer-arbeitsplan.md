@@ -128,3 +128,30 @@ nächsten offenen Punkt bearbeiten und den Fortschritt unten eintragen.
   `build-test.cmd` aus `wip/bruecke-ux3` und geht PRUEFUNG-UX3.md durch; erst danach Merge.
   Installer P0a (Codex) reviewt und auf `feat/installer-p0` (43403ba); volle Pi-Suite läuft,
   danach Merge nach `feat/integration`.
+- 2026-11-14 ~01:40: **Installer P0a gemergt** in `feat/integration`. Volle Pi-Suite auf
+  `feat/installer-p0`: 4281 bestanden. Inhalt: `packaging/apt-packages.txt`, robustes
+  `install-workbench.sh`, `scripts/werkbank-dienst.sh` (Dienstbefehl jetzt im Repo, mit
+  Laufsperre), `dispread.defaults`/`dispread.hardware_ports` als einzige Quelle,
+  `init-tls --host` Pflicht und `--show`. Der laufende Dienst wurde **nicht** auf das neue
+  Skript umgestellt (läuft weiter per systemd-run aus `.worktrees/bruecke-run`).
+  Bericht mit Entscheidungsvorlage zum Pfadmodell (L6) und Liste der Frontend-Duplikate:
+  `docs/quellen/installer-p0-2026-11-14/REPORT-codex.md`.
+  **Alle Plan-Punkte erledigt.** Was bis Mittwoch wartet, steht unten unter „Für Leonhard“.
+
+## Für Leonhard (Mittwoch)
+
+1. EXE-Runde 3 prüfen: `wip/bruecke-ux3` mit `windows/bridge/build-test.cmd` bauen und
+   `windows/bridge/PRUEFUNG-UX3.md` durchgehen. Erst danach Merge nach `feat/integration`.
+2. Entscheidungen:
+   - Fokusband 0,95–1,05 am Laufstart: Es lehnt auch brauchbare Starts ab.
+   - Freigabetexte nach der Abnahme („Testfreigabe – keine Messfreigabe“, `release_block`).
+   - UART über Brücke bis zur Prüfsumme nicht für Messungen?
+     [Spec](../specs/2026-11-13-uart-pruefsumme-design.md)
+   - Installer/TUI: Entscheidungen 1–6 im
+     [Spec-Entwurf](../specs/2026-11-13-installer-tui-design.md), Pfadmodell L6.
+3. Roter CI-Lauf „Playwright Tests“ auf master `d6d5ab5` (vermutlich der bekannte Wackler);
+   bitte den Schritt auf der Actions-Seite ansehen.
+4. Am Aufbau: OQ-77 (dreimal `uart_timeout` beim Verbinden), Gegentest UART-Brücke mit
+   115 200 Baud, Fokusband kalibrieren (OQ-74).
+5. Wiki: Entwurf Ausgabewege einhängen, sobald die Wiki-Session `feat/wiki-lebendig` gemergt
+   hat (dort berühren sich CHANGELOG.md und tests/docs-site.spec.ts mit master).
