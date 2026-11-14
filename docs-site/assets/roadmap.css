@@ -273,7 +273,7 @@
 }
 
 [data-wiki-look="lebendig"] .roadmap-viewport {
-  border-radius: 20px;
+  border-radius: 22px;
   box-shadow: inset 0 1px 3px rgb(40 60 150 / .1);
 }
 [data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .roadmap-viewport {
@@ -303,7 +303,7 @@
 [data-wiki-look="lebendig"] .roadmap[data-roadmap-view="entering"] .roadmap-node,
 [data-wiki-look="lebendig"] .roadmap[data-roadmap-view="leaving"] .roadmap-node { box-shadow: none; }
 [data-wiki-look="lebendig"] :is(.roadmap-enter, .roadmap-node-content) { border-radius: 18px; }
-[data-wiki-look="lebendig"] .roadmap-number { border-radius: 11px; }
+[data-wiki-look="lebendig"] .roadmap-number { border-radius: 12px; }
 [data-wiki-look="lebendig"] .roadmap-connections path { stroke-width: 2; stroke-linecap: round; }
 
 /* Bedienung über der Karte: Glas mit Unschärfe, Linse für gewählte Ansicht. */
@@ -316,7 +316,7 @@
   box-shadow: var(--lb-glass-light), var(--lb-drop);
 }
 [data-wiki-look="lebendig"] .roadmap-navigation { border-radius: 22px; padding: 5px; gap: 2px; }
-[data-wiki-look="lebendig"] .roadmap-minimap { border-radius: 16px; }
+[data-wiki-look="lebendig"] .roadmap-minimap { border-radius: 14px; }
 [data-wiki-look="lebendig"] .roadmap-control { border-radius: 50%; }
 [data-wiki-look="lebendig"] .roadmap-control:hover { background: color-mix(in srgb, var(--lb-ink) 7%, transparent); }
 [data-wiki-look="lebendig"] .roadmap-control[aria-pressed="true"] {
@@ -334,7 +334,7 @@
 }
 [data-wiki-look="lebendig"] .roadmap-search-wrap {
   border-color: color-mix(in srgb, var(--lb-ink2) 50%, transparent);
-  border-radius: 20px;
+  border-radius: 999px;
   padding: 7px 14px;
   background: var(--md-default-bg-color);
   box-shadow: inset 0 1px 2px rgb(40 60 150 / .1);
@@ -349,7 +349,7 @@
   [data-wiki-look="lebendig"] .md-typeset details.roadmap-phase-context {
     padding: 4px 10px 6px 4px;
     border: 1px solid var(--lb-glass-edge);
-    border-radius: 16px;
+    border-radius: 14px;
     background: var(--lb-glass), color-mix(in srgb, var(--roadmap-surface) 82%, transparent);
     backdrop-filter: blur(14px) saturate(180%);
     -webkit-backdrop-filter: blur(14px) saturate(180%);

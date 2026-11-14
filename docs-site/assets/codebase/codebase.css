@@ -10,9 +10,9 @@
 :root{
   color-scheme:light;
   /* Atmosphäre */
-  --atmo:#eef2fb;--tint-k:100%;
+  --atmo:#eef2fb;--tint-k:100%; /* wie --lb-ground in wiki-lebendig.css */
   /* Tinte und Linien */
-  --ink:#141a2e;--ink2:#434c75;--ink3:#6b76a8;--line:rgba(60,80,150,.16);--grid:#46507a;
+  --ink:#141a2e;--ink2:#46507a;--ink3:#6b76a8;--line:rgba(60,80,150,.16);--grid:#46507a; /* ink, ink2, line wie --lb-ink, --lb-ink2, --lb-line in wiki-lebendig.css */
   --dot-bg:#ffffff;--on-fill-light:#ffffff;--on-fill-dark:#10152a;--focus:#2f6df6;--sel-bg:#2f6df6;--sel-ink:#ffffff;
   /* Kategorien (Flächen, Punkte; nie als Fließtextfarbe) */
   --docs:#2f6df6;--tests:#10b981;--workbench:#8b5cf6;--scripts:#f59e0b;--core:#27307a;--bridge:#ec4899;--infra:#94a3b8;--other:#94a3b8;
@@ -50,8 +50,8 @@
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
-  --atmo:#0a0f1f;--tint-k:24%;
-  --ink:#eef1fb;--ink2:#b3bbdc;--ink3:#8b95c2;--line:rgba(180,195,255,.14);--grid:#9aa4cc;
+  --atmo:#0b1020;--tint-k:24%; /* wie --lb-ground in wiki-lebendig.css */
+  --ink:#e7ebff;--ink2:#aab4dc;--ink3:#8b95c2;--line:rgba(170,185,255,.16);--grid:#9aa4cc; /* ink, ink2, line wie --lb-ink, --lb-ink2, --lb-line in wiki-lebendig.css */
   --dot-bg:#151b33;--on-fill-light:#ffffff;--on-fill-dark:#0a0f1f;--focus:#8fb0ff;--sel-bg:#8fb0ff;--sel-ink:#0a0f1f;
   --docs:#6b97ff;--tests:#34d399;--workbench:#a78bfa;--scripts:#fbbf24;--core:#8e98ff;--bridge:#f472b6;--infra:#9fadc4;--other:#9fadc4;
   --alert:#ff6b5e;--alert-ink:#ff9a90;--ok:#34d399;--ok-ink:#6ee7b7;--infra-ink:#c3cde0;--scripts-ink:#fcd34d;
@@ -222,4 +222,4 @@ html.narrow .hr{grid-template-columns:minmax(0,46%) 1fr auto;gap:10px}
   .sheen,.pulse{display:none}
   .tab svg{animation:none}
 }
-@media (prefers-color-scheme:dark){html:not([data-theme]) body{background:#0a0f1f;color:#eef1fb}}
+@media (prefers-color-scheme:dark){html:not([data-theme]) body{background:#0b1020;color:#e7ebff}}

@@ -1748,11 +1748,59 @@
       this.caption.replaceChildren(content);
     }
 
+    // Lebendig: Die Linse unter dem Kapitel gleitet als Geist von der alten
+    // zur neuen Position (wie glideLens in wiki-lebendig.js).
+    glideChapterLens(fromIndex, toIndex) {
+      const bar = this.chapterButtons[0] && this.chapterButtons[0].parentElement;
+      const fromButton = this.chapterButtons[fromIndex];
+      const toButton = this.chapterButtons[toIndex];
+      if (!bar || !fromButton || !toButton || fromIndex === toIndex) return;
+      if (document.documentElement.dataset.wikiLook !== "lebendig") return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (!bar.offsetParent || !toButton.offsetParent) return;
+      const box = bar.getBoundingClientRect();
+      const place = (el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.left - box.left + bar.scrollLeft, y: r.top - box.top + bar.scrollTop, w: r.width, h: r.height };
+      };
+      const from = this.lensFromRect;
+      const to = place(toButton);
+      if (!from || (Math.abs(to.x - from.x) < 1 && Math.abs(to.y - from.y) < 1)) return;
+      bar.querySelectorAll(".tour-lens-geist").forEach((old) => old.remove());
+      const ghost = make("div", "tour-lens-geist");
+      Object.assign(ghost.style, { width: from.w + "px", height: from.h + "px", transform: `translate(${from.x}px, ${from.y}px)` });
+      bar.append(ghost);
+      toButton.classList.add("tour-lens-wartet");
+      void ghost.offsetWidth;
+      Object.assign(ghost.style, { width: to.w + "px", height: to.h + "px", transform: `translate(${to.x}px, ${to.y}px)` });
+      let finished = false;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        ghost.remove();
+        toButton.classList.remove("tour-lens-wartet");
+      };
+      ghost.addEventListener("transitionend", (event) => { if (event.propertyName === "transform") done(); });
+      setTimeout(done, 900);
+    }
+
     renderNav() {
+      const previous = this.navIndex;
+      // Ausgangslage der Linse messen, bevor aria-current wechselt.
+      this.lensFromRect = null;
+      const prevButton = this.chapterButtons[previous];
+      if (prevButton && prevButton.offsetParent) {
+        const bar = prevButton.parentElement;
+        const box = bar.getBoundingClientRect();
+        const r = prevButton.getBoundingClientRect();
+        this.lensFromRect = { x: r.left - box.left + bar.scrollLeft, y: r.top - box.top + bar.scrollTop, w: r.width, h: r.height };
+      }
       this.chapterButtons.forEach((button, ci) => {
         if (ci === this.ci) button.setAttribute("aria-current", "step");
         else button.removeAttribute("aria-current");
       });
+      this.navIndex = this.ci;
+      if (previous !== undefined && previous !== this.ci) this.glideChapterLens(previous, this.ci);
       const chapter = this.chapters[this.ci];
       this.dots.replaceChildren(...chapter.steps.map((step, si) => {
         const dot = make("button", "tour-dot");

@@ -550,7 +550,7 @@
 [data-wiki-look="lebendig"] .md-typeset .wiki-kette-figure { position: relative; }
 [data-wiki-look="lebendig"] .md-typeset a.wiki-kette-node {
   background-color: transparent; background-image: var(--wiki-kette-glas);
-  border-color: var(--wiki-kette-kante); border-radius: 16px;
+  border-color: var(--wiki-kette-kante); border-radius: 14px;
   box-shadow: var(--wiki-kette-licht);
   transform-origin: left center;
   transition: transform .5s var(--lb-spring), box-shadow .35s var(--lb-out), border-color .35s var(--lb-out);

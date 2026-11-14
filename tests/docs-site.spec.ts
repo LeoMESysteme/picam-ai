@@ -2139,14 +2139,14 @@ test('Sonderseiten lebendig: Glasbedienung, schmal ohne Querscrollen, Wechsel zu
   await page.goto('/docs/uebersicht/projekt-tour.html');
   const chapters = page.locator('.tour-chapters');
   const current = page.locator('.tour-chapter-button[aria-current="step"]');
-  await expect(chapters).toHaveCSS('border-top-left-radius', '24px');
+  await expect(chapters).toHaveCSS('border-top-left-radius', '22px');
   expect(await current.evaluate(e => getComputedStyle(e).boxShadow)).not.toBe('none');
   await page.getByRole('switch', { name: 'Lebendige Darstellung' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'ruhig');
   await expect(chapters).toHaveCSS('border-top-left-radius', '0px');
   await expect(current).toHaveCSS('box-shadow', 'none');
   await page.getByRole('switch', { name: 'Lebendige Darstellung' }).click();
-  await expect(chapters).toHaveCSS('border-top-left-radius', '24px');
+  await expect(chapters).toHaveCSS('border-top-left-radius', '22px');
 
   await page.goto('/docs/ROADMAP.html');
   await expect(page.locator('.roadmap-node').first()).toHaveCSS('border-top-left-radius', '18px');
@@ -2250,4 +2250,52 @@ test('Lebendige Kette: Puls wandert, fehlt bei reduzierter Bewegung und verschwi
     .filter(animation => (animation.effect as KeyframeEffect | null)?.target?.closest?.('.wiki-kette')).length)).toBe(0);
   await expect(chain.locator('.wiki-kette-node')).toHaveCount(7);
   await expect(chain.locator('.wiki-kette-figure')).toHaveCount(1);
+});
+
+test('Tour: Kapitelwechsel erzeugt lebendig kurz einen Linsen-Geist, ruhig und reduziert keinen', async ({ page }) => {
+  test.setTimeout(60000);
+  await lebendig(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto(TOUR);
+  await expect(page.locator('html')).toHaveAttribute('data-wiki-look', 'lebendig');
+  const buttons = page.locator('.tour-chapter-button:not(.tour-chapter-button--planned)');
+  await expect(buttons.nth(1)).toBeVisible();
+  await buttons.nth(1).click();
+  await expect(page.locator('.tour-lens-geist')).toHaveCount(1);
+  await expect(page.locator('.tour-chapter-button[aria-current="step"]')).toHaveClass(/tour-lens-wartet/);
+  await expect(page.locator('.tour-lens-geist')).toHaveCount(0, { timeout: 3000 });
+  await expect(page.locator('.tour-chapter-button.tour-lens-wartet')).toHaveCount(0);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await buttons.nth(2).click();
+  await page.waitForTimeout(150);
+  await expect(page.locator('.tour-lens-geist')).toHaveCount(0);
+});
+
+test('Lebendige Bausteine: Filterpille mit Linse, Feldrand ≥ 3 : 1, Suchdialog in der Welt', async ({ page }) => {
+  await lebendig(page);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+    await page.goto('/docs/open-questions.html');
+    const pressed = page.locator('.oq-filter[aria-pressed="true"]').first();
+    await expect(pressed).toBeVisible();
+    expect(await pressed.evaluate(node => getComputedStyle(node).backgroundImage)).toContain('gradient');
+    const ratio = await page.locator('.oq-search').evaluate((field) => {
+      const rgba = (value: string) => (value.match(/[\d.]+/g) || []).map(Number);
+      const over = (top: number[], bottom: number[]) => [0, 1, 2].map(i => top[i] * (top[3] ?? 1) + bottom[i] * (1 - (top[3] ?? 1)));
+      const lum = (c: number[]) => {
+        const [r, g, b] = c.map(v => { const x = v / 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; });
+        return .2126 * r + .7152 * g + .0722 * b;
+      };
+      const ground = rgba(getComputedStyle(document.body).backgroundColor);
+      const paper = over(rgba(getComputedStyle(document.querySelector('.md-content')!).backgroundColor), ground);
+      const edge = over(rgba(getComputedStyle(field).borderTopColor), paper);
+      const [x, y] = [lum(edge), lum(paper)].sort((m, n) => n - m);
+      return (x + .05) / (y + .05);
+    });
+    expect(ratio, `${scheme} Feldrand`).toBeGreaterThanOrEqual(3);
+    const background = await page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--color-background').trim());
+    expect(background).toBe(scheme === 'dark' ? '17 23 44' : '255 255 255');
+  }
 });

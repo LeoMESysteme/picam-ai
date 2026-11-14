@@ -708,10 +708,10 @@
   padding: 5px;
   background: var(--lb-glass), color-mix(in srgb, var(--lb-ground) 55%, transparent);
   border: 1px solid var(--lb-glass-edge);
-  border-radius: 24px;
+  border-radius: 22px;
   box-shadow: var(--lb-glass-light), var(--lb-drop);
 }
-[data-wiki-look="lebendig"] .tour-chapters { gap: 2px; }
+[data-wiki-look="lebendig"] .tour-chapters { gap: 2px; position: relative; isolation: isolate; }
 [data-wiki-look="lebendig"] .tour-count { margin-left: auto; }
 /* Vollseite mit Spalte: beide Bänder füllen die Spalte gleich breit. */
 @media (min-width: 60em) and (min-aspect-ratio: 4/3) {
@@ -724,7 +724,7 @@
   min-height: 2.1rem;
   padding: .2rem .9rem;
   border: 1px solid transparent;
-  border-radius: 20px;
+  border-radius: 12px;
   background: none;
   color: var(--lb-ink2);
   transition: color .3s, background-color .2s;
@@ -745,6 +745,15 @@
   color: var(--lb-ink);
   font-weight: 600;
 }
+
+/* Gleitende Linse beim Kapitelwechsel (tour.js, glideChapterLens): Geist unter
+ * den Knöpfen; der neue Knopf trägt währenddessen keine eigene Linse. */
+.tour-lens-geist {
+  position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none; border-radius: 12px;
+  background: var(--lb-lens); box-shadow: var(--lb-lens-shadow);
+  transition: transform .75s cubic-bezier(.22, 1.12, .36, 1), width .75s cubic-bezier(.22, 1.12, .36, 1), height .75s cubic-bezier(.22, 1.12, .36, 1);
+}
+[data-wiki-look="lebendig"] .tour-chapter-button[aria-current="step"].tour-lens-wartet { background: none; box-shadow: none; border-color: transparent; }
 
 [data-wiki-look="lebendig"] .tour-controls { gap: 0; }
 [data-wiki-look="lebendig"] .tour-control {

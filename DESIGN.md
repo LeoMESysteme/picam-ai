@@ -288,6 +288,10 @@ Nebelblau und Tinte statt Theme-Indigo; Farbe trägt weiterhin nur Status und Da
 - **Glas** (`--lb-glass`, `--lb-glass-edge`, `--lb-glass-light`): Verlauf `135deg` aus Weiß .5 → .2 → .38 (dunkel .09 → .03 → .06), Kante Weiß .7 (dunkel .13).
 - **Linse** (`--lb-lens`, `--lb-lens-shadow`): heller Verlauf `170deg` von Weiß nach `rgb(235 242 255 / .92)`; dunkel `rgb(120 150 255 / .32 → .16)`.
 - **Glanz** (`--lb-sheen`): Weiß .55, dunkel `rgb(160 185 255 / .14)`.
+- **Schwebend** (`--lb-float-bg`, `--lb-float-edge`, `--lb-float-shadow`): eine Quelle für Hinweis-Pop-up, `.fs-tooltip`, `.session-tip` und die Handy-Schublade.
+- **Feld** (`--lb-field`, `--lb-field-edge`): Grund und Rand von Eingabefeldern und nicht gewählten Pillen; Rand Tinte hell 70 % (dunkel `rgb(170 180 220 / .55)`), ≥ 3 : 1 gegen die Lesefläche (WCAG 1.4.11).
+- **Code** (`--lb-code-bg` → `--md-code-bg-color`): Linienblau 6 % (dunkel 7 %) statt Neutralgrau.
+- **Suchdialog** (Zensical, Shadow DOM): liest `--color-foreground/-background/-background-subtle/-backdrop` als RGB-Tripel vom `body`; lebendig auf Tinte, Weiß/Nachtblau und Nebelblau gesetzt.
 
 **Atmosphäre je Weg** (`TINTS` in `wiki-lebendig.js`, drei Radialtönungen `--a/--b/--c`; Weg aus `.wiki-pagehead[data-weg]`, Codebase-Seite = projekt, sonst start):
 
@@ -340,14 +344,14 @@ Geschichtet statt flach: feste Atmosphäre (z-index -1) → Glasbänder mit Unsc
 
 ### Shapes
 
-Weich und groß gerundet, Rundung nimmt mit der Fläche ab: **22px** Flächen (Lesefläche, Seitenleisten, Roadmap-Navigation, Sessions-Diagrammwahl), **18px** schmale Lesefläche unter 60em und Schalen (Tour-Bühne, Fortschritts-Diagramme, Roadmap-Karten, Session-Einzelansicht), **14px** Pop-up, schwebende Werte, Leisten-Kopfzeilen, „Mehr dazu“- und Stand-Kästen, **12px** Linse und Eingabefelder. Pillen (`999px`) für Wert-, Legenden- und Bedienpillen, Kreise für runde Bedienknöpfe. Kanten 1px: `--lb-glass-edge` an Glas, `--lb-line` an Schalen. Icons bleiben Linien-SVG mit `currentColor` (auch die Tour-Bedienknöpfe, `tour.js` `controlIcon`, 1.8px, in beiden Darstellungen).
+Weich und groß gerundet, Rundung nimmt mit der Fläche ab: **22px** Flächen (Lesefläche, Seitenleisten, Roadmap-Navigation, Sessions-Diagrammwahl), **18px** schmale Lesefläche unter 60em und Schalen (Tour-Bühne, Fortschritts-Diagramme, Roadmap-Karten, Session-Einzelansicht), **14px** Pop-up, schwebende Werte, Leisten-Kopfzeilen, Kettenknoten, Tabellen, Code-Blöcke, Tiefenebenen, „Mehr dazu“- und Stand-Kästen, **12px** Linse. Suchfelder und Filter sind Pillen. Pillen (`999px`) für Wert-, Legenden- und Bedienpillen, Kreise für runde Bedienknöpfe. Kanten 1px: `--lb-glass-edge` an Glas, `--lb-line` an Schalen. Icons bleiben Linien-SVG mit `currentColor` (auch die Tour-Bedienknöpfe, `tour.js` `controlIcon`, 1.8px, in beiden Darstellungen).
 
 ### Motion
 
 Kurven: Feder `--lb-spring` `cubic-bezier(.2, 1.25, .35, 1)` (Umschalterknopf, Pillen, Kettenknoten, Pop-up-Anhebung), Auslauf `--lb-out` `cubic-bezier(.16, 1, .3, 1)` (Eintritt, Überblendungen).
 
 - **Der eine Moment: Seiteneintritt.** Glanzstreif (`105deg`, `--lb-sheen`) läuft in 1.15s über die Lesefläche; die ersten sechs sichtbaren Blöcke tauchen gestaffelt auf (`translateY(14px)`, Deckkraft .35 → 1, 760ms, 45ms Staffel). Inhalt ist ohne Animation lesbar.
-- **Signatur: gleitende Linse.** Beim Klick in der Navigation merkt sich `wiki-lebendig.js` die alte Linse; nach dem Seitenwechsel gleitet ein Geist (`.wiki-lens-geist`) in .75s (`cubic-bezier(.22, 1.12, .36, 1)`) zum neuen Eintrag.
+- **Signatur: gleitende Linse** (Navigation und Tour-Kapitel). Beim Klick in der Navigation merkt sich `wiki-lebendig.js` die alte Linse; nach dem Seitenwechsel gleitet ein Geist (`.wiki-lens-geist`) in .75s (`cubic-bezier(.22, 1.12, .36, 1)`) zum neuen Eintrag.
 - **Atmosphäre:** zwei feste Schichten überblenden beim Wegwechsel in 1.4s.
 - **Diagramme** wachsen beim Sichtbarwerden: Balken 900ms `outExpo`, 45ms Staffel, Wertpillen ab 420ms in 360ms; beim Umschalten zeichnen sie neu und wachsen erneut, wenn sie im Blick sind.
 - **Kette:** Puls wandert die Schiene in 80 % von 5.6s ab und verblasst, jede Stufe leuchtet bei Ankunft kurz auf; kompakte Kette mit Signal entlang der Pfeile (4.2s, 350ms Versatz), nur solange sichtbar.
@@ -363,20 +367,29 @@ Schalter `role="switch"` im Kopf vor der Farbschema-Wahl: Spur 2.1 × 1.1rem, Pi
 Aktiver Navigationseintrag: `--lb-lens`, Radius 12px, `--lb-lens-shadow`, Onest 600 in Tinte. Dieselbe Linse markiert die gewählte Option überall: aktuelles Tour-Kapitel, gedrückte Tour- und Roadmap-Knöpfe, aktive Fortschritts-Legende, gewählte Sessions-Diagrammwahl.
 
 #### Glas-Pop-up
-`.wiki-hint`: Verlauf Weiß .94 → .82 (dunkel `rgb(24 31 58 / .95)` → `rgb(17 23 44 / .9)`), `blur(16px) saturate(180%)`, Kante `#fff` (dunkel Weiß .14), Radius 14px, Schatten „Schwebend“; Einblendung .25s Auslauf, Anhebung .45s Feder. Dieselbe Optik tragen `.fs-tooltip` und `.session-tip`.
+`.wiki-hint`: `--lb-float-bg` (Weiß .94 → .82, dunkel `rgb(24 31 58 / .95)` → `rgb(17 23 44 / .9)`), `blur(16px) saturate(180%)`, `--lb-float-edge`, Radius 14px, `--lb-float-shadow`; Einblendung .25s Auslauf, Anhebung .45s Feder. `.fs-tooltip` und `.session-tip` nutzen dieselben Tokens.
+
+#### Pillen, Felder, Suchknopf
+Filter (OQ-Liste, Glossar-Wege): nicht gewählt Glaspille (`--lb-field`, Rand `--lb-field-edge`), gewählt Linse in Tinte, Onest 600. Suchfelder (OQ, Glossar) und der Suchknopf im Kopf als runde Felder mit leichtem Innenschatten; Fokus 2px Akzent. A–Z-Leiste: Linse beim Überfahren.
+
+#### Tabellen, Code, Tiefenebenen
+Tabellen mit 1px `--lb-line`, Radius 14px, Kopf mit 4 % Tinte, Zeile beim Überfahren 5 % Akzent. Code-Blöcke 14px, Inline-Code 6px auf `--lb-code-bg`. Tiefenebenen als Glasscheibe auf der Lesefläche (Kante `--lb-glass-edge`, Innenlicht, 14px), Zusammenfassung färbt beim Überfahren in Akzent.
+
+#### Rollenwege, Schublade, Codebase-Einbettung
+Rollenweg unter dem Zeiger hebt sich als Glas (18px). Unter 76.25em ist die Navigationsschublade eine schwebende Glasfläche. Die Bühnen-Einbettung der Codebase-Seite hat 18px, Glaskante und Tiefe; die Sprungknöpfe „Auf der Bühne zeigen“ sind Glaspillen mit Linse beim Überfahren.
 
 #### Lebendige Diagramme (`wiki-chart.js`)
 Nur lebendig: Spur je Balken (`--wiki-chart-track`), Balken mit fast eckiger Grundlinie (2px) und weichem Datenende (7px), Glanz im oberen Drittel, Wert in Glaspille (Radius 9, 6px Innenabstand). Raster und Achse in Linienblau, Titel Bricolage 700. Überfahren/Fokus hebt den Balken, die übrigen treten auf .32 zurück, Pillen bleiben voll lesbar; Fokusring 2px Akzent. Achsenmarken in runden Schritten (1, 2, 2,5, 5 × 10ⁿ), kollidierende Beschriftungen entfallen (gilt in beiden Darstellungen).
 
 #### Kette (`wiki-kette.js`)
-Stufen als Glasknoten (Radius 16px, Verlauf `165deg`, Innenlicht), Hover/Fokus `scale(1.02)` mit Feder. Volle Fassung: Schiene 2px links mit Stationspunkten (10px, Statusfarbe `--docs-*-fg`, 3px Papierring) und wanderndem Puls in Akzent. Kompakt (Startseite): Glaspillen, `scale(1.05)`, Signal entlang der Pfeile.
+Stufen als Glasknoten (Radius 14px, Verlauf `165deg`, Innenlicht), Hover/Fokus `scale(1.02)` mit Feder. Volle Fassung: Schiene 2px links mit Stationspunkten (10px, Statusfarbe `--docs-*-fg`, 3px Papierring) und wanderndem Puls in Akzent. Kompakt (Startseite): Glaspillen, `scale(1.05)`, Signal entlang der Pfeile.
 
 #### Sonderseiten-Schichten
-- **Tour** (`tour.css`): Bühne als Schale (18px, Innenschatten), eigene Atmosphäre-Tönung für Vollbild. Kapitelwahl und Steuerung als zwei Glasbänder (Radius 24px, Innenabstand 5px), Linse unter dem aktuellen Kapitel, runde Bedienknöpfe mit Linse beim Überfahren/Drücken, aktueller Schrittpunkt als kurze Linse (1.5rem). „Mehr dazu“ als weicher Kasten (14px) statt Randbalken; „Nochmal“ als Glaspille.
-- **Roadmap** (`roadmap.css`): Karte als Schale (20px), Meilenstein- und Schrittkarten als Glasscheiben ohne Unschärfe (18px), Verbindungen 2px rund; Navigation (22px) und Übersicht (16px) als Glas mit Unschärfe, Ansichtswahl als Glasband, Suche als Feld (20px). Hover färbt Kante und Schatten in der Knotenfarbe.
+- **Tour** (`tour.css`): Bühne als Schale (18px, Innenschatten), eigene Atmosphäre-Tönung für Vollbild. Kapitelwahl und Steuerung als zwei Glasbänder (Radius 22px, Innenabstand 5px), Linse (12px) unter dem aktuellen Kapitel, die beim Kapitelwechsel gleitet (`.tour-lens-geist`, wie die Navigationslinse), runde Bedienknöpfe mit Linse beim Überfahren/Drücken, aktueller Schrittpunkt als kurze Linse (1.5rem). „Mehr dazu“ als weicher Kasten (14px) statt Randbalken; „Nochmal“ als Glaspille.
+- **Roadmap** (`roadmap.css`): Karte als Schale (22px), Meilenstein- und Schrittkarten als Glasscheiben ohne Unschärfe (18px), Verbindungen 2px rund; Navigation (22px) und Übersicht (14px) als Glas mit Unschärfe, Ansichtswahl als Glasband, Suche als Pille. Hover färbt Kante und Schatten in der Knotenfarbe.
 - **Fortschritt** (`fortschritt.css`): jedes Diagramm in einer Schale (18px, schmal 14px), die so weit in den Rand ragt, wie sie innen Abstand hält (Zeichenbreite bleibt beim Umschalten gleich). Legendenschalter als Glaspillen, ausgeschaltet als Umriss; Stand-Hinweis als weicher Kasten mit getönter Kante je Zustand.
 - **Sessions** (`sessions.css`): Knöpfe als Linsenpillen, Verweisknöpfe bleiben Text, Felder 12px; Diagrammwahl als Glasband (22px) mit Linse; Laufmatrix-Kopf als flaches Band mit runden Enden (12px); Detailzeile getönt (unten 14px); Einzelansicht im Glasrahmen (18px). Der eingebettete Records-Explorer behält seine eigene Darstellung.
-- **Codebase-Seite** (`docs/uebersicht/codebase.md`, `wiki-codebase.js`): bettet nur in „lebendig“ die Bühne `assets/codebase/index.html` ein und reicht das Farbschema per `postMessage` durch; in „ruhig“ bleiben Text, Tabellen und Diagramme, die Bühne ist über „Vollbild öffnen“ erreichbar. Die Bühne (`codebase.css`, `codebase.js`, `kit.js`) ist die Ursprungswelt dieser Darstellung und hat einen eigenen Tokensatz (`--glass-*`, `--lens-*`, Bereichsfarben).
+- **Codebase-Seite** (`docs/uebersicht/codebase.md`, `wiki-codebase.js`): bettet nur in „lebendig“ die Bühne `assets/codebase/index.html` ein und reicht das Farbschema per `postMessage` durch; in „ruhig“ bleiben Text, Tabellen und Diagramme, die Bühne ist über „Vollbild öffnen“ erreichbar. Die Bühne (`codebase.css`, `codebase.js`, `kit.js`) ist die Ursprungswelt dieser Darstellung; sie läuft im iframe, erbt die Variablen nicht und führt deshalb eigene Tokens (`--glass-*`, `--lens-*`, Bereichsfarben), deren Tinte, Nebentext, Linie und Grund den `--lb-*`-Werten gleichen.
 
 ### Do's and Don'ts
 

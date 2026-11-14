@@ -262,10 +262,10 @@ body:has(#session-dashboard) .md-content__inner > :is(p, ul, ol) { max-width: 40
  * Diagramme und Tabelle bleiben ruhig lesbar. Der eingebettete
  * Records-Explorer behält seine eigene Darstellung. */
 [data-wiki-look="lebendig"].session-page .md-content :is(.session-controls, .session-field) :is(select, input) {
-  border-color: color-mix(in srgb, var(--lb-ink2) 70%, transparent);
+  border-color: var(--lb-field-edge);
   border-radius: 12px;
   padding: .4rem .65rem;
-  background: var(--md-default-bg-color);
+  background: var(--lb-field);
   box-shadow: inset 0 1px 2px rgb(40 60 150 / .1);
 }
 [data-wiki-look="lebendig"].session-page .md-content button {
@@ -311,7 +311,205 @@ body:has(#session-dashboard) .md-content__inner > :is(p, ul, ol) { max-width: 40
 [data-wiki-look="lebendig"].session-page .md-content .session-switch button {
   min-height: 2.1rem;
   border-color: transparent;
-  border-radius: 18px;
+  border-radius: 12px;
+  padding: .25rem .9rem;
+  background: none;
+  box-shadow: none;
+  color: var(--lb-ink2);
+}
+[data-wiki-look="lebendig"].session-page .md-content .session-switch button:hover { color: var(--lb-ink); }
+[data-wiki-look="lebendig"].session-page .md-content .session-switch button[aria-selected="true"] {
+  border-color: var(--lb-glass-edge);
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+  color: var(--lb-ink);
+}
+
+/* Lagebild und Kennzahlen: Linien in der Glasfarbe. */
+[data-wiki-look="lebendig"] .md-typeset .session-verdict { border-color: var(--lb-line); }
+[data-wiki-look="lebendig"] .md-typeset .session-brief-col + .session-brief-col,
+[data-wiki-look="lebendig"] .session-metrics > div,
+[data-wiki-look="lebendig"] .md-typeset ul.session-notable > li,
+[data-wiki-look="lebendig"] .md-typeset .session-file { border-color: var(--lb-line); }
+[data-wiki-look="lebendig"] .session-strip { border-radius: 4px; }
+[data-wiki-look="lebendig"] .session-key { border-color: var(--lb-line); border-radius: 999px; padding: .1rem .55rem; }
+[data-wiki-look="lebendig"] .session-key--baseline { border-color: color-mix(in srgb, var(--lb-ink2) 40%, transparent); }
+
+/* Schwebender Wert über dem Diagramm: Glas wie das Pop-up. */
+[data-wiki-look="lebendig"] .session-tip {
+  background: var(--lb-float-bg);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--lb-float-edge);
+  border-radius: 14px;
+  box-shadow: var(--lb-float-shadow);
+  color: var(--lb-ink);
+}
+
+/* Laufmatrix: eine Zeile je Lauf, Zahlen in Spalten. */
+.md-typeset .session-howto { margin: 0 0 .4rem; font-size: .66rem; color: var(--md-default-fg-color--light); }
+.md-typeset table.session-matrix { display: table; width: 100%; margin: 0; border: 0; border-collapse: collapse; font-size: .68rem; }
+.md-typeset .session-matrix caption { caption-side: top; padding: 0 0 .3rem; text-align: left; font-size: .66rem; font-weight: 600; color: var(--md-default-fg-color--light); }
+.md-typeset .session-matrix thead th { padding: .3rem .5rem .3rem 0; background: none; border-bottom: 1px solid var(--md-default-fg-color--lighter); font-size: .64rem; font-weight: 600; color: var(--md-default-fg-color--light); text-align: left; vertical-align: bottom; }
+.md-typeset .session-matrix tbody :is(th, td) { padding: .5rem .5rem .5rem 0; border-top: 1px solid var(--md-default-fg-color--lightest); vertical-align: top; text-align: left; font-weight: 400; }
+.md-typeset .session-matrix tbody tr:first-child > * { border-top: 0; }
+.md-typeset .session-matrix tbody tr:hover { background: none; }
+.md-typeset .session-matrix .session-col-num { text-align: right; white-space: nowrap; }
+.md-typeset .session-matrix thead .session-col-num { text-align: right; white-space: normal; }
+.md-typeset .session-matrix .session-col-strip { width: 22%; min-width: 6rem; }
+.md-typeset .session-matrix .session-col-act { padding-left: .6rem; }
+/* Zeilentönung mit Innenrand: Text berührt die getönte Kante nicht. */
+.md-typeset .session-matrix :is(thead, tbody) tr > :first-child { padding-left: .6rem; }
+.md-typeset .session-matrix :is(thead, tbody) tr > :last-child { padding-right: .6rem; }
+.session-page .md-content :is(button.session-open, button.session-compare) { border-color: var(--md-default-fg-color--lightest); }
+/* Hinweis an den Statusstreifen: Farbe, Anteil und Bedeutung. */
+.wiki-hint .session-hint-body { margin: 0; }
+.md-typeset .session-hint-rows, .wiki-hint .session-hint-rows { display: grid; grid-template-columns: auto auto; justify-content: start; gap: 0 .8rem; margin: .2rem 0 0; }
+.wiki-hint .session-hint-rows dt { display: flex; align-items: center; gap: .35rem; font-weight: 600; }
+.wiki-hint .session-hint-rows dd { margin: 0; font-variant-numeric: tabular-nums; }
+.wiki-hint .session-hint-rows .session-hint-meaning { grid-column: 1 / -1; margin: 0 0 .3rem 1rem; color: var(--md-default-fg-color--light); }
+.md-typeset .session-run-title { margin: 0; overflow-wrap: normal; }
+.md-typeset .session-run-title strong { font-weight: 600; }
+.md-typeset .session-th-sub { display: block; font-weight: 400; }
+.session-page .md-content button.session-textbutton { display: inline; min-height: 0; margin: 0; padding: .1rem 0; border: 0; background: none; font-size: .64rem; color: var(--md-typeset-a-color); }
+.md-typeset .session-run-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .6rem; margin: .1rem 0 0; }
+.md-typeset .session-id { font-size: .62rem; color: var(--md-default-fg-color--light); overflow-wrap: anywhere; }
+.session-strip { display: flex; height: .7rem; margin-top: .3rem; border-radius: 2px; overflow: hidden; background: var(--wiki-chart-grid); transform-origin: 0 50%; cursor: help; }
+.session-strip--empty { background: repeating-linear-gradient(135deg, var(--wiki-chart-grid) 0 3px, transparent 3px 6px); }
+.session-strip-part { display: block; height: 100%; background: var(--tone); }
+.session-strip-part + .session-strip-part { box-shadow: inset 2px 0 0 var(--md-default-bg-color); }
+.md-typeset .session-actions { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0; }
+.md-typeset .session-picked-note { align-self: center; font-size: .64rem; font-weight: 600; color: var(--docs-progress-fg); }
+.session-row { transition: background-color 120ms ease-out; }
+/* Tönung auf der ganzen Zeile, damit sie auch im schmalen Rasterlayout ohne Lücken bleibt. */
+.md-typeset .session-matrix tbody tr.session-row--active { background: color-mix(in srgb, var(--md-default-fg-color) 6%, transparent); }
+.md-typeset .session-matrix tbody tr.session-row--picked { background: color-mix(in srgb, var(--docs-progress-bg) 55%, transparent); }
+.md-typeset .session-detail-row > td { padding: .2rem 0 .9rem; border-top: 0; background: color-mix(in srgb, var(--md-default-fg-color) 3%, transparent); }
+.md-typeset .session-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .4rem 1.2rem; margin: .4rem .75rem .6rem; }
+.md-typeset .session-facts dt { font-size: .62rem; color: var(--md-default-fg-color--light); }
+.md-typeset .session-facts dd { margin: 0; overflow-wrap: anywhere; }
+.md-typeset .session-files { margin: 0 .75rem; }
+.md-typeset .session-files-title { margin: 0 0 .2rem; font-weight: 600; }
+.md-typeset .session-file { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .6rem; padding: .35rem 0; border-top: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset .session-file-name { flex: 1 1 12rem; }
+.md-typeset .session-parts summary { cursor: pointer; color: var(--md-typeset-a-color); }
+.md-typeset .session-parts p { margin: .2rem 0; }
+.md-typeset .session-parts a { display: inline-block; min-width: 1.6rem; padding: .2rem .25rem; text-align: center; }
+.md-typeset .session-row-error { margin: .3rem 0 0; padding: .1rem .45rem; border-radius: .2rem; background: var(--docs-blocked-bg); color: var(--docs-blocked-fg); }
+
+/* Einzelansicht */
+#untersuchen { scroll-margin-top: 3.2rem; }
+.session-viewer-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: .3rem 1rem; font-size: .68rem; }
+.md-typeset .session-viewer-picked p { margin: 0 0 .2rem; overflow-wrap: anywhere; }
+.md-typeset .session-viewer-picked .session-id { display: inline; }
+.session-viewer-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .5rem; }
+.session-viewer iframe { display: block; width: 100%; height: min(950px, 85vh); min-height: 550px; margin-top: .5rem; border: 1px solid var(--md-default-fg-color--lightest); border-radius: .4rem; }
+.md-typeset .session-viewer-empty { font-size: .72rem; color: var(--md-default-fg-color--light); }
+#untersuchen:focus { outline: none; }
+#untersuchen:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; }
+
+/* Statische Archivfassung (ohne JavaScript lesbar) als Tiefenebene. */
+.md-typeset details.session-source { font-size: .68rem; }
+.md-typeset .session-source-group { font-weight: 600; margin-top: 1rem; }
+.md-typeset .session-source table { font-size: .64rem; }
+.md-typeset .session-source caption { caption-side: top; text-align: left; font-weight: 600; padding: .5rem .75rem .4rem; }
+.md-typeset .session-source :is(td, th) { overflow-wrap: normal; hyphens: manual; }
+/* Nur die lange Laufkennung darf beliebig umbrechen. */
+.md-typeset .session-source .session-source-run { min-width: 9rem; overflow-wrap: anywhere; font-weight: 400; }
+.md-typeset .session-source-runs :is(th, td) { padding: .45rem .6rem .45rem 0; text-align: left; vertical-align: top; border-top: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset .session-source-runs thead th { border-top: 0; border-bottom: 1px solid var(--md-default-fg-color--lighter); vertical-align: bottom; font-weight: 600; }
+.md-typeset .session-source-scroll { max-width: 100%; overflow-x: auto; }
+.md-typeset .session-source-runs td:last-child { min-width: 14rem; }
+.md-typeset .session-source-runs td:nth-child(3) { min-width: 6.5rem; }
+.md-typeset .session-source-runs ul { margin: 0 0 .3rem; padding: 0; list-style: none; }
+.md-typeset .session-source-runs li { margin: 0 0 .25rem; }
+
+@media (prefers-reduced-motion: reduce) { .session-row, .session-tip { transition: none; } }
+
+@media (max-width: 700px) {
+  .md-typeset .session-verdict { grid-template-columns: minmax(0, 1fr); }
+  .md-typeset .session-brief-col, .md-typeset .session-brief-col:first-child { padding: .8rem 0; }
+  .md-typeset .session-brief-col + .session-brief-col { border-left: 0; border-top: 1px solid var(--md-default-fg-color--lightest); }
+  .md-typeset ul.session-notable > li { grid-template-columns: minmax(0, 1fr); }
+  .session-tip { white-space: normal; max-width: 15rem; }
+  .md-typeset .session-metrics { grid-template-columns: minmax(0, 1fr); }
+  .md-typeset .session-metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+  .md-typeset .session-metrics dd { text-align: right; }
+  .session-controls { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .session-controls input { min-width: 0; }
+  /* Jede Zeile wird ein Block: Lauf, Statusstreifen, drei Zahlen nebeneinander, Auswahl. */
+  .md-typeset table.session-matrix, .session-matrix tbody { display: block; width: 100%; }
+  .session-matrix thead { display: none; }
+  .session-matrix tr.session-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .2rem .6rem; padding: .6rem .5rem; border-top: 1px solid var(--md-default-fg-color--lightest); }
+  .md-typeset .session-matrix tbody tr.session-row > * { display: block; padding: 0; border: 0; }
+  .session-matrix .session-row > th, .session-matrix .session-row > .session-col-strip, .session-matrix .session-row > .session-col-act { grid-column: 1 / -1; }
+  .md-typeset .session-matrix .session-col-num { text-align: left; white-space: normal; }
+  .md-typeset .session-matrix .session-col-strip { width: auto; min-width: 0; }
+  .md-typeset .session-matrix caption { display: block; }
+  .md-typeset .session-matrix .session-col-act { padding: .3rem 0 0; }
+  .session-matrix .session-col-num::before { content: attr(data-label); display: block; font-size: .6rem; color: var(--md-default-fg-color--light); }
+  .md-typeset .session-matrix .session-detail-row { display: block; }
+  .md-typeset .session-matrix .session-detail-row > td { display: block; }
+  .session-viewer iframe { min-height: 600px; }
+}
+
+/* ================================= Lebendige Darstellung (wiki-look) ==== */
+/* Nur unter html[data-wiki-look="lebendig"]; „ruhig“ bleibt wie oben.
+ * session-page sitzt wie data-wiki-look am <html>. Glas bekommt, was man
+ * bedient (Schalter, Knöpfe, Filter) oder was schwebt (Wertanzeige); Zahlen,
+ * Diagramme und Tabelle bleiben ruhig lesbar. Der eingebettete
+ * Records-Explorer behält seine eigene Darstellung. */
+[data-wiki-look="lebendig"].session-page .md-content :is(.session-controls, .session-field) :is(select, input) {
+  border-color: var(--lb-field-edge);
+  border-radius: 12px;
+  padding: .4rem .65rem;
+  background: var(--lb-field);
+  box-shadow: inset 0 1px 2px rgb(40 60 150 / .1);
+}
+[data-wiki-look="lebendig"].session-page .md-content button {
+  border-color: var(--lb-glass-edge);
+  border-radius: 999px;
+  padding: .3rem .8rem;
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+  color: var(--lb-ink);
+  transition: box-shadow .2s, color .2s;
+}
+[data-wiki-look="lebendig"].session-page .md-content button:hover:not(:disabled) { border-color: var(--lb-glass-edge); color: var(--md-typeset-a-color); }
+[data-wiki-look="lebendig"].session-page .md-content button:disabled {
+  border-color: color-mix(in srgb, var(--lb-ink2) 40%, transparent);
+  background: none;
+  box-shadow: none;
+  color: var(--lb-ink2);
+}
+/* Verweisknöpfe bleiben Text. */
+[data-wiki-look="lebendig"].session-page .md-content :is(button.session-runlink, button.session-textbutton) {
+  border: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--md-typeset-a-color);
+}
+[data-wiki-look="lebendig"].session-page .md-content button.session-textbutton { padding: .1rem 0; }
+[data-wiki-look="lebendig"].session-page .md-content :focus-visible { outline-color: var(--md-accent-fg-color); }
+[data-wiki-look="lebendig"].session-page .md-content ::selection { background: #2f6df6; color: #fff; }
+
+/* Diagrammwahl: Glasband, Linse unter dem gewählten Diagramm. */
+[data-wiki-look="lebendig"] .session-switch {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 22px;
+  background: var(--lb-glass), color-mix(in srgb, var(--lb-ground) 55%, transparent);
+  box-shadow: var(--lb-glass-light), var(--lb-drop);
+}
+[data-wiki-look="lebendig"].session-page .md-content .session-switch button {
+  min-height: 2.1rem;
+  border-color: transparent;
+  border-radius: 12px;
   padding: .25rem .9rem;
   background: none;
   box-shadow: none;
