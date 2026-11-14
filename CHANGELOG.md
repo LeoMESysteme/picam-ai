@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-14: Wiki „lebendig“ vervollständigt. Filterpillen (OQ, Glossar)
+  tragen die Linse, Suchfelder und der Suchknopf sind runde Glasfelder mit
+  Rand ≥ 3 : 1, Tabellen, Code-Blöcke und Tiefenebenen folgen der
+  Glas-Formsprache, die Navigationsschublade auf dem Handy ist eine
+  Glasfläche, und Zensicals Suchdialog bekommt über seine RGB-Variablen
+  Nebel- und Nachtblau. Gemeinsame Tokens für schwebende Flächen und Felder
+  ersetzen Kopien in den Sonderseiten, Radien folgen 22/18/14/12 px, die
+  Tour-Kapitellinse gleitet. Die Codebase-Seite steht jetzt auf `master`
+  (`./scripts/codebase-facts.py --write --focus master`).
+
 * 2026-11-14: Wiki „lebendig“, Stufe 4 und Abschlussprüfung. Diagramme
   (`wiki-chart.js`) wachsen beim Sichtbarwerden, heben den gewählten Balken
   hervor und zeigen den Wert als Glaspille; die Kette (`wiki-kette.js`) hat

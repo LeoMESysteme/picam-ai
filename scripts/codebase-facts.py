@@ -1036,8 +1036,10 @@ def render_markdown(repo: dict) -> str:
     # Branches
     br = repo["health"]["branches"]
     cnt = Counter(b["state"] for b in br)
+    besides = (f"Neben dem Fokus `{m['focus']}`" if m["trunk"] == m["focus"]
+               else f"Neben `{m['trunk']}` und dem Fokus `{m['focus']}`")
     lines += ["## Branches {#branches}", "",
-              f"Neben `{m['trunk']}` und dem Fokus `{m['focus']}` gibt es {de(len(br))} Refs: "
+              f"{besides} gibt es {de(len(br))} Refs: "
               f"{de(cnt['stale'])} still, {de(cnt['open'])} offen und {de(cnt['merged'])} gemergt. "
               f"Insgesamt enthält die Historie {de(m['commits'])} Commits und {de(m['merges'])} Merges.", ""]
     names = {"stale": "still", "open": "offen", "merged": "gemergt"}
