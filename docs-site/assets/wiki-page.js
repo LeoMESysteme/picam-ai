@@ -199,6 +199,72 @@
     head.dataset.ready = "true";
   });
 
+  // Signet des Wegs: in „lebendig“ zeichnet sich das Linien-Icon beim
+  // Seiteneintritt einmal in der Rollenfarbe (wiki-messkette.css). Jeder
+  // Teilpfad bekommt einen eigenen Strich, damit das Zeichnen nicht davon
+  // abhängt, wie der Browser Strichmuster über Teilpfade fortsetzt.
+  const SIGNET_MS = 700;
+  const SIGNET_EASE = "cubic-bezier(.16, 1, .3, 1)";
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const livelyLook = () => document.documentElement.getAttribute("data-wiki-look") === "lebendig";
+
+  onPage((article) => {
+    const svg = article.querySelector(".wiki-pagehead[data-weg] .wiki-pagehead-weg svg");
+    if (!svg) return;
+    let running = [];
+
+    function split() {
+      const paths = Array.from(svg.querySelectorAll("path"));
+      if (paths.length !== 1) return paths;
+      const parts = paths[0].getAttribute("d").split(/(?=M)/).map((part) => part.trim()).filter(Boolean);
+      if (parts.length < 2) return paths;
+      const pieces = parts.map((d) => {
+        const piece = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        piece.setAttribute("d", d);
+        return piece;
+      });
+      paths[0].replaceWith(...pieces);
+      return pieces;
+    }
+
+    function clear() {
+      running.forEach((animation) => animation.cancel());
+      running = [];
+      svg.querySelectorAll("path").forEach((path) => {
+        path.style.removeProperty("stroke-dasharray");
+        path.style.removeProperty("stroke-dashoffset");
+      });
+      delete svg.dataset.signet;
+    }
+
+    function draw() {
+      clear();
+      if (!livelyLook() || reduceMotion.matches || typeof svg.animate !== "function") return;
+      for (const path of split()) {
+        const length = typeof path.getTotalLength === "function" ? path.getTotalLength() : 0;
+        if (!(length > 0)) continue;
+        const dash = length.toFixed(2);
+        path.style.strokeDasharray = dash;
+        path.style.strokeDashoffset = "0";
+        running.push(path.animate([{ strokeDashoffset: dash }, { strokeDashoffset: "0" }],
+          { duration: SIGNET_MS, easing: SIGNET_EASE, delay: 120, fill: "backwards" }));
+      }
+      svg.dataset.signet = "zeichnet";
+    }
+
+    function lookChanged() {
+      if (livelyLook()) draw();
+      else clear();
+    }
+
+    draw();
+    window.addEventListener("wiki:look", lookChanged);
+    return () => {
+      window.removeEventListener("wiki:look", lookChanged);
+      running.forEach((animation) => animation.cancel());
+    };
+  });
+
   onPage((article) => {
     const path = new URL(window.location.href).pathname;
     if (/\/docs\/(?:open-questions|ROADMAP)(?:\.html)?$/.test(path)) return;

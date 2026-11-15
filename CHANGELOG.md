@@ -5,6 +5,22 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-15: Wiki „lebendig“: Bewegung und Grafiken. Seitenwechsel als
+  Morph (View Transitions: der Linktext fliegt in den neuen Titel, nichts
+  sonst überblendet), Lesefortschritt unter dem Kopf und gleitende Linse im
+  Inhaltsverzeichnis, atmende Atmosphäre (pausiert bei verborgenem Tab),
+  Aufklappen mit Feder (`wiki-feder.js`), Pop-ups wachsen aus dem Begriff,
+  Zahlen mit Einheit zählen beim Sichtbarwerden hoch, Weg-Signets zeichnen
+  sich, die Verlustlinie der Fortschrittsseite zieht sich, ein Glasband
+  folgt dem gewählten Lauf in der Laufmatrix. Neue Startseiten-Grafik
+  „Messkette“ (`wiki-messkette.js`/`.css`): alle Stufen aus `kette.json`,
+  ein Anzeigewert wandert durch die Kette bis zur gesperrten DUT-Ausgabe.
+  Alles nur in „lebendig“, bei reduzierter Bewegung statisch. Tests je
+  Teil in eigenen Dateien (`tests/docs-site-{rahmen,feder,grafik}.spec.ts`,
+  die Doku-Konfiguration matcht `docs-site(-…)?.spec.ts`). Bekannt: Auf dem
+  Pi (Headless, Software-Rendering) erscheint das erste Morph-Bild nach
+  360–860 ms statt 70–420 ms ohne Morph.
+
 * 2026-11-14: Wiki „lebendig“ vervollständigt. Filterpillen (OQ, Glossar)
   tragen die Linse, Suchfelder und der Suchknopf sind runde Glasfelder mit
   Rand ≥ 3 : 1, Tabellen, Code-Blöcke und Tiefenebenen folgen der

@@ -3,6 +3,8 @@
 Optische Auslesung von Messverstärkeranzeigen im Kalibrierlabor. Erkannte
 Werte werden mit Zeitbasis, Freigabestatus und Begründung dokumentiert.
 
+<div class="wiki-messkette" data-messkette></div>
+
 <div class="wiki-stand" markdown="1">
 
 * **Kamera:** Logitech StreamCam (UVC), aktiv seit 2026-09-25; die IMX500 ist außer Betrieb.

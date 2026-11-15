@@ -257,13 +257,13 @@ Zensical-Navigation unverändert (Sections, Indexes, Pfad, Top, Footer, Instant)
 
 ## Lebendige Darstellung
 
-Gilt nur unter `html[data-wiki-look="lebendig"]`. Quelle: `assets/wiki-lebendig.css` (Rahmen, Tokens, Schriften), `assets/wiki-lebendig.js` (Atmosphäre, Linse, Seiteneintritt), lebendige Schichten am Ende von `wiki.css`, `tour.css`, `roadmap.css`, `fortschritt.css`, `sessions.css`. Inhalt, Navigation, Tabellen, Status- und Datenfarben sind dieselben wie in „ruhig“; es ändern sich Material, Schrift und Bewegung.
+Gilt nur unter `html[data-wiki-look="lebendig"]`. Quelle: `assets/wiki-lebendig.css` (Rahmen, Tokens, Schriften), `assets/wiki-lebendig.js` (Atmosphäre, Linsen, Seitenwechsel-Morph, Lesefortschritt), `assets/wiki-feder.js` (Aufklappen, Zähler), `assets/wiki-messkette.js`/`.css` (Startseiten-Grafik), lebendige Schichten am Ende von `wiki.css`, `tour.css`, `roadmap.css`, `fortschritt.css`, `sessions.css`. Inhalt, Navigation, Tabellen, Status- und Datenfarben sind dieselben wie in „ruhig“; es ändern sich Material, Schrift und Bewegung.
 
 ### Overview
 
 **Creative North Star: "Glas über atmender Atmosphäre"**
 
-Das Wiki liegt als Glas über einer ruhig atmenden Farbatmosphäre. Die Welt setzt die Codebase-Bühne (`assets/codebase/`); jede Textseite trägt sie leise weiter. Wer umschaltet, erkennt dasselbe Wiki: Navigation, Text und Tabellen bleiben an ihrem Platz, nur der Rahmen wird Glas und die Seite bekommt einen Eintrittsmoment.
+Das Wiki liegt als Glas über einer ruhig atmenden Farbatmosphäre. Die Welt setzt die Codebase-Bühne (`assets/codebase/`); jede Textseite trägt sie leise weiter. Wer umschaltet, erkennt dasselbe Wiki: Navigation, Text und Tabellen bleiben an ihrem Platz, nur der Rahmen wird Glas, und der Seitenwechsel wird zu einem Morph, bei dem der angeklickte Titel in die neue Seite fliegt.
 
 Glas ist dem vorbehalten, was über dem Inhalt schwebt oder was man bedient: Kopf, Seitenleisten, Pop-up, Fußzeile, schwebende Bedienflächen. Die Lesefläche selbst ist fast deckendes Papier (90 %), damit Lesen nie leidet. Inhalt im Textfluss (Diagramme, Tour-Bühne, Roadmap-Karte) liegt in ruhigen Schalen ohne Unschärfe.
 
@@ -272,7 +272,7 @@ Glas ist dem vorbehalten, was über dem Inhalt schwebt oder was man bedient: Kop
 - Glasbänder mit weißem Innenlicht oben, bläulichem Unterschatten, 1px heller Kante.
 - Lesefläche als große gerundete Scheibe (22px), fast deckend.
 - Eigene Schriften lokal: Bricolage Grotesque, Onest, Martian Mono.
-- Ein Bewegungsmoment je Seite (Eintritt), Signatur gleitende Linse; bei reduzierter Bewegung alles aus.
+- Ein Hauptmoment (Seitenwechsel als Morph), Signatur gleitende Linse; alles Weitere erklärt Zustand oder Zusammenhang und bleibt klein; bei reduzierter Bewegung keine räumliche Bewegung.
 - Status- und Datenfarben unverändert aus „ruhig“.
 
 ### Colors
@@ -350,13 +350,19 @@ Weich und groß gerundet, Rundung nimmt mit der Fläche ab: **22px** Flächen (L
 
 Kurven: Feder `--lb-spring` `cubic-bezier(.2, 1.25, .35, 1)` (Umschalterknopf, Pillen, Kettenknoten, Pop-up-Anhebung), Auslauf `--lb-out` `cubic-bezier(.16, 1, .3, 1)` (Eintritt, Überblendungen).
 
-- **Der eine Moment: Seiteneintritt.** Glanzstreif (`105deg`, `--lb-sheen`) läuft in 1.15s über die Lesefläche; die ersten sechs sichtbaren Blöcke tauchen gestaffelt auf (`translateY(14px)`, Deckkraft .35 → 1, 760ms, 45ms Staffel). Inhalt ist ohne Animation lesbar.
+- **Der eine Moment: Seitenwechsel als Morph.** Klick auf Navigation, „Weiter mit“, Fußzeilen-Link oder Rollenweg startet eine View Transition (Typ `wiki-morph`): der Linktext fliegt als `wiki-titel` in den neuen `h1` bzw. die Zielüberschrift (.44s, `--lb-out`), der alte Text verschwimmt hinaus (140ms, Unschärfe 4px), der neue blendet ab 100ms in 280ms ein; beide sind unter dem Kopf abgeschnitten. Kopf, Leisten, Atmosphäre und Papier wechseln ohne Überblendung, nichts steht doppelt. Der Glanzstreif der Lesefläche gehört zum selben Moment. Ohne View Transitions fliegt ein Geist des Linktexts (`.wiki-morph-geist`); Links im Text und Zurück/Vor bekommen nur eine kurze Überblendung. Braucht die Seite länger als 1,5s, wird das Bild freigegeben und der Text blendet ein, sobald er da ist.
+- **Lesen:** feine Fortschrittslinie (2px Akzent mit Schein) unter dem Kopf, scroll-getrieben (`animation-timeline: scroll(root block)`, sonst rAF); im Inhaltsverzeichnis gleitet eine Linse (12px) mit dem aktiven Abschnitt (.6s `--lb-out`), ab 60em.
 - **Signatur: gleitende Linse** (Navigation und Tour-Kapitel). Beim Klick in der Navigation merkt sich `wiki-lebendig.js` die alte Linse; nach dem Seitenwechsel gleitet ein Geist (`.wiki-lens-geist`) in .75s (`cubic-bezier(.22, 1.12, .36, 1)`) zum neuen Eintrag.
-- **Atmosphäre:** zwei feste Schichten überblenden beim Wegwechsel in 1.4s.
+- **Atmosphäre:** zwei feste Schichten überblenden beim Wegwechsel in 1.4s und „atmen“ gegenphasig per `transform` (40s Zyklus), pausiert bei verborgenem Tab (`html.wiki-verborgen`).
+- **Aufklappen mit Feder:** `details` (Tiefenebenen, „Werte als Tabelle“, Glossar-Vorkommen, „Alle Seiten“, „Source code in“) öffnen in ~360ms mit sanfter Feder (Überschwingen < 2 %), schließen in 220ms, Pfeil dreht mit; `interpolate-size` + `::details-content`, sonst WAAPI auf dem `details` (`wiki-feder.js`).
+- **Pop-up aus dem Begriff:** `#wiki-hint` wächst von `scale(.92)` mit leichter Unschärfe aus der Richtung des Begriffs (`transform-origin` am Anker, 220ms), schließt in 120ms.
+- **Zahlen zählen hoch:** Zahlen mit Einheit in den Kernsätzen der Codebase-Seite und Wertpillen der Diagramme zählen beim ersten Sichtbarwerden (800ms bzw. 700ms, `outExpo`, `tabular-nums`, deutsches Format); danach steht der Originaltext exakt wieder da, Screenreader lesen immer den Endwert. Daten, Versionen, Hashes bleiben unberührt.
 - **Diagramme** wachsen beim Sichtbarwerden: Balken 900ms `outExpo`, 45ms Staffel, Wertpillen ab 420ms in 360ms; beim Umschalten zeichnen sie neu und wachsen erneut, wenn sie im Blick sind.
 - **Kette:** Puls wandert die Schiene in 80 % von 5.6s ab und verblasst, jede Stufe leuchtet bei Ankunft kurz auf; kompakte Kette mit Signal entlang der Pfeile (4.2s, 350ms Versatz), nur solange sichtbar.
 - **Wechsel der Darstellung:** View Transition .45s.
-- **Reduzierte Bewegung:** Eintritt, Linse, Puls, Signal, Überblendungen und Federn entfallen; die Tönung springt.
+- **Signets je Weg:** das Linien-Icon im Seitenkopf zeichnet sich beim Eintritt einmal (700ms, `stroke-dashoffset`) in der Rollenfarbe (Bedienen `--docs-resolved-fg`, Konfigurieren `--docs-progress-fg`, Entwickeln `--docs-partial-fg`, Projekt `--lb-ink2`).
+- **Diagramme zeichnen sich:** die Verlustlinie der Fortschrittsseite zieht sich beim ersten Sichtbarwerden (900ms), Punkte erscheinen, wenn die Linie sie erreicht; in der Laufmatrix gleitet ein Glasband (`.session-lens`, .42s) zum gewählten Lauf.
+- **Reduzierte Bewegung:** Morph, Linsen-Gleiten, Drift, Federn, Zähler, Zeichnen, Puls und Signal entfallen; Fortschrittslinie und Linsen springen, die Tönung springt, Zustandswechsel bleiben als kurze Überblendung.
 
 ### Components
 
@@ -384,6 +390,9 @@ Nur lebendig: Spur je Balken (`--wiki-chart-track`), Balken mit fast eckiger Gru
 #### Kette (`wiki-kette.js`)
 Stufen als Glasknoten (Radius 14px, Verlauf `165deg`, Innenlicht), Hover/Fokus `scale(1.02)` mit Feder. Volle Fassung: Schiene 2px links mit Stationspunkten (10px, Statusfarbe `--docs-*-fg`, 3px Papierring) und wanderndem Puls in Akzent. Kompakt (Startseite): Glaspillen, `scale(1.05)`, Signal entlang der Pfeile.
 
+#### Messkette (Startseite)
+Glas-Bühne `wiki-messkette.js`/`.css` unter dem ersten Absatz der Startseite, nur in „lebendig“ (Platzhalter `[data-messkette]`, in „ruhig“ leer und 0px hoch; ersetzt dort per `:has()` die kompakte Kette). Alle Stufen aus `kette.json` als Glasschilder (14px, gleich hoch) mit Zustandspunkt und Link auf `doku`; die Ausgabe zeigt ehrlich „DUT gesperrt“. Eine Glaslinse trägt den Wert „+0.46761 mV/V“ durch die Kette und verwandelt ihn per Wischblende (Kamerabild → Anzeige gefunden → nachgeführt → entzerrtes Raster → gelesene Ziffern → ValueRecord VALID → Audit + GSVmulti gesperrt; kein erfundenes Telegramm). Form, Unterschrift und Knotenmarkierung wechseln gemeinsam am Ende jeder Wischblende; die neue Form deckt die alte zu, die Linse ist nie leer. Zwei Durchläufe (≈ 7s), dann Ruhe im Endzustand „Ausgabe · Audit · DUT gesperrt“ mit Glaspille „Nochmal“ (Linien-Icon „wiederholen“); läuft nur sichtbar und bei aktivem Tab; Überfahren/Fokus hält an, zeigt `zweck` und setzt danach ab dieser Stufe fort. Schmal senkrecht. Reduzierte Bewegung: Standbild je Stufe.
+
 #### Sonderseiten-Schichten
 - **Tour** (`tour.css`): Bühne als Schale (18px, Innenschatten), eigene Atmosphäre-Tönung für Vollbild. Kapitelwahl und Steuerung als zwei Glasbänder (Radius 22px, Innenabstand 5px), Linse (12px) unter dem aktuellen Kapitel, die beim Kapitelwechsel gleitet (`.tour-lens-geist`, wie die Navigationslinse), runde Bedienknöpfe mit Linse beim Überfahren/Drücken, aktueller Schrittpunkt als kurze Linse (1.5rem). „Mehr dazu“ als weicher Kasten (14px) statt Randbalken; „Nochmal“ als Glaspille.
 - **Roadmap** (`roadmap.css`): Karte als Schale (22px), Meilenstein- und Schrittkarten als Glasscheiben ohne Unschärfe (18px), Verbindungen 2px rund; Navigation (22px) und Übersicht (14px) als Glas mit Unschärfe, Ansichtswahl als Glasband, Suche als Pille. Hover färbt Kante und Schatten in der Knotenfarbe.
@@ -405,7 +414,7 @@ Stufen als Glasknoten (Radius 14px, Verlauf `165deg`, Innenlicht), Hover/Fokus `
 
 #### Don't:
 - **Don't** Glas als Dekoration auf jeden Kasten legen oder die Lesefläche durchscheinend machen.
-- **Don't** einen zweiten seitenweiten Bewegungsmoment neben dem Seiteneintritt einführen.
+- **Don't** einen zweiten seitenweiten Bewegungsmoment neben dem Seitenwechsel-Morph einführen; alles Weitere erklärt Zustand oder Zusammenhang (Aufklappen, Linsen, Zeichnen, Zählen) und bleibt klein.
 - **Don't** Neon-Dunkel: keine gesättigten Leuchtflächen, Glas im Dunkeln nicht über `saturate(112%)`.
 - **Don't** Navigation, Text oder Tabellen gegenüber „ruhig“ verschieben oder umbauen.
 - **Don't** Schriften von einem CDN laden; nur `assets/fonts/` mit `OFL.txt`.

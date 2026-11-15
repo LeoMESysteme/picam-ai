@@ -24,6 +24,9 @@
     let openTimer = null;
     let closeTimer;
     let positionFrame = null;
+    let hideTimer = null;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    const lively = () => document.documentElement.getAttribute("data-wiki-look") === "lebendig";
     let requestId = 0;
 
     function findTarget(node) {
@@ -51,7 +54,13 @@
       }
       target = null;
       popup.removeAttribute("data-open");
-      popup.hidden = true;
+      clearTimeout(hideTimer);
+      if (lively() && !reduce.matches && !popup.hidden) {
+        // Lebendig: kurz zurück in den Begriff schrumpfen, dann erst verbergen.
+        hideTimer = setTimeout(() => { popup.hidden = true; }, 130);
+      } else {
+        popup.hidden = true;
+      }
     }
 
     hint.closeWithin = (container) => {
@@ -60,12 +69,18 @@
 
     function position(element) {
       const rect = element.getBoundingClientRect();
-      const size = popup.getBoundingClientRect();
+      // Layoutmaß statt Rechteck: das Pop-up wächst per scale aus dem Begriff.
+      const size = { width: popup.offsetWidth, height: popup.offsetHeight };
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - size.width - 8));
       const below = rect.bottom + 8;
       const top = below + size.height <= window.innerHeight - 8 ? below : rect.top - size.height - 8;
+      const placedTop = Math.max(8, Math.min(top, window.innerHeight - size.height - 8));
       popup.style.left = `${left + window.scrollX}px`;
-      popup.style.top = `${Math.max(8, Math.min(top, window.innerHeight - size.height - 8)) + window.scrollY}px`;
+      popup.style.top = `${placedTop + window.scrollY}px`;
+      // Ursprung der lebendigen Wachstumsbewegung: Mitte des Begriffs, an seiner nächsten Kante.
+      const anchorX = Math.max(0, Math.min(size.width, rect.left + Math.min(rect.width / 2, 40) - left));
+      const anchorY = Math.max(0, Math.min(size.height, (placedTop + 1 >= rect.bottom ? rect.bottom : rect.top) - placedTop));
+      popup.style.transformOrigin = `${anchorX}px ${anchorY}px`;
     }
 
     function schedulePosition(event) {
@@ -120,6 +135,7 @@
       if (id !== requestId || requestedTarget !== element || !element.isConnected) return;
       requestedTarget = null;
       if (!content) return;
+      clearTimeout(hideTimer);
       popup.replaceChildren(content);
       popup.hidden = false;
       position(element);
@@ -206,6 +222,7 @@
       close();
       hint.closeWithin = () => {};
       listeners.abort();
+      clearTimeout(hideTimer);
       popup.remove();
     };
   });

@@ -232,6 +232,8 @@
 [data-wiki-look="lebendig"] .fs-legend-item:focus-visible { outline-color: var(--md-accent-fg-color); outline-offset: 2px; }
 
 [data-wiki-look="lebendig"] .fs-dot { fill: var(--lb-paper); }
+/* Punkte der Verlustquote erscheinen, wenn die Linie sie erreicht (fortschritt.js). */
+[data-wiki-look="lebendig"] .fs-dot { transform-box: fill-box; transform-origin: center; }
 
 [data-wiki-look="lebendig"] .fs-tooltip {
   background: var(--lb-float-bg);

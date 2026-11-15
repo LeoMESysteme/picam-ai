@@ -168,17 +168,31 @@
  * Tönung nach Weg der Seite. */
 .wiki-atmo { display: none; }
 [data-wiki-look="lebendig"] .wiki-atmo {
-  display: block; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  display: block; position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden;
 }
+/* Die Schichten sind etwas größer als das Fenster, damit die Drift keine
+ * Kante zeigt. Sie atmen als Ganzes (transform auf der Schicht, die
+ * Verläufe selbst werden nie neu berechnet); 40 s je Zyklus, die zweite
+ * Schicht läuft gegenphasig. Pause bei verborgenem Tab (Klasse setzt
+ * wiki-lebendig.js) und bei reduzierter Bewegung. */
 .wiki-atmo-layer {
-  position: absolute; inset: 0; opacity: 0;
+  position: absolute; inset: -6%; opacity: 0;
   transition: opacity 1.4s;
+  animation: wiki-atmo-atem 40s ease-in-out infinite;
+  animation-play-state: running;
   background:
     radial-gradient(60% 70% at 12% 18%, var(--a), transparent 72%),
     radial-gradient(56% 66% at 88% 8%, var(--b), transparent 72%),
     radial-gradient(72% 70% at 55% 100%, var(--c), transparent 72%);
 }
 .wiki-atmo-layer[data-on] { opacity: 1; }
+.wiki-atmo-layer + .wiki-atmo-layer { animation-delay: -20s; }
+.wiki-verborgen .wiki-atmo-layer { animation-play-state: paused; }
+@keyframes wiki-atmo-atem {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(2.2%, -1.4%, 0) scale(1.04); }
+  66% { transform: translate3d(-1.6%, 1.8%, 0) scale(1.025); }
+}
 
 /* --------------------------------------------------------- Schrift ---- */
 [data-wiki-look="lebendig"] .md-typeset :is(h1, h2, h3) {
@@ -235,6 +249,31 @@
 }
 [data-wiki-look="lebendig"] .md-content.wiki-sheen::after { animation: wiki-sheen 1.15s var(--lb-out); }
 @keyframes wiki-sheen { from { background-position: 120% 0; opacity: 1; } to { background-position: -40% 0; opacity: 1; } }
+
+/* Lesefortschritt: feine Akzentlinie am oberen Rand der Lesefläche, klebt
+ * beim Scrollen unter dem Kopf (Höhe misst wiki-lebendig.js als --wiki-kopf).
+ * Breite folgt dem Fortschritt der Seite als scaleX: scroll-getrieben, wo
+ * der Browser animation-timeline kennt, sonst setzt das Skript --p. */
+.wiki-lesefortschritt { display: none; }
+[data-wiki-look="lebendig"] .wiki-lesefortschritt {
+  display: block;
+  position: sticky;
+  top: var(--wiki-kopf, 2.4rem);
+  z-index: 2;
+  height: 2px;
+  margin: 0 22px -2px;
+  border-radius: 2px;
+  pointer-events: none;
+  transform-origin: 0 50%;
+  transform: scaleX(var(--p, 0));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--md-accent-fg-color) 35%, transparent), var(--md-accent-fg-color) 55%, color-mix(in srgb, var(--md-accent-fg-color) 55%, #fff));
+  box-shadow: 0 1px 6px -1px color-mix(in srgb, var(--md-accent-fg-color) 70%, transparent);
+}
+[data-wiki-look="lebendig"] .wiki-lesefortschritt--css {
+  animation: wiki-fortschritt linear both;
+  animation-timeline: scroll(root block);
+}
+@keyframes wiki-fortschritt { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* ---------------------------------------------------- Seitenleisten ---- */
 @media screen and (min-width: 76.25em) {
@@ -337,6 +376,66 @@
   background: var(--lb-lens); box-shadow: var(--lb-lens-shadow);
   /* Etwas ruhiger als die Feder der Bühne, damit das Gleiten sichtbar bleibt. */
   transition: transform .75s cubic-bezier(.22, 1.12, .36, 1), width .75s cubic-bezier(.22, 1.12, .36, 1), height .75s cubic-bezier(.22, 1.12, .36, 1);
+}
+
+/* Linse im Inhaltsverzeichnis: ein Element unter dem aktuellen Abschnitt
+ * (toc.follow), gleitet beim Lesen ruhiger als die Navigationslinse beim
+ * Klicken. Liegt im Glasblock (Stapelkontext durch backdrop-filter), also
+ * über dessen Grund und unter dem Text. Nur ab 60em, wo das Verzeichnis steht. */
+.wiki-toc-linse { display: none; }
+@media screen and (min-width: 60em) {
+  [data-wiki-look="lebendig"] .md-sidebar--secondary .md-sidebar__inner { position: relative; }
+  [data-wiki-look="lebendig"] .wiki-toc-linse {
+    display: block;
+    position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none;
+    border-radius: 12px;
+    background: var(--lb-lens);
+    box-shadow: var(--lb-lens-shadow);
+    opacity: 0;
+    transition: transform .6s var(--lb-out), width .6s var(--lb-out), height .6s var(--lb-out), opacity .3s;
+  }
+  [data-wiki-look="lebendig"] .wiki-toc-linse[data-on] { opacity: 1; }
+  [data-wiki-look="lebendig"] .wiki-toc-linse--sofort { transition: none; }
+  [data-wiki-look="lebendig"] .md-sidebar--secondary .md-nav__link--active { color: var(--lb-ink); }
+}
+
+/* ---------------------------------------------------- Seitenwechsel ---- */
+/* Morph bei Sofortnavigation (View Transitions vom Typ „wiki-morph“, in
+ * älteren Browsern Klasse .wiki-morph am <html>; wiki-lebendig.js benennt
+ * die Elemente nur für diesen Moment und schneidet den alten Text unter dem
+ * Kopf per Web Animation auf dem Pseudo-Element ab).
+ * Nur drei Dinge bewegen sich, damit nirgends Text doppelt steht:
+ * - wiki-titel: angeklickter Linktext → neuer h1 (der Blickfang, dem das
+ *   Auge folgt): alte Gestalt weg in 80 ms (mit Unschärfe), neue ab 60 ms;
+ * - wiki-text-alt: alter Text der Lesefläche, raus in 140 ms (≤ 2 px);
+ * - wiki-text-neu: neuer Text erst danach, ab 140 ms rein in 280 ms
+ *   (hintereinander statt übereinander; bewusst ungepaart, damit nichts
+ *   quer fliegt, wenn die Seite nach oben springt).
+ * Alles andere (Kopf, Navigation, Inhaltsverzeichnis, Atmosphäre, Papier,
+ * Fußzeile) bleibt im Wurzelbild, und das wechselt ohne Überblendung: altes
+ * Bild sofort weg, neues sofort da. Eigene Namen für Kopf und Leisten
+ * bräuchte es dafür nicht, und im Wurzelbild behalten die Glasflächen ihre
+ * Hintergrundunschärfe (ein benanntes Element wird isoliert aufgenommen).
+ * Die gleitende Navigationslinse läuft im lebenden neuen Bild weiter.
+ * Die Pseudo-Elemente erben vom <html>, die --lb-*-Tokens liegen am body;
+ * deshalb Kurven hier ausgeschrieben. */
+:root:is(.wiki-morph, :active-view-transition-type(wiki-morph))::view-transition-group(root) { animation: none; }
+:root:is(.wiki-morph, :active-view-transition-type(wiki-morph))::view-transition-old(root) { animation: none; opacity: 0; }
+:root:is(.wiki-morph, :active-view-transition-type(wiki-morph))::view-transition-new(root) { animation: none; }
+:root:is(.wiki-morph, :active-view-transition-type(wiki-morph))::view-transition-group(wiki-titel) { animation-duration: .44s; animation-timing-function: cubic-bezier(.16, 1, .3, 1); }
+:root:is(.wiki-morph, :active-view-transition-type(wiki-morph))::view-transition-old(wiki-titel) { animation: wiki-morph-aus 80ms cubic-bezier(.4, 0, 1, 1) both; }
+:root:is(.wiki-morph, :active-view-transition-type(wiki-morph))::view-transition-new(wiki-titel) { animation: wiki-morph-ein .26s 60ms cubic-bezier(.16, 1, .3, 1) both; }
+:root:is(.wiki-morph, :active-view-transition-type(wiki-morph))::view-transition-old(wiki-text-alt) { animation: wiki-text-aus .14s cubic-bezier(.4, 0, 1, 1) both; }
+:root:is(.wiki-morph, :active-view-transition-type(wiki-morph))::view-transition-new(wiki-text-neu) { animation: wiki-text-ein .28s .14s cubic-bezier(.16, 1, .3, 1) both; }
+@keyframes wiki-morph-aus { to { opacity: 0; filter: blur(4px); } }
+@keyframes wiki-morph-ein { from { opacity: 0; } }
+@keyframes wiki-text-aus { to { opacity: 0; filter: blur(2px); } }
+@keyframes wiki-text-ein { from { opacity: 0; } }
+
+/* Ersatzweg ohne View Transitions: Geist des Linktexts fliegt zum Titel. */
+.wiki-morph-geist {
+  position: fixed; z-index: 5; margin: 0; pointer-events: none;
+  white-space: nowrap; transform-origin: 0 0; line-height: 1.2;
 }
 
 /* ----------------------------------------------------------- Pop-up ---- */
@@ -475,11 +574,14 @@
 [data-wiki-look="lebendig"] :focus-visible { outline-color: #2f6df6; }
 
 @media (prefers-reduced-motion: reduce) {
-  .wiki-atmo-layer { transition: none; }
+  .wiki-atmo-layer { transition: none; animation: none; }
+  [data-wiki-look="lebendig"] .wiki-toc-linse { transition: none; }
+  [data-wiki-look="lebendig"] .wiki-lesefortschritt--css { animation: none; }
+  .wiki-morph-geist { display: none; }
   [data-wiki-look="lebendig"] .md-content.wiki-sheen::after { animation: none; }
   .wiki-lens-geist { display: none; }
 }
 @media print {
-  .wiki-atmo { display: none !important; }
+  .wiki-atmo, .wiki-lesefortschritt, .wiki-toc-linse { display: none !important; }
   [data-wiki-look="lebendig"] .md-content { box-shadow: none; border: 0; background: none; }
 }

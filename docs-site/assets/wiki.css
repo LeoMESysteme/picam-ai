@@ -606,3 +606,64 @@
   [data-wiki-look="lebendig"] .md-typeset a.wiki-kette-node:is(:hover, :focus-visible) { transform: none; }
   .wiki-kette-puls { display: none; }
 }
+
+/* ------------------------------------------- Lebendig: Federn und Zähler ----
+ * Nur in der lebendigen Darstellung (wiki-feder.js, wiki-hint.js). Öffnen
+ * federt weich auf (kein Überschwingen über 2 %), Schließen ist kürzer.
+ * Ruhig und ohne JavaScript bleibt alles beim Alten; was geschlossen ist,
+ * bleibt geschlossen, offener Inhalt ist nie versteckt. */
+[data-wiki-look="lebendig"] {
+  --lb-feder: cubic-bezier(.22, 1.02, .36, 1);
+  interpolate-size: allow-keywords;
+}
+@supports selector(::details-content) {
+  [data-wiki-look="lebendig"] :is(details.wiki-layer, details.wiki-chart-table, details.wiki-allpages, .wiki-occ details, details.mkdocstrings-source)::details-content {
+    block-size: 0; overflow: clip;
+    transition: block-size 220ms var(--lb-out), content-visibility 220ms allow-discrete;
+  }
+  [data-wiki-look="lebendig"] :is(details.wiki-layer, details.wiki-chart-table, details.wiki-allpages, .wiki-occ details, details.mkdocstrings-source)[open]::details-content {
+    block-size: auto;
+    transition: block-size 360ms var(--lb-feder), content-visibility 360ms allow-discrete;
+  }
+}
+/* Der Innenabstand der Tiefenebene wandert mit, statt beim Öffnen zu springen. */
+[data-wiki-look="lebendig"] .md-typeset details.wiki-layer { transition: padding-bottom 220ms var(--lb-out); }
+[data-wiki-look="lebendig"] .md-typeset details.wiki-layer[open] { transition-duration: 360ms; transition-timing-function: var(--lb-feder); }
+/* Pfeil dreht mit; beim Schließen per Rückfall bleibt „open“ bis zum Ende, daher data-closing. */
+[data-wiki-look="lebendig"] :is(.md-typeset details.wiki-layer, .md-typeset details.wiki-allpages, .md-typeset details.wiki-chart-table, .md-typeset .wiki-occ details, .md-typeset details.mkdocstrings-source) > summary::after {
+  transition: transform 360ms var(--lb-feder);
+}
+[data-wiki-look="lebendig"] :is(.md-typeset details.wiki-layer, .md-typeset details.wiki-allpages)[data-closing] > summary::after { transform: rotate(0deg); }
+[data-wiki-look="lebendig"] .md-typeset details.wiki-chart-table[data-closing] > summary::after,
+[data-wiki-look="lebendig"] .md-typeset .wiki-occ details[data-closing] > summary::after,
+[data-wiki-look="lebendig"] .md-typeset details.mkdocstrings-source[data-closing] > summary::after { transform: rotate(0deg); }
+
+/* Pop-up wächst aus dem Begriff (Ursprung setzt wiki-hint.js). */
+html[data-wiki-look="lebendig"] .wiki-hint {
+  opacity: 0; transform: scale(.92); filter: blur(3px);
+  transition: opacity 120ms var(--lb-out), transform 120ms var(--lb-out), filter 120ms var(--lb-out);
+}
+html[data-wiki-look="lebendig"] .wiki-hint[data-open="true"] {
+  opacity: 1; transform: none; filter: none;
+  transition: opacity 220ms var(--lb-out), transform 220ms var(--lb-out), filter 220ms var(--lb-out);
+}
+
+/* Zähler: Ziffern gleich breit; Screenreader liest den Endwert. */
+.wiki-zahl { font-variant-numeric: tabular-nums; }
+.wiki-zahl.is-counting { display: inline-block; text-align: right; }
+.wiki-zahl-sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-wiki-look="lebendig"] :is(details.wiki-layer, details.wiki-chart-table, details.wiki-allpages, .wiki-occ details, details.mkdocstrings-source)::details-content,
+  [data-wiki-look="lebendig"] :is(details.wiki-layer, details.wiki-chart-table, details.wiki-allpages, .wiki-occ details, details.mkdocstrings-source)[open]::details-content,
+  [data-wiki-look="lebendig"] .md-typeset details.wiki-layer,
+  [data-wiki-look="lebendig"] .md-typeset details.wiki-layer[open],
+  [data-wiki-look="lebendig"] :is(.md-typeset details.wiki-layer, .md-typeset details.wiki-allpages, .md-typeset details.wiki-chart-table, .md-typeset .wiki-occ details, .md-typeset details.mkdocstrings-source) > summary::after {
+    transition: none;
+  }
+  html[data-wiki-look="lebendig"] .wiki-hint,
+  html[data-wiki-look="lebendig"] .wiki-hint[data-open="true"] { transition: none; transform: none; filter: none; }
+}

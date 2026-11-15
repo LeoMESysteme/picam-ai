@@ -584,3 +584,22 @@ body:has(#session-dashboard) .md-content__inner > :is(p, ul, ol) { max-width: 40
 @media (prefers-reduced-motion: reduce) {
   [data-wiki-look="lebendig"].session-page .md-content button { transition: none; }
 }
+
+/* Lebendig: Lichtband der Laufmatrix (wiki-sessions.js). Glaslinse hinter dem
+ * Diagramm statt des festen 9-%-Bands; sie gleitet beim Wechsel (Pfeiltasten,
+ * Überfahren) zum neuen Lauf. Ruhig und ohne Auswahl bleibt sie aus. */
+.session-lens { display: none; }
+[data-wiki-look="lebendig"] .session-plot > svg { position: relative; z-index: 1; }
+[data-wiki-look="lebendig"] .session-plot > .session-lens {
+  display: block; position: absolute; top: 0; left: 0; z-index: 0;
+  border-radius: 12px;
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow), inset 0 0 0 1px color-mix(in srgb, var(--md-accent-fg-color) 14%, transparent);
+  opacity: 0; pointer-events: none;
+  transition: transform .42s var(--lb-out), opacity .2s var(--lb-out);
+}
+[data-wiki-look="lebendig"] .session-plot > .session-lens[data-on="true"] { opacity: 1; }
+[data-wiki-look="lebendig"] .session-plot:has(> .session-lens) .session-band { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  [data-wiki-look="lebendig"] .session-plot > .session-lens { transition: opacity .15s linear; }
+}

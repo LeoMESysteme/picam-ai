@@ -260,6 +260,76 @@
     }
   }
 
+  /* ---------- Achsentexte ohne Überschneidung ---------- */
+
+  // Wie in wiki-chart.js: eine Beschriftung steht nur, wenn sie mit Mindestabstand
+  // neben der zuletzt gesetzten Platz hat; sonst wird sie entfernt.
+  const LABEL_GAP = 6;
+  function thinLabels(labels) {
+    let right = -Infinity;
+    for (const label of labels) {
+      let box;
+      try { box = label.getBBox(); } catch { return; }
+      if (!box.width) continue;
+      if (box.x < right + LABEL_GAP) { label.remove(); continue; }
+      right = box.x + box.width;
+    }
+  }
+
+  /* ---------- Lebendig: Linie zeichnet sich ---------- */
+
+  // Nur in der lebendigen Darstellung und ohne reduzierte Bewegung: Beim
+  // ersten Sichtbarwerden zieht die Linie von links nach rechts (900 ms), jeder
+  // Punkt erscheint, wenn die Linie ihn erreicht. Danach (Neuzeichnen nach
+  // Größenänderung oder Legendenwahl) steht sie sofort da.
+  const LINE_MS = 900;
+  const LINE_EASE = "cubic-bezier(.16, 1, .3, 1)";
+
+  function lively() {
+    return document.documentElement.getAttribute("data-wiki-look") === "lebendig";
+  }
+
+  function revealLine(container, line, dots, xs) {
+    if (container.dataset.fsLineDrawn || !lively() || typeof line.animate !== "function"
+      || typeof line.getTotalLength !== "function"
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    function run() {
+      if (!line.isConnected || container.dataset.fsLineDrawn) return;
+      container.dataset.fsLineDrawn = "true";
+      const length = line.getTotalLength();
+      if (!(length > 0)) return;
+      const dash = length.toFixed(2);
+      line.style.strokeDasharray = dash;
+      const animation = line.animate([{ strokeDashoffset: dash }, { strokeDashoffset: "0" }],
+        { duration: LINE_MS, easing: LINE_EASE });
+      line.dataset.zeichnet = "true";
+      animation.finished.then(() => line.style.removeProperty("stroke-dasharray"), () => {});
+      // Ankunft der Linie am Punkt: Anteil der Strecke bis zu seinem x-Wert,
+      // umgerechnet über die Auslaufkurve (näherungsweise per Tabelle).
+      const first = xs[0];
+      const span = Math.max(1, xs[xs.length - 1] - first);
+      const curve = [];
+      for (let k = 0; k <= 40; k += 1) {
+        const t = k / 40;
+        curve.push([t, 1 - Math.pow(1 - t, 3.2)]);
+      }
+      dots.forEach((dot, index) => {
+        const share = (xs[index] - first) / span;
+        const at = curve.find(([, p]) => p >= share)?.[0] ?? 1;
+        dot.animate([{ opacity: 0, transform: "scale(.4)" }, { opacity: 1, transform: "scale(1)" }],
+          { duration: 260, delay: at * LINE_MS, easing: LINE_EASE, fill: "backwards" });
+      });
+    }
+    if (typeof IntersectionObserver === "undefined") { run(); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      run();
+    }, { threshold: 0.4 });
+    observer.observe(line.ownerSVGElement || line);
+    observers.push(observer);
+  }
+
   /* ---------- a) Datensatz je Gruppe ---------- */
 
   function datasetGroups(data) {
@@ -389,6 +459,8 @@
           svg("text", { x: svgWidth - 4, y: 12, class: "fs-axis fs-axis--drop", "text-anchor": "end" }, root, "Verlust");
         }
         const points = [];
+        const nameLabels = [];
+        const dateLabels = [];
         runs.forEach((run, index) => {
           const cx = ml + slot * index + slot / 2;
           const p = parts(run);
@@ -406,8 +478,8 @@
               root, "RAM");
           }
           const name = str(run.run, "ohne Namen");
-          svg("text", { x: cx, y: height - mb + 16, class: "fs-label", "text-anchor": "middle" }, root, fit(name, slot - 4, 13));
-          svg("text", { x: cx, y: height - mb + 32, class: "fs-axis", "text-anchor": "middle" }, root, shortDate(run.started_at_utc));
+          nameLabels.push(svg("text", { x: cx, y: height - mb + 16, class: "fs-label", "text-anchor": "middle" }, root, fit(name, slot - 4, 13)));
+          dateLabels.push(svg("text", { x: cx, y: height - mb + 32, class: "fs-axis", "text-anchor": "middle" }, root, shortDate(run.started_at_utc)));
           if (isNum(run.drop_fraction)) points.push([cx, mt + innerH - Math.min(1, Math.max(0, run.drop_fraction)) * innerH, run]);
           const recorded = num(run.frames_recorded);
           const unlabeled = isNum(run.frames_recorded) && isNum(run.labeled) ? Math.max(0, recorded - run.labeled) : null;
@@ -425,11 +497,16 @@
           setTip(hit, lines, `${name}: ${fmtInt(run.frames_recorded)} Bilder, ${fmtInt(run.labeled)} beschriftet`);
         });
         if (!hidden.has("drop") && points.length) {
-          if (points.length > 1) {
-            svg("polyline", { points: points.map(([px, py]) => `${px},${py}`).join(" "), class: "fs-line" }, root);
-          }
-          for (const [px, py] of points) svg("circle", { cx: px, cy: py, r: 4.5, class: "fs-dot", "data-series": "drop" }, root);
+          const line = points.length > 1
+            ? svg("polyline", { points: points.map(([px, py]) => `${px},${py}`).join(" "), class: "fs-line" }, root)
+            : null;
+          const dots = points.map(([px, py]) => svg("circle", { cx: px, cy: py, r: 4.5, class: "fs-dot", "data-series": "drop" }, root));
+          if (line) revealLine(container, line, dots, points.map(([px]) => px));
         }
+        // Achsentexte, die sich mit dem Nachbarn überschneiden würden, entfallen
+        // (Tooltip und Tabelle nennen Lauf und Datum weiterhin).
+        thinLabels(nameLabels);
+        thinLabels(dateLabels);
         // Trefferflächen nach oben holen, damit Linie und Punkte den Tooltip nicht verdecken.
         root.querySelectorAll(".fs-hit").forEach((hit) => root.append(hit));
       },
