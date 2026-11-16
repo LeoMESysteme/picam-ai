@@ -7,7 +7,7 @@
 }
 .md-typeset .wiki-stand-item { flex: 1 1 14rem; min-width: 0; }
 .md-typeset .wiki-stand-label { display: block; font-weight: 600; color: var(--md-default-fg-color--light); margin-bottom: .1rem; }
-.md-typeset .wiki-wege { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 1rem 0 1.6rem; }
+.md-typeset .wiki-wege { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 1rem 0 1.6rem; }
 .md-typeset .wiki-wege:has(> h3) { display: block; }
 .md-typeset .wiki-weg { padding: .2rem 1rem .4rem; min-width: 0; }
 .md-typeset .wiki-weg:first-child { padding-left: 0; }
@@ -21,7 +21,6 @@
 .md-typeset ul.wiki-weg-links a { font-weight: 600; font-size: .74rem; }
 .md-typeset ul.wiki-weg-links li > a { display: block; }
 .md-typeset .wiki-weg-hint { display: block; font-size: .66rem; color: var(--md-default-fg-color--light); }
-#weg-bedienen h3 svg { color: var(--docs-resolved-fg); }
 #weg-konfigurieren h3 svg { color: var(--docs-progress-fg); }
 #weg-entwickeln h3 svg { color: var(--docs-partial-fg); }
 .md-typeset details.wiki-allpages {
@@ -666,4 +665,133 @@ html[data-wiki-look="lebendig"] .wiki-hint[data-open="true"] {
   }
   html[data-wiki-look="lebendig"] .wiki-hint,
   html[data-wiki-look="lebendig"] .wiki-hint[data-open="true"] { transition: none; transform: none; filter: none; }
+}
+
+/* ---------------------------------------------------- Seitenskelett ---- */
+/* Braucht die neue Seite bei Sofortnavigation länger als 250 ms, steht in
+ * der Lesefläche ein Skelett statt des alten Texts (wiki-lebendig.js setzt
+ * .wiki-laedt und aria-busy an .md-content). Ruhig: graue Flächen, die sanft
+ * in der Deckkraft pulsieren; lebendig: Glas mit wanderndem Glanz
+ * (wiki-lebendig.css). Bei reduzierter Bewegung steht es still. Der alte
+ * Inhalt bleibt im Layout (nur unsichtbar), damit sich Höhe und
+ * Scrollposition nicht ändern; das Skelett klebt oben im sichtbaren Teil. */
+.md-content.wiki-laedt { position: relative; min-height: 34rem; }
+.md-content.wiki-laedt > :not(.wiki-skelett) { visibility: hidden; }
+.wiki-skelett { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.wiki-skelett-inner {
+  position: sticky;
+  top: 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  margin: 0 .8rem;
+  padding: .9rem 0 1.2rem;
+  animation: wiki-skelett-puls 1.4s ease-in-out infinite alternate;
+}
+@media screen and (min-width: 76.25em) {
+  .wiki-skelett-inner { margin-inline: 1.2rem; }
+}
+.wiki-skelett-balken {
+  display: block;
+  width: var(--w, 100%);
+  height: .7rem;
+  border-radius: .2rem;
+  background: var(--md-default-fg-color--lightest);
+}
+.wiki-skelett-pfad { width: 9rem; height: .55rem; }
+.wiki-skelett-titel { width: min(62%, 22rem); height: 1.7rem; margin: .45rem 0 .15rem; }
+.wiki-skelett-meta { width: min(46%, 16rem); height: .6rem; margin-bottom: .9rem; }
+.wiki-skelett-block { height: 8rem; margin: .7rem 0; border-radius: .4rem; }
+@keyframes wiki-skelett-puls { from { opacity: 1; } to { opacity: .45; } }
+.wiki-laden-status {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiki-skelett-inner { animation: none; }
+}
+@media print {
+  .wiki-skelett { display: none; }
+}
+
+/* ------------------------------------- Startseite: geführter Weg ---- */
+/* .wiki-pfad (#weg-bedienen, wiki-start.js): fünf Schritte zum ersten
+ * Messwert. Breit eine Schrittleiste (Tabs) über Haarlinie, gewählter
+ * Schritt mit Akzentpunkt; schmal (< 45em) ein Akkordeon. Ohne JavaScript
+ * bleiben Überschriften und Linklisten stehen. Lebendige Fassung:
+ * wiki-messkette.css. */
+.md-typeset .wiki-pfad { margin: 1rem 0 2.2rem; scroll-margin-top: 3.4rem; }
+.md-typeset .wiki-pfad-leiste {
+  position: relative;
+  display: grid; grid-template-columns: repeat(var(--wiki-pfad-n, 5), minmax(0, 1fr));
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+.md-typeset .wiki-pfad-leiste[hidden] { display: none; }
+.md-typeset .wiki-pfad-tab {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: .35rem;
+  min-width: 0; margin: 0 0 -1px; padding: .45rem .25rem .6rem;
+  border: 0; border-bottom: 2px solid transparent; background: none;
+  font: inherit; font-size: .7rem; font-weight: 600; line-height: 1.25;
+  color: var(--md-default-fg-color--light); cursor: pointer; text-align: center;
+}
+.md-typeset .wiki-pfad-tab:hover { color: var(--md-accent-fg-color); }
+.md-typeset .wiki-pfad-tab[aria-selected="true"] { color: var(--md-default-fg-color); border-bottom-color: var(--md-accent-fg-color); }
+.md-typeset .wiki-pfad-tab:focus-visible,
+.md-typeset .wiki-pfad-auf:focus-visible,
+.md-typeset .wiki-pfad-weiter-knopf:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; border-radius: .2rem; }
+.md-typeset .wiki-pfad-name { overflow-wrap: anywhere; }
+.md-typeset .wiki-pfad-nr {
+  display: inline-grid; place-items: center; flex: none;
+  width: 1.35rem; height: 1.35rem; border-radius: 50%;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  background: var(--md-default-bg-color);
+  font-size: .62rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--md-default-fg-color--light);
+}
+.md-typeset .wiki-pfad-tab--erledigt .wiki-pfad-nr,
+.md-typeset .wiki-pfad-schritt--erledigt .wiki-pfad-nr { border-color: var(--md-accent-fg-color); color: var(--md-accent-fg-color); }
+.md-typeset .wiki-pfad-tab[aria-selected="true"] .wiki-pfad-nr,
+.md-typeset .wiki-pfad-auf[aria-expanded="true"] .wiki-pfad-nr,
+.md-typeset .wiki-pfad-schritt--an .wiki-pfad-nr {
+  border-color: var(--md-accent-fg-color); background: var(--md-accent-fg-color); color: var(--md-accent-bg-color, #fff);
+}
+/* Spur und Linse braucht nur die lebendige Fassung. */
+.md-typeset .wiki-pfad-spur,
+.md-typeset .wiki-pfad-linse { display: none; }
+.md-typeset .wiki-pfad[data-modus="tabs"] .wiki-pfad-schritt > h3 { display: none; }
+.md-typeset .wiki-pfad[data-modus="tabs"] .wiki-pfad-schritt { padding-top: 1rem; }
+.md-typeset .wiki-pfad-inhalt > p:first-child { margin: 0 0 .9rem; font-size: .74rem; color: var(--md-default-fg-color--light); }
+.md-typeset ul.wiki-pfad-links {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .8rem 2rem;
+  list-style: none; margin: 0; padding: 0;
+}
+.md-typeset ul.wiki-pfad-links li { margin: 0; padding: 0; }
+.md-typeset ul.wiki-pfad-links li > a { display: block; font-size: .74rem; font-weight: 600; }
+.md-typeset .wiki-pfad-hint { display: block; font-size: .66rem; color: var(--md-default-fg-color--light); }
+.md-typeset .wiki-pfad-weiter { margin: 1.1rem 0 0; }
+.md-typeset .wiki-pfad-weiter-knopf {
+  display: inline-flex; align-items: center; gap: .35rem; padding: 0; border: 0; background: none;
+  font: inherit; font-size: .74rem; font-weight: 600; color: var(--md-typeset-a-color); cursor: pointer;
+}
+.md-typeset .wiki-pfad-weiter-knopf:hover { color: var(--md-accent-fg-color); }
+/* Akkordeon (schmal). */
+.md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-schritt + .wiki-pfad-schritt { border-top: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-schritt > h3 { margin: 0; font-size: inherit; }
+.md-typeset .wiki-pfad-auf {
+  display: flex; align-items: center; gap: .6rem; width: 100%; padding: .7rem 0;
+  border: 0; background: none; font: inherit; font-size: .8rem; font-weight: 600; line-height: 1.3;
+  color: var(--md-default-fg-color); cursor: pointer; text-align: left;
+}
+.md-typeset .wiki-pfad-auf::after {
+  content: ""; flex: none; width: 1rem; height: 1rem; margin-left: auto;
+  background-color: currentColor; mask-image: var(--md-details-icon);
+  mask-repeat: no-repeat; mask-position: center; mask-size: contain;
+  transition: transform 150ms ease;
+}
+.md-typeset .wiki-pfad-auf[aria-expanded="true"]::after { transform: rotate(90deg); }
+.md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-inhalt { padding: 0 0 1.1rem 1.95rem; }
+.md-typeset .wiki-pfad[data-modus="akkordeon"] ul.wiki-pfad-links { grid-template-columns: 1fr; }
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset .wiki-pfad-auf::after { transition: none; }
 }

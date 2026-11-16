@@ -36,7 +36,8 @@ for (const width of [1280, 375]) {
         await expect(page.locator('.md-content__inner h1')).toBeVisible();
         if (path === '/index.html') {
           await expect(page.locator('.wiki-stand')).toBeVisible();
-          await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(3);
+          await expect(page.locator('.wiki-pfad .wiki-pfad-schritt')).toHaveCount(5);
+          await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(2);
           await expect(page.locator('.wiki-kette[data-variant="kompakt"] .wiki-kette-node')).toHaveCount(7);
         } else if (path.endsWith('/glossar.html')) {
           const glossaryCount = (readFileSync('docs/anleitung/glossar.md', 'utf8').match(/^### /gm) || []).length;
@@ -578,20 +579,26 @@ test('Beispielseiten tragen ihren Weg', async ({ page }) => {
   }
 });
 
-test('Startseite führt in drei Wegen zum ersten Schritt', async ({ page }) => {
+test('Startseite führt über den geführten Weg und zwei Vertiefungswege', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto('/index.html');
-  const ways = ['bedienen', 'konfigurieren', 'entwickeln'];
-  await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(3);
+  // Geführter Weg: fünf Schritte als Tabs, Schritt 1 offen; #weg-bedienen ist das Ziel der Bedienen-Seitenköpfe.
+  const pfad = page.locator('#weg-bedienen.wiki-pfad');
+  await expect(pfad).toHaveAttribute('data-ready', 'true');
+  await expect(pfad.getByRole('tab')).toHaveText(['1Aufbauen', '2Installieren', '3Einrichten', '4Messen', '5Prüfen']);
+  await expect(pfad.getByRole('tab', { selected: true })).toHaveText('1Aufbauen');
+  await expect(pfad.getByRole('tabpanel')).toHaveCount(1);
+  await expect(pfad.locator('.wiki-pfad-weiter-knopf:visible')).toHaveText('Weiter: Installieren');
+  const ways = ['konfigurieren', 'entwickeln'];
+  await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(2);
   expect(await page.locator('.wiki-wege > .wiki-weg').evaluateAll(nodes => nodes.map(node => node.id)))
-    .toEqual(['weg-bedienen', 'weg-konfigurieren', 'weg-entwickeln']);
+    .toEqual(['weg-konfigurieren', 'weg-entwickeln']);
   const bounds = await page.locator('.wiki-weg').evaluateAll(nodes => nodes.map(node => {
     const box = node.getBoundingClientRect();
     return { top: box.top, left: box.left };
   }));
-  expect(Math.max(...bounds.map(box => box.top)) - Math.min(...bounds.map(box => box.top))).toBeLessThan(2);
+  expect(Math.abs(bounds[0].top - bounds[1].top)).toBeLessThan(2);
   expect(bounds[0].left).toBeLessThan(bounds[1].left);
-  expect(bounds[1].left).toBeLessThan(bounds[2].left);
   await page.evaluate(() => document.fonts.ready);
   const titles = await page.locator('.wiki-weg h3').evaluateAll(nodes => nodes.map(node => ({
     height: node.getBoundingClientRect().height,
@@ -602,8 +609,12 @@ test('Startseite führt in drei Wegen zum ersten Schritt', async ({ page }) => {
   await expect(page.locator('.wiki-stand .wiki-chip')).toHaveCount(1);
   await expect(page.locator('.wiki-wege .wiki-kette')).toHaveCount(0);
   await expect(page.locator('.wiki-wege ~ .wiki-kette[data-variant="kompakt"]')).toHaveCount(1);
+  // Reihenfolge: geführter Weg, Tiefer gehen, Stand, Alle Seiten.
+  const order = await page.evaluate(() => ['.wiki-pfad', '.wiki-wege', '.wiki-stand', 'h2#alle-seiten']
+    .map(selector => document.querySelector(selector)!.getBoundingClientRect().top));
+  expect([...order].sort((a, b) => a - b)).toEqual(order);
   await expect(page.locator('.md-content__inner')).toHaveAttribute('data-wiki-terms-ready', 'true');
-  await expect(page.locator('.wiki-weg .wiki-term, .wiki-stand-label .wiki-term, .wiki-kette .wiki-term')).toHaveCount(0);
+  await expect(page.locator('.wiki-weg .wiki-term, .wiki-pfad .wiki-term, .wiki-stand-label .wiki-term, .wiki-kette .wiki-term')).toHaveCount(0);
   const allPages = page.locator('details.wiki-allpages');
   await expect(allPages).toHaveCount(1);
   await expect(allPages).not.toHaveAttribute('open', '');
@@ -628,15 +639,20 @@ test('Startseite führt in drei Wegen zum ersten Schritt', async ({ page }) => {
     await links.first().click();
     await expect(page.locator('.wiki-pagehead')).toHaveAttribute('data-weg', way);
     await page.locator('.wiki-pagehead-weg').click();
-    await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(3);
+    await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(2);
     await expect(page.locator('.wiki-allpages')).toHaveCount(1);
     await expect(page.locator('.wiki-stand-item')).toHaveCount(3);
   }
+  // Bedienen: erster Link des geführten Wegs, Seitenkopf führt zurück zur Schrittleiste.
+  await page.locator('#weg-bedienen .wiki-pfad-links a').first().click();
+  await expect(page.locator('.wiki-pagehead')).toHaveAttribute('data-weg', 'bedienen');
+  await page.locator('.wiki-pagehead-weg').click();
+  await expect(page).toHaveURL(/index\.html#weg-bedienen$/);
+  await expect(page.locator('#weg-bedienen')).toBeInViewport();
   await page.setViewportSize({ width: 375, height: 812 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   const tops = await page.locator('.wiki-weg').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().top));
   expect(tops[0]).toBeLessThan(tops[1]);
-  expect(tops[1]).toBeLessThan(tops[2]);
 });
 
 test('Statuszeile bleibt bei abweichender Liste unverändert', async ({ page }) => {
@@ -656,7 +672,7 @@ test('Statuszeile bleibt bei abweichender Liste unverändert', async ({ page }) 
     await route.fulfill({ response, body: changed });
   });
   await page.goto('/index.html');
-  await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(3);
+  await expect(page.locator('.wiki-wege > .wiki-weg')).toHaveCount(2);
   await expect(page.locator('.md-content__inner')).toHaveAttribute('data-wiki-terms-ready', 'true');
   // Read the expected text from the response before any page enhancement.
   const expectedTexts = await page.evaluate(source => {
@@ -680,9 +696,13 @@ test('Startseite bleibt ohne JavaScript als vollständiges Markdown lesbar', asy
   try {
     const page = await context.newPage();
     await page.goto('/index.html');
-    await expect(page.locator('.wiki-wege h3')).toContainText([
-      'Einrichten und bedienen', 'Konfigurieren und verstehen', 'Entwickeln und anbinden',
-    ]);
+    await expect(page.locator('#weg-bedienen.wiki-pfad > h3')).toContainText(['Aufbauen', 'Installieren', 'Einrichten', 'Messen', 'Prüfen']);
+    for (const list of await page.locator('#weg-bedienen.wiki-pfad > ul').all()) {
+      await expect(list).toBeVisible();
+      expect(await list.locator('li > a[href]').count()).toBeGreaterThanOrEqual(2);
+    }
+    await expect(page.locator('.wiki-pfad-leiste')).toHaveCount(0);
+    await expect(page.locator('.wiki-wege h3')).toContainText(['Konfigurieren und verstehen', 'Entwickeln und anbinden']);
     await expect(page.locator('.wiki-stand > ul > li')).toHaveCount(3);
     await expect(page.locator('.wiki-allpages')).toHaveCount(0);
     await expect(page.locator('.md-content__inner a[href$="api/index.html"]').first()).toBeVisible();

@@ -401,3 +401,169 @@ for (const look of ['ruhig', 'lebendig'] as const) {
     }
   });
 }
+
+/* ------------------------------------------- Startseite: geführter Weg -- */
+
+const SCHRITTE = ['Aufbauen', 'Installieren', 'Einrichten', 'Messen', 'Prüfen'];
+const pfad = (page: Page) => page.locator('#weg-bedienen.wiki-pfad');
+
+test('Geführter Weg: fünf Schritte als Tabs, ein Panel sichtbar, „Weiter“ führt zum nächsten', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/index.html');
+  const host = pfad(page);
+  await expect(host).toHaveAttribute('data-modus', 'tabs');
+  const tabs = host.getByRole('tab');
+  await expect(tabs).toHaveCount(5);
+  for (const [index, name] of SCHRITTE.entries()) {
+    const tab = tabs.nth(index);
+    await expect(tab).toContainText(name);
+    const panel = page.locator(`#${await tab.getAttribute('aria-controls')}`);
+    await expect(panel).toHaveAttribute('role', 'tabpanel');
+    await expect(panel).toHaveAttribute('aria-labelledby', (await tab.getAttribute('id'))!);
+    expect(await panel.locator('.wiki-pfad-links > li > a[href]').count()).toBeGreaterThanOrEqual(2);
+  }
+  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
+  await expect(host.locator('.wiki-pfad-schritt:visible')).toHaveCount(1);
+  await tabs.nth(3).click();
+  await expect(tabs.nth(3)).toHaveAttribute('aria-selected', 'true');
+  // Linktext steht nie doppelt: auch direkt nach dem Wechsel genau ein Panel.
+  await expect(host.locator('.wiki-pfad-schritt:visible')).toHaveCount(1);
+  await expect(host.locator('.wiki-pfad-schritt:visible')).toContainText('Messlauf fahren');
+  await host.locator('.wiki-pfad-weiter-knopf:visible').click();
+  await expect(tabs.nth(4)).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.nth(4)).toBeFocused();
+  await expect(host.locator('.wiki-pfad-schritt:visible .wiki-pfad-weiter-knopf')).toHaveCount(0);
+  // Ruhig: keine Linse, keine Fortschrittslinie.
+  await expect(host.locator('.wiki-pfad-linse')).toBeHidden();
+  await expect(host.locator('.wiki-pfad-spur')).toBeHidden();
+});
+
+test('Geführter Weg: Tabs per Tastatur (Pfeile mit Umlauf, Pos1, Ende, wandernder Tabstopp)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/index.html');
+  const tabs = pfad(page).getByRole('tab');
+  await expect(tabs.first()).toHaveAttribute('tabindex', '0');
+  await expect(tabs.nth(1)).toHaveAttribute('tabindex', '-1');
+  await tabs.first().focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(tabs.nth(1)).toBeFocused();
+  await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.nth(1)).toHaveAttribute('tabindex', '0');
+  await page.keyboard.press('End');
+  await expect(tabs.nth(4)).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(tabs.first()).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(tabs.nth(4)).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Home');
+  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
+  // Tab verlässt die Leiste und landet im Panel.
+  await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => document.activeElement?.closest('.wiki-pfad-schritt')?.id)).toBe('wiki-pfad-schritt-1');
+});
+
+for (const look of ['ruhig', 'lebendig'] as const) {
+  test(`Geführter Weg (${look}): #weg-bedienen springt zur Leiste, Schrittanker wählt den Schritt`, async ({ page }) => {
+    if (look === 'lebendig') await lebendig(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/index.html#weg-bedienen');
+    const host = pfad(page);
+    await expect(host).toHaveAttribute('data-ready', 'true');
+    if (look === 'lebendig') await expect(messkette(page).locator('.wmk')).toBeVisible();
+    await page.waitForTimeout(400);
+    const top = await host.evaluate((node) => node.getBoundingClientRect().top);
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(top).toBeLessThan(200);
+    await page.goto('/index.html#messen');
+    await expect(host.getByRole('tab', { selected: true })).toContainText('Messen');
+    await expect(host).toBeInViewport();
+  });
+}
+
+test('Geführter Weg lebendig: Linse gleitet, Fortschrittslinie füllt sich bis zum gewählten Schritt', async ({ page }) => {
+  await lebendig(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/index.html');
+  const host = pfad(page);
+  const lens = host.locator('.wiki-pfad-linse');
+  await expect(lens).toHaveAttribute('data-on', 'true');
+  // Erst messen, wenn die Seite fertig aufgebaut ist (Begriffsmarkierung belegt sonst den Hauptthread).
+  await expect(page.locator('.md-content__inner')).toHaveAttribute('data-wiki-terms-ready', 'true');
+  await host.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const tabs = host.getByRole('tab');
+  const lensX = () => lens.evaluate((node) => new DOMMatrix(getComputedStyle(node).transform).m41);
+  const start = await lensX();
+  const sampling = lens.evaluate((node) => new Promise<number[]>((resolve) => {
+    const values: number[] = [];
+    const end = performance.now() + 1200;
+    const tick = () => {
+      values.push(new DOMMatrix(getComputedStyle(node).transform).m41);
+      if (performance.now() < end) requestAnimationFrame(tick); else resolve(values);
+    };
+    requestAnimationFrame(tick);
+  }));
+  await tabs.nth(2).click();
+  const values = await sampling;
+  const target = await tabs.nth(2).evaluate((tab) => tab.getBoundingClientRect().left - tab.parentElement!.getBoundingClientRect().left);
+  expect(Math.abs(values[values.length - 1] - target)).toBeLessThan(2);
+  expect(values.some((value) => value > start + 2 && value < target - 2), values.join(', ')).toBe(true);
+  await expect.poll(() => host.locator('.wiki-pfad-fuellung').evaluate((node) => new DOMMatrix(getComputedStyle(node).transform).a)).toBeCloseTo(0.5, 2);
+  // Glasband statt Haarlinie.
+  expect(await host.locator('.wiki-pfad-leiste').evaluate((node) => getComputedStyle(node).borderTopLeftRadius)).toBe('18px');
+});
+
+test('Geführter Weg lebendig, reduzierte Bewegung: die Linse springt ohne Gleiten', async ({ page }) => {
+  await lebendig(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/index.html');
+  const host = pfad(page);
+  await expect(host.locator('.wiki-pfad-linse')).toHaveAttribute('data-on', 'true');
+  await host.getByRole('tab').nth(3).click();
+  expect(await host.locator('.wiki-pfad-linse').evaluate((node) => node.getAnimations().length)).toBe(0);
+  const [lensX, tabX] = await host.evaluate((node) => {
+    const bar = node.querySelector('.wiki-pfad-leiste')!.getBoundingClientRect().left;
+    return [new DOMMatrix(getComputedStyle(node.querySelector('.wiki-pfad-linse')!).transform).m41,
+      node.querySelectorAll('[role="tab"]')[3].getBoundingClientRect().left - bar];
+  });
+  expect(Math.abs(lensX - tabX)).toBeLessThan(2);
+});
+
+for (const look of ['ruhig', 'lebendig'] as const) {
+  test(`Geführter Weg schmal (${look}): Akkordeon, ein Schritt offen, ohne Querscrollen`, async ({ page }) => {
+    if (look === 'lebendig') await lebendig(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/index.html');
+    const host = pfad(page);
+    await expect(host).toHaveAttribute('data-modus', 'akkordeon');
+    await expect(host.getByRole('tablist')).toBeHidden();
+    const toggles = host.locator('h3 > button.wiki-pfad-auf');
+    await expect(toggles).toHaveCount(5);
+    await expect(toggles.first()).toHaveAttribute('aria-expanded', 'true');
+    await expect(host.getByRole('region')).toHaveCount(1);
+    await toggles.nth(2).click();
+    await expect(toggles.nth(2)).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggles.first()).toHaveAttribute('aria-expanded', 'false');
+    await expect(host.getByRole('region', { name: /Einrichten/ })).toBeVisible();
+    await toggles.nth(2).click();
+    await expect(toggles.nth(2)).toHaveAttribute('aria-expanded', 'false');
+    await expect(host.getByRole('region')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  });
+}
+
+test('Geführter Weg ohne JavaScript: Schritte und Links als Liste lesbar', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  try {
+    const page = await context.newPage();
+    await page.goto('/index.html');
+    const host = page.locator('#weg-bedienen.wiki-pfad');
+    await expect(host.locator(':scope > h3')).toContainText(SCHRITTE);
+    await expect(host.locator(':scope > ul > li > a[href]').first()).toBeVisible();
+    expect(await host.locator(':scope > ul > li > a[href]').count()).toBeGreaterThanOrEqual(14);
+    await expect(page.locator('.wiki-messkette')).toBeHidden();
+  } finally {
+    await context.close();
+  }
+});

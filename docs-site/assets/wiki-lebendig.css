@@ -432,6 +432,39 @@
 @keyframes wiki-text-aus { to { opacity: 0; filter: blur(2px); } }
 @keyframes wiki-text-ein { from { opacity: 0; } }
 
+/* Seitenskelett (Aufbau und ruhige Fassung in wiki.css): Glasflächen statt
+ * Grau, statt Pulsieren ein Glanz, der in 1,4 s über die Flächen wandert –
+ * derselbe Streif wie beim Eintritt der Lesefläche, nur als Schleife,
+ * solange geladen wird. Bewegt wird nur transform eines Overlays. */
+[data-wiki-look="lebendig"] .wiki-skelett-inner { animation: none; overflow: hidden; }
+[data-wiki-look="lebendig"] .wiki-skelett-balken {
+  background: linear-gradient(180deg, rgb(255 255 255 / .28), transparent 70%), color-mix(in srgb, var(--lb-ink) 11%, transparent);
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 var(--lb-glass-edge);
+}
+[data-wiki-look="lebendig"] body[data-md-color-scheme="slate"] .wiki-skelett-balken {
+  background: linear-gradient(180deg, rgb(255 255 255 / .07), transparent 70%), color-mix(in srgb, var(--lb-ink) 9%, transparent);
+}
+[data-wiki-look="lebendig"] .wiki-skelett-titel { border-radius: 12px; }
+[data-wiki-look="lebendig"] .wiki-skelett-block { border-radius: 14px; }
+[data-wiki-look="lebendig"] .wiki-skelett-inner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, var(--lb-sheen) 50%, transparent 65%);
+  /* Streif läuft nach unten weich aus, statt am Rand des Skeletts abzubrechen. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  transform: translateX(-100%);
+  animation: wiki-skelett-glanz 1.4s cubic-bezier(.45, 0, .25, 1) infinite;
+}
+@keyframes wiki-skelett-glanz { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  [data-wiki-look="lebendig"] .wiki-skelett-inner::after { animation: none; display: none; }
+}
+
 /* Ersatzweg ohne View Transitions: Geist des Linktexts fliegt zum Titel. */
 .wiki-morph-geist {
   position: fixed; z-index: 5; margin: 0; pointer-events: none;

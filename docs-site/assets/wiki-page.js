@@ -39,7 +39,7 @@
         const match = window.wiki.termMatcher(entries);
         const tasks = [];
         let seen = new Set();
-        const excluded = "a, pre, summary, button, svg, .wiki-chart-figure, .fs-chart, .fs-status, [data-preview], .wiki-hint, .wiki-pagehead, .wiki-chip, .wiki-stand-label, .wiki-weg, .wiki-kette, .roadmap, nav, .md-typeset__table thead";
+        const excluded = "a, pre, summary, button, svg, .wiki-chart-figure, .fs-chart, .fs-status, [data-preview], .wiki-hint, .wiki-pagehead, .wiki-chip, .wiki-stand-label, .wiki-weg, .wiki-pfad, .wiki-kette, .roadmap, nav, .md-typeset__table thead";
         const walker = document.createTreeWalker(article, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
           acceptNode(node) {
             const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;

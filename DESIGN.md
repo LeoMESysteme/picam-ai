@@ -185,7 +185,7 @@ Zurückhaltend: Theme-Indigo für Links und Marke, Theme-Akzent für Fokus und H
 
 ## Layout
 
-Zensical-Raster (`.md-grid` 61rem) mit Seitenleisten. Die Startseite ist von oben nach unten: Titel, ein Satz Zweck, haarlinien-begrenzte Statusreihe (Flex, `gap .6rem 2rem`, Items ab 14rem), dann "Wähle deinen Weg" als drei Spalten (`repeat(3, minmax(0,1fr))`, `gap 0`), getrennt durch 1px-Haarlinien, Innenabstand 1rem, erste/letzte Spalte ohne Außenabstand. Unter 52em stapeln die Wege, Trennlinie wechselt von links nach oben. Tabellen und Diagramme brechen unter 600px um; kein horizontales Scrollen. Rhythmus: 0.35 / 0.6 / 1 / 1.3 bis 1.6 / 2rem; Abschnitte mit Haarlinie ab `margin-top 2.4rem`. Seitenkopf (Weg, Meta, Weiter-Link) sitzt in einer Flex-Zeile über dem Inhalt, `margin -.5rem 0 1.6rem`.
+Zensical-Raster (`.md-grid` 61rem) mit Seitenleisten. Die Startseite ist von oben nach unten: Titel, ein Satz Zweck, (lebendig: Messkette), "So kommst du zum ersten Messwert" als geführter Weg in fünf Schritten (Aufbauen, Installieren, Einrichten, Messen, Prüfen; `.wiki-pfad#weg-bedienen`), "Tiefer gehen" mit zwei Wegen Konfigurieren und Entwickeln (`repeat(2, minmax(0,1fr))`, `gap 0`, 1px-Haarlinie dazwischen), "Stand" mit haarlinien-begrenzter Statusreihe (Flex, `gap .6rem 2rem`, Items ab 14rem) und Projektstand-Zeile, dann "Alle Seiten". Unter 52em stapeln die Wege, Trennlinie wechselt von links nach oben. `scripts/wiki-check.py` prüft diese Struktur (fünf Schritte in Reihenfolge, je ≥ 2 Links, zwei Wege). Tabellen und Diagramme brechen unter 600px um; kein horizontales Scrollen. Rhythmus: 0.35 / 0.6 / 1 / 1.3 bis 1.6 / 2rem; Abschnitte mit Haarlinie ab `margin-top 2.4rem`. Seitenkopf (Weg, Meta, Weiter-Link) sitzt in einer Flex-Zeile über dem Inhalt, `margin -.5rem 0 1.6rem`.
 
 Roadmap-Karte weitet das Raster (bis 1920px) und blendet die rechte Leiste aus; sie ist eine Sonderseite.
 
@@ -208,8 +208,11 @@ Zurückhaltend gerundet: 0.4rem für Pop-up, Tiefenebenen, Diagramm- und Tabelle
 ### Statuschip
 Pille (`1em`), `.72em`, 600, Paar aus Status-Hintergrund und -Vordergrund, `margin-left .3em`. Sechs Varianten: offen, in Arbeit, teilweise, gelöst, verworfen, blockiert. Erscheint im Fließtext, in der Statusreihe (OQ-Chip) und im Pop-up.
 
-### Rollenwege (Wähle deinen Weg)
-Drei Spalten ohne Karten, Haarlinien dazwischen. Titel (h3, 0.8rem) mit Linien-Icon in Rollenfarbe, Beschreibung in `ink-light`, Links 600 mit Hinweiszeile darunter. Darunter eine aufklappbare "Alle Seiten"-Zeile, nur Haarlinien oben und unten, Pfeil rotiert 90° in 150ms.
+### Geführter Weg (Startseite)
+Fünf Schritte als WAI-ARIA-Tabs (`wiki-start.js`: Pfeiltasten mit Umlauf, Pos1/Ende), Schritt 1 offen, unter jedem Panel "Weiter: <nächster Schritt>". Schrittleiste mit Haarlinie, nummerierter Punkt, aktiver Schritt mit Akzentpunkt und 2px-Unterstrich; Panel mit einem Satz und 2–4 Links (600, Hinweiszeile darunter, zweispaltig). Unter 45em Akkordeon. Ohne JavaScript bleiben Überschriften und Listen lesbar. `#weg-bedienen` (Ziel des Seitenkopfs aller Bedienen-Seiten) scrollt zur Leiste.
+
+### Rollenwege (Tiefer gehen)
+Zwei Spalten ohne Karten, Haarlinien dazwischen. Titel (h3, 0.8rem) mit Linien-Icon in Rollenfarbe, Beschreibung in `ink-light`, Links 600 mit Hinweiszeile darunter. Darunter eine aufklappbare "Alle Seiten"-Zeile, nur Haarlinien oben und unten, Pfeil rotiert 90° in 150ms.
 
 ### Statusreihe
 Haarlinie oben und unten, Label 600 in `ink-light`, darunter Wert; Kamera, Messpfad, GSVmulti (mit OQ-Chip).
@@ -350,7 +353,7 @@ Weich und groß gerundet, Rundung nimmt mit der Fläche ab: **22px** Flächen (L
 
 Kurven: Feder `--lb-spring` `cubic-bezier(.2, 1.25, .35, 1)` (Umschalterknopf, Pillen, Kettenknoten, Pop-up-Anhebung), Auslauf `--lb-out` `cubic-bezier(.16, 1, .3, 1)` (Eintritt, Überblendungen).
 
-- **Der eine Moment: Seitenwechsel als Morph.** Klick auf Navigation, „Weiter mit“, Fußzeilen-Link oder Rollenweg startet eine View Transition (Typ `wiki-morph`): der Linktext fliegt als `wiki-titel` in den neuen `h1` bzw. die Zielüberschrift (.44s, `--lb-out`), der alte Text verschwimmt hinaus (140ms, Unschärfe 4px), der neue blendet ab 100ms in 280ms ein; beide sind unter dem Kopf abgeschnitten. Kopf, Leisten, Atmosphäre und Papier wechseln ohne Überblendung, nichts steht doppelt. Der Glanzstreif der Lesefläche gehört zum selben Moment. Ohne View Transitions fliegt ein Geist des Linktexts (`.wiki-morph-geist`); Links im Text und Zurück/Vor bekommen nur eine kurze Überblendung. Braucht die Seite länger als 1,5s, wird das Bild freigegeben und der Text blendet ein, sobald er da ist.
+- **Der eine Moment: Seitenwechsel als Morph.** Klick auf Navigation, „Weiter mit“, Fußzeilen-Link oder Rollenweg startet eine View Transition (Typ `wiki-morph`): der Linktext fliegt als `wiki-titel` in den neuen `h1` bzw. die Zielüberschrift (.44s, `--lb-out`), der alte Text verschwimmt hinaus (140ms, Unschärfe 4px), der neue blendet ab 100ms in 280ms ein; beide sind unter dem Kopf abgeschnitten. Kopf, Leisten, Atmosphäre und Papier wechseln ohne Überblendung, nichts steht doppelt. Der Glanzstreif der Lesefläche gehört zum selben Moment. Ohne View Transitions fliegt ein Geist des Linktexts (`.wiki-morph-geist`); Links im Text und Zurück/Vor bekommen nur eine kurze Überblendung. Braucht die Seite länger als 800ms, wird das Bild freigegeben und das Seitenskelett erscheint; der Text blendet ein, sobald er da ist.
 - **Lesen:** feine Fortschrittslinie (2px Akzent mit Schein) unter dem Kopf, scroll-getrieben (`animation-timeline: scroll(root block)`, sonst rAF); im Inhaltsverzeichnis gleitet eine Linse (12px) mit dem aktiven Abschnitt (.6s `--lb-out`), ab 60em.
 - **Signatur: gleitende Linse** (Navigation und Tour-Kapitel). Beim Klick in der Navigation merkt sich `wiki-lebendig.js` die alte Linse; nach dem Seitenwechsel gleitet ein Geist (`.wiki-lens-geist`) in .75s (`cubic-bezier(.22, 1.12, .36, 1)`) zum neuen Eintrag.
 - **Atmosphäre:** zwei feste Schichten überblenden beim Wegwechsel in 1.4s und „atmen“ gegenphasig per `transform` (40s Zyklus), pausiert bei verborgenem Tab (`html.wiki-verborgen`).
@@ -380,6 +383,12 @@ Filter (OQ-Liste, Glossar-Wege): nicht gewählt Glaspille (`--lb-field`, Rand `-
 
 #### Tabellen, Code, Tiefenebenen
 Tabellen mit 1px `--lb-line`, Radius 14px, Kopf mit 4 % Tinte, Zeile beim Überfahren 5 % Akzent. Code-Blöcke 14px, Inline-Code 6px auf `--lb-code-bg`. Tiefenebenen als Glasscheibe auf der Lesefläche (Kante `--lb-glass-edge`, Innenlicht, 14px), Zusammenfassung färbt beim Überfahren in Akzent.
+
+#### Geführter Weg (Startseite)
+Glasband (18px) mit den fünf Schritten; die Linse (`--lb-lens`) gleitet mit der Kurve der Navigationslinse zum gewählten Schritt, eine Fortschrittslinie zwischen den Punkten füllt sich bis dorthin. Panelwechsel blendet in Wechselrichtung über, das alte Panel ist sofort weg (kein doppelter Linktext). "Weiter" als Glaspille. Reduzierte Bewegung: Linse und Linie springen.
+
+#### Seitenskelett (beide Darstellungen)
+Braucht eine Seite bei Sofortnavigation länger als 250ms, ersetzt ein Skelett die Lesefläche (Brotkrume, Titelbalken, Metazeile, Textzeilen, ein Block), mindestens 200ms sichtbar; `aria-busy` an `.md-content`, Live-Region "Seite wird geladen". Ruhig: Flächen in `--md-default-fg-color--lightest`, Deckkraft pulsiert (1.4s). Lebendig: getönte Glasflächen, Glanzstreif (`--lb-sheen`) wandert per `transform` (1.4s); beim Morph gibt der Übergang nach 800ms frei und zeigt das Skelett, der fliegende Titel landet im Titelbalken. Reduzierte Bewegung: statisch. Fehlerfall: Zensical lädt vollständig neu; Sicherheits-Timeout 15s.
 
 #### Rollenwege, Schublade, Codebase-Einbettung
 Rollenweg unter dem Zeiger hebt sich als Glas (18px). Unter 76.25em ist die Navigationsschublade eine schwebende Glasfläche. Die Bühnen-Einbettung der Codebase-Seite hat 18px, Glaskante und Tiefe; die Sprungknöpfe „Auf der Bühne zeigen“ sind Glaspillen mit Linse beim Überfahren.

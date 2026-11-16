@@ -398,3 +398,106 @@
 [data-wiki-look="lebendig"] .md-typeset .wiki-pagehead[data-weg="konfigurieren"] .wiki-pagehead-weg svg { color: var(--docs-progress-fg); }
 [data-wiki-look="lebendig"] .md-typeset .wiki-pagehead[data-weg="entwickeln"] .wiki-pagehead-weg svg { color: var(--docs-partial-fg); }
 [data-wiki-look="lebendig"] .md-typeset .wiki-pagehead[data-weg="projekt"] .wiki-pagehead-weg svg { color: var(--lb-ink2); }
+
+/* ------------------------------- Startseite: geführter Weg (lebendig) -- */
+/* Glasband als Schrittleiste; die Linse gleitet zum gewählten Schritt (Kurve
+ * der Navigationslinse), die Fortschrittslinie füllt sich bis dorthin
+ * (wiki-start.js setzt Lage und Füllung). */
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-leiste {
+  gap: .2rem;
+  padding: .35rem;
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 18px;
+  background: var(--lb-glass), var(--lb-field);
+  box-shadow: var(--lb-glass-light), 0 14px 30px -24px rgb(40 60 150 / .45);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-tab {
+  margin: 0;
+  padding: .5rem .3rem .55rem;
+  border: 0;
+  border-radius: 12px;
+  color: var(--lb-ink2);
+  transition: color .25s var(--lb-out);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-tab:hover { color: var(--lb-ink); }
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-tab[aria-selected="true"] { color: var(--lb-ink); }
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-tab:focus-visible { border-radius: 12px; outline-offset: -2px; }
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-linse {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  border-radius: 12px;
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .62s cubic-bezier(.22, 1.12, .36, 1), opacity .2s var(--lb-out);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-linse[data-on="true"] { opacity: 1; }
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-spur {
+  display: block;
+  position: absolute;
+  z-index: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--lb-line);
+  pointer-events: none;
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-fuellung {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--md-accent-fg-color);
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform .62s var(--lb-out);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-nr {
+  border-color: var(--lb-field-edge);
+  background: var(--lb-paper);
+  color: var(--lb-ink2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lb-paper) 70%, transparent);
+  transition: background-color .3s var(--lb-out), color .3s var(--lb-out), border-color .3s var(--lb-out);
+}
+[data-wiki-look="lebendig"] .md-typeset :is(.wiki-pfad-tab--erledigt, .wiki-pfad-schritt--erledigt) .wiki-pfad-nr {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+[data-wiki-look="lebendig"] .md-typeset :is(.wiki-pfad-tab[aria-selected="true"], .wiki-pfad-auf[aria-expanded="true"]) .wiki-pfad-nr {
+  border-color: var(--md-accent-fg-color);
+  background: var(--md-accent-fg-color);
+  color: #fff;
+}
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .md-typeset :is(.wiki-pfad-tab[aria-selected="true"], .wiki-pfad-auf[aria-expanded="true"]) .wiki-pfad-nr { color: #0b1020; }
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad[data-modus="tabs"] .wiki-pfad-schritt { padding-top: 1.1rem; }
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-weiter-knopf {
+  padding: .3rem .75rem .3rem .85rem;
+  border: 1px solid var(--lb-glass-edge);
+  border-radius: 999px;
+  background: var(--lb-lens);
+  box-shadow: var(--lb-lens-shadow);
+  color: var(--lb-ink);
+  transition: transform .45s var(--lb-spring);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-weiter-knopf:hover { transform: translateX(2px); color: var(--lb-ink); }
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-weiter-knopf:focus-visible { border-radius: 999px; }
+/* Akkordeon (schmal): der offene Schritt liegt als Glasscheibe auf dem Papier. */
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-schritt {
+  padding: 0 .7rem;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  transition: background-color .3s var(--lb-out), border-color .3s var(--lb-out);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-schritt + .wiki-pfad-schritt { border-top-color: transparent; margin-top: .25rem; }
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-schritt:has(> h3 [aria-expanded="true"]) {
+  border-color: var(--lb-glass-edge);
+  background: var(--lb-glass), var(--lb-field);
+  box-shadow: var(--lb-glass-light);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-pfad-auf { color: var(--lb-ink); }
+@media (prefers-reduced-motion: reduce) {
+  [data-wiki-look="lebendig"] .md-typeset :is(.wiki-pfad-linse, .wiki-pfad-fuellung, .wiki-pfad-nr, .wiki-pfad-tab, .wiki-pfad-weiter-knopf, .wiki-pfad-schritt) { transition: none; }
+  [data-wiki-look="lebendig"] .md-typeset .wiki-pfad-weiter-knopf:hover { transform: none; }
+}

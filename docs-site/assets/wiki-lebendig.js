@@ -162,16 +162,17 @@
    * Zensical aus; der Rückruf wartet, bis wiki.onPage die neue Seite meldet.
    * Kein Vorladen: Es hätte auf dem Pi 110–200 ms vor den Übergang gesetzt.
    * So steht das alte Bild genau so lange, wie Zensical ohnehin lädt. Dauert
-   * das länger als SWAP_MS, gibt der Rückruf das Bild frei (Zensicals
-   * Ladebalken wird sichtbar), und der neue Text blendet ein, sobald er da
-   * ist (weiche Überblendung in enter()). */
+   * das länger als SWAP_MS (800 ms), gibt der Rückruf das Bild frei: Im
+   * neuen Bild steht das Seitenskelett, der Titel landet in dessen
+   * Titelbalken, und der echte Text blendet ein, sobald er da ist. Länger als
+   * 800 ms ohne Rückmeldung wirkte wie ein Hänger (vorher 1,5 s). */
   const MORPH_LINKS = [
     ".md-sidebar--primary a.md-nav__link[href]",
     "a.wiki-pagehead-weiter",
     "a.md-footer__link",
     ".wiki-weg-links > li > a[href]",
   ].join(", ");
-  const SWAP_MS = 1500;
+  const SWAP_MS = 800;
 
   function instantNavigation() {
     if (location.protocol === "file:" || typeof window.document$ === "undefined") return false;
@@ -302,12 +303,16 @@
       if (inline) source.style.display = "inline-block";
       name(source, "wiki-titel");
     }
+    morph.flying = flying;
     const update = () => new Promise((resolve) => {
       // Der Rückruf läuft, nachdem das alte Bild aufgenommen ist.
-      const timeout = setTimeout(finish, SWAP_MS);
-      function finish() {
+      const timeout = setTimeout(() => finish(true), SWAP_MS);
+      function finish(late) {
         clearTimeout(timeout);
         if (morph && morph.token === own) morph.arrive = null;
+        // Seite noch nicht da: Bild freigeben, im neuen Bild steht das
+        // Seitenskelett; der Titel landet in dessen Titelbalken.
+        if (late === true) skeletonForMorph();
         setTimeout(resolve, 0);
       }
       // Navigiert wird immer, auch wenn der Morph inzwischen verworfen ist.
@@ -513,14 +518,15 @@
 
   // Ein Moment je Seitenwechsel: unter View Transitions übernimmt der Morph
   // Titel und Text; sonst blendet der Text kurz aus der Unschärfe ein.
-  function enter(article) {
+  function enter(article, held) {
     const instantEntry = !firstPage;
     firstPage = false;
     if (!moving() || !article) return;
     sheen();
     if (morphArrive(article)) return;
     flyGhost(article);
-    if (!instantEntry) return;
+    // Kam die Seite nach dem Skelett, blendet endLoading/revealEntrance ein.
+    if (!instantEntry || held) return;
     article.animate(
       [{ opacity: .3, filter: "blur(5px)" }, { opacity: 1, filter: "blur(0)" }],
       { duration: 380, easing: OUT },
@@ -630,15 +636,178 @@
     features = [progressLine(), tocLens()].filter(Boolean);
   }
 
+  /* ----------------------------------------------- Seitenskelett ---- */
+  /* Gilt in beiden Darstellungen (diese Datei ist immer geladen; Aussehen
+   * ruhig in wiki.css, lebendig in wiki-lebendig.css). Braucht die neue
+   * Seite bei Sofortnavigation länger als SKELETON_DELAY, steht in der
+   * Lesefläche ein Skelett statt des alten Texts; ist es einmal zu sehen,
+   * bleibt es mindestens SKELETON_MIN. Beginn einer Navigation: Zensical
+   * ruft history.pushState (Klick auf einen Link, auch Suche) oder der
+   * Browser meldet popstate (Zurück/Vor) mit anderem Pfad. Ende: wiki.onPage
+   * meldet die neue Seite. Scheitert das Laden, lädt Zensical die Seite
+   * vollständig neu (location.href); für alles andere räumt SKELETON_MAX
+   * auf. Morph: Der Rückruf der View Transition zeigt das Skelett selbst,
+   * wenn er nach SWAP_MS freigibt (skeletonForMorph). */
+  const SKELETON_DELAY = 250;
+  const SKELETON_MIN = 200;
+  const SKELETON_MAX = 15000;
+  const LINES = [96, 88, 92, 71, 94, 83, 58];
+  let loading = null;   // { path, timer, safety, shownAt, el }
+  // Cloudflare Pages leitet /x.html auf /x um; Pfade deshalb vergleichbar machen.
+  const pathKey = (path) => path.replace(/\.html$/, "").replace(/\/index$/, "/");
+  let renderedPath = pathKey(location.pathname);
+  let status = null;
+
+  function announce(text) {
+    if (!status?.isConnected) {
+      status = document.createElement("div");
+      status.className = "wiki-laden-status";
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      document.body.append(status);
+    }
+    status.textContent = text;
+  }
+
+  function skeletonElement() {
+    const el = document.createElement("div");
+    el.className = "wiki-skelett";
+    el.setAttribute("aria-hidden", "true");
+    const inner = document.createElement("div");
+    inner.className = "wiki-skelett-inner";
+    const bar = (cls, width) => {
+      const span = document.createElement("span");
+      span.className = "wiki-skelett-balken " + cls;
+      if (width) span.style.setProperty("--w", width + "%");
+      inner.append(span);
+      return span;
+    };
+    bar("wiki-skelett-pfad");
+    bar("wiki-skelett-titel");
+    bar("wiki-skelett-meta");
+    LINES.forEach((width) => bar("wiki-skelett-zeile", width));
+    bar("wiki-skelett-block");
+    bar("wiki-skelett-zeile", 90);
+    bar("wiki-skelett-zeile", 64);
+    el.append(inner);
+    return el;
+  }
+
+  function paper() { return document.querySelector(".md-content"); }
+
+  function mountSkeleton() {
+    const host = paper();
+    if (!loading || !host) return null;
+    if (!loading.el) loading.el = skeletonElement();
+    host.prepend(loading.el);
+    host.classList.add("wiki-laedt");
+    host.setAttribute("aria-busy", "true");
+    return loading.el;
+  }
+
+  function showSkeleton() {
+    if (!loading || loading.shownAt) return null;
+    const el = mountSkeleton();
+    if (!el) return null;
+    loading.shownAt = performance.now();
+    announce("Seite wird geladen");
+    return el;
+  }
+
+  function clearLoading() {
+    if (!loading) return;
+    clearTimeout(loading.timer);
+    clearTimeout(loading.safety);
+    clearTimeout(loading.hold);
+    loading.el?.remove();
+    for (const host of document.querySelectorAll(".md-content.wiki-laedt, .md-content[aria-busy]")) {
+      host.classList.remove("wiki-laedt");
+      host.removeAttribute("aria-busy");
+    }
+    if (loading.shownAt) announce("");
+    loading = null;
+  }
+
+  function navStart(url) {
+    if (!instant || pathKey(url.pathname) === renderedPath) return;
+    if (loading) {
+      // Weiterer Wechsel während des Ladens: Skelett bleibt, Ziel wechselt.
+      loading.path = url.pathname;
+      return;
+    }
+    loading = { path: url.pathname, shownAt: 0, el: null };
+    paper()?.setAttribute("aria-busy", "true");
+    // Beim Morph hält der Browser das alte Bild fest; das Skelett zeigt der
+    // Rückruf, wenn er freigibt.
+    if (!morph?.arrive) loading.timer = setTimeout(showSkeleton, SKELETON_DELAY);
+    loading.safety = setTimeout(clearLoading, SKELETON_MAX);
+  }
+
+  // Morph gibt nach SWAP_MS frei: Skelett sofort, Text und Titelbalken
+  // benennen, damit der alte Text aus- und das Skelett einblendet und der
+  // fliegende Titel im Titelbalken landet.
+  function skeletonForMorph() {
+    const el = showSkeleton() || loading?.el;
+    if (!el?.isConnected) return;
+    clearTimeout(loading.timer);
+    const inner = el.firstElementChild;
+    name(inner, "wiki-text-neu");
+    const bar = inner.querySelector(".wiki-skelett-titel");
+    if (bar && morph?.flying) name(bar, "wiki-titel");
+  }
+
+  // Neue Seite ist da. Gibt true zurück, wenn das Skelett noch die
+  // Mindestzeit stehen bleibt (dann blendet reveal den Text ein).
+  function endLoading(article) {
+    renderedPath = pathKey(location.pathname);
+    if (!loading) return false;
+    clearTimeout(loading.timer);
+    const shownFor = loading.shownAt ? performance.now() - loading.shownAt : Infinity;
+    if (!loading.shownAt || shownFor >= SKELETON_MIN) {
+      const shown = !!loading.shownAt;
+      clearLoading();
+      if (shown) revealEntrance(article);
+      return shown;
+    }
+    // Erst seit kurzem zu sehen: im neuen Papier stehen lassen, kein Flackern.
+    mountSkeleton();
+    loading.hold = setTimeout(() => {
+      clearLoading();
+      revealEntrance(article);
+    }, SKELETON_MIN - shownFor);
+    return true;
+  }
+
+  function revealEntrance(article) {
+    if (!moving() || !article?.isConnected) return;
+    article.animate(
+      [{ opacity: 0, filter: "blur(4px)" }, { opacity: 1, filter: "blur(0)" }],
+      { duration: 320, easing: OUT },
+    );
+  }
+
+  const pushState = history.pushState;
+  history.pushState = function (state, title, url) {
+    const result = pushState.apply(this, arguments);
+    if (url != null) {
+      try { navStart(new URL(url, location.href)); } catch (error) { /* ungültige Adresse: nichts zu tun */ }
+    }
+    return result;
+  };
+  window.addEventListener("popstate", () => navStart(new URL(location.href)));
+  // Aus dem Verlaufsspeicher zurück (nach vollständigem Neuladen): kein Skelett.
+  window.addEventListener("pageshow", (event) => { if (event.persisted) clearLoading(); });
+
   let currentArticle = null;
   function page(article) {
     currentArticle = article;
+    const held = endLoading(article);
     tint(weg(article));
     const morphing = !!(morph?.arrive && moving());
     if (morphing) holdNav();
     glideLens(morphing ? morph.transition?.ready : null);
     if (morphing) quietSource();
-    enter(article);
+    enter(article, held);
     setup();
     return teardown;
   }

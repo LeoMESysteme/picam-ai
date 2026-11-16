@@ -5,26 +5,56 @@ Werte werden mit Zeitbasis, Freigabestatus und Begründung dokumentiert.
 
 <div class="wiki-messkette" data-messkette></div>
 
-<div class="wiki-stand" markdown="1">
+## So kommst du zum ersten Messwert
 
-* **Kamera:** Logitech StreamCam (UVC), aktiv seit 2026-09-25; die IMX500 ist außer Betrieb.
-* **Messpfad:** live gebaut über `dispread serve --port 8081` und `/live` (Einrichtung, namentliche Bestätigung, Messlauf, JSONL-Audit); real geprüft nur an GSV-2AS / Displaytech 161A, Raumlicht, mV/V — siehe [offene Grenzen](docs/status.md).
-* **GSVmulti:** UserDefined-Zahlenimport, Formatter und gemeinsame TCP-/UART-Brücke sind als Software-Prototyp gebaut. Windows-Demoläufe belegen Zahlenimport und Prozesswiederanlauf; ungültige Werte und Altwertpuffer sind nicht ausreichend geprüft. Echte DUT-Ausgabe bleibt gesperrt, Messfreigabe ist offen ([Bewertung](docs/GSVMULTI_PROTOCOL.md), [Roadmap](docs/ROADMAP.md), [OQ-07](docs/open-questions.md#oq-07)).
+<div class="wiki-pfad" id="weg-bedienen" markdown="1">
+
+### Aufbauen
+
+Kamera, Licht und Messverstärker kommen an ihren Platz, bevor Software ins Spiel kommt.
+
+* [Kamera anschließen und prüfen](docs/CAMERA_COMMISSIONING.md#aktuell-logitech-streamcam-uvc) — StreamCam an einen USB3-Port, Diagnose mit `camera-commissioning.sh`
+* [Halterung und Licht](docs/OPTICAL_SETUP.md#checkliste-vor-der-ersten-messreihe) — Checkliste vor der ersten Messreihe
+* [Messverstärker anschließen](docs/HARDWARE_PROFILE.md#messverstarker-gsv-2as-klemmenbelegung-und-schnittstelle) — GSV-2AS: Klemmenbelegung und Schnittstelle
+* [Rechner und Schnittstellen](docs/HARDWARE_PROFILE.md#serielle-schnittstellen) — GSVmulti-Datenport `/dev/ttyAMA0`, Referenz über USB-RS232-Adapter
+
+### Installieren
+
+Die Werkbank läuft auf dem Pi; für GSVmulti kommt eine Brücke auf den Windows-Rechner.
+
+* [Werkbank auf dem Pi installieren und starten](docs/anleitung/10-kamera-livevorschau.md#start) — `scripts/install-workbench.sh`, einmal `init-tls`, dann `dispread serve --port 8081`
+* [Windows-Brücke und GSVmulti vorbereiten](docs/GSVMULTI_PROTOCOL.md#windows-bruecke) — com0com-Portpaar, Python-Brücke, GSVmulti am zweiten Port
+
+### Einrichten
+
+Im Browser wird die Anzeige eingerichtet, geprüft und mit Namen bestätigt.
+
+* [Werkbank im Browser öffnen](docs/anleitung/10-kamera-livevorschau.md#zertifikat-auf-windows) — HTTPS: dem Zertifikat des Pi auf Windows vertrauen
+* [Anzeige einrichten und bestätigen](docs/anleitung/10-kamera-livevorschau.md#einrichten-prufen-und-bestatigen) — Vorschlag prüfen, Befunde lesen, namentlich bestätigen
+* [Kamera einstellen](docs/anleitung/10-kamera-livevorschau.md#kamera-einstellen) — Fokus und Automatiken
+
+### Messen
+
+Erst nach der Bestätigung startet ein Messlauf; jeder Wert trägt seinen Status.
+
+* [Messlauf fahren und Wertstatus verstehen](docs/anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus) — VALID, TRANSITION, UNREADABLE und STALE
+* [Werte an GSVmulti ausgeben](docs/GSVMULTI_PROTOCOL.md) — Software-Prototyp gebaut, echte DUT-Ausgabe gesperrt
+* [Referenz aufzeichnen](docs/anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich) — GSV-2AS seriell mitschreiben und abgleichen
+
+### Prüfen
+
+Nach dem Lauf werden Ergebnisse angesehen und Auffälligkeiten eingeordnet.
+
+* [Läufe ansehen](docs/session-explorer.md) — Session-Explorer: Kennzahlen und Dateien je Lauf
+* [Wann ein Wert gültig ist](docs/uebersicht/messpfad.md) — Messpfad und Freigaberegeln
+* [Typische Fehler](docs/anleitung/10-kamera-livevorschau.md#typische-fehler) — Meldung und nächster Schritt
+* [Zeitstempel richtig lesen](docs/uebersicht/zeitstempel.md) — Zeitbasen und zulässige Schlüsse
 
 </div>
 
-## Wähle deinen Weg
+## Tiefer gehen
 
 <div class="wiki-wege" markdown="1">
-
-### Einrichten und bedienen
-
-Für Einsteiger und Bediener im Labor: Kamera aufbauen, Anzeige einrichten, Messlauf fahren.
-
-* [Kamera einrichten](docs/CAMERA_COMMISSIONING.md) — Diagnose und Inbetriebnahme der StreamCam
-* [Messpfad live bedienen](docs/anleitung/10-kamera-livevorschau.md) — einrichten, bestätigen, Lauf fahren
-* [Optischen Aufbau prüfen](docs/OPTICAL_SETUP.md) — Halterung, Licht, Reflexionen
-* [Projekt-Tour](docs/uebersicht/projekt-tour.md) — das Projekt als Animation
 
 ### Konfigurieren und verstehen
 
@@ -51,6 +81,18 @@ Für Entwickler: Trennstellen, Verträge und Stellen, an denen man anbindet.
 <div class="wiki-kette" data-variant="kompakt" markdown="1">
 
 Die Verarbeitungskette als Grafik braucht JavaScript; [Die Kette verstehen](docs/anleitung/01-kette-verstehen.md) beschreibt jede Stufe.
+
+</div>
+
+Zum Einstieg ohne Vorwissen: die [Projekt-Tour](docs/uebersicht/projekt-tour.md) zeigt das Projekt als Animation.
+
+## Stand
+
+<div class="wiki-stand" markdown="1">
+
+* **Kamera:** Logitech StreamCam (UVC), aktiv seit 2026-09-25; die IMX500 ist außer Betrieb.
+* **Messpfad:** live gebaut über `dispread serve --port 8081` und `/live` (Einrichtung, namentliche Bestätigung, Messlauf, JSONL-Audit); real geprüft nur an GSV-2AS / Displaytech 161A, Raumlicht, mV/V — siehe [offene Grenzen](docs/status.md).
+* **GSVmulti:** UserDefined-Zahlenimport, Formatter und gemeinsame TCP-/UART-Brücke sind als Software-Prototyp gebaut. Windows-Demoläufe belegen Zahlenimport und Prozesswiederanlauf; ungültige Werte und Altwertpuffer sind nicht ausreichend geprüft. Echte DUT-Ausgabe bleibt gesperrt, Messfreigabe ist offen ([Bewertung](docs/GSVMULTI_PROTOCOL.md), [Roadmap](docs/ROADMAP.md), [OQ-07](docs/open-questions.md#oq-07)).
 
 </div>
 

@@ -5,6 +5,21 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-16: Wiki-Startseite als geführter Weg und Seitenskelett beim
+  Laden. Problem: Die Startseite ordnete nach Rollen, ein durchgehender
+  Weg zum ersten Messwert fehlte; langsame Seitenwechsel ließen halbe oder
+  eingefrorene Inhalte stehen. Änderung: „So kommst du zum ersten
+  Messwert“ in fünf Schritten (Aufbauen, Installieren, Einrichten, Messen,
+  Prüfen) mit je 2–4 vorhandenen Seiten (Installieren: Werkbank per
+  `scripts/install-workbench.sh`, Windows-Brücke und GSVmulti), als Tabs
+  bzw. schmal als Akkordeon; Konfigurieren und Entwickeln als „Tiefer
+  gehen“, Stand und Alle Seiten darunter. `scripts/wiki-check.py` prüft
+  die neue Struktur. Seitenskelett ab 250 ms Ladezeit in beiden
+  Darstellungen (ruhig pulsierend grau, lebendig Glas mit Glanz),
+  `aria-busy` und Live-Region; der Morph gibt nach 800 ms frei und zeigt
+  das Skelett. Konsequenz: Seitenköpfe der Bedienen-Seiten führen weiter
+  zu `index.html#weg-bedienen`, jetzt auf den geführten Weg.
+
 * 2026-11-15: Wiki „lebendig“: Bewegung und Grafiken. Seitenwechsel als
   Morph (View Transitions: der Linktext fliegt in den neuen Titel, nichts
   sonst überblendet), Lesefortschritt unter dem Kopf und gleitende Linse im

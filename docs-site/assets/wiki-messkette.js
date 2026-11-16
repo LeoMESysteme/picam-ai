@@ -613,6 +613,9 @@
       unmount?.();
       unmount = null;
       if (lively()) unmount = mount(host, stages);
+      // Die Bühne nimmt über dem Inhalt Platz; Bausteine darunter (geführter
+      // Weg, Hash-Sprung) richten sich danach neu aus.
+      window.dispatchEvent(new CustomEvent("wiki:messkette", { detail: { mounted: Boolean(unmount) } }));
     }
 
     Promise.all([

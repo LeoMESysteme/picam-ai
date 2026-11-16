@@ -34,17 +34,46 @@ def test_no_front_matter_ok() -> None:
     assert wiki_check.check_front_matter("# Titel\n\n---\nweg: kunde\n---\n", "seite.md") == []
 
 
-START = """<div class="wiki-stand" markdown="1">
+START = """<div class="wiki-pfad" id="weg-bedienen" markdown="1">
 
-* **Kamera:** Stand
+### Aufbauen
+
+Erster Schritt.
+
+* [A](a.md) — eins
+* [B](b.md) — zwei
+
+### Installieren
+
+Zweiter Schritt.
+
+* [A](a.md) — eins
+* [B](b.md) — zwei
+
+### Einrichten
+
+Dritter Schritt.
+
+* [A](a.md) — eins
+* [B](b.md) — zwei
+
+### Messen
+
+Vierter Schritt.
+
+* [A](a.md) — eins
+* [B](b.md) — zwei
+
+### Prüfen
+
+Fünfter Schritt.
+
+* [A](a.md) — eins
+* [B](b.md) — zwei
 
 </div>
 
 <div class="wiki-wege" markdown="1">
-
-### Einrichten und bedienen
-
-Für Bediener.
 
 ### Konfigurieren und verstehen
 
@@ -55,46 +84,73 @@ Für Konfigurierende.
 Für Entwickler.
 
 </div>
+
+<div class="wiki-stand" markdown="1">
+
+* **Kamera:** Stand
+
+</div>
 """
 
 
-def test_start_has_three_ways_in_order() -> None:
+def test_start_has_two_ways_in_order() -> None:
     assert wiki_check.check_start(START) == []
-    reversed_ways = START.replace("### Einrichten und bedienen", "### Platzhalter")
-    reversed_ways = reversed_ways.replace("### Entwickeln und anbinden", "### Einrichten und bedienen")
-    reversed_ways = reversed_ways.replace("### Platzhalter", "### Entwickeln und anbinden")
-    errors = wiki_check.check_start(reversed_ways)
+    swapped = START.replace("### Konfigurieren und verstehen", "### Platzhalter")
+    swapped = swapped.replace("### Entwickeln und anbinden", "### Konfigurieren und verstehen")
+    swapped = swapped.replace("### Platzhalter", "### Entwickeln und anbinden")
+    errors = wiki_check.check_start(swapped)
     assert len(errors) == 1
     assert "Reihenfolge" in errors[0]
 
 
 def test_start_missing_stand() -> None:
-    text = START[START.index('<div class="wiki-wege"'):]
+    text = START[:START.index('<div class="wiki-stand"')]
     assert wiki_check.check_start(text) == ["README.md: wiki-stand fehlt oder ist nicht geschlossen"]
 
 
 def test_start_missing_wege() -> None:
-    text = START[:START.index('<div class="wiki-wege"')]
+    text = START.replace(START[START.index('<div class="wiki-wege"'):START.index('<div class="wiki-stand"')], "")
     assert wiki_check.check_start(text) == ["README.md: wiki-wege fehlt oder ist nicht geschlossen"]
 
 
-@pytest.mark.parametrize("heading", ["Einrichten und bedienen", "Konfigurieren und verstehen", "Entwickeln und anbinden"])
-def test_start_requires_exactly_three_ways_inside_wrapper(heading: str) -> None:
-    text = START.replace(f"### {heading}\n", "") + f"\n### {heading}\n"
+def test_start_missing_pfad() -> None:
+    text = START[START.index('<div class="wiki-wege"'):]
+    assert wiki_check.check_start(text) == ["README.md: wiki-pfad fehlt oder ist nicht geschlossen"]
+
+
+def test_start_pfad_needs_anchor_and_steps() -> None:
+    assert wiki_check.check_start(START.replace(' id="weg-bedienen"', "")) == ['README.md: wiki-pfad braucht id="weg-bedienen"']
+    expected = "README.md: wiki-pfad braucht genau die Schritte Aufbauen, Installieren, Einrichten, Messen, Prüfen"
+    missing = START.replace("### Messen\n\nVierter Schritt.\n\n", "")
+    assert wiki_check.check_start(missing) == [expected]
+    swapped = START.replace("### Messen", "### TEMP").replace("### Prüfen", "### Messen").replace("### TEMP", "### Prüfen")
+    assert wiki_check.check_start(swapped) == [expected]
+
+
+def test_start_pfad_step_needs_two_links() -> None:
+    one_link = START.replace("Dritter Schritt.\n\n* [A](a.md) — eins\n* [B](b.md) — zwei", "Dritter Schritt.\n\n* [A](a.md) — eins")
+    assert wiki_check.check_start(one_link) == ["README.md: wiki-pfad-Schritt Einrichten braucht mindestens zwei Links"]
+
+
+@pytest.mark.parametrize("heading", ["Konfigurieren und verstehen", "Entwickeln und anbinden"])
+def test_start_requires_exactly_two_ways_inside_wrapper(heading: str) -> None:
+    wege = START[START.index('<div class="wiki-wege"'):START.index('<div class="wiki-stand"')]
+    text = START.replace(wege, wege.replace(f"### {heading}\n", "")) + f"\n### {heading}\n"
     assert len(wiki_check.check_start(text)) == 1
-    assert len(wiki_check.check_start(START.replace("</div>\n", "\n### Weiterer Weg\n\n</div>\n"))) == 1
+    extra = START.replace(wege, wege.replace("</div>\n", "\n### Weiterer Weg\n\n</div>\n"))
+    assert len(wiki_check.check_start(extra)) == 1
 
 
-@pytest.mark.parametrize("wrapper", ["wiki-stand", "wiki-wege"])
+@pytest.mark.parametrize("wrapper", ["wiki-pfad", "wiki-stand", "wiki-wege"])
 def test_start_requires_closed_wrapper(wrapper: str) -> None:
-    opening = f'<div class="{wrapper}" markdown="1">'
+    opening = next(line for line in START.splitlines() if line.startswith(f'<div class="{wrapper}"'))
     before, body = START.split(opening)
     text = before + opening + body.replace("</div>", "", 1)
-    assert wiki_check.check_start(text) == [f"README.md: {wrapper} fehlt oder ist nicht geschlossen"]
+    assert wrapper in " ".join(wiki_check.check_start(text))
 
 
 def test_cli_checks_start(wiki_tree: Path) -> None:
-    (wiki_tree / "README.md").write_text(START[START.index('<div class="wiki-wege"'):], encoding="utf-8")
+    (wiki_tree / "README.md").write_text(START[:START.index('<div class="wiki-stand"')], encoding="utf-8")
     result = run_check(wiki_tree)
     assert result.returncode == 1
     assert result.stderr.strip() == "README.md: wiki-stand fehlt oder ist nicht geschlossen"
