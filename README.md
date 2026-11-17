@@ -25,6 +25,10 @@ Für Einsteiger und Bediener im Labor: Kamera aufbauen, Anzeige einrichten, Mess
 * [Projekt-Tour](docs/uebersicht/projekt-tour.md) — das Projekt als Animation
 
 Die Softwareeinrichtung erfolgt mit `bash scripts/install-workbench.sh`.
+Für eine getrennte Neuinstallation mit geprüftem Releasepaket gibt es den
+[neuen Installer](docs/INSTALLER.md): System-, Benutzer- oder portabler
+Betrieb, zunächst als schreibfreier Plan. Die bestehende Installation wird
+dabei nicht automatisch übernommen.
 Die verbindliche Debian-Paketliste steht in `packaging/apt-packages.txt`;
 [Abhängigkeiten](docs/dependencies.md#pi-werkbank-installieren) erläutert die Auswahl.
 Danach folgen Identität, TLS mit expliziter Adresse, Dienststart und Profilexport

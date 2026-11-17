@@ -5,6 +5,19 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-17: **Getrennter Neuinstaller.** Geprüfte Releasearchive mit
+  eingefrorener Leservorlage, System-/Benutzer-/portablem Modus, schreibfreier
+  Planung und expliziter Ausführung. Fähigkeitenprüfung erkennt ältere
+  Python-Versionen, native Importfehler und fehlenden Dienstmanager;
+  andere Linux-Rechner können ohne Pi-Brückenidentität eingerichtet werden.
+  Bestehende Ziele werden nicht übernommen; weder Dienststart noch Migration.
+* 2026-11-17: **Installierte Konfiguration und Zertifikat.** `serve --config`
+  liest streng geprüfte TOML-Pfade relativ zur Datei; CLI-Angaben haben
+  Vorrang, bisherige Aufrufe behalten ihre Defaults. Neue Brückenidentitäten
+  können den ausdrücklich angegebenen Host im SAN tragen und ihr tatsächlich
+  ausgeliefertes öffentliches Zertifikat exklusiv exportieren. Vorhandene
+  Identitäten werden bei Hostabweichung nicht verändert.
+
 * 2026-11-14: **Installer P0a, Aufgabe 1 (L1).** Die kommentierte Paketliste
   `packaging/apt-packages.txt` deckt die aktiven Drittmodule und UVC-Werkzeuge ab.
   Der Installer überspringt vorhandene Pakete/Editable-Installation, behält

@@ -2,8 +2,11 @@
 
 Stand: 2026-11-17. Grundlage: Integrationscommit `911b8f3` und der
 [Installer-/TUI-Entwurf vom 13.11.](2026-11-13-installer-tui-design.md).
-Dies ist die vorbereitete Ausgestaltung der nächsten Installer-Stufe;
-Bootstrap, System-Unit und Pfadmigration sind noch nicht implementiert.
+Ursprünglich die vorbereitete Ausgestaltung der nächsten Installer-Stufe;
+nach Leonhards Auftrag umgesetzt als getrennter Neuinstaller mit
+System-/Benutzer-/portablem Modus. Stand und Prüfgrenzen im
+[Implementierungsbericht](../../quellen/installer-2026-11-17/REPORT.md).
+Bestehende Installationen werden weiterhin nicht migriert.
 
 ## Auftrag und bestätigte Entscheidungen
 
@@ -19,8 +22,10 @@ Leonhard möchte den Installer bereits vorbereiten. In dieser Session bestätigt
 
 Die Vorbereitung liegt deshalb in einem eigenen Git-Worktree auf
 `docs/installer-vorbereitung-20261117`, ohne Verknüpfungen auf `var` oder
-eine bestehende `.venv`. Die heutige Lieferung ist dieses Dokument. Es gibt
-keinen gestarteten Installer, neu eingerichteten Dienst oder One-Line-Download.
+eine bestehende `.venv`. Die ursprüngliche Vorbereitung lieferte dieses
+Dokument. Nach der Freigabe wurde nur in getrennten Probeverzeichnissen
+installiert; kein Betriebsdienst wurde eingerichtet oder umgestellt.
+Ein veröffentlichter One-Line-Download ist weiterhin nicht eingerichtet.
 
 ## Ansätze und Wahl
 
@@ -132,8 +137,10 @@ nicht durch einen erneuten Download überschrieben.
    zur späteren Kalibrierung fortgesetzt werden. Ein Kalibrierimport bleibt
    bis zur fachlichen Entscheidung außerhalb dieser ersten Stufe.
 6. **Neue Identität und TLS:** ausschließlich im neuen Datenverzeichnis;
-   bestehende Dateien nicht ersetzen. Browser-TLS und gepinnte
-   Brückenidentität bleiben getrennte Mechanismen. Host/SAN und Ablauf anzeigen.
+   bestehende Dateien nicht ersetzen. Bei aktivierter Brücke teilen Browser
+   und Brücke den HTTPS-Listener; das neue Identitätszertifikat braucht daher
+   den Host-SAN und wird für Browservertrauen öffentlich exportiert. Ohne
+   Brücke bleibt das klassische Browserzertifikat. Host/SAN und Ablauf anzeigen.
 7. **Systemdienst vorbereiten:** Verzeichnisse mit passenden Besitzern und
    Rechten, Laufzeitverzeichnis über systemd; zunächst nur auf dem neuen Pi.
    Erst nach expliziter Startaktion aktivieren, erreichbare `/live`-Seite und
@@ -236,8 +243,8 @@ nicht und bleiben ausdrücklich außerhalb ihrer ersten Umsetzung:
 - Zulässigkeit einer Kalibrierübernahme zwischen Geräten;
 - Einbindung von Tailscale und Migration dieses bestehenden Pi.
 
-Nach Prüfung dieses Dokuments lässt sich der Implementierungsplan für
-Konfiguration/Pfade, Paketlieferung, isoliert testbaren Bootstrap und
-System-Unit schreiben. Auch dessen Umsetzung bleibt ohne Ausführung gegen
-die bestehende Installation. Ein vollständiger Installationslauf braucht
-den gesonderten zweiten Pi.
+Der Implementierungsplan für Konfiguration/Pfade, Paketlieferung,
+isoliert testbaren Bootstrap und System-Unit ist umgesetzt. Seine Prüfung
+bleibt von der bestehenden Installation getrennt. Die tatsächliche
+Erstinstallation mit Hardware-/PAM-/Bootprüfung braucht weiterhin den
+gesonderten zweiten Pi; weitere reale OS-Versionen sind gesondert zu prüfen.

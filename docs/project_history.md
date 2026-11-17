@@ -9,6 +9,40 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-17 — Neuinstallation getrennt vom laufenden Entwicklungs-Pi
+
+**Problem:** Die Lieferung musste auch ohne dessen Checkout, Laufdaten und
+Python-Umgebung funktionieren. Eine Migration hätte den ausdrücklich zu
+erhaltenden Betrieb verändert. Zugleich unterscheiden sich Python-Versionen,
+native OS-Pakete und Verfügbarkeit von systemd zwischen Zielsystemen.
+
+**Entscheidung:** Neuer Installer in separatem Worktree, drei explizite
+Installationsmodi und schreibfreie Planung als Vorgabe. Primär `/opt/picam`
+plus `/var/lib/picam`, Systemdienst unter dem vorhandenen Bedienerkonto;
+Benutzer-/portable Alternativen sind ausdrücklich wählbar. Die TOML-Datei
+ist opt-in; alte CLI-Aufrufe behalten Pfade und Verhalten. Releasebau nimmt
+die hashgeprüfte Leservorlage auf, keine Laufzeitidentitäten oder Kalibrierung.
+
+**Begründung:** Echte Modulimporte prüfen die gewählte Python-/ABI-Kombination
+zuverlässiger als eine OS-Namensliste. Ohne Pi-Serienkennung ist Browserbetrieb
+mit `--without-bridge` möglich, statt eine Hardwarekennung zu erfinden.
+Ein neues Brückenzertifikat kann den ausdrücklich gewählten Host tragen:
+Browser und Brücke teilen den Listener und benutzen daher dasselbe tatsächlich
+ausgelieferte Zertifikat. Bestehende Identitäten werden nicht erneuert.
+
+**Verworfene Alternativen:** Eigenes Dienstkonto würde die bestehende
+PAM-Kontogleichheit verletzen. Automatisches OS-/Python-Upgrade, pip-Kopien
+nativer Pakete, stiller Dienstmoduswechsel und Bestandsübernahme sind keine
+Fallbacks dieser Lieferung. Automatische Updates warten auf eine atomare
+Wartungssperre gegen neue Messstarts.
+
+**Konsequenz:** Nur neue Ziele werden eingerichtet, der aktive Versionslink
+entsteht zuletzt. Überlappende veränderliche Daten-/Konfigurationspfade dürfen
+Code nicht enthalten; Besitzwechsel folgen keinen Symlinks. Auch die
+dekomprimierten Archivmetadaten sind begrenzt. Installer-, Paket-, Konfigurations-
+und Zertifikatsprüfungen sowie isolierte portable Probe dokumentiert im
+[Implementierungsbericht](quellen/installer-2026-11-17/REPORT.md).
+
 ## 2026-11-14 — Installer P0a ohne Pfad- oder Identitätsmigration
 
 **Problem:** Die Softwareeinrichtung ließ aktive Systempakete aus, kopierte

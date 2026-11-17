@@ -1,4 +1,34 @@
-# Status und Übergabe — 2026-11-13
+# Status und Übergabe — 2026-11-17
+
+## Diese Session: getrennter Neuinstaller umgesetzt
+
+Arbeitsstand ausschließlich im Worktree `installer-vorbereitung`, Branch
+`docs/installer-vorbereitung-20261117`, ausgehend von `911b8f3`/`f084340`.
+Anleitung: [INSTALLER.md](INSTALLER.md). Code, Nachweise und Grenzen:
+[Implementierungsbericht](quellen/installer-2026-11-17/REPORT.md).
+
+System-, Benutzer- und portabler Modus, schreibfreie Planung als Standard,
+geprüfte Releasearchive mit Vorlage, eigene venv und ausdrückliche TOML-Datei.
+Andere Linux-Systeme werden nach Python-/ABI-/Dienstfähigkeiten geprüft;
+`--without-bridge` ermöglicht Browserbetrieb ohne Pi-Hardwarekennung.
+Kein automatischer Dienststart, Update, Kalibrierimport oder Bestandsmigration.
+
+200 gezielte Prüfungen und zwei native portable Installationswege erfolgreich.
+TLS mit Hostprüfung und Brückenpin per MemoryBIO verifiziert. Vollständige
+hardwarefreie Suite nach Korrektur der isolierten Testvoraussetzungen:
+4075 bestanden, 220 übersprungen; Einzelheiten im Implementierungsbericht.
+
+Der bestehende Dienst bleibt auf `95d0540`, PID 714468 seit 13.11.2026
+19:28:49 CET aktiv. Keine Kamera-/UART-Aktion oder Dienstumstellung.
+Die eigene venv und Testkopien unter dem eigenen `var` sind keine Verknüpfung
+auf die Betriebsdaten. Release und native Probeziele enthalten keine
+übernommene Kalibrierung oder Identität.
+
+Nächste Abnahme: frischer zweiter Pi (PAM, Boot, reale Kamera/UART/Windows).
+Öffentlicher/interner Downloadort und wartungsgesicherter Updateweg bleiben
+separate Aufgaben. Kein Merge, Push oder Deployment aus dieser Session.
+
+## Vorheriger Integrationsstand (historische Übergabe)
 
 ## Kurzfassung
 
