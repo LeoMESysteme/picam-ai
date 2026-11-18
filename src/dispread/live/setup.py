@@ -582,11 +582,13 @@ def check_focus_at_run_start(
     cam: SetupCamera, reference: dict[str, Any] | None, *, target: int, settle_s: float = 1.0,
     sleep: Callable[[float], None] | None = None,
 ) -> tuple[dict[str, Any], dict[str, np.ndarray]] | None:
-    """OQ-74: Nach dem Kameraneustart am Laufstart die Schaerfe gegen die Einrichtung pruefen.
+    """OQ-74: Vor dem Laufstart die Schaerfe gegen die Einrichtung pruefen.
 
     ROI ist das bestaetigte Anzeige-Viereck (`quad_focus_reference`), Normierung
     wie in der Einrichtung. Unter 0,6 einmal von unten neu setzen; danach
-    muss das Verhaeltnis im vorlaeufigen Band 0,95–1,05 liegen. `None` ohne Referenz.
+    wird das Verhaeltnis gegen das vorlaeufige Band 0,95–1,05 geprueft.
+    Der Dienst entscheidet ueber die zusaetzliche Lesbarkeitsprobe.
+    `None` ohne Referenz.
     """
     if not reference:
         return None
@@ -607,10 +609,10 @@ def check_focus_at_run_start(
     if not np.isfinite(ratio) or not 0.95 <= ratio <= 1.05:
         result["status"] = "FEHLER"
         result["text"] = (f"Fokus weicht von der Einrichtung ab ({100 * ratio:.0f} %; "
-                          "zulässig 95–105 %) – Fokus prüfen und neu einrichten")
+                          "Vergleichsband 95–105 %) – Fokus prüfen und neu einrichten")
     elif result["reapproach"] is not None:
         result["status"] = "OK"
-        result["text"] = (f"Fokus nach Kamerastart neu gesetzt (vorher {100 * result['after_restart']['ratio']:.0f} %, "
+        result["text"] = (f"Fokus beim Laufstart neu gesetzt (vorher {100 * result['after_restart']['ratio']:.0f} %, "
                           f"danach {100 * ratio:.0f} % der Einrichtungsschärfe)")
     else:
         result["text"] = (f"Fokusvergleich: {100 * ratio:.0f} % der Einrichtungsschärfe "

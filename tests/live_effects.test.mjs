@@ -499,6 +499,10 @@ test('alerts: Fokuspruefung am Laufstart zeigt die Warnung stehend, einmal je La
     focus_check: {status: 'OK', text: 'Fokus nach Kamerastart neu gesetzt (vorher 5 %, danach 98 % der Einrichtungsschärfe)'}}});
   assert.equal(h.toasts.get('fokus-lauf').level, 'info');
   assert.notEqual(h.toasts.get('fokus-lauf').sticky, true);
+  alerts.update({...running, run: {...running.run, dir: 'run-03'}});
+  assert.equal(h.toasts.get('fokus-lauf').level, 'warn');
+  alerts.update({state: 'stopped', session_id: 's1', run: {dir: 'run-03'}});
+  assert.equal(h.toasts.has('fokus-lauf'), false);
 });
 
 test('abgelehnter Start bleibt nach erneutem Statusabruf getrennt sichtbar', () => {

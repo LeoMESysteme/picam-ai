@@ -880,11 +880,14 @@ Für reproduzierbare Aufnahmen schaltet `CameraSettings` die Fokusautomatik
 `focus_automatic_continuous` aus und liest den festen Fokuswert
 `focus_absolute` zurück.
 
-Beim Start mit einer echten Kamera vergleicht die Werkbank die helligkeitsnormierte
-Schärfe mit der bestätigten Einrichtung. Liegt sie nach einem gegebenenfalls
-nötigen Neusetzen außerhalb von 95–105 %, oder fehlt eine verwertbare Referenz,
-lehnt sie den Start ab: Fokus prüfen und neu einrichten. Das Band ist ein
-vorläufiger Gleichheitsfilter, keine kalibrierte Qualitätsgrenze. Die
+Beim Laufstart verwendet die Werkbank den laufenden Kamerastream weiter, wenn
+Format und zurückgelesene Regler zum bestätigten Profil passen. Sie vergleicht
+die helligkeitsnormierte Schärfe mit der Einrichtung. Außerhalb von 95–105 %
+prüft sie frische Bilder mit der normalen Nachführung, dem Leser und der
+Freigabe. Der Lauf startet mit Fokuswarnung, wenn dabei eine gültige Lesung
+entsteht. Die Probe gibt selbst keine Daten aus. Bei weniger als 60 % nach
+einmaligem Neusetzen, fehlender Referenz oder fehlgeschlagener Lesung bleibt
+der Start gesperrt. Die
 Nachführansicht zeigt den Anteil der Zweitversuche und den Median ihres
 Maßstabs; beides sind Diagnosewerte und keine Freigabeentscheidung. Der
 Anteil bezieht sich auf alle geprüften Bilder einschließlich solcher mit

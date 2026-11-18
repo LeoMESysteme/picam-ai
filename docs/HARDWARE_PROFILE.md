@@ -49,6 +49,15 @@ wie bisher `var/diagnostics/`. Explizite Ausgabeorte bleiben maßgeblich.
 Produktcode unter `src/` kennt weder diese Variable noch die SSD; die
 Auflösung erfolgt ausschließlich in Tests und Skripten.
 
+## StreamCam-Diagnose vom 18.11.2026
+
+Zeitweilig angewandte Profileinstellungen der Sitzung `live-20261118T102121Z`:
+Fokus 42, Belichtung 300, Gain 128, Weißabgleich 5.904 K, Automatiken aus.
+Rücklesewerte und Originalbilder liegen im lokalen Schnappschuss
+`var/diagnostics/workbench-20261118-streamprobe/`. Der Diagnosestrom wurde
+anschließend geschlossen. Die Einstellungen gelten für diese Probe.
+[Versuchsaufbau und Ergebnis](lab_journal.md#workbench-2026-11-18).
+
 ## T13-Einrichtung (2026-11-06)
 
 Sitzung `live-20261106T112527Z`, Code `ab2423c`, neue Werkbank auf Port 8082.

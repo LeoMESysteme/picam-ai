@@ -36,9 +36,10 @@ from dispread.live.preview import PreviewEncoder, PreviewFrame, RateGovernor
 from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.reference_eval import evaluate_records, validate_reference_session
 from dispread.live.region_hint import MIN_SHARE
-from dispread.live.session import LiveConfig, LiveSession
+from dispread.live.session import LiveConfig, LiveSession, build_live_pipeline
 from dispread.live.storage import cleanup_runs
 from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
+from dispread.records import ValueStatus
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
 
@@ -605,8 +606,28 @@ class LiveService:
             with self._lock:
                 self._diagnostics_error = f"{path.name}: {type(exc).__name__}: {str(exc)[:160]}"
 
-    def _check_run_start_focus(self, camera: CameraSettings, out_dir: Path) -> dict:
-        """Schaerfe nach dem Neustart pruefen; fehlende Evidenz sperrt den Lauf."""
+    def _matching_camera_controls(self, camera: CameraSettings) -> dict[str, int] | None:
+        """Nur einen gesunden Stream mit den Ruecklesewerten des Profils uebernehmen."""
+        status = self._owner.status()
+        if not status.get("running") or status.get("stalled") or status.get("error"):
+            return None
+        source = status.get("source", {})
+        if (source.get("camera_model") != camera.model or source.get("usb_id") != camera.usb_id
+                or tuple(source.get("size") or ()) != camera.size or source.get("fourcc") != camera.fourcc
+                or source.get("fps") != camera.fps or (camera.device and camera.device != source.get("device"))):
+            return None
+        expected = dict(camera.ordered_controls())
+        try:
+            actual = OwnerSetupCamera(self._owner).get_controls(list(expected))
+        except (UvcError, live_setup.SetupError) as exc:
+            _LOG.warning("Kameraregler vor Laufstart nicht lesbar: %s", exc)
+            return None
+        return actual if actual == expected else None
+
+    def _check_run_start_focus(
+        self, camera: CameraSettings, out_dir: Path, restarted: bool,
+    ) -> dict:
+        """Schaerfe vor dem Start pruefen; fehlende Evidenz sperrt den Lauf."""
         reference = self._focus_reference
         if not reference:
             return {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz",
@@ -623,12 +644,40 @@ class LiveService:
             return {"status": "NICHT_GEPRUEFT", "reason": "keine_schaerfereferenz",
                     "run_band_ratio": [0.95, 1.05]}
         result, frames = checked
+        if not restarted and "after_restart" in result:
+            result["first_sample"] = result.pop("after_restart")
+        if not restarted and "nach_neustart" in frames:
+            frames["fortlaufend"] = frames.pop("nach_neustart")
         box = tuple(reference.get("roi_box") or ()) or None
         for name, frame in frames.items():
             crop, rect = live_setup.focus_diagnostic_crop(frame, box)
             result.setdefault("diagnostic_crop", rect)
             self._write_setup_image(out_dir / f"fokus-laufstart-{name.replace('_', '-')}.png", crop)
         return result
+
+    def _probe_start_readability(self, profile_path: Path) -> dict:
+        """Frische Bilder mit eigener Pipeline pruefen, ohne Audit, Ausgabe oder Referenzwert."""
+        pipeline, *_ = build_live_pipeline(
+            self._owner, profile_path, self._config,
+            reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
+        )
+        latest = self._owner.latest()
+        seen = latest[0] if latest else 0
+        counts: dict[str, int] = {}
+        for _ in range(max(8, self._config.confirm_frames)):
+            next_frame = self._owner.wait_newer(seen, 0.5)
+            if next_frame is None:
+                status = self._owner.status()
+                if status.get("stalled") or not status.get("running"):
+                    break
+                continue
+            seen, frame = next_frame
+            record = pipeline.process(frame)
+            counts[record.status.value] = counts.get(record.status.value, 0) + 1
+            if record.status is ValueStatus.VALID:
+                status = self._owner.status()
+                return {"valid": bool(status.get("running") and not status.get("stalled")), "by_status": counts}
+        return {"valid": False, "by_status": counts}
 
     def _focus_preview_image(self) -> Any:
         """Neuestes Vorschaubild fuer die Hinweisbox vor der Fokussuche (OQ-74)."""
@@ -1049,14 +1098,39 @@ class LiveService:
                         json.dumps(test_run, indent=2, ensure_ascii=False), encoding="utf-8",
                     )
                 if camera is not None:
-                    try:
-                        self._owner.restart(lambda: self._source_for(camera), reason="laufstart")
-                    except RuntimeError as exc:
-                        raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
-                    focus_check = self._check_run_start_focus(camera, out_dir)
+                    readback = self._matching_camera_controls(camera)
+                    restarted = readback is None
+                    if restarted:
+                        try:
+                            self._owner.restart(lambda: self._source_for(camera), reason="laufstart")
+                        except RuntimeError as exc:
+                            raise LiveError(f"Kamera nicht neu gestartet: {exc}") from exc
+                    focus_check = self._check_run_start_focus(camera, out_dir, restarted)
+                    focus_check["camera_transition"] = "neu_geoeffnet" if restarted else "fortgesetzt"
+                    if readback is not None:
+                        focus_check["controls_readback"] = readback
+                    sample = (focus_check.get("reapproach") or focus_check.get("first_sample")
+                              or focus_check.get("after_restart") or {})
+                    ratio = sample.get("ratio")
+                    if (focus_check.get("status") == "FEHLER" and ratio is not None
+                            and np.isfinite(ratio) and ratio >= live_setup.FOCUS_END_RATIO):
+                        try:
+                            probe = self._probe_start_readability(profile_path)
+                        except Exception as exc:  # noqa: BLE001 - Fehler als Startablehnung protokollieren
+                            _LOG.warning("Lesbarkeitsprobe beim Laufstart fehlgeschlagen: %s", exc)
+                            probe = {"valid": False, "error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+                        focus_check["start_probe"] = probe
+                        if probe["valid"]:
+                            focus_check.update(
+                                status="WARNUNG",
+                                text=(f"Fokusvergleich außerhalb des Einrichtungsbands ({100 * ratio:.0f} %). "
+                                      "Die Startprobe hat die Anzeige nachgeführt und gültig gelesen."),
+                            )
+                        else:
+                            focus_check["text"] += " Die Startprobe lieferte keinen gültigen Wert."
                     (out_dir / "focus-check.json").write_text(
                         json.dumps(focus_check, indent=2, ensure_ascii=False), encoding="utf-8")
-                    if focus_check.get("status") != "OK":
+                    if focus_check.get("status") != "OK" and not focus_check.get("start_probe", {}).get("valid"):
                         rejection = {
                             "schema": "live-start-rejection/1", "state": "start_abgelehnt",
                             "ended_at_utc": self._wall().astimezone(UTC).isoformat(),

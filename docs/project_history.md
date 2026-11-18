@@ -9,6 +9,28 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-18 — Lesbarkeit am Laufstart prüfen
+
+**Problem.** Das Schärfeverhältnis reagiert auf den Helligkeits- und
+Anzeigeinhalt. Bei der Kontrollaufnahme überlappten die Quoten von Bildern
+mit und ohne bestandene Nachführung stark. Drei Bedienerstarts waren am
+vorläufigen Gleichheitsband gescheitert.
+
+**Entscheidung.** Bei passenden Kamerareglern läuft die eingerichtete Quelle
+weiter. Für Abweichungen vom 95–105-%-Band oberhalb der bestehenden
+60-%-Grenze prüft eine separate, ausgabefreie Messpipeline frische Bilder.
+Eine regulär gültige Lesung erlaubt den Start mit Fokuswarnung. Die laufende
+Pipeline beginnt mit eigener Freigabehistorie.
+
+**Alternativen.** Ein breiteres Schärfeband wäre durch die bisherigen
+Aufnahmen zu kalibrieren und würde den tatsächlichen Rahmenfit weiterhin
+auslassen. Ein obligatorischer Neustart schreibt die Einstellungen erneut,
+obwohl Format und Regler bereits verifiziert sein können. Änderungen der
+Rahmenresiduen und das Entfernen eines einzelnen Bereichs bleiben offen,
+bis die Schutzprobe eine sichere Geometrie belegt.
+
+**Beleg.** [Validierung](VALIDATION.md#workbench-2026-11-18).
+
 ## 2026-11-14 — Installer P0a ohne Pfad- oder Identitätsmigration
 
 **Problem:** Die Softwareeinrichtung ließ aktive Systempakete aus, kopierte

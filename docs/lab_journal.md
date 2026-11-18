@@ -4866,3 +4866,65 @@ paralleler Last und wurde zwischenzeitlich mit `SIGSTOP` pausiert und mit
 `SIGCONT` fortgesetzt; keine belastbare Laufzeitmessung. Alle Shards haben
 30 vollständige, hashgeprüfte Ergebniszeilen und keine Fehlerzeilen; der
 Warteprozess meldete nach der Pause Exit 143 und ist kein Erfolgsnachweis.
+
+
+## 2026-11-18 — Fokusblockade und Rahmennachführung { #workbench-2026-11-18 }
+
+**Ziel.** Fokusmeldungen und fehlgeschlagene Lesungen der neuen Werkbank
+anhand der sieben Bediener-Sitzungen und einer Kameraprobe untersuchen.
+
+**Aufbau.** raspi06, StreamCam an `/dev/video0`, 1920 × 1080 YUYV, 30 fps
+angefordert. Werkbankdienst bei der Probe beendet. Zuerst Vorschau für
+25 s (Host-Monotonuhr, Unsicherheit unbekannt) ohne Setzen der Regler
+geöffnet. Die Regler standen nach dem Schließen des vorherigen Dienstes
+auf Automatik. Danach das bestätigte Profil `102121Z` in zwei frischen
+Streams geöffnet. Rücklesewerte: Fokus 42, Belichtung 300, Gain 128,
+Weißabgleich 5.904 K, Automatiken aus. Kamera jeweils wieder geschlossen.
+Keine Bedienereingabe und kein Zugriff auf serielle Referenz oder Ausgabe.
+Lokaler Schnappschuss: `var/diagnostics/workbench-20261118-streamprobe/`
+(`summary.json`, `fixed-controls.json`, Rohbilder, je Bild Aufnahmezeit mit
+`v4l2_monotonic`, Regler und Bereichsresiduen).
+
+**Beobachtung.** Die drei Startablehnungen folgen auf normierte Quoten
+0,793, 0,907 und 0,922. Die unnormierten Quoten sind 0,973, 0,947 und
+0,961. Die ROI-Helligkeitsnormierung beeinflusst die Ablehnung. Der
+schlechteste gestartete Lauf bestand die Schärfeprüfung. Die meisten
+unlesbaren Bilder scheiterten an der Rahmennachführung. Die Laufbilddiagnose
+war dort ausgeschaltet, der Einbruch lässt sich rückwirkend nur aus den
+Audits eingrenzen. Die neue Kontrollaufnahme reproduziert den
+Nachführverlust mit dem Profil bei fast identischen Ergebnissen vor und
+nach dem zweiten Öffnen. Die Displayanzeige war bei der Probe gegenüber der
+Einrichtung geändert. Im Rohbild liegt Bereich 14 an der unteren Fase der
+Anzeige. Seine Residuen erklären einen Teil der Ablehnungen.
+
+**Deutung.** Die normierte Schärfequote trennt akzeptierte und abgelehnte
+Nachführbilder in dieser Probe kaum. Die Regler- und Restartfolge allein
+erklärt den Einbruch nicht. Die physische Ursachenprüfung bleibt unter
+[OQ-74](open-questions.md#oq-74) und [OQ-78](open-questions.md#oq-78)
+offen. Zahlen in [VALIDATION.md](VALIDATION.md#workbench-2026-11-18).
+
+**Gegenprobe mit Startkorrektur.** Dasselbe Profil mit Bestätigung in den
+Diagnoseordner kopiert und am geöffneten Stream mit `LiveService.start_run`
+getestet. Referenz und Ausgabe waren ausgeschaltet. Das Audit unter
+`probe-laufstart/run-01/` belegt die Übernahme des Streams, die Fokuswarnung
+und die bestandene Startprobe. Der Lauf wurde nach der kurzen Stichprobe
+beendet, die Kamera geschlossen. Die Auswertung kam aus dem abgeschlossenen
+Audit. Beim ersten Konsolenausdruck wurde das optionale Feld `output` bei
+ausgeschalteter Ausgabe fälschlich vorausgesetzt.
+Bei der Wiederholung `probe-laufstart/run-02/` bestätigten alle
+zurückgelesenen Regler das Profil. Die Startprobe bestand erneut.
+Das Audit dokumentiert die deaktivierte Referenz explizit. Während der
+Wiederholung liefen parallel Softwaretests auf dem Pi.
+
+**Offline-Varianten der Rahmennachführung.** Gespeicherten Vorschlag mit dem
+tatsächlichen Lauftracker auf den 18 Rohbildern aus den zwei
+Reglerphasen wiederholt. Neue Vorschläge aus dem gemittelten zweiten
+Standbild, aus je einer Diagnosephase und aus beiden Varianten der
+Lagekonsistenz verglichen. In einer weiteren Gegenprobe wurden sowohl
+Referenz als auch Laufbild leicht vorgefiltert. Der quadratische 2D-Fit
+verwendete zusätzlich gemischte Ableitungen aus den vier diagonalen
+Nachbarn des Korrelationsmaximums. Die Stichprobe ist ereignisbezogen
+und erlaubt keine Aussage über die Trefferrate im Betrieb. Die
+Geometriesicherheit neuer Bereiche ist damit noch offen. Die
+Produktnachführung nutzt weiterhin den bestätigten Vorschlag und die
+bisherigen Prüfgrenzen.

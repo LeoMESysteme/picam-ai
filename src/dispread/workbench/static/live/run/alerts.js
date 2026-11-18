@@ -27,8 +27,8 @@ export const STORE_KEY = 'werkbank.anzeige-bewegt';
 export const LOST_TITLE = 'Rahmenbereiche verdeckt oder verschoben – Kamera und Sicht prüfen';
 export const STALL_TITLE = 'Streamstillstand: kein neues Kamerabild';
 export const MOVED_TITLE = 'Anzeige hat sich bewegt';
-// OQ-74: Fokuspruefung nach dem Kameraneustart am Laufstart (run.focus_check, Text vom Server).
-export const FOCUS_RUN_TITLE = 'Fokus nach Kamerastart';
+// OQ-74: Fokuspruefung am Laufstart (run.focus_check, Text vom Server).
+export const FOCUS_RUN_TITLE = 'Fokus beim Laufstart';
 const MOVED_ACTIONS = [
   {label: 'Weiter beobachten', value: 'weiter', escape: true, cls: 'ghost'},
   {label: 'Lauf stoppen', value: 'stopp', cls: 'danger', icon: 'stop'},
@@ -196,9 +196,14 @@ export function createAlerts(initial = {}) {
     else if (key) toast({level: 'err', title: out.error || 'Ausgabe fehlgeschlagen', sticky: true, key: 'ausgabe'});
   }
 
-  // Laufstart: Schaerfe nach dem Kameraneustart (Server). WARNUNG stehend, Neusetzen kurz; einmal je Lauf.
+  // Laufstart: Schaerfe laut Server. WARNUNG stehend, OK kurz; einmal je Lauf.
   function focusToast(status, runKey) {
-    const check = status.state === 'running' ? status.run?.focus_check : null;
+    if (status.state !== 'running') {
+      if (focusKey) closeToast('fokus-lauf');
+      focusKey = null;
+      return;
+    }
+    const check = status.run?.focus_check;
     if (!check?.text || !runKey) return;
     const key = `${runKey}|${check.status}|${check.text}`;
     if (key === focusKey) return;

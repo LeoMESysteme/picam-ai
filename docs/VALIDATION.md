@@ -22,6 +22,68 @@ breitere Gerätevielfalt bleibt offen ([OQ-04](open-questions.md#oq-04)).
 Synthetische Daten ergänzen, sie zählen nie zum realen Testset.
 Technische Kamerastream-Tests belegen keine Erkennungszuverlässigkeit.
 
+## Workbench am 18.11.2026 { #workbench-2026-11-18 }
+
+Audit aus `var/live/live-20261118T…Z/run-01`. Die Zeit bis zur
+Startentscheidung ist die Differenz der UTC-Host-Wanduhr im Bestätigungs-
+und im Laufaudit. Messunsicherheit unbekannt. Die Werte sind keine Latenzen.
+
+| Sitzung (UTC) | Entscheidung ab Bestätigung (s) | Fokusverhältnis | VALID / gesamt | UNREADABLE | Rahmenverlust `rahmen_unstimmig` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 093827Z | 1.181,62 | 0,793 | Start abgelehnt | — | — |
+| 100000Z | 7,73 | 0,996 | 1.363 / 3.686 | 1.666 | 1.611 |
+| 100347Z | 5,70 | 0,987 | 1.471 / 2.050 | 293 | 247 |
+| 100632Z | 11,28 | 0,999 | 846 / 1.135 | 159 | 119 |
+| 100926Z | 240,94 | 0,907 | Start abgelehnt | — | — |
+| 101505Z | 10,84 | 0,922 | Start abgelehnt | — | — |
+| 102121Z | 6,62 | 1,002 | 419 / 2.755 | 2.062 | 2.024 |
+
+Kontrollaufnahme am selben Pi mit Profil `102121Z`, festen zurückgelesenen
+Kamerareglern, unveränderter Nachführung und ohne Ausgabe. Phasen von je
+18 s nach Host-Monotonuhr, Unsicherheit unbekannt, keine Latenzmessung.
+
+| Phase | Nachführung OK / geprüft | `rahmen_unstimmig` | Normierte Schärfe p10 / Median / p90 |
+| --- | ---: | ---: | ---: |
+| Erster Stream | 279 / 499 | 220 | 1,142 / 1,177 / 1,207 |
+| Nach erneutem Öffnen | 275 / 497 | 222 | 1,141 / 1,177 / 1,199 |
+
+Im ersten Stream lagen die Schärfemediane akzeptierter und abgelehnter
+Bilder bei 1,176 und 1,180. Bereich 14 überschritt im zweiten Fit in
+83/220 bzw. 108/222 abgelehnten Bildern 0,65 px. Auch andere Bereiche
+überschritten die Grenze. Die Auswahl der gespeicherten PNGs ist nach
+Ereignis und Abtastposition erfolgt. Details und verbleibende Fragen im
+[Laborjournal](lab_journal.md#workbench-2026-11-18).
+
+Technischer Lauf mit dem neuen Startpfad, gleicher Profilstand, ohne
+Referenzaufnahme und Ausgabe. Fokusverhältnis 1,05249. Der Kamerastream
+lief weiter, und die Startprobe lieferte eine Übergangslesung und eine
+gültige Lesung. Anschließend 103 VALID, 53 TRANSITION, 84 UNREADABLE
+(davon 79 mit `rahmen_unstimmig`) unter 240 Laufdatensätzen.
+Die Laufspanne betrug 8,015 s nach Host-Wanduhr UTC. Die Unsicherheit ist
+unbekannt. Der Versuch prüfte den geänderten Startpfad. Die verbleibende
+Tracking-Ausfallrate ist Gegenstand von [OQ-78](open-questions.md#oq-78).
+
+Wiederholung mit protokollierter Regler-Rücklesung bei 1,05783.
+Die Startprobe bestand nach drei unlesbaren Bildern und einem Übergang.
+Im anschließenden Lauf 21 VALID, 18 TRANSITION und 25 UNREADABLE, alle
+25 mit Rahmenverlust. 4,054 s nach Host-Wanduhr UTC, Unsicherheit
+unbekannt. Parallele Softwaretests belasteten den Pi. Die Stichprobe
+bewertet daher weder Bildrate noch Laufzeit.
+
+Explorativ wurden 18 nach Ereignis ausgewählte Diagnosebilder erneut auf
+Rahmenkonsistenz geprüft. Der gespeicherte Satz bestand 7/18. Neue
+Bereichsvorschläge mit dem gespeicherten gemittelten Stabilitätsbild
+bestanden 14/18. Ein zweidimensionaler quadratischer Fit des
+Korrelationsmaximums mit dem gespeicherten Satz bestand 11/18. Für
+keine dieser Varianten liegt ein unabhängiger Geometrie- oder
+Langlaufnachweis vor.
+
+Die vorhandene Schutzprobe mit 288 synthetischen Störungen am Referenzbild
+ergab als größten angenommenen Eckfehler 2,863 px beim gespeicherten Satz
+und 2,268 px beim Satz aus dem zweiten Mittelbild. Mit jeweils einem
+weiteren ausgefallenen Bereich lagen die Maxima bei 2,939 bzw. 2,268 px.
+Beide überschreiten die Grenze dieser Schutzprobe von 1 px.
+
 ## Raster B1 und A1+B1 — Offline-Gegenprobe 2026-11-13
 
 | Bestand | Baseline | B1 | A1+B1 |

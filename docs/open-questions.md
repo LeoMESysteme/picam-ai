@@ -71,6 +71,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-74](#oq-74) | — | offen | Warum wird das Bild nach erfolgreich geprüfter Fokussuche wieder unscharf? |
 | [OQ-75](#oq-75) | — | offen | Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus? |
 | [OQ-77](#oq-77) | — | offen | Was verursacht die drei UART-Timeouts beim Anmelden der Windows-Brücke? |
+| [OQ-78](#oq-78) | — | offen | Warum bricht die Rahmennachführung im Lauf vom 18.11. ein? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3733,6 +3734,15 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   mit 1,418 hatte keine Zweitversuche; Schärfe allein beweist keinen Maßstab.
   Details und Offline-Auswertung: [Nachführung](quellen/nachfuehrung-recherche-2026-11-13/README.md).
 
+* **Nachtrag 2026-11-18:** Das Band sperrte 3 von 7 Bedienerstarts. In der
+  Kontrollaufnahme bei festen Reglern war die Quote bei bestandener und
+  gescheiterter Nachführung ähnlich. Die Werkbank nutzt den bestätigten
+  Kamerastream weiter und prüft Abweichungen mit frischen Bildern und der
+  regulären Lesefreigabe. Die optische Ursache möglicher Fokusrückfälle
+  bleibt offen. [Validierung](VALIDATION.md#workbench-2026-11-18).
+
+---
+
 <span id="oq-75"></span>
 
 ## OQ-75 — Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus?
@@ -3804,3 +3814,28 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md).
 * **Antwort landet in:** UART-Transport/Listener, Verbindungsdiagnose,
   [Validierung](VALIDATION.md) und [Laborjournal](lab_journal.md).
+
+---
+
+<span id="oq-78"></span>
+
+## OQ-78 — Warum bricht die Rahmennachführung im Lauf vom 18.11. ein?
+
+* **Status:** offen · **Zuständig:** ME-Systeme
+* **Befund (2026-11-18):** In `live-20261118T102121Z/run-01` bestanden
+  Einrichtung und Fokusprüfung. Im Lauf gingen 2.024 von 2.755 Auditbildern mit
+  `rahmen_unstimmig` verloren. Bereich 14 fiel im Residuenfenster auf. Die
+  vorhandene Schutzprobe verbot seine Stilllegung. Die grob geschätzten
+  Maßstäbe lagen im Median bei 0,999819.
+* **Kontrollaufnahme:** Der ursprüngliche Bereichssatz bestand 7/18
+  ausgewählte Diagnosebilder, ein neuer Satz aus dem zweiten
+  Einrichtungsbild 14/18. Der neue Satz überschritt die erlaubte
+  Abweichung der Schutzprobe mit 2,268 px Eckfehler. Die Originale und
+  `region-variants.json` liegen in
+  `var/diagnostics/workbench-20261118-streamprobe/`.
+* **Offen:** Welche Struktur im Bereich 14 oder in anderen Bereichen die
+  Abweichungen verursacht. Laufbilddiagnose war für diesen Lauf ausgeschaltet.
+  Die Startbilder zeigen nur den Zustand vor dem Einbruch.
+* **Zielort:** [Validierung](VALIDATION.md#workbench-2026-11-18) und
+  [Laborjournal](lab_journal.md#workbench-2026-11-18). Vergleichbare
+  akzeptierte und abgelehnte Rohbilder mit Bereichslagen aufnehmen.

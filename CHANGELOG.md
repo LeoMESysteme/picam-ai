@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-18: **Laufstart nach bestätigter Einrichtung.** Ein gesunder
+  Kamerastream mit passenden zurückgelesenen Reglern bleibt offen. Außerhalb
+  des vorläufigen Fokusbands prüft die Werkbank frische Bilder mit der
+  normalen Nachführung und Lesefreigabe. Bei gültiger Startprobe erscheint
+  eine Fokuswarnung, und der Lauf kann beginnen. Fehlende Fokusreferenzen,
+  Verhältnisse unter 60 % nach Neusetzen und fehlgeschlagene Startproben
+  sperren den Start. Der Lauf übernimmt keine Werte aus der Probe.
+
 * 2026-11-14: **Installer P0a, Aufgabe 1 (L1).** Die kommentierte Paketliste
   `packaging/apt-packages.txt` deckt die aktiven Drittmodule und UVC-Werkzeuge ab.
   Der Installer überspringt vorhandene Pakete/Editable-Installation, behält

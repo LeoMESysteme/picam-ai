@@ -3185,6 +3185,8 @@ def test_cancel_real_setup_worker_within_one_slice(tmp_path, monkeypatch, checkp
 
 @pytest.mark.parametrize('output', [None, {'transport': 'serial', 'port': '/fake/output', 'acknowledge_unaccepted': True}])
 def test_bridge_reserves_off_and_serial_before_camera_and_releases_on_stop(tmp_path, monkeypatch, output):
+    from test_live_session import _CAMERA
+
     from dispread.bridge.hub import BridgeHub
     hub = BridgeHub('pi', tmp_path / 'audit')
     class Session(MarkerSession):
@@ -3193,7 +3195,7 @@ def test_bridge_reserves_off_and_serial_before_camera_and_releases_on_stop(tmp_p
     service = _confirmed_service(tmp_path, monkeypatch, Session)
     monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
     service._bridge_hub = hub
-    service._profile_camera = object()
+    service._profile_camera = _CAMERA
     seen = []
     def restart(*args, **kwargs):
         seen.append(hub.status()['run_id'])
@@ -3213,6 +3215,8 @@ def test_bridge_reserves_off_and_serial_before_camera_and_releases_on_stop(tmp_p
 
 @pytest.mark.parametrize('stage', ['storage', 'camera', 'constructor', 'start', 'thread'])
 def test_bridge_startup_failure_releases_reservation(tmp_path, monkeypatch, stage):
+    from test_live_session import _CAMERA
+
     from dispread.bridge.hub import BridgeHub
     hub = BridgeHub('pi', tmp_path / 'audit')
     service = _confirmed_service(tmp_path, monkeypatch)
@@ -3223,7 +3227,7 @@ def test_bridge_startup_failure_releases_reservation(tmp_path, monkeypatch, stag
     if stage == 'storage':
         monkeypatch.setattr(service, '_require_storage', fail)
     elif stage == 'camera':
-        service._profile_camera = object()
+        service._profile_camera = _CAMERA
         monkeypatch.setattr(service._owner, 'restart', fail)
     elif stage == 'constructor':
         monkeypatch.setattr('dispread.live.service.LiveSession', fail)
@@ -3582,6 +3586,106 @@ def test_run_start_checks_focus_after_restart_and_records_it(tmp_path, monkeypat
     finally:
         service.stop_run()
 
+
+
+@pytest.mark.parametrize(("ratio", "same_controls", "image_kind", "starts"), [
+    (0.91, True, "readable", True),
+    (1.17, False, "readable", True),
+    (0.91, True, "blank", False),
+    (0.91, True, "broken", False),
+    (0.55, True, "readable", False),
+])
+def test_run_start_with_focus_deviation_requires_a_fresh_valid_reading(
+    tmp_path, monkeypatch, ratio, same_controls, image_kind, starts,
+):
+    import json
+    from functools import partial
+
+    import numpy as np
+    from test_live_session import _CAMERA, _files, embed, synthetic_reader
+    from test_live_session import FakeOwner as FrameOwner
+
+    from dispread.live.session import LiveSession, build_live_pipeline
+
+    class Owner(FrameOwner):
+        def __init__(self):
+            good = embed("+ 1.2345 ")
+            image = {"readable": good, "blank": np.zeros_like(good), "broken": None}[image_kind]
+            super().__init__([image] * 8)
+            self.restarts = 0
+            self.delivered = None
+            self.first_wait_times_out = same_controls
+
+        def latest(self):
+            return self.delivered
+
+        def wait_newer(self, after, timeout):
+            if self.first_wait_times_out:
+                self.first_wait_times_out = False
+                return None  # Quelle laeuft trotz einmaliger Lieferpause weiter.
+            new_frame = super().wait_newer(after, timeout)
+            if new_frame is not None:
+                self.delivered = new_frame
+            return new_frame
+
+        def status(self):
+            return {**super().status(), "source": {
+                "device": "/dev/fake", "camera_model": _CAMERA.model, "size": _CAMERA.size,
+                "usb_id": _CAMERA.usb_id, "fourcc": _CAMERA.fourcc, "fps": _CAMERA.fps,
+            }}
+
+        def control_target(self):
+            return self
+
+        def get_controls(self, names):
+            return {**dict(_CAMERA.ordered_controls()), "focus_absolute": 48 if same_controls else 42}
+
+        def restart(self, factory=None, reason=None):
+            self.restarts += 1
+
+    def reader_factory(*args, **kwargs):
+        return synthetic_reader()
+
+    monkeypatch.setattr("dispread.live.service.build_live_pipeline",
+                        partial(build_live_pipeline, reader_factory=reader_factory))
+    monkeypatch.setattr("dispread.live.service.LiveSession", partial(LiveSession, reader_factory=reader_factory))
+    path, config = _files(tmp_path)
+    owner = Owner()
+    service = LiveService(owner, tmp_path, config=config)
+    service._state, service._profile_path, service._profile_camera = "confirmed", path, _CAMERA
+    service._focus_reference = {"score": 100}
+    monkeypatch.setattr("dispread.live.setup.check_focus_at_run_start", lambda *_args, **_kwargs: ({
+        "status": "FEHLER", "text": "Fokus weicht ab", "threshold_ratio": 0.6,
+        "after_restart": {"ratio": ratio}, "reapproach": None,
+    }, {}))
+    audit = tmp_path / "run-01" / "focus-check.json"
+
+    if starts:
+        service.start_run(reference=False)
+        try:
+            check = json.loads(audit.read_text())
+            assert check["status"] == "WARNUNG"
+            assert check["start_probe"]["valid"] is True
+            assert check["camera_transition"] == ("fortgesetzt" if same_controls else "neu_geoeffnet")
+            assert owner.restarts == int(not same_controls)
+            assert check.get("controls_readback") == (dict(_CAMERA.ordered_controls()) if same_controls else None)
+            records = audit.with_name("records.jsonl")
+            deadline = time.monotonic() + 2
+            while records.stat().st_size == 0 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert json.loads(records.read_text().splitlines()[0])["frame_sequence"] == 3
+        finally:
+            service.stop_run()
+    else:
+        with pytest.raises(LiveError, match="Fokus weicht ab"):
+            service.start_run(reference=False)
+        check = json.loads(audit.read_text())
+        assert check["status"] == "FEHLER"
+        assert (tmp_path / "run-01" / "records.jsonl").exists() is False
+        assert ("start_probe" in check) == (ratio >= 0.6)
+        if image_kind == "broken":
+            assert check["start_probe"]["error"]
+            assert service.status()["last_start_rejection"]["focus_check"] == check
 
 
 def test_confirm_keeps_focus_reference_for_run_start(tmp_path, proposal):
