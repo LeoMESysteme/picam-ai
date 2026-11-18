@@ -5,6 +5,19 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-18: **Einrichtung prüft die Nachführung wie im Lauf.** Am 18.11.
+  bestanden alle Einrichtungen, die Läufe verloren aber bis zu 73 % der Bilder
+  an `rahmen_unstimmig`. Ursache war wenig Licht: Gain am Anschlag 128
+  (Automatik 210–255, davor nie über 61), die Struktur der Rahmenbereiche ein
+  Drittel der Läufe vom 13.11. Die Bereichsprobe prüfte je Bereich Treffer und
+  Lage, aber nicht den starren Konsens mit den Residuengrenzen des Laufs. Jetzt
+  läuft der Lauf-Tracker in der Einrichtung über die acht Einzelbilder:
+  7–8 bestanden OK, 5–6 WARNUNG, höchstens 4 FEHLER, jeweils mit Hinweis auf
+  Licht und Ruhe. Grenzen und Tracker sind unverändert, nichts wird gelockert.
+  Zusätzlich warnt die Belichtung, wenn der Gain am Anschlag steht. An den
+  Laufaudits nachgestellt: gute Läufe vom 13.11. bestehen 89–100 % der
+  8er-Fenster, `102121Z` vom 18.11. nur 13 %
+  ([OQ-78](docs/open-questions.md#oq-78)).
 * 2026-11-18: **Laufstart nach bestätigter Einrichtung.** Ein gesunder
   Kamerastream mit passenden zurückgelesenen Reglern bleibt offen. Außerhalb
   des vorläufigen Fokusbands prüft die Werkbank frische Bilder mit der

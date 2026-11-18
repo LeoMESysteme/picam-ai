@@ -84,6 +84,24 @@ und 2,268 px beim Satz aus dem zweiten Mittelbild. Mit jeweils einem
 weiteren ausgefallenen Bereich lagen die Maxima bei 2,939 bzw. 2,268 px.
 Beide überschreiten die Grenze dieser Schutzprobe von 1 px.
 
+**Licht als Hauptursache (Nachtrag Claude).** Gain aus `camera-settings.json`,
+Patch-Streuung der Rahmenbereiche (15 × 15 px, Graustufen) im Standbild
+`still.png`, Laufverlust aus `records.jsonl`. 8er-Fenster: Anteil
+aufeinanderfolgender Achtergruppen im Audit mit höchstens einem
+Trackingverlust, so wie die neue Einzelbildprobe der Einrichtung urteilt.
+Audit-Datensätze sind keine lückenlosen Kamerabilder; die Fenster sind eine
+Näherung.
+
+| Sitzungen | Gain (Automatik → gewählt) | Patch-Streuung Median | Verlust `rahmen_unstimmig` | 8er-Fenster ≥ 7/8 |
+| --- | --- | ---: | ---: | ---: |
+| 13.11., 12 Läufe | 3–17 → 0–16 | 6,3–12,1 | 0–4,6 % (ein Lauf 30,5 %) | 89–100 % (42,7 %) |
+| 11.11., 6 Läufe | 15–61 → 15–61 | 7,9–11,7 | 0–24,2 % | 64–100 % |
+| 18.11., 4 Läufe | 128–255 → 128 | 2,4–3,2 | 10,5–73,5 % | 13–80 % |
+
+Raster A1/B1 gegen den Stand vor dem 13.11. abends auf allen sieben
+Standbildern vom 18.11.: identisches Viereck (0,000 px). `frame_tracking.py`
+ist zwischen den Dienstständen `5a31b41` und `95d0540` unverändert.
+
 ## Raster B1 und A1+B1 — Offline-Gegenprobe 2026-11-13
 
 | Bestand | Baseline | B1 | A1+B1 |

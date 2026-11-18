@@ -532,3 +532,76 @@ def test_displayfehler_receives_known_blank_setup_cells(tmp_path, monkeypatch):
 
     monkeypatch.setattr(live_setup, 'display_defect_check', check)
     _propose(tmp_path, stability=True, cell_text='+ 1.23?5 ')
+
+
+@pytest.mark.parametrize(("passed", "status"), [(8, "OK"), (7, "OK"), (6, "WARNUNG"), (5, "WARNUNG"), (4, "FEHLER"), (0, "FEHLER")])
+def test_setup_runs_live_tracker_on_single_frames(tmp_path, monkeypatch, passed, status):
+    """18.11.: Einrichtung bestand, Lauf verlor 73 % an rahmen_unstimmig. Der Lauf-Tracker
+    muss schon an den acht Einzelbildern der Einrichtung zeigen, ob er besteht."""
+    calls = []
+
+    class Tracker:
+        def __init__(self, reference, quad, proposal, config):
+            pass
+
+        def update(self, image):
+            calls.append(image)
+            ok = len(calls) <= passed
+            return SimpleNamespace(quad=[[0, 0]] * 4 if ok else None, reason=None if ok else "rahmen_unstimmig")
+
+    monkeypatch.setattr(live_setup, "FrameTracker", Tracker)
+    _, _, proposal = _propose(tmp_path)
+    check = proposal["setup_checks"]["checks"]["nachfuehrung"]
+    trial = check["metrics"]["einzelbildprobe"]
+    assert len(calls) == 8
+    assert trial == {"frames": 8, "ok": passed, "required_ok": 7, "fehler_bis": 4,
+                     "reasons": {} if passed == 8 else {"rahmen_unstimmig": 8 - passed}}
+    assert check["status"] == status
+    assert proposal["setup_checks"]["overall"] == status
+    if status != "OK":
+        assert f"{passed} von 8" in check["reason"]
+        assert "Licht" in check["reason"]
+
+
+def test_setup_tracking_trial_also_runs_after_manual_region_edits(tmp_path, monkeypatch):
+    _, _, proposal = _propose(tmp_path)
+    assert proposal["setup_checks"]["checks"]["nachfuehrung"]["metrics"]["einzelbildprobe"]["ok"] == 8
+
+    class Failing:
+        def __init__(self, *args):
+            pass
+
+        def update(self, image):
+            return SimpleNamespace(quad=None, reason="rahmen_unstimmig")
+
+    monkeypatch.setattr(live_setup, "FrameTracker", Failing)
+    edited = _edit_regions(proposal, add=[], remove=[0], out_dir=tmp_path, at_utc='2026-11-18T12:00:00+00:00')
+    check = edited["setup_checks"]["checks"]["nachfuehrung"]
+    assert check["status"] == "FEHLER"
+    assert check["metrics"]["einzelbildprobe"]["ok"] == 0
+    assert edited["setup_checks"]["overall"] == "FEHLER"
+
+
+@pytest.mark.parametrize(("selected_gain", "initial_gain", "warns"), [(128, 210, True), (128, 128, True), (46, 46, False)])
+def test_exposure_at_gain_limit_warns_about_weak_light(tmp_path, selected_gain, initial_gain, warns):
+    """18.11.: alle sieben Einrichtungen mit Gain 128 (Automatik 210-255), davor nie ueber 61."""
+    image, quad = reference_scene()
+    frame = tmp_path / "still.png"
+    cv2.imwrite(str(frame), image)
+    controls = {"exposure_time_absolute": 300, "gain": selected_gain}
+    adjust = {"achieved": True, "final_level": 141.0, "initial_controls": {**controls, "gain": initial_gain},
+              "selected_controls": controls, "gain_range": [0, 128], "rounds": []}
+    checks = SimpleNamespace(
+        overall="OK", checks={"kanten": SimpleNamespace(cells=())},
+        to_dict=lambda: {"overall": "OK", "checks": {"rasterversatz": {"status": "OK"}}},
+    )
+    proposal = live_setup.propose_with_fit(
+        image, fit=SimpleNamespace(quad=quad, assigned_points=(), rejected_points=()), frame_path=frame,
+        camera_settings=replace(_CAMERA, size=image.shape[1::-1]), device_id="gsv", session_id="session",
+        out_dir=tmp_path, offset_check=SimpleNamespace(status="OK"), final_checks=checks, exposure_adjust=adjust,
+    )
+    check = proposal["setup_checks"]["checks"]["belichtung"]
+    assert check["status"] == ("WARNUNG" if warns else "OK")
+    assert proposal["setup_checks"]["overall"] == ("WARNUNG" if warns else "OK")
+    if warns:
+        assert "Gain am Anschlag" in check["reason"] and str(initial_gain) in check["reason"]

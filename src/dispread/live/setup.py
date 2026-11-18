@@ -32,7 +32,13 @@ from dispread.focus_sweep import DEFAULT_FOCUS_START, FocusMeasurements, climb_f
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.lattice_offsets import refine_quad
-from dispread.live.frame_tracking import FrameTrackingConfig, RegionProposal, proposal_from_regions, propose_regions
+from dispread.live.frame_tracking import (
+    FrameTracker,
+    FrameTrackingConfig,
+    RegionProposal,
+    proposal_from_regions,
+    propose_regions,
+)
 from dispread.live.texts import REASONS
 from dispread.rectify import rectify
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
@@ -1082,6 +1088,17 @@ def propose_with_fit(
                 'Kamera näher stellen oder helle Umgebung abdecken und neu einrichten'))
             if checks_dict['overall'] == 'OK':
                 checks_dict['overall'] = 'WARNUNG'
+        elif _gain_at_limit(exposure_adjust):
+            # 18.11.: alle sieben Einrichtungen mit Gain 128 (Automatik 210-255), Struktur
+            # der Rahmenbereiche ein Drittel, Laeufe bis 73 % rahmen_unstimmig. Davor nie ueber 61.
+            initial = (exposure_adjust.get('initial_controls') or {}).get('gain')
+            exposure_check['status'] = 'WARNUNG'
+            exposure_check['reason'] = (
+                f"Wenig Licht: Gain am Anschlag ({EXPOSURE_GAIN_RANGE[1]}, Automatik: {initial}). "
+                "Der Gehäuserahmen ist zu dunkel für eine sichere Nachführung - Raumlicht einschalten "
+                "oder Gerät beleuchten, dann neu einrichten")
+            if checks_dict['overall'] == 'OK':
+                checks_dict['overall'] = 'WARNUNG'
     if focus_check is not None:
         checks_dict["checks"] = {"fokus": deepcopy(focus_check), **checks_dict["checks"]}
         if focus_check["status"] == "WARNUNG" and checks_dict["overall"] == "OK":
@@ -1109,8 +1126,9 @@ def propose_with_fit(
         # Welche Bereiche das sind, steht in den Kennzahlen, damit eine
         # manuelle Korrektur die WARNUNG nicht verliert.
         _bind_fallback_regions(tracking_proposal, _fallback_centres(tracking_proposal.metrics, bound=False))
-        checks_dict["checks"]["nachfuehrung"] = _tracking_check(tracking_proposal)
-        if not tracking_proposal.ok:
+        trial = _tracking_trial(image, quad, tracking_proposal, stability_images)
+        checks_dict["checks"]["nachfuehrung"] = _tracking_check(tracking_proposal, trial)
+        if checks_dict["checks"]["nachfuehrung"]["status"] == "FEHLER":
             checks_dict["overall"] = "FEHLER"
         elif checks_dict["checks"]["nachfuehrung"]["status"] == "WARNUNG" and checks_dict["overall"] == "OK":
             checks_dict["overall"] = "WARNUNG"
@@ -1202,15 +1220,58 @@ def _bind_fallback_regions(tracking: Any, fallback: list[list[int]]) -> None:
     ]
 
 
-def _tracking_check(tracking: Any) -> dict:
-    """nachfuehrung: FEHLER vor WARNUNG (Ersatz ohne Lagekonsistenz im Satz) vor OK."""
+TRIAL_REQUIRED_OK = 7  # wie die 7-von-8-Probe je Bereich
+TRIAL_FEHLER_BIS = 4  # hoechstens 4 von 8 bestanden: Lauf waere ueberwiegend unlesbar
+
+
+def _gain_at_limit(exposure_adjust: dict[str, Any]) -> bool:
+    selected = (exposure_adjust.get("selected_controls") or {}).get("gain")
+    return selected is not None and selected >= EXPOSURE_GAIN_RANGE[1]
+
+
+def _tracking_trial(image: np.ndarray, quad: Any, tracking: Any,
+                    stability_images: tuple[np.ndarray, ...]) -> dict | None:
+    """Lauf-Tracker an den Einzelbildern der Einrichtung (18.11.).
+
+    Die Bereichsprobe prueft je Bereich Treffer und Lage, aber nicht den starren
+    Konsens aller Bereiche mit den Residuengrenzen des Laufs. Rauschen bei wenig
+    Licht oder ein systematisch versetzter Bereich fallen erst dort auf. Gleiche
+    Referenz, gleiche Bereiche, gleiche Grenzen wie im Lauf; nichts wird gelockert.
+    Die Bereiche wurden an denselben Bildern ausgewaehlt: die Probe ist eher zu
+    guenstig, eine Ablehnung also belastbar.
+    """
+    if not tracking.ok or len(stability_images) < 8:
+        return None
+    tracker = FrameTracker(image, quad, tracking, FrameTrackingConfig.from_dict(tracking.config))
+    reasons: dict[str, int] = {}
+    passed = 0
+    for frame in stability_images:
+        result = tracker.update(frame)
+        if result.quad is not None and result.reason is None:
+            passed += 1
+        else:
+            reasons[result.reason or "ohne_grund"] = reasons.get(result.reason or "ohne_grund", 0) + 1
+    return {"frames": len(stability_images), "ok": passed, "required_ok": TRIAL_REQUIRED_OK,
+            "fehler_bis": TRIAL_FEHLER_BIS, "reasons": reasons}
+
+
+def _tracking_check(tracking: Any, trial: dict | None = None) -> dict:
+    """nachfuehrung: FEHLER vor WARNUNG (Ersatz ohne Lagekonsistenz, Einzelbildprobe) vor OK."""
     unchecked = bool(tracking.metrics.get("stability_fallback_remaining"))
-    return {
-        "status": "FEHLER" if not tracking.ok else "WARNUNG" if unchecked else "OK",
-        "reason": ("; ".join(REASONS[reason] for reason in tracking.reasons)
-                   or (REASONS["rahmenbereiche_ersatz_ohne_lagekonsistenz"] if unchecked else None)),
-        "metrics": tracking.metrics,
-    }
+    status = "FEHLER" if not tracking.ok else "WARNUNG" if unchecked else "OK"
+    reasons = ([REASONS[reason] for reason in tracking.reasons]
+               or ([REASONS["rahmenbereiche_ersatz_ohne_lagekonsistenz"]] if unchecked else []))
+    metrics = tracking.metrics
+    if trial is not None:
+        metrics = {**metrics, "einzelbildprobe": trial}
+        if trial["ok"] < trial["required_ok"]:
+            status = "FEHLER" if trial["ok"] <= trial["fehler_bis"] else max(
+                status, "WARNUNG", key={"OK": 0, "WARNUNG": 1, "FEHLER": 2}.__getitem__)
+            reasons.append(
+                f"Nachführung bestand nur {trial['ok']} von {trial['frames']} Einzelbildern "
+                f"(nötig {trial['required_ok']}) - Rahmen zu dunkel oder unruhig: Licht auf Gerät "
+                "und Rahmen, Kamera ruhig stellen, dann neu einrichten")
+    return {"status": status, "reason": "; ".join(reasons) or None, "metrics": metrics}
 
 
 def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_utc: str,
@@ -1279,7 +1340,8 @@ def edit_regions(proposal: dict, *, add: list, remove: list, out_dir: Path, at_u
                  for point, result in zip(add, results[len(kept):], strict=True))
     new_block["edits"] = block.get("edits", []) + edits
     checks = updated["setup_checks"]["checks"]
-    checks["nachfuehrung"] = _tracking_check(tracking)
+    checks["nachfuehrung"] = _tracking_check(
+        tracking, _tracking_trial(image, updated["quad"], tracking, stability_images))
     updated["setup_checks"]["overall"] = max(
         (check["status"] for check in checks.values()), key={"OK": 0, "WARNUNG": 1, "FEHLER": 2}.__getitem__,
     )

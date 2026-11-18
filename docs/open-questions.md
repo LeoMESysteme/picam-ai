@@ -3839,3 +3839,19 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Zielort:** [Validierung](VALIDATION.md#workbench-2026-11-18) und
   [Laborjournal](lab_journal.md#workbench-2026-11-18). Vergleichbare
   akzeptierte und abgelehnte Rohbilder mit Bereichslagen aufnehmen.
+* **Nachtrag 2026-11-18 (Claude): Hauptursache Licht.** Alle sieben
+  Einrichtungen vom 18.11. stehen auf Gain 128; die Automatik wollte 210–255.
+  Am 11. und 13.11. lag der Gain bei 0–61. Die Patch-Streuung der
+  Rahmenbereiche im Standbild betrug 2,4–3,2 Grauwerte statt 6–12, das
+  Einzelbildrauschen etwa 1,6. Der Rahmen war im Bild fast schwarz.
+  Raster (A1/B1 alt gegen neu: Quad 0,000 px Unterschied auf allen sieben
+  Standbildern) und Nachführung sind seit 13.11. unverändert. In der
+  Kontrollaufnahme liegt Bereich 14 im Median 0,52 px neben dem Konsens
+  (Grenze 0,65), Bereich 12 bei 0,41. Das Rauschen schiebt sie und andere
+  Bereiche über die Grenze. **Folge im Code:** Die Einrichtung führt den
+  Lauf-Tracker über die acht Einzelbilder (7–8 OK, 5–6 WARNUNG, ≤ 4 FEHLER),
+  und die Belichtung warnt bei Gain am Anschlag. Nachgestellt an den
+  Laufaudits mit 8er-Fenstern: 13.11. 89–100 % bestanden, `102121Z` 13 %,
+  `100000Z` 25 %. Offen bleibt, warum auch bei gutem Licht einzelne Läufe
+  (11.11. `103604Z`, 13.11. `111848Z`) 24–31 % verloren; die Verluste
+  kommen dort in Schüben.
