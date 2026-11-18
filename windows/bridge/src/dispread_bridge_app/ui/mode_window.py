@@ -1,17 +1,21 @@
 """Moduswahl-Fenster (UX2): drei Wege als Karten untereinander, Radio-Semantik, „Wechseln“ im Fuß."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from dataclasses import replace
+
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QLabel, QRadioButton, QVBoxLayout, QWidget
 
 from . import texts, theme
 from .port import ModeInfo
 from .tool_windows import ToolWindow, label
-from .widgets import InfoBar, ProgressRing, StateIcon, button, repolish
+from .widgets import InfoBar, InfoIcon, ProgressRing, StateIcon, button, repolish
 
 
 class ModeCard(QFrame):
-    """Karte eines Wegs. Klick irgendwo auf die Karte wählt sie (wie ihr Auswahlknopf)."""
+    """Karte eines Wegs: Name, ein Satz, Status. Die ausführliche Erklärung (mit Baudraten) steht im ⓘ.
+    Klick irgendwo auf die Karte wählt sie (wie ihr Auswahlknopf)."""
+    disconnect_clicked = Signal()
 
     def __init__(self, info: ModeInfo, ctx, parent=None):
         super().__init__(parent)
@@ -20,7 +24,8 @@ class ModeCard(QFrame):
         self.setProperty('card', True)
         self.setProperty('selected', False)
         self.setProperty('dimmed', not info.available)
-        name, text = texts.mode_text(info.mode, ctx)
+        name, detail = texts.mode_text(info.mode, ctx)
+        text = texts.MODE_LINE[info.mode]
         lay = QHBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 12)
         lay.setSpacing(10)
@@ -31,7 +36,7 @@ class ModeCard(QFrame):
         if not info.available and info.reason:
             acc += f'. Nicht wählbar: {info.reason}'
         self.radio.setAccessibleName(acc)
-        self.radio.setAccessibleDescription(text)
+        self.radio.setAccessibleDescription(f'{text} {detail}')
         lay.addWidget(self.radio, 0, Qt.AlignmentFlag.AlignTop)
         icon = QLabel()
         icon.setFixedSize(20, 20)
@@ -43,6 +48,8 @@ class ModeCard(QFrame):
         head.setSpacing(8)
         self.name_label = label(name, 'body_strong')
         head.addWidget(self.name_label, 1)
+        self.info_icon = InfoIcon(detail, f'Erklärung {name}')
+        head.addWidget(self.info_icon, 0, Qt.AlignmentFlag.AlignTop)
         if info.active:
             badge = QLabel(texts.MODE_ACTIVE)
             badge.setObjectName('badge_active')
@@ -65,12 +72,17 @@ class ModeCard(QFrame):
             rr.addWidget(lock, 0, Qt.AlignmentFlag.AlignTop)
             self.reason_label = label(info.reason, 'caption')
             rr.addWidget(self.reason_label, 1)
+            self.disconnect_button = button(texts.MODE_DISCONNECT, name=f'mode_disconnect_{info.mode}')
+            self.disconnect_button.clicked.connect(self.disconnect_clicked)
+            rr.addWidget(self.disconnect_button, 0, Qt.AlignmentFlag.AlignTop)
             col.addLayout(rr)
         else:
             self.reason_label = None
+            self.disconnect_button = None
         lay.addLayout(col, 1)
         for w in self.findChildren(QLabel):
-            w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            if w is not self.info_icon:                # das ⓘ bleibt für den Mauszeiger erreichbar
+                w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def set_selected(self, on: bool) -> None:
         if self.property('selected') != on:
@@ -90,6 +102,7 @@ class ModesWindow(ToolWindow):
     """Drei Karten aus ``controller.modes()``; „Wechseln“ ruft ``select_mode`` im Pool."""
     switch_requested = Signal(str)
     change_setup = Signal()
+    disconnect_requested = Signal()
 
     def __init__(self, owner: QWidget):
         super().__init__('modes', f'{texts.MODES_TITLE} – {texts.APP_TITLE}', owner)
@@ -103,6 +116,7 @@ class ModesWindow(ToolWindow):
         self.cancel_button = button(texts.MODE_CANCEL, name='modes_cancel')
         self.switch_button = button(texts.MODE_SWITCH, True, name='modes_switch')
         self.cancel_button.clicked.connect(self.close)
+        self.switch_button.setDefault(True)             # Enter in einer Karte wechselt (Dialog-Standardknopf)
         self.switch_button.clicked.connect(self._switch)
         self.ring = ProgressRing(16)
         self.ring.hide()
@@ -119,6 +133,19 @@ class ModesWindow(ToolWindow):
         self.error = error
         self._render()
 
+    def transmitting(self) -> bool:
+        """Nur echte Übertragung sperrt den Wechsel; eine bloße Verbindung wird nach Bestätigung getrennt."""
+        return texts.is_transmitting(self.ctx) if self.ctx is not None else False
+
+    def effective_modes(self) -> tuple[ModeInfo, ...]:
+        """Der Controller sperrt bei jedem aktiven Worker; die Oberfläche sperrt nur bei Übertragung."""
+        if self.modes is None:
+            return ()
+        if self.transmitting():
+            return tuple(m if m.active else replace(m, available=False, reason=m.reason or texts.MODE_LOCKED_REASON)
+                         for m in self.modes)
+        return tuple(replace(m, available=True, reason='') for m in self.modes)
+
     def set_busy(self, on: bool) -> None:
         self.busy = on
         self.ring.setVisible(on)
@@ -126,14 +153,14 @@ class ModesWindow(ToolWindow):
 
     def _render(self) -> None:
         ctx = self.ctx
-        key = (self.modes, self.error, None if ctx is None else (ctx.uart_baud, ctx.gsv_baud))
+        key = (self.modes, self.error, self.transmitting(),
+               None if ctx is None else (ctx.uart_baud, ctx.gsv_baud))
         self.set_content(key, self._build)
         self._update_foot()
 
     def _build(self, body) -> None:
         self.cards = {}
         body.addWidget(label(texts.MODES_TITLE, 'title'))
-        body.addWidget(label(texts.MODES_LEAD, 'caption'))
         if self.error:
             bar = InfoBar()
             title, text = texts.explain_code(self.error)
@@ -147,19 +174,18 @@ class ModesWindow(ToolWindow):
             row.addWidget(label(texts.MODE_LOADING, 'caption'), 1)
             body.addLayout(row)
             return
-        if any(not m.available for m in self.modes):
-            bar = InfoBar()
-            bar.set_bar(texts.ActionBar('info', texts.MODE_LOCKED_TITLE, texts.MODE_LOCKED_TEXT))
-            bar.setObjectName('modes_locked')
-            body.addWidget(bar)
+        modes = self.effective_modes()
         self.group = QButtonGroup(self.content)
         self.group.setExclusive(True)
-        active = next((m.mode for m in self.modes if m.active), None)
-        if self.selected not in {m.mode for m in self.modes if m.available}:
-            self.selected = active if active in {m.mode for m in self.modes if m.available} else None
-        for m in self.modes:
+        active = next((m.mode for m in modes if m.active), None)
+        if self.selected not in {m.mode for m in modes if m.available}:
+            self.selected = active if active in {m.mode for m in modes if m.available} else None
+        for m in modes:
             card = ModeCard(m, self.ctx)
             self.cards[m.mode] = card
+            if card.disconnect_button is not None:
+                card.disconnect_clicked.connect(self.disconnect_requested)
+            card.radio.installEventFilter(self)       # Pfeiltasten wechseln die Karte
             self.group.addButton(card.radio)
             card.radio.setChecked(m.mode == self.selected)
             card.set_selected(m.mode == self.selected)
@@ -168,15 +194,29 @@ class ModesWindow(ToolWindow):
         self.hint = label(texts.MODE_UNCONFIGURED_HINT, 'caption')
         self.hint.setObjectName('modes_hint')
         body.addWidget(self.hint)
-        locked = any(not m.available for m in self.modes)
+        locked = any(not m.available for m in modes)
         self.change_button = button(texts.CHANGE_SETUP, name='modes_change_setup')
         self.change_button.setEnabled(bool(active) and not locked)
         if locked:
             self.change_button.setToolTip(texts.REASON_TRANSMISSION_FIRST)
         self.change_button.clicked.connect(self.change_setup)
+        body.addWidget(self.change_button, 0, Qt.AlignmentFlag.AlignLeft)       # erst einhängen, dann sichtbar machen
         self.change_button.setVisible(bool(active))          # ohne aktiven Weg gibt es nichts erneut zu durchlaufen
-        body.addWidget(self.change_button, 0, Qt.AlignmentFlag.AlignLeft)
         self._update_hint()
+
+    def eventFilter(self, obj, e):
+        """Pfeil hoch/links = vorige, runter/rechts = nächste wählbare Karte (B-08)."""
+        if e.type() == QEvent.Type.KeyPress and e.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left,
+                                                          Qt.Key.Key_Right):
+            order = [k for k, c in self.cards.items() if c.radio.isEnabled()]
+            cur = next((k for k, c in self.cards.items() if c.radio is obj), None)
+            if cur in order and len(order) > 1:
+                step = -1 if e.key() in (Qt.Key.Key_Up, Qt.Key.Key_Left) else 1
+                nxt = order[(order.index(cur) + step) % len(order)]
+                self.cards[nxt].radio.setChecked(True)
+                self.cards[nxt].radio.setFocus(Qt.FocusReason.TabFocusReason)
+                return True
+        return super().eventFilter(obj, e)
 
     def _select(self, mode: str) -> None:
         self.selected = mode
@@ -186,7 +226,7 @@ class ModesWindow(ToolWindow):
         self._update_foot()
 
     def _info(self, mode: str | None) -> ModeInfo | None:
-        return next((m for m in self.modes or () if m.mode == mode), None)
+        return next((m for m in self.effective_modes() if m.mode == mode), None)
 
     def _update_hint(self) -> None:
         info = self._info(self.selected)

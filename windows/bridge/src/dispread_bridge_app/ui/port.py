@@ -147,6 +147,8 @@ class UiContext:
     session_format: str | None = None       # erzeugte Session für den aktuellen Weg/Port
     run_format: str | None = None           # erkanntes Format des aktuellen Laufs; None = unbekannt
     default_session_format: str = '1ch'
+    # Runde 3: Kopplung je Weg ((network|uart, gekoppelt?), …); leer = unbekannt. Zugangsdaten gelten je Transport.
+    paired_routes: tuple[tuple[str, bool], ...] = ()
 
 
 class ControllerPort(Protocol):

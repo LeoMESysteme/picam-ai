@@ -44,13 +44,14 @@ _IDLE = WorkerStatus('idle', False, False, None)
 _RUN = WorkerStatus('running', True, True, None)
 _BASE = UiContext(bridge_port='COM4', gsv_port='COM5', version='0.1.0.dev0', protocol='Version 2',
                   pi_name='Prüfstand 2', route='Netzwerk (LAN)', run_id='7', pi_id='pi-4b7e09c1',
-                  endpoint='wss://192.168.10.24 (LAN, Beispiel)', fingerprint=_FP,
+                  endpoint='https://192.168.10.24:8443', fingerprint=_FP,
                   last_report='Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben',
                   session_name='GSVmulti_Pruefstand2_COM5.ucf', session_confirmed=True, journal=_HEUTE,
                   paired=(('Prüfstand 2', 'pi-4b7e09c1', 'zuletzt vor 2 Stunden'),
                           ('Prüfstand 3 – Halle A', 'pi-d21a77e6', 'zuletzt gestern')),
                   route_mode='network', activity_seq=1, uart_baud=460800, gsv_baud=115200,
-                  session_template='Session-COM8.ucf', session_channels=1)
+                  session_template='Session-COM8.ucf', session_channels=1, session_format='1ch',
+                  paired_routes=(('network', True), ('uart', False)))
 
 
 _DATA = dict(peer_fingerprint='a3f9 0c1d 7b42 e58a 19d6 f03c 84ab 2e71 5c0d b8f4 63a9 d127 55e0 1b6c 9a46 3f02',
@@ -64,6 +65,8 @@ def _setup(variant, step, **kw):
         pre = dict(route='UART (USB-Adapter)', route_mode='uart_bridge', adapter_port='COM9', adapter_present=True,
                    activity_seq=0)
     pre['setup_leavable'] = variant not in ('E1', 'E1uac', 'E1restart', 'E1ok', 'E2')
+    if 'paired_routes' not in kw:
+        pre['paired_routes'] = ()
     return (replace(_OK, peer='disconnected', output='unavailable', com='unknown'), None,
             replace(_BASE, mode='setup', setup=SetupState(step, variant, dict(_DATA)), **pre, **kw))
 
@@ -156,6 +159,18 @@ STATES: dict[str, tuple] = {
     'E4session': _setup('E4locked', 4, session_name=None, session_confirmed=False),
 }
 STATES['E1manual'][2].setup.data.update(ports=('COM1', 'COM4', 'COM5', 'COM9'))
+# --- Runde 3: Vierkanal-Takt (Taktzähler, Format), unpassende Session, Ende des Empfangstests
+_TICKS = WorkerStatus('running', True, True, None, demo_only=False, ticks_written=1342, ticks_invalid=17)
+_4CH = dict(session_format='4ch', run_format='4ch', session_channels=4)
+STATES['B1tick'] = (STATES['B1tr'][0], _TICKS, replace(STATES['B1tr'][2], **_4CH))
+STATES['B1mismatch'] = (STATES['B1tr'][0], _TICKS, replace(STATES['B1tr'][2], session_format='1ch', run_format='4ch',
+                                                          session_channels=1))
+STATES['E5done'] = _setup('E5done', 5)
+STATES['E5done'][2].setup.data.update(written=600, count=600, missing=0)
+STATES['E5short'] = _setup('E5short', 5)
+STATES['E5short'][2].setup.data.update(written=588, count=600, missing=12)
+STATES['E2b_route'] = _setup('E2b', 2, route='UART (USB-Adapter)', route_mode='uart_bridge',
+                             paired_routes=(('network', True), ('uart', False)))
 
 
 _PORTS = (PortChoice('COM4', 'COM4 – com0com Brückenseite', 'com0com', False),
@@ -220,7 +235,12 @@ class FakeController:
         return self._r
     def install_components(self): self._rec('install_components')
     def connect(self, mode, selected_device_id=None): self._rec('connect', mode, selected_device_id)
-    def disconnect(self): self._rec('disconnect')
+    def disconnect(self):
+        self._rec('disconnect')
+        self._r = replace(self._r, peer='disconnected', output='unavailable', com='unknown', next_action=None)
+        self._w = None
+        self._c = replace(self._c, release=None, dut_locked=True, demo=False, test_release=False, run_id=None,
+                          switch_locked=False)
     def export_session(self, settings, destination): self._rec('export_session', settings, destination)
     def begin_demo_check(self, confirmed_test_session): self._rec('begin_demo_check', confirmed_test_session)
     def pair(self, code, fingerprint_confirmed): self._rec('pair', fingerprint_confirmed)   # Code nie aufzeichnen
@@ -248,7 +268,24 @@ class FakeController:
     def open_manual_pair(self): self._rec('open_manual_pair')
     def rescan(self): self._rec('rescan')
     def confirm_session(self, on): self._rec('confirm_session', on)
-    def setup_step(self, direction): self._rec('setup_step', direction)
+    FLOW_BRIDGE = ('E1', 'E2b', 'E3', 'E4session', 'E5')
+    FLOW_DIRECT = ('D1', 'D2', 'D3', 'D4')
+
+    def setup_step(self, direction):
+        """„Weiter“/„Zurück“ der Demo: schaltet die Einrichtung durch (E1→E2b→E3→E4session→E5, D1→D4)."""
+        self._rec('setup_step', direction)
+        st = self._c.setup
+        if direction not in ('next', 'back') or st is None:
+            return
+        flow = self.FLOW_DIRECT if st.variant.startswith('D') else self.FLOW_BRIDGE
+        step = min(max(st.step, 1), len(flow))
+        target = step + (1 if direction == 'next' else -1)
+        if target < 1:
+            return
+        if target > len(flow):
+            self._c = replace(self._c, mode='operate', setup=None)       # letzter Schritt: Einrichtung beendet
+            return
+        self._r, self._w, self._c = STATES[flow[target - 1]]
     def set_auto_connect(self, on): self._rec('set_auto_connect', on)
     def auto_connect_at_start(self):
         self._rec('auto_connect_at_start')
@@ -383,7 +420,7 @@ class FakeController:
                                'Den Code vollständig vom Pi kopieren')
         return CheckResult('ok', 'Format stimmt')
 
-    def export_session_file(self, destination, port=None):
+    def export_session_file(self, destination, port=None, fmt=None):
         port = port or self._c.gsv_port or 'COM5'
         self._rec('export_session_file', Path(destination), port)
         data = _SESSION_PLACEHOLDER.format(n=re.sub(r'\D', '', port) or '0').encode('cp1252')

@@ -2,6 +2,7 @@
 
 Startet die App nacheinander mit den Fake-Zuständen aus ``ui/fake.py``, öffnet die
 Werkzeugfenster und fotografiert jedes Fenster samt nativem Rahmen vom Bildschirm.
+Mit ``QT_QPA_PLATFORM=offscreen`` (Pi, ohne Bildschirm) fotografiert sie den Fensterinhalt ohne Rahmen.
 Kein Pi, kein COM-Port, keine Netzwerkverbindung nötig.
 
     python windows/bridge/probes/ux_tour.py AUSGABEORDNER [--theme light|dark|system] [--only TEIL]
@@ -36,6 +37,8 @@ SCENES = [
     ('05-betrieb-nicht-eingerichtet', 'Bnone', (440, 720), None),
     ('06-betrieb-uart-direkt', 'Bdirect', (440, 720), None),
     ('07-betrieb-minimal-380', 'B1', (380, 560), None),
+    ('08-betrieb-takt-vierkanal', 'B1tick', (440, 720), None),
+    ('09-betrieb-session-passt-nicht', 'B1mismatch', (440, 720), None),
     ('10-fenster-moduswahl-erster-start', 'first_run', (440, 720), 'modes'),
     ('11-fenster-moduswahl', 'B10', (440, 720), 'modes'),
     ('12-fenster-moduswahl-gesperrt', 'B1', (440, 720), 'modes'),
@@ -49,14 +52,19 @@ SCENES = [
     ('20-fenster-protokolle', 'B1', (440, 720), 'export'),
     ('21-fenster-protokolle-gespeichert', 'B1', (440, 720), 'export_done'),
     ('22-fenster-gekoppelte-pi', 'B1', (440, 720), 'paired'),
+    ('23-fenster-kachel-weitergabe-takte', 'B1tick', (440, 720), 'chip4'),
+    ('24-fenster-kachel-gsvmulti-passt-nicht', 'B1mismatch', (440, 720), 'chip5'),
     ('30-einrichtung-komponenten', 'E1', (440, 720), None),
     ('31-einrichtung-portpaar', 'E1manual', (440, 720), None),
     ('32-einrichtung-koppeln', 'E2b', (440, 720), None),
+    ('32b-einrichtung-kopplung-je-weg', 'E2b_route', (440, 720), None),
     ('33-einrichtung-adresse-ok', 'E3', (440, 720), 'endpoint_ok'),
     ('34-einrichtung-adresse-fehler', 'E3', (440, 720), 'endpoint_err'),
     ('35-einrichtung-uart-bruecke', 'E3uart', (440, 720), None),
     ('36-einrichtung-session', 'E4session', (440, 720), 'session'),
     ('37-einrichtung-empfangstest', 'E5', (440, 720), None),
+    ('38-einrichtung-test-gesendet', 'E5done', (440, 720), None),
+    ('39-einrichtung-test-unvollstaendig', 'E5short', (440, 720), None),
     ('40-direkt-adapter', 'D1', (440, 720), None),
     ('41-direkt-verdrahtung', 'D2', (440, 720), None),
     ('42-direkt-adapter-fehlt', 'D2missing', (440, 720), None),
@@ -78,6 +86,9 @@ def grab(widget, path: Path) -> None:
     widget.raise_()
     widget.activateWindow()
     QTest.qWait(400)
+    if QGuiApplication.platformName() == 'offscreen':      # Pi/CI ohne Bildschirm: Inhalt ohne Rahmen
+        widget.grab().save(str(path))
+        return
     fg = widget.frameGeometry()
     screen = widget.screen() or QGuiApplication.primaryScreen()
     screen.grabWindow(0, fg.x(), fg.y(), fg.width(), fg.height()).save(str(path))

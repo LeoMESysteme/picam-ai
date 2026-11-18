@@ -125,9 +125,13 @@ class InputChecks:
                 known = any({p.bridge_port, p.gsv_port} == {a, b} for p in self.pairs())
             except Exception:
                 known = False
+            # Die Paarprüfung vergleicht als Menge: welche Seite Brücke und welche GSVmulti ist, spielt für ein
+            # com0com-Paar keine Rolle (es arbeitet in beide Richtungen). Ohne verifiziertes Inventar bleibt das
+            # Paar unbestätigt – in beiden Reihenfolgen gleich (Prüfung 13.11.: Tausch wirkte wie ein Fehler).
             return (CheckResult('ok', 'Portpaar vorhanden und frei.') if known else
-                    CheckResult('warn', 'Ports vorhanden und frei; Paarzuordnung unbestätigt.',
-                                'com0com-Paarzuordnung prüfen.'))
+                    CheckResult('warn', 'Ports vorhanden und frei; Paar nicht geprüft.',
+                                'Ob beide Ports ein com0com-Paar bilden, kann die App noch nicht prüfen. Die '
+                                'Reihenfolge spielt keine Rolle: GSVmulti liest die GSVmulti-Seite.'))
         return self.run(probe)
 
     def adapter(self, port, baud):

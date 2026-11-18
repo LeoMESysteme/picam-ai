@@ -136,7 +136,8 @@ def test_manual_port_pair_is_marked_and_validated(tmp_path):
     assert (ctx.bridge_port, ctx.gsv_port) == ('COM4', 'COM5')
     assert c.snapshot().components == 'manual_pair'
     chip = texts.chips(c.snapshot(), None, ctx)[0]
-    assert chip.word == 'Portpaar COM4 ↔ COM5' and chip.tone == 'info'
+    # Runde 3: Zustandswort in der Kachel, das Paar als Wert in der Zweitzeile (Textbudget R3-2)
+    assert (chip.word, chip.sub) == ('Portpaar manuell', 'COM4 ↔ COM5') and chip.tone == 'info'
 
 
 def test_install_components_never_creates_a_pair(tmp_path):

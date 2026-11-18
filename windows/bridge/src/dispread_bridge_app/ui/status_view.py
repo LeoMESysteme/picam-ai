@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
 from . import texts, theme
 from .port import JournalEntry
 from .widgets import (
-    ColorFlash,
     FocusPushButton,
     FocusToolButton,
     Header,
@@ -48,7 +47,7 @@ def _fit_words(label: QLabel, raw: str, avail: int) -> None:
 class Chip(FocusToolButton):
     """Prüfpunkt-Kachel: Komponenten-Symbol, Name, Info-Symbol (Erklärung), Statussymbol + Wort, Zweitzeile.
 
-    Bei echtem Zustandswechsel kurzer Farbübergang (200 ms); ein Klick öffnet das Detailfenster.
+    Ein Klick öffnet das Detailfenster; Zustandswechsel werden ohne Farbblitz sofort gezeigt.
     Symbol, Name und Info-Symbol stehen in einer Zeile; nur wenn ein Name dort nicht passt, stehen die
     Namen aller Kacheln in eigener Zeile."""
     PAD_L, PAD_R, GAP_NAME, GAP_INFO = 6, 4, 4, 2
@@ -96,7 +95,6 @@ class Chip(FocusToolButton):
             w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         # Das Info-Symbol bleibt für den Mauszeiger erreichbar (Tooltip); Klicks reicht QLabel an die Kachel weiter.
         self.view: texts.ChipView | None = None
-        self.flash = ColorFlash(self)
         self._inline = True
         self._spacer = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -119,8 +117,6 @@ class Chip(FocusToolButton):
         self.setToolTip(f'{v.word}' + (f' – {v.sub}' if v.sub else ''))
         self.setAccessibleName(f'{v.name}: {texts.SCREEN_READER[v.tone]} {v.word}' + (f', {v.sub}' if v.sub else ''))
         self.setAccessibleDescription(help_text)
-        if prev is not None and prev.key == v.key and (prev.tone, prev.word) != (v.tone, v.word):
-            self.flash.start(v.tone)
 
     def _set_inline(self, inline: bool) -> None:
         if inline == self._inline:
@@ -153,16 +149,138 @@ class Chip(FocusToolButton):
             h += 3 + self.sub.heightForWidth(inner)
         return h
 
-    def paintEvent(self, e):
-        super().paintEvent(e)
-        if self.flash.running:
-            p = QPainter(self)
-            self.flash.paint(p, self.rect(), 4)
-            p.end()
 
-    def hideEvent(self, e):
-        super().hideEvent(e)
-        self.flash.stop()
+class DirectRoute(QFrame):
+    """Weg „UART direkt“ als Bild (B-19): USB-Adapter → Wertfeld mit dem Port → GSVmulti. So ist auf einen Blick
+    erkennbar, dass GSVmulti den Port direkt liest; die Brücke steht nicht dazwischen."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('direct_route')
+        self.setProperty('card', True)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(12, 12, 12, 12)
+        lay.setSpacing(8)
+        self.adapter_icon = QLabel()
+        self.adapter_icon.setPixmap(theme.icon_pixmap('usb_stick', 'text', 20))
+        self.adapter_state = StateIcon('info', 16)
+        self.adapter_word = theme.set_typo(QLabel(), 'caption_strong')
+        self.adapter_word.setWordWrap(True)
+        left = QVBoxLayout()
+        left.setSpacing(4)
+        left.addWidget(self.adapter_icon, 0, Qt.AlignmentFlag.AlignHCenter)
+        left.addWidget(theme.set_typo(QLabel(texts.ROUTE_ADAPTER), 'caption'), 0, Qt.AlignmentFlag.AlignHCenter)
+        st = QHBoxLayout()
+        st.setSpacing(4)
+        st.addStretch(1)
+        st.addWidget(self.adapter_state)
+        st.addWidget(self.adapter_word)
+        st.addStretch(1)
+        left.addLayout(st)
+        self.port_slot = QWidget()
+        self.port_slot.setMinimumWidth(96)
+        PortLay = QVBoxLayout(self.port_slot)
+        PortLay.setContentsMargins(0, 0, 0, 0)
+        self._port_lay = PortLay
+        self._port_value = None
+        gsv = QVBoxLayout()
+        gsv.setSpacing(4)
+        gi = QLabel()
+        gi.setPixmap(theme.icon_pixmap('data_line', 'text', 20))
+        gsv.addWidget(gi, 0, Qt.AlignmentFlag.AlignHCenter)
+        gsv.addWidget(theme.set_typo(QLabel(texts.ROUTE_GSV), 'caption'), 0, Qt.AlignmentFlag.AlignHCenter)
+        gsv.addWidget(theme.set_typo(QLabel(texts.ROUTE_READS), 'caption_strong'), 0, Qt.AlignmentFlag.AlignHCenter)
+        arrows = []
+        for _ in range(2):
+            a = QLabel()
+            a.setPixmap(theme.icon_pixmap('arrow_forward', 'text2', 20))
+            arrows.append(a)
+        lay.addLayout(left, 1)
+        lay.addWidget(arrows[0], 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(self.port_slot, 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(arrows[1], 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addLayout(gsv, 1)
+        self.setAccessibleName(texts.ROUTE_ACCESSIBLE)
+
+    def set_state(self, port: str | None, present: bool | None) -> None:
+        from .widgets import ValueField
+        if port != self._port_value:
+            self._port_value = port
+            while self._port_lay.count():
+                it = self._port_lay.takeAt(0)
+                if it.widget() is not None:
+                    it.widget().deleteLater()
+            self.port_field = ValueField('', port or texts.NOT_SET, copyable=bool(port))
+            self._port_lay.addWidget(self.port_field)
+        tone, word = {True: ('ok', texts.ROUTE_PRESENT), False: ('warn', texts.ROUTE_MISSING)}.get(
+            present, ('info', texts.ROUTE_UNKNOWN))
+        self.adapter_state.set_tone(tone)
+        self.adapter_word.setText(word)
+        self.setAccessibleDescription(f'{texts.ROUTE_ADAPTER} {port or ""}: {word} – {texts.ROUTE_GSV} {texts.ROUTE_READS}')
+
+
+class BridgeRoute(QFrame):
+    """Brückenweg als Bild (Runde 3): Brücke → Brückenseite ⇄ GSVmulti-Seite → GSVmulti.
+
+    Zeigt nur die festgelegten Ports, keinen Zustand: ob Werte fließen, sagen die Kacheln. Die Ports stehen in
+    Wertfeldern, weil sie sich ändern können. Neu gebaut wird nur, wenn sich ein Port ändert."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('bridge_route')
+        self.setProperty('card', True)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 4, 10, 4)
+        lay.setSpacing(6)
+        self._ports = (object(), object())
+        self.fields: list = []
+
+        def node(icon, text):
+            box = QHBoxLayout()
+            box.setSpacing(4)
+            ic = QLabel()
+            ic.setPixmap(theme.icon_pixmap(icon, 'text2', 16))
+            box.addWidget(ic, 0, Qt.AlignmentFlag.AlignVCenter)
+            box.addWidget(theme.set_typo(QLabel(text), 'caption'), 0, Qt.AlignmentFlag.AlignVCenter)
+            return box
+
+        def arrow(icon):
+            a = QLabel()
+            a.setPixmap(theme.icon_pixmap(icon, 'text2', 16))
+            return a
+        lay.addLayout(node('cube', texts.ROUTE_BRIDGE))
+        lay.addWidget(arrow('arrow_forward'), 0, Qt.AlignmentFlag.AlignVCenter)
+        self.slots = []
+        for i in range(2):
+            slot = QWidget()
+            sl = QHBoxLayout(slot)
+            sl.setContentsMargins(0, 0, 0, 0)
+            self.slots.append(sl)
+            lay.addWidget(slot, 1, Qt.AlignmentFlag.AlignVCenter)
+            if i == 0:
+                swap = arrow('arrow_swap')
+                swap.setToolTip(texts.ROUTE_PAIR_TIP)
+                lay.addWidget(swap, 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(arrow('arrow_forward'), 0, Qt.AlignmentFlag.AlignVCenter)
+        lay.addLayout(node('data_line', texts.ROUTE_GSV))
+
+    def set_ports(self, bridge: str | None, gsv: str | None) -> None:
+        from .widgets import ValueField
+        if (bridge, gsv) == self._ports:
+            return
+        self._ports = (bridge, gsv)
+        self.fields = []
+        for sl, port, tip in zip(self.slots, (bridge, gsv), (texts.PORT_BRIDGE_TIP, texts.PORT_GSV_TIP), strict=True):
+            while sl.count():
+                it = sl.takeAt(0)
+                if it.widget() is not None:
+                    it.widget().deleteLater()
+            f = ValueField('', port or texts.NOT_SET, copyable=bool(port))
+            f.setToolTip(tip)
+            sl.addWidget(f)
+            self.fields.append(f)
+        self.setAccessibleName(texts.ROUTE_BRIDGE_ACCESSIBLE.format(bridge=bridge or texts.NOT_SET,
+                                                                    gsv=gsv or texts.NOT_SET))
 
 
 class JournalModel(QAbstractListModel):
@@ -339,9 +457,37 @@ class _HeadBody(QWidget):
         lay = self.layout()
         if lay is None:
             return super().minimumSizeHint()
-        w = max(self.width(), lay.totalMinimumSize().width())
+        minw = lay.totalMinimumSize().width()
+        if lay.hasHeightForWidth():
+            # Ohne Bildlaufleiste ist der Inhalt breiter und oft niedriger (Sperrzeile in einer Zeile weniger).
+            # Passt er dann in den Bereich, diese Höhe melden – sonst hielte die Leiste sich selbst am Leben
+            # (schmaler wegen Leiste -> höher -> Leiste bleibt).
+            h_full = self._height_without_bar()
+            if h_full is not None:
+                return QSize(minw, h_full)
+        w = max(self.width(), minw)
         h = lay.totalHeightForWidth(w) if lay.hasHeightForWidth() else lay.totalMinimumSize().height()
-        return QSize(lay.totalMinimumSize().width(), h)
+        return QSize(minw, h)
+
+
+    def _height_without_bar(self) -> int | None:
+        """Inhaltshöhe bei voller Breite (ohne Bildlaufleiste), wenn sie in den Bereich passt; sonst None."""
+        lay = self.layout()
+        area = self.parentWidget().parentWidget() if self.parentWidget() is not None else None
+        if lay is None or not isinstance(area, QScrollArea):
+            return None
+        frame = 2 * area.frameWidth()
+        full = max(area.width() - frame, lay.totalMinimumSize().width())
+        h_full = lay.totalHeightForWidth(full)
+        return h_full if 0 <= h_full <= area.height() - frame else None
+
+    def heightForWidth(self, w):
+        # QScrollArea fragt mit der Breite neben der Leiste; passt der Inhalt ohne Leiste, zählt diese Höhe.
+        h_full = self._height_without_bar()
+        if h_full is not None:
+            return h_full
+        lay = self.layout()
+        return lay.totalHeightForWidth(w) if lay is not None and lay.hasHeightForWidth() else super().heightForWidth(w)
 
 
 class _HeadScroll(QScrollArea):
@@ -403,6 +549,12 @@ class StatusView(QWidget):
             c.clicked.connect(lambda _=False, n=i: QTimer.singleShot(0, lambda: self._chip_clicked(n)))
         self.chip_grid = grid
         body.addLayout(grid)
+        self.route = DirectRoute()
+        self.route.hide()
+        body.addWidget(self.route)
+        self.bridge_route = BridgeRoute()
+        self.bridge_route.hide()
+        body.addWidget(self.bridge_route)
         self.journal_box = QWidget()
         self.journal_box.setObjectName('journal_box')
         jl = QVBoxLayout(self.journal_box)
@@ -524,10 +676,20 @@ class StatusView(QWidget):
                 self.exit_button]
 
     def update_from(self, readiness, worker, ctx, locked: bool, configured: bool | None = None) -> None:
-        self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked, peer=readiness.peer)
+        self.header.update_from(ctx, texts.headline(readiness, worker, ctx), locked, peer=readiness.peer,
+                                badges=texts.header_badges(readiness, ctx))
         self.infobar.set_bar(texts.action_bar(readiness, worker, ctx, configured))
+        direct = ctx.route_mode == 'uart_direct'
         for chip, view in zip(self.chips, texts.chips(readiness, worker, ctx), strict=False):
             chip.set_view(view)
+            chip.setVisible(not direct)               # UART direkt: die Strecke als Bild statt „nicht benutzt“-Kacheln
+        self.route.setVisible(direct)
+        if direct:
+            self.route.set_state(ctx.adapter_port, ctx.adapter_present)
+        bridged = ctx.route_mode in ('network', 'uart_bridge')
+        self.bridge_route.setVisible(bridged)
+        if bridged:
+            self.bridge_route.set_ports(ctx.bridge_port, ctx.gsv_port)
         self.version_label.setText(texts.version_label(ctx.version))
         self.channel_label.setText(ctx.channel or '')
         self.channel_label.setVisible(bool(ctx.channel))
