@@ -6,6 +6,19 @@
   const NS = "http://www.w3.org/2000/svg";
   const records = new WeakMap();
   let animePromise;
+  let glossCount = 0;
+
+  // Lebendige Darstellung (wiki-look.js): Glanz, Spur, Wertpille, Hervorhebung.
+  const lively = () => document.documentElement.getAttribute("data-wiki-look") === "lebendig";
+
+  // Balken mit eigenem Radius je Ende: die Grundlinie bleibt fast eckig, das
+  // Datenende weich (Marken an der Grundlinie verankert).
+  function barPath(x, y, w, h, left, right) {
+    const l = Math.min(left, w / 2, h / 2);
+    const r = Math.min(right, w / 2, h / 2);
+    return `M${x + l},${y}h${w - l - r}q${r},0 ${r},${r}v${h - r * 2}q0,${r} -${r},${r}`
+      + `h-${w - l - r}q-${l},0 -${l},-${l}v-${h - l * 2}q0,-${l} ${l},-${l}z`;
+  }
 
   function loadAnime() {
     if (window.anime?.animate) return Promise.resolve(window.anime);
@@ -115,18 +128,24 @@
 
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const canvas = document.createElement("canvas").getContext("2d");
+    let canvasFont = "";
     let disposed = false;
     let seen = false;
     let revision = 0;
     let lastWidth = 0;
     let animation;
+    let pillAnimation;
     let intersection;
     let targets = [];
+    let pills = [];
     let frame;
+    const glossId = `wiki-chart-gloss-${glossCount += 1}`;
 
     function finish() {
       animation?.revert();
+      pillAnimation?.revert();
       animation = null;
+      pillAnimation = null;
       targets.forEach((target) => target.removeAttribute("transform"));
     }
 
@@ -134,11 +153,18 @@
       const sample = svgNode("text", { class: className });
       svg.append(sample);
       const style = getComputedStyle(sample);
-      if (canvas) canvas.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
       const size = parseFloat(style.fontSize);
       sample.remove();
-      return { width: (value) => canvas ? canvas.measureText(value).width : value.length * size * .6,
-        line: size * 1.25 };
+      // Der Canvas ist für alle Maße derselbe: Schrift bei jeder Messung setzen,
+      // sonst misst eine früher angelegte Metrik mit der Schrift der letzten.
+      // Nur bei Wechsel setzen: wrap() misst Zeichen für Zeichen, und das
+      // Zuweisen von canvas.font parst die Schrift jedes Mal neu.
+      return { width: (value) => {
+        if (!canvas) return value.length * size * .6;
+        if (canvasFont !== font) { canvas.font = font; canvasFont = font; }
+        return canvas.measureText(value).width;
+      }, line: size * 1.25 };
     }
 
     function wrap(text, width, metric) {
@@ -166,6 +192,7 @@
       const width = host.getBoundingClientRect().width;
       if (disposed || width <= 0 || width === lastWidth) return;
       lastWidth = width;
+      const live = lively();
       revision += 1;
       const active = document.activeElement;
       const focusIndex = svg.contains(active) ? Array.from(svg.querySelectorAll('[data-hint="chart"]')).indexOf(active) : -1;
@@ -174,16 +201,32 @@
       hint.closeWithin(svg);
       svg.replaceChildren();
       targets = [];
+      pills = [];
+      if (live) {
+        // Glanz nur im oberen Drittel: Innenbeschriftungen liegen darunter und
+        // behalten so den Kontrast der ruhigen Darstellung.
+        const gradient = svgNode("linearGradient", { id: glossId, x1: 0, y1: 0, x2: 0, y2: 1 });
+        gradient.append(svgNode("stop", { offset: 0, class: "wiki-chart-gloss-stop" }),
+          svgNode("stop", { offset: .3, class: "wiki-chart-gloss-stop wiki-chart-gloss-stop--end" }));
+        const defs = svgNode("defs");
+        defs.append(gradient);
+        svg.append(defs);
+      }
       const category = measure("", "wiki-chart-category");
       const axis = measure("", "wiki-chart-axis-label");
       const valueMetric = measure("", "wiki-chart-value");
       const longest = Math.max(...data.rows.map((row) => category.width(row.label)));
       const left = Math.min(width * .4, longest + 12);
       const maximum = data.kind === "stacked" ? 100 : Math.max(...data.rows.map((row) => row.values[0]));
-      const step = 10 ** Math.floor(Math.log10(maximum));
-      const domain = data.kind === "stacked" ? 100 : Math.ceil(maximum / step) * step;
+      // Runde Schrittweite (1, 2, 2,5 oder 5 × 10^n) mit drei bis fünf Teilen,
+      // damit keine Marke wie „33,333“ entsteht.
+      const magnitude = 10 ** Math.floor(Math.log10(maximum / 4));
+      const tickStep = data.kind === "stacked" ? 25
+        : [1, 2, 2.5, 5, 10].map((f) => f * magnitude).find((candidate) => maximum / candidate <= 5);
+      const domain = data.kind === "stacked" ? 100 : Math.max(tickStep * 3, Math.ceil(maximum / tickStep) * tickStep);
       const lastTick = `${format(domain)}${unit ? ` ${unit}` : ""}`;
-      const right = Math.max(axis.width(lastTick), valueMetric.width(format(maximum)) + 6) + 4;
+      // Lebendig sitzt der Wert in einer Pille mit 6 px Innenabstand je Seite.
+      const right = Math.max(axis.width(lastTick), valueMetric.width(format(maximum)) + (live ? 16 : 6)) + 4;
       const plot = Math.max(1, width - left - right);
       const rows = chartRows(data, plot, domain);
       const positions = [];
@@ -200,18 +243,29 @@
       svg.setAttribute("viewBox", `0 0 ${width} ${y + axis.line + 8}`);
       svg.setAttribute("width", width);
       svg.setAttribute("height", y + axis.line + 8);
-      const divisions = data.kind === "bar" ? 3 : 4;
+      const divisions = Math.round(domain / tickStep);
+      // Beschriftungen, die in die vorige oder die letzte laufen würden, entfallen.
+      const lastStart = left + plot;
+      let labelEnd = -Infinity;
       for (let index = 0; index <= divisions; index += 1) {
         const x = left + plot * index / divisions;
         svg.append(svgNode("line", { x1: x, x2: x, y1: 1, y2: bottom,
           class: index ? "wiki-chart-grid" : "wiki-chart-axis" }));
+        const text = index === divisions ? lastTick : format(domain * index / divisions);
+        const textWidth = axis.width(text);
+        const start = index === divisions || !index ? x : x - textWidth / 2;
+        const fits = index === divisions || (start >= labelEnd + 6 && start + textWidth <= lastStart - 6);
+        if (!fits) continue;
         svg.append(svgNode("text", { x, y: y + axis.line, class: "wiki-chart-axis-label",
-          "text-anchor": index === divisions ? "start" : index ? "middle" : "start" },
-        index === divisions ? lastTick : format(domain * index / divisions)));
+          "text-anchor": index === divisions ? "start" : index ? "middle" : "start" }, text));
+        labelEnd = start + textWidth;
       }
       data.rows.forEach((row, rowIndex) => {
         const pos = positions[rowIndex];
         textLines(pos.labels, 0, pos.y + category.line * .8, category, "wiki-chart-category");
+        if (live && data.kind === "bar") {
+          svg.append(svgNode("path", { d: barPath(left, pos.y, plot, 18, 2, 7), class: "wiki-chart-track" }));
+        }
         if (pos.notes.length) textLines(pos.notes, left, pos.y + 23 + axis.line * .8, axis, "wiki-chart-note");
         const groups = rows[rowIndex].map((segment, segmentIndex, segments) => {
           const x = left + segment.x;
@@ -227,14 +281,26 @@
           const gap = data.kind === "stacked" && segmentIndex < segments.length - 1 ? Math.min(2, segment.width / 2) : 0;
           const w = Math.max(0, segment.width - gap);
           const radius = segmentIndex === segments.length - 1 ? Math.min(4, w / 2) : 0;
-          const path = `M${x},${pos.y}h${w - radius}q${radius},0 ${radius},${radius}v${18 - radius * 2}q0,${radius} -${radius},${radius}h-${w - radius}z`;
+          const path = live
+            ? barPath(x, pos.y, w, 18, segmentIndex ? 0 : 2, segmentIndex === segments.length - 1 ? 7 : 0)
+            : `M${x},${pos.y}h${w - radius}q${radius},0 ${radius},${radius}v${18 - radius * 2}q0,${radius} -${radius},${radius}h-${w - radius}z`;
           const role = data.kind === "bar" ? "series" : seriesRole(data.headers[segment.index + 1]);
           growth.append(svgNode("path", { d: path, class: `wiki-chart-mark wiki-chart-color--${role}` }));
+          if (live) growth.append(svgNode("path", { d: path, class: "wiki-chart-gloss", fill: `url(#${glossId})` }));
           group.append(growth);
           targets.push(growth);
           if (role === "series") {
-            group.append(svgNode("text", { x: x + segment.width + 6, y: pos.y + 13, class: "wiki-chart-value" },
-              `${format(segment.value)}${data.kind === "stacked" ? " %" : ""}`));
+            const label = `${format(segment.value)}${data.kind === "stacked" ? " %" : ""}`;
+            if (live) {
+              const pill = svgNode("g", { class: "wiki-chart-pill" });
+              pill.append(svgNode("rect", { x: x + segment.width + 4, y: pos.y, width: valueMetric.width(label) + 12,
+                height: 18, rx: 9, class: "wiki-chart-pill-glass" }),
+              svgNode("text", { x: x + segment.width + 10, y: pos.y + 13, class: "wiki-chart-value" }, label));
+              group.append(pill);
+              pills.push(pill);
+            } else {
+              group.append(svgNode("text", { x: x + segment.width + 6, y: pos.y + 13, class: "wiki-chart-value" }, label));
+            }
           } else {
             const label = `${format(segment.value)} %`;
             if (w >= 36 && valueMetric.width(label) + 8 <= w) group.append(svgNode("text", {
@@ -251,17 +317,39 @@
       host.dataset.renderedWidth = String(Math.round(width));
     }
 
-    async function reveal() {
-      if (disposed || seen) return;
-      seen = true;
-      intersection?.disconnect();
+    async function grow() {
       if (motion.matches) return;
       const version = revision;
       const anime = await loadAnime();
       if (disposed || motion.matches || !anime || version !== revision) return;
       try {
-        animation = anime.animate(targets, { scaleX: [0, 1], duration: 420, delay: anime.stagger(60), ease: "outExpo" });
+        if (lively()) {
+          // Wie die Balken der Codebase-Bühne: länger, weich auslaufend; die
+          // Wertpillen tauchen auf, wenn ihr Balken fast steht.
+          animation = anime.animate(targets, { scaleX: [0, 1], duration: 900, delay: anime.stagger(45), ease: "outExpo" });
+          if (pills.length) pillAnimation = anime.animate(pills, { opacity: [0, 1], duration: 360,
+            delay: anime.stagger(45, { start: 420 }), ease: "outExpo" });
+        } else {
+          animation = anime.animate(targets, { scaleX: [0, 1], duration: 420, delay: anime.stagger(60), ease: "outExpo" });
+        }
       } catch { finish(); }
+    }
+
+    function reveal() {
+      if (disposed || seen) return;
+      seen = true;
+      intersection?.disconnect();
+      grow();
+    }
+
+    // Darstellung gewechselt: neu zeichnen (ersetzt alle Knoten) und, falls das
+    // Diagramm schon gesehen wurde und im Blick ist, lebendig neu wachsen lassen.
+    function lookChanged() {
+      if (disposed) return;
+      lastWidth = 0;
+      draw();
+      const box = figure.getBoundingClientRect();
+      if (seen && lively() && box.bottom > 0 && box.top < window.innerHeight) grow();
     }
 
     draw();
@@ -278,16 +366,23 @@
     }
     function motionChanged() { if (motion.matches) finish(); }
     motion.addEventListener("change", motionChanged);
-    if (document.fonts) document.fonts.ready.then(() => {
-      if (!disposed) { lastWidth = 0; draw(); }
-    });
+    window.addEventListener("wiki:look", lookChanged);
+    // Beschriftungen werden vermessen; kommt eine Schrift erst später (z. B.
+    // Onest in der lebendigen Darstellung), stimmen die Maße danach nicht mehr.
+    function fontsLoaded() { if (!disposed) { canvasFont = ""; lastWidth = 0; draw(); } }
+    if (document.fonts) {
+      document.fonts.ready.then(fontsLoaded);
+      document.fonts.addEventListener("loadingdone", fontsLoaded);
+    }
     return () => {
       disposed = true;
+      document.fonts?.removeEventListener("loadingdone", fontsLoaded);
       revision += 1;
       cancelAnimationFrame(frame);
       resize?.disconnect();
       intersection?.disconnect();
       motion.removeEventListener("change", motionChanged);
+      window.removeEventListener("wiki:look", lookChanged);
       finish();
       details.before(source);
       details.remove();

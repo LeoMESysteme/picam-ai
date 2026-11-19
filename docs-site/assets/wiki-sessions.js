@@ -331,12 +331,25 @@
       });
       // Werte erscheinen schwebend über dem Diagramm: nichts um das Diagramm herum ändert dabei seine Höhe.
       const wrap = el("div", null, "session-plot"), tip = el("div", null, "session-tip"); tip.setAttribute("aria-hidden", "true");
+      // Lebendig: ein Lichtband aus Glas hinter dem Diagramm ersetzt das feste Band und gleitet zum gewählten Lauf (sessions.css).
+      const lens = el("div", null, "session-lens"); lens.setAttribute("aria-hidden", "true");
+      const placeLens = (i, retry = true) => {
+        const scale = plot.getBoundingClientRect().width / W;
+        // Erste Auswahl kommt, bevor das Diagramm eingehängt ist: im nächsten Bild setzen.
+        if (!(scale > 0)) { if (retry) requestAnimationFrame(() => { if (lens.isConnected && rows[i]?.id === activeRun) placeLens(i, false); }); return; }
+        const jump = lens.dataset.on !== "true";
+        Object.assign(lens.style, { top: (T - 4) * scale + "px", width: bandWidth * scale + "px", height: (H - B - T + 4) * scale + "px" });
+        if (jump) lens.style.transition = "none";
+        lens.style.transform = `translateX(${((X(i) - bandWidth / 2) * scale).toFixed(1)}px)`;
+        lens.dataset.on = "true";
+        if (jump) { void lens.offsetWidth; lens.style.removeProperty("transition"); }
+      };
       let tipOn = false;
       const readout = el("p", "Überfahren oder mit den Pfeiltasten wählen zeigt die Werte; ein Klick oder Enter führt zur Tabellenzeile.", "session-point-readout");
       const show = id => {
         const i = rows.findIndex(r => r.id === id);
-        if (i < 0) { band.setAttribute("visibility", "hidden"); tip.dataset.open = "false"; return; }
-        band.setAttribute("x", X(i) - bandWidth / 2); band.setAttribute("visibility", "visible");
+        if (i < 0) { band.setAttribute("visibility", "hidden"); lens.dataset.on = "false"; tip.dataset.open = "false"; return; }
+        band.setAttribute("x", X(i) - bandWidth / 2); band.setAttribute("visibility", "visible"); placeLens(i);
         if (!tipOn) { tip.dataset.open = "false"; return; }
         const run = rows[i];
         tip.replaceChildren(el("strong", runName(run) + " UTC"));
@@ -361,7 +374,7 @@
         else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); reveal(rows[i].id, true); }
         else if (e.key === "Escape") { tipOn = false; tip.dataset.open = "false"; }
       });
-      wrap.append(plot, tip);
+      wrap.append(lens, plot, tip);
       animateChart(plot, kind);
       figure.append(wrap, readout); return figure;
     }

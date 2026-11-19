@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: 'docs-site.spec.ts',
+  testMatch: /docs-site(-[a-z0-9-]+)?\.spec\.ts$/,
   // Auf dem Pi teilt sich die CI die CPU mit Werkbank und Messläufen, und der
   // Runner läuft gedrosselt. Zeitkritische Tests reißen dort vereinzelt; ein
   // Wiederholungsversuch fängt das ab, der Bericht führt sie als „flaky“.

@@ -7,7 +7,7 @@
 }
 .md-typeset .wiki-stand-item { flex: 1 1 14rem; min-width: 0; }
 .md-typeset .wiki-stand-label { display: block; font-weight: 600; color: var(--md-default-fg-color--light); margin-bottom: .1rem; }
-.md-typeset .wiki-wege { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 1rem 0 1.6rem; }
+.md-typeset .wiki-wege { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 1rem 0 1.6rem; }
 .md-typeset .wiki-wege:has(> h3) { display: block; }
 .md-typeset .wiki-weg { padding: .2rem 1rem .4rem; min-width: 0; }
 .md-typeset .wiki-weg:first-child { padding-left: 0; }
@@ -21,7 +21,6 @@
 .md-typeset ul.wiki-weg-links a { font-weight: 600; font-size: .74rem; }
 .md-typeset ul.wiki-weg-links li > a { display: block; }
 .md-typeset .wiki-weg-hint { display: block; font-size: .66rem; color: var(--md-default-fg-color--light); }
-#weg-bedienen h3 svg { color: var(--docs-resolved-fg); }
 #weg-konfigurieren h3 svg { color: var(--docs-progress-fg); }
 #weg-entwickeln h3 svg { color: var(--docs-partial-fg); }
 .md-typeset details.wiki-allpages {
@@ -431,4 +430,368 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .md-typeset .wiki-kette-list > li + li::before { transform: none; }
+}
+
+/* ---------------------------------------------- Codebase-Seite ---- */
+/* docs/uebersicht/codebase.md, wiki-codebase.js. Breiter wie die Roadmap,
+ * Fließtext bleibt auf Lesebreite. */
+.codebase-page .md-grid { max-width: min(1600px, calc(100% - 56px)); }
+.codebase-page .md-content__inner > :is(p, ul, ol) { max-width: 42rem; }
+.md-typeset .wiki-codebase-bar,
+.md-typeset .wiki-codebase-note {
+  display: flex; flex-wrap: wrap; gap: .3rem 1rem; align-items: baseline;
+  margin: 1.2rem 0 .5rem; font-size: .68rem; color: var(--md-default-fg-color--light);
+}
+.md-typeset .wiki-codebase-help { flex: 1 1 18rem; }
+.md-typeset .wiki-codebase-full { font-weight: 600; white-space: nowrap; }
+.wiki-codebase-frame {
+  display: block; width: 100%; border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: .4rem; height: clamp(520px, calc(100vh - 7rem), 960px);
+  background: var(--md-default-bg-color);
+}
+.md-typeset h2 .wiki-codebase-jump {
+  margin-left: .6rem; padding: .1em .55em; border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 1rem; background: none; color: var(--md-typeset-a-color);
+  font-family: inherit; font-size: .55rem; font-weight: 600; line-height: 1.4; letter-spacing: 0; vertical-align: middle; cursor: pointer;
+}
+.md-typeset h2 .wiki-codebase-jump:hover { border-color: var(--md-accent-fg-color); color: var(--md-accent-fg-color); }
+.md-typeset h2 .wiki-codebase-jump:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; }
+@media (max-width: 959px) {
+  .codebase-page .md-grid { max-width: 100%; }
+}
+
+/* ============== Lebendige Darstellung: Diagramme und Verarbeitungskette ==== */
+/* Alles hier gilt nur unter [data-wiki-look="lebendig"] und überschreibt die
+ * ruhigen Regeln oben; ohne das Attribut bleibt es bei ihnen. Tokens (--lb-*)
+ * aus wiki-lebendig.css. Zusätzliche Knoten (Glanzverlauf, Spur, Wertpille,
+ * Schiene, Puls) legen wiki-chart.js und wiki-kette.js nur lebendig an.
+ * Datenfarben und Statusfarben bleiben die der ruhigen Darstellung. */
+[data-wiki-look="lebendig"] .wiki-chart {
+  --wiki-chart-grid: rgb(60 80 150 / .1);
+  --wiki-chart-axis: rgb(60 80 150 / .3);
+  --wiki-chart-track: rgb(60 80 150 / .07);
+  --wiki-chart-gloss: .5;
+  --wiki-chart-rest: rgb(40 60 150 / .24);
+  --wiki-chart-lift: rgb(40 60 150 / .42);
+  --wiki-chart-pill: rgb(255 255 255 / .92);
+  --wiki-chart-pill-edge: #fff;
+  --wiki-chart-pill-shadow: rgb(40 60 150 / .22);
+}
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .wiki-chart {
+  --wiki-chart-grid: rgb(170 185 255 / .09);
+  --wiki-chart-axis: rgb(170 185 255 / .28);
+  --wiki-chart-track: rgb(170 185 255 / .07);
+  --wiki-chart-gloss: .26;
+  --wiki-chart-rest: rgb(0 0 12 / .5);
+  --wiki-chart-lift: rgb(0 0 12 / .75);
+  --wiki-chart-pill: rgb(30 38 70 / .94);
+  --wiki-chart-pill-edge: rgb(200 215 255 / .22);
+  --wiki-chart-pill-shadow: rgb(0 0 12 / .6);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-chart-figure > figcaption {
+  font-family: "Bricolage Grotesque", var(--md-text-font-family); font-weight: 700;
+  font-size: .8rem; letter-spacing: -.01em; color: var(--lb-ink);
+}
+[data-wiki-look="lebendig"] :is(.wiki-chart-axis-label, .wiki-chart-note) { fill: var(--lb-ink2); }
+[data-wiki-look="lebendig"] .wiki-chart-legend > span { color: var(--lb-ink2); }
+[data-wiki-look="lebendig"] .wiki-chart-key { border-radius: 3px; }
+[data-wiki-look="lebendig"] .wiki-chart-track { fill: var(--wiki-chart-track); }
+[data-wiki-look="lebendig"] .wiki-chart-gloss-stop { stop-color: #fff; stop-opacity: var(--wiki-chart-gloss); }
+[data-wiki-look="lebendig"] .wiki-chart-gloss-stop--end { stop-opacity: 0; }
+[data-wiki-look="lebendig"] .wiki-chart-growth {
+  filter: drop-shadow(0 2px 3px var(--wiki-chart-rest));
+  transition: opacity .35s var(--lb-out), filter .35s var(--lb-out);
+}
+[data-wiki-look="lebendig"] .wiki-chart-pill-glass {
+  fill: var(--wiki-chart-pill); stroke: var(--wiki-chart-pill-edge); stroke-width: 1;
+  filter: drop-shadow(0 4px 6px var(--wiki-chart-pill-shadow));
+}
+[data-wiki-look="lebendig"] .wiki-chart-pill { transition: transform .45s var(--lb-spring); }
+[data-wiki-look="lebendig"] .wiki-chart-pill .wiki-chart-value { fill: var(--lb-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-wiki-look="lebendig"] .wiki-chart-value--inside { transition: opacity .35s var(--lb-out); }
+/* Überfahren und Fokus: der gewählte Balken hebt sich, die übrigen treten
+ * zurück. Wertpillen bleiben voll lesbar. */
+[data-wiki-look="lebendig"] .wiki-chart-svg g[data-hint="chart"]:hover .wiki-chart-hit { stroke: none; }
+[data-wiki-look="lebendig"] .wiki-chart-svg g[data-hint="chart"]:focus-visible .wiki-chart-hit {
+  stroke: var(--md-accent-fg-color); stroke-width: 2; rx: 10px;
+}
+[data-wiki-look="lebendig"] .wiki-chart-svg g[data-hint="chart"]:is(:hover, :focus-visible) .wiki-chart-growth {
+  filter: drop-shadow(0 6px 8px var(--wiki-chart-lift)) brightness(1.06);
+}
+[data-wiki-look="lebendig"] .wiki-chart-svg g[data-hint="chart"]:is(:hover, :focus-visible) .wiki-chart-pill { transform: translateY(-2px); }
+[data-wiki-look="lebendig"] .wiki-chart-svg:has(g[data-hint="chart"]:is(:hover, :focus-visible))
+  g[data-hint="chart"]:not(:hover, :focus-visible) :is(.wiki-chart-growth, .wiki-chart-value--inside) { opacity: .32; }
+
+/* Kette: Stufen als Glasknoten; die volle Fassung bekommt links eine Schiene
+ * mit Stationspunkten, auf der ein Puls wandert (wiki-kette.js). */
+[data-wiki-look="lebendig"] .wiki-kette {
+  --wiki-kette-glas: linear-gradient(165deg, #fff, rgb(243 246 255 / .92) 55%, rgb(234 240 255 / .9));
+  --wiki-kette-glas-an: linear-gradient(165deg, #fff, #fff 40%, rgb(238 243 255));
+  --wiki-kette-kante: #fff;
+  --wiki-kette-licht: inset 0 1.5px 0 #fff, inset 0 -10px 18px -12px rgb(70 100 220 / .24),
+    0 6px 16px -10px rgb(40 60 150 / .42), 0 1px 2px rgb(40 60 150 / .1);
+  --wiki-kette-licht-an: inset 0 1.5px 0 #fff, inset 0 -10px 18px -12px rgb(70 100 220 / .3),
+    0 14px 26px -14px rgb(40 60 150 / .55), 0 2px 4px rgb(40 60 150 / .12);
+  --wiki-kette-glut: rgb(47 109 246 / .13);
+  --wiki-kette-schiene: rgb(60 80 150 / .2);
+}
+[data-wiki-look="lebendig"] [data-md-color-scheme="slate"] .wiki-kette {
+  --wiki-kette-glas: linear-gradient(165deg, rgb(255 255 255 / .09), rgb(255 255 255 / .03) 55%, rgb(255 255 255 / .06));
+  --wiki-kette-glas-an: linear-gradient(165deg, rgb(255 255 255 / .16), rgb(255 255 255 / .07));
+  --wiki-kette-kante: rgb(200 215 255 / .16);
+  --wiki-kette-licht: inset 0 1px 0 rgb(225 233 255 / .2), inset 0 -10px 18px -12px rgb(120 150 255 / .2),
+    0 6px 16px -10px rgb(0 0 12 / .7);
+  --wiki-kette-licht-an: inset 0 1px 0 rgb(225 233 255 / .28), inset 0 -10px 18px -12px rgb(120 150 255 / .28),
+    0 14px 26px -14px rgb(0 0 12 / .85);
+  --wiki-kette-glut: rgb(143 176 255 / .16);
+  --wiki-kette-schiene: rgb(170 185 255 / .2);
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette-figure { position: relative; }
+[data-wiki-look="lebendig"] .md-typeset a.wiki-kette-node {
+  background-color: transparent; background-image: var(--wiki-kette-glas);
+  border-color: var(--wiki-kette-kante); border-radius: 14px;
+  box-shadow: var(--wiki-kette-licht);
+  transform-origin: left center;
+  transition: transform .5s var(--lb-spring), box-shadow .35s var(--lb-out), border-color .35s var(--lb-out);
+}
+[data-wiki-look="lebendig"] .md-typeset a.wiki-kette-node:is(:hover, :focus-visible) {
+  background-image: var(--wiki-kette-glas-an); box-shadow: var(--wiki-kette-licht-an);
+  transform: scale(1.02);
+}
+[data-wiki-look="lebendig"] .md-typeset a.wiki-kette-node:hover { border-color: var(--wiki-kette-kante); }
+[data-wiki-look="lebendig"] .wiki-kette-titel { color: var(--lb-ink); }
+[data-wiki-look="lebendig"] .wiki-kette-id { color: var(--lb-ink2); }
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette-figure > figcaption { color: var(--lb-ink2); }
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette:not([data-variant="kompakt"]) ol.wiki-kette-list { padding-left: 1.5rem; }
+/* Der ruhige Verbinderpfeil wird zum Stationspunkt auf der Schiene; die
+ * Aufbauanimation skaliert ihn über --wiki-kette-progress. */
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette:not([data-variant="kompakt"]) .wiki-kette-list > li::before {
+  content: ""; position: absolute; top: 50%; left: calc(.55rem + 1px - 5px - 1.5rem);
+  width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; clip-path: none;
+  background: var(--docs-progress-fg);
+  box-shadow: 0 0 0 3px var(--lb-paper);
+  transform: scale(var(--wiki-kette-progress, 1)); transform-origin: center;
+}
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette-list > li[data-zustand="resolved"]::before { background: var(--docs-resolved-fg); }
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette-list > li[data-zustand="partial"]::before { background: var(--docs-partial-fg); }
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette-list > li[data-zustand="discarded"]::before { background: var(--docs-discarded-fg); }
+.wiki-kette-schiene { display: none; }
+[data-wiki-look="lebendig"] .wiki-kette-schiene {
+  display: block; position: absolute; left: .55rem; width: 2px; border-radius: 1px;
+  background: var(--wiki-kette-schiene); pointer-events: none;
+}
+.wiki-kette-puls {
+  position: absolute; left: -4px; top: -5px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--md-accent-fg-color); opacity: 0;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent);
+}
+/* Kompakt (Startseite): Glaspillen; ein Signal läuft die Pfeile entlang,
+ * solange die Kette im Blick ist. */
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette[data-variant="kompakt"] a.wiki-kette-node { transform-origin: center; }
+[data-wiki-look="lebendig"] .md-typeset .wiki-kette[data-variant="kompakt"] a.wiki-kette-node:is(:hover, :focus-visible) { transform: scale(1.05); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-wiki-look="lebendig"] .wiki-kette[data-variant="kompakt"] .wiki-kette--sichtbar .wiki-kette-pfeil {
+    animation: wiki-kette-signal 4.2s var(--lb-out) infinite;
+    animation-delay: calc(var(--k, 0) * 350ms);
+  }
+}
+@keyframes wiki-kette-signal {
+  0%, 22%, 100% { color: var(--md-default-fg-color--lighter); transform: none; }
+  8% { color: var(--md-accent-fg-color); transform: translateX(2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-wiki-look="lebendig"] :is(.wiki-chart-growth, .wiki-chart-pill, .wiki-chart-value--inside, a.wiki-kette-node) { transition: none; }
+  [data-wiki-look="lebendig"] .wiki-chart-svg g[data-hint="chart"]:is(:hover, :focus-visible) .wiki-chart-pill { transform: none; }
+  [data-wiki-look="lebendig"] .md-typeset a.wiki-kette-node:is(:hover, :focus-visible) { transform: none; }
+  .wiki-kette-puls { display: none; }
+}
+
+/* ------------------------------------------- Lebendig: Federn und Zähler ----
+ * Nur in der lebendigen Darstellung (wiki-feder.js, wiki-hint.js). Öffnen
+ * federt weich auf (kein Überschwingen über 2 %), Schließen ist kürzer.
+ * Ruhig und ohne JavaScript bleibt alles beim Alten; was geschlossen ist,
+ * bleibt geschlossen, offener Inhalt ist nie versteckt. */
+[data-wiki-look="lebendig"] {
+  --lb-feder: cubic-bezier(.22, 1.02, .36, 1);
+  interpolate-size: allow-keywords;
+}
+@supports selector(::details-content) {
+  [data-wiki-look="lebendig"] :is(details.wiki-layer, details.wiki-chart-table, details.wiki-allpages, .wiki-occ details, details.mkdocstrings-source)::details-content {
+    block-size: 0; overflow: clip;
+    transition: block-size 220ms var(--lb-out), content-visibility 220ms allow-discrete;
+  }
+  [data-wiki-look="lebendig"] :is(details.wiki-layer, details.wiki-chart-table, details.wiki-allpages, .wiki-occ details, details.mkdocstrings-source)[open]::details-content {
+    block-size: auto;
+    transition: block-size 360ms var(--lb-feder), content-visibility 360ms allow-discrete;
+  }
+}
+/* Der Innenabstand der Tiefenebene wandert mit, statt beim Öffnen zu springen. */
+[data-wiki-look="lebendig"] .md-typeset details.wiki-layer { transition: padding-bottom 220ms var(--lb-out); }
+[data-wiki-look="lebendig"] .md-typeset details.wiki-layer[open] { transition-duration: 360ms; transition-timing-function: var(--lb-feder); }
+/* Pfeil dreht mit; beim Schließen per Rückfall bleibt „open“ bis zum Ende, daher data-closing. */
+[data-wiki-look="lebendig"] :is(.md-typeset details.wiki-layer, .md-typeset details.wiki-allpages, .md-typeset details.wiki-chart-table, .md-typeset .wiki-occ details, .md-typeset details.mkdocstrings-source) > summary::after {
+  transition: transform 360ms var(--lb-feder);
+}
+[data-wiki-look="lebendig"] :is(.md-typeset details.wiki-layer, .md-typeset details.wiki-allpages)[data-closing] > summary::after { transform: rotate(0deg); }
+[data-wiki-look="lebendig"] .md-typeset details.wiki-chart-table[data-closing] > summary::after,
+[data-wiki-look="lebendig"] .md-typeset .wiki-occ details[data-closing] > summary::after,
+[data-wiki-look="lebendig"] .md-typeset details.mkdocstrings-source[data-closing] > summary::after { transform: rotate(0deg); }
+
+/* Pop-up wächst aus dem Begriff (Ursprung setzt wiki-hint.js). */
+html[data-wiki-look="lebendig"] .wiki-hint {
+  opacity: 0; transform: scale(.92); filter: blur(3px);
+  transition: opacity 120ms var(--lb-out), transform 120ms var(--lb-out), filter 120ms var(--lb-out);
+}
+html[data-wiki-look="lebendig"] .wiki-hint[data-open="true"] {
+  opacity: 1; transform: none; filter: none;
+  transition: opacity 220ms var(--lb-out), transform 220ms var(--lb-out), filter 220ms var(--lb-out);
+}
+
+/* Zähler: Ziffern gleich breit; Screenreader liest den Endwert. */
+.wiki-zahl { font-variant-numeric: tabular-nums; }
+.wiki-zahl.is-counting { display: inline-block; text-align: right; }
+.wiki-zahl-sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-wiki-look="lebendig"] :is(details.wiki-layer, details.wiki-chart-table, details.wiki-allpages, .wiki-occ details, details.mkdocstrings-source)::details-content,
+  [data-wiki-look="lebendig"] :is(details.wiki-layer, details.wiki-chart-table, details.wiki-allpages, .wiki-occ details, details.mkdocstrings-source)[open]::details-content,
+  [data-wiki-look="lebendig"] .md-typeset details.wiki-layer,
+  [data-wiki-look="lebendig"] .md-typeset details.wiki-layer[open],
+  [data-wiki-look="lebendig"] :is(.md-typeset details.wiki-layer, .md-typeset details.wiki-allpages, .md-typeset details.wiki-chart-table, .md-typeset .wiki-occ details, .md-typeset details.mkdocstrings-source) > summary::after {
+    transition: none;
+  }
+  html[data-wiki-look="lebendig"] .wiki-hint,
+  html[data-wiki-look="lebendig"] .wiki-hint[data-open="true"] { transition: none; transform: none; filter: none; }
+}
+
+/* ---------------------------------------------------- Seitenskelett ---- */
+/* Braucht die neue Seite bei Sofortnavigation länger als 250 ms, steht in
+ * der Lesefläche ein Skelett statt des alten Texts (wiki-lebendig.js setzt
+ * .wiki-laedt und aria-busy an .md-content). Ruhig: graue Flächen, die sanft
+ * in der Deckkraft pulsieren; lebendig: Glas mit wanderndem Glanz
+ * (wiki-lebendig.css). Bei reduzierter Bewegung steht es still. Der alte
+ * Inhalt bleibt im Layout (nur unsichtbar), damit sich Höhe und
+ * Scrollposition nicht ändern; das Skelett klebt oben im sichtbaren Teil. */
+.md-content.wiki-laedt { position: relative; min-height: 34rem; }
+.md-content.wiki-laedt > :not(.wiki-skelett) { visibility: hidden; }
+.wiki-skelett { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.wiki-skelett-inner {
+  position: sticky;
+  top: 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  margin: 0 .8rem;
+  padding: .9rem 0 1.2rem;
+  animation: wiki-skelett-puls 1.4s ease-in-out infinite alternate;
+}
+@media screen and (min-width: 76.25em) {
+  .wiki-skelett-inner { margin-inline: 1.2rem; }
+}
+.wiki-skelett-balken {
+  display: block;
+  width: var(--w, 100%);
+  height: .7rem;
+  border-radius: .2rem;
+  background: var(--md-default-fg-color--lightest);
+}
+.wiki-skelett-pfad { width: 9rem; height: .55rem; }
+.wiki-skelett-titel { width: min(62%, 22rem); height: 1.7rem; margin: .45rem 0 .15rem; }
+.wiki-skelett-meta { width: min(46%, 16rem); height: .6rem; margin-bottom: .9rem; }
+.wiki-skelett-block { height: 8rem; margin: .7rem 0; border-radius: .4rem; }
+@keyframes wiki-skelett-puls { from { opacity: 1; } to { opacity: .45; } }
+.wiki-laden-status {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiki-skelett-inner { animation: none; }
+}
+@media print {
+  .wiki-skelett { display: none; }
+}
+
+/* ------------------------------------- Startseite: geführter Weg ---- */
+/* .wiki-pfad (#weg-bedienen, wiki-start.js): fünf Schritte zum ersten
+ * Messwert. Breit eine Schrittleiste (Tabs) über Haarlinie, gewählter
+ * Schritt mit Akzentpunkt; schmal (< 45em) ein Akkordeon. Ohne JavaScript
+ * bleiben Überschriften und Linklisten stehen. Lebendige Fassung:
+ * wiki-messkette.css. */
+.md-typeset .wiki-pfad { margin: 1rem 0 2.2rem; scroll-margin-top: 3.4rem; }
+.md-typeset .wiki-pfad-leiste {
+  position: relative;
+  display: grid; grid-template-columns: repeat(var(--wiki-pfad-n, 5), minmax(0, 1fr));
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+.md-typeset .wiki-pfad-leiste[hidden] { display: none; }
+.md-typeset .wiki-pfad-tab {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; gap: .35rem;
+  min-width: 0; margin: 0 0 -1px; padding: .45rem .25rem .6rem;
+  border: 0; border-bottom: 2px solid transparent; background: none;
+  font: inherit; font-size: .7rem; font-weight: 600; line-height: 1.25;
+  color: var(--md-default-fg-color--light); cursor: pointer; text-align: center;
+}
+.md-typeset .wiki-pfad-tab:hover { color: var(--md-accent-fg-color); }
+.md-typeset .wiki-pfad-tab[aria-selected="true"] { color: var(--md-default-fg-color); border-bottom-color: var(--md-accent-fg-color); }
+.md-typeset .wiki-pfad-tab:focus-visible,
+.md-typeset .wiki-pfad-auf:focus-visible,
+.md-typeset .wiki-pfad-weiter-knopf:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; border-radius: .2rem; }
+.md-typeset .wiki-pfad-name { overflow-wrap: anywhere; }
+.md-typeset .wiki-pfad-nr {
+  display: inline-grid; place-items: center; flex: none;
+  width: 1.35rem; height: 1.35rem; border-radius: 50%;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  background: var(--md-default-bg-color);
+  font-size: .62rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--md-default-fg-color--light);
+}
+.md-typeset .wiki-pfad-tab--erledigt .wiki-pfad-nr,
+.md-typeset .wiki-pfad-schritt--erledigt .wiki-pfad-nr { border-color: var(--md-accent-fg-color); color: var(--md-accent-fg-color); }
+.md-typeset .wiki-pfad-tab[aria-selected="true"] .wiki-pfad-nr,
+.md-typeset .wiki-pfad-auf[aria-expanded="true"] .wiki-pfad-nr,
+.md-typeset .wiki-pfad-schritt--an .wiki-pfad-nr {
+  border-color: var(--md-accent-fg-color); background: var(--md-accent-fg-color); color: var(--md-accent-bg-color, #fff);
+}
+/* Spur und Linse braucht nur die lebendige Fassung. */
+.md-typeset .wiki-pfad-spur,
+.md-typeset .wiki-pfad-linse { display: none; }
+.md-typeset .wiki-pfad[data-modus="tabs"] .wiki-pfad-schritt > h3 { display: none; }
+.md-typeset .wiki-pfad[data-modus="tabs"] .wiki-pfad-schritt { padding-top: 1rem; }
+.md-typeset .wiki-pfad-inhalt > p:first-child { margin: 0 0 .9rem; font-size: .74rem; color: var(--md-default-fg-color--light); }
+.md-typeset ul.wiki-pfad-links {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .8rem 2rem;
+  list-style: none; margin: 0; padding: 0;
+}
+.md-typeset ul.wiki-pfad-links li { margin: 0; padding: 0; }
+.md-typeset ul.wiki-pfad-links li > a { display: block; font-size: .74rem; font-weight: 600; }
+.md-typeset .wiki-pfad-hint { display: block; font-size: .66rem; color: var(--md-default-fg-color--light); }
+.md-typeset .wiki-pfad-weiter { margin: 1.1rem 0 0; }
+.md-typeset .wiki-pfad-weiter-knopf {
+  display: inline-flex; align-items: center; gap: .35rem; padding: 0; border: 0; background: none;
+  font: inherit; font-size: .74rem; font-weight: 600; color: var(--md-typeset-a-color); cursor: pointer;
+}
+.md-typeset .wiki-pfad-weiter-knopf:hover { color: var(--md-accent-fg-color); }
+/* Akkordeon (schmal). */
+.md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-schritt + .wiki-pfad-schritt { border-top: 1px solid var(--md-default-fg-color--lightest); }
+.md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-schritt > h3 { margin: 0; font-size: inherit; }
+.md-typeset .wiki-pfad-auf {
+  display: flex; align-items: center; gap: .6rem; width: 100%; padding: .7rem 0;
+  border: 0; background: none; font: inherit; font-size: .8rem; font-weight: 600; line-height: 1.3;
+  color: var(--md-default-fg-color); cursor: pointer; text-align: left;
+}
+.md-typeset .wiki-pfad-auf::after {
+  content: ""; flex: none; width: 1rem; height: 1rem; margin-left: auto;
+  background-color: currentColor; mask-image: var(--md-details-icon);
+  mask-repeat: no-repeat; mask-position: center; mask-size: contain;
+  transition: transform 150ms ease;
+}
+.md-typeset .wiki-pfad-auf[aria-expanded="true"]::after { transform: rotate(90deg); }
+.md-typeset .wiki-pfad[data-modus="akkordeon"] .wiki-pfad-inhalt { padding: 0 0 1.1rem 1.95rem; }
+.md-typeset .wiki-pfad[data-modus="akkordeon"] ul.wiki-pfad-links { grid-template-columns: 1fr; }
+@media (prefers-reduced-motion: reduce) {
+  .md-typeset .wiki-pfad-auf::after { transition: none; }
 }

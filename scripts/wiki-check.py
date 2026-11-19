@@ -23,20 +23,34 @@ KETTE_PATH = "docs-site/assets/data/kette.json"
 
 
 def check_start(md_text: str) -> list[str]:
-    """Prüft die Starthüllen und die drei Wege innerhalb der Weiche."""
+    """Prüft die Starthüllen: geführten Weg (#weg-bedienen), Stand und die zwei Vertiefungswege."""
     errors = []
-    for kind in ("wiki-stand", "wiki-wege"):
+    for kind in ("wiki-pfad", "wiki-stand", "wiki-wege"):
         block = re.search(
-            rf'^<div class="{kind}" markdown="1">\s*\n((?:(?!^<div\b)[\s\S])*?)^</div>\s*$',
+            rf'^<div class="{kind}"([^>]*) markdown="1">\s*\n((?:(?!^<div\b)[\s\S])*?)^</div>\s*$',
             md_text, re.MULTILINE,
         )
         if block is None:
             errors.append(f"README.md: {kind} fehlt oder ist nicht geschlossen")
+        elif kind == "wiki-pfad":
+            # Der Seitenkopf aller Bedienen-Seiten verlinkt auf index.html#weg-bedienen.
+            if 'id="weg-bedienen"' not in block[1]:
+                errors.append('README.md: wiki-pfad braucht id="weg-bedienen"')
+            steps = re.findall(r"^### (.+)$", block[2], re.MULTILINE)
+            expected_steps = ["Aufbauen", "Installieren", "Einrichten", "Messen", "Prüfen"]
+            if steps != expected_steps:
+                errors.append("README.md: wiki-pfad braucht genau die Schritte " + ", ".join(expected_steps))
+            else:
+                # Jeder Schritt führt weiter: mindestens zwei Listenlinks „* [Titel](pfad)“.
+                bodies = re.split(r"^### .+$", block[2], flags=re.MULTILINE)[1:]
+                for step, body in zip(steps, bodies, strict=True):
+                    if len(re.findall(r"^\* \[[^\]]+\]\([^)\s]+\)", body, re.MULTILINE)) < 2:
+                        errors.append(f"README.md: wiki-pfad-Schritt {step} braucht mindestens zwei Links")
         elif kind == "wiki-wege":
-            headings = re.findall(r"^### (.+)$", block[1], re.MULTILINE)
-            expected = ["Einrichten und bedienen", "Konfigurieren und verstehen", "Entwickeln und anbinden"]
+            headings = re.findall(r"^### (.+)$", block[2], re.MULTILINE)
+            expected = ["Konfigurieren und verstehen", "Entwickeln und anbinden"]
             if headings != expected:
-                errors.append("README.md: wiki-wege braucht genau drei Wege in der Reihenfolge " + ", ".join(expected))
+                errors.append("README.md: wiki-wege braucht genau zwei Wege in der Reihenfolge " + ", ".join(expected))
     return errors
 
 

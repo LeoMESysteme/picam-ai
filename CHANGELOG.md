@@ -59,6 +59,83 @@ was ist die Konsequenz.
   Verhältnisse unter 60 % nach Neusetzen und fehlgeschlagene Startproben
   sperren den Start. Der Lauf übernimmt keine Werte aus der Probe.
 
+* 2026-11-16: Wiki-Startseite als geführter Weg und Seitenskelett beim
+  Laden. Problem: Die Startseite ordnete nach Rollen, ein durchgehender
+  Weg zum ersten Messwert fehlte; langsame Seitenwechsel ließen halbe oder
+  eingefrorene Inhalte stehen. Änderung: „So kommst du zum ersten
+  Messwert“ in fünf Schritten (Aufbauen, Installieren, Einrichten, Messen,
+  Prüfen) mit je 2–4 vorhandenen Seiten (Installieren: Werkbank per
+  `scripts/install-workbench.sh`, Windows-Brücke und GSVmulti), als Tabs
+  bzw. schmal als Akkordeon; Konfigurieren und Entwickeln als „Tiefer
+  gehen“, Stand und Alle Seiten darunter. `scripts/wiki-check.py` prüft
+  die neue Struktur. Seitenskelett ab 250 ms Ladezeit in beiden
+  Darstellungen (ruhig pulsierend grau, lebendig Glas mit Glanz),
+  `aria-busy` und Live-Region; der Morph gibt nach 800 ms frei und zeigt
+  das Skelett. Konsequenz: Seitenköpfe der Bedienen-Seiten führen weiter
+  zu `index.html#weg-bedienen`, jetzt auf den geführten Weg.
+
+* 2026-11-15: Wiki „lebendig“: Bewegung und Grafiken. Seitenwechsel als
+  Morph (View Transitions: der Linktext fliegt in den neuen Titel, nichts
+  sonst überblendet), Lesefortschritt unter dem Kopf und gleitende Linse im
+  Inhaltsverzeichnis, atmende Atmosphäre (pausiert bei verborgenem Tab),
+  Aufklappen mit Feder (`wiki-feder.js`), Pop-ups wachsen aus dem Begriff,
+  Zahlen mit Einheit zählen beim Sichtbarwerden hoch, Weg-Signets zeichnen
+  sich, die Verlustlinie der Fortschrittsseite zieht sich, ein Glasband
+  folgt dem gewählten Lauf in der Laufmatrix. Neue Startseiten-Grafik
+  „Messkette“ (`wiki-messkette.js`/`.css`): alle Stufen aus `kette.json`,
+  ein Anzeigewert wandert durch die Kette bis zur gesperrten DUT-Ausgabe.
+  Alles nur in „lebendig“, bei reduzierter Bewegung statisch. Tests je
+  Teil in eigenen Dateien (`tests/docs-site-{rahmen,feder,grafik}.spec.ts`,
+  die Doku-Konfiguration matcht `docs-site(-…)?.spec.ts`). Bekannt: Auf dem
+  Pi (Headless, Software-Rendering) erscheint das erste Morph-Bild nach
+  360–860 ms statt 70–420 ms ohne Morph.
+
+* 2026-11-14: Wiki „lebendig“ vervollständigt. Filterpillen (OQ, Glossar)
+  tragen die Linse, Suchfelder und der Suchknopf sind runde Glasfelder mit
+  Rand ≥ 3 : 1, Tabellen, Code-Blöcke und Tiefenebenen folgen der
+  Glas-Formsprache, die Navigationsschublade auf dem Handy ist eine
+  Glasfläche, und Zensicals Suchdialog bekommt über seine RGB-Variablen
+  Nebel- und Nachtblau. Gemeinsame Tokens für schwebende Flächen und Felder
+  ersetzen Kopien in den Sonderseiten, Radien folgen 22/18/14/12 px, die
+  Tour-Kapitellinse gleitet. Die Codebase-Seite steht jetzt auf `master`
+  (`./scripts/codebase-facts.py --write --focus master`).
+
+* 2026-11-14: Wiki „lebendig“, Stufe 4 und Abschlussprüfung. Diagramme
+  (`wiki-chart.js`) wachsen beim Sichtbarwerden, heben den gewählten Balken
+  hervor und zeigen den Wert als Glaspille; die Kette (`wiki-kette.js`) hat
+  Glasknoten mit wanderndem Puls. Tour, Roadmap, Fortschritt und
+  Session-Explorer haben je eine Glas-Schicht in ihrer CSS-Datei. Behobene
+  Altfehler, die beide Darstellungen betreffen: Diagrammachsen zeigten
+  krumme Marken wie „33,333“ (jetzt runde Schritte, überlappende
+  Beschriftungen entfallen); Kategorien wurden mit der Schrift der zuletzt
+  angelegten Messung vermessen und liefen in den Balken (gemeinsamer Canvas,
+  Schrift wird jetzt je Messung gesetzt); Tour-Bedienknöpfe waren
+  Unicode-Zeichen (jetzt Linien-SVG). `scripts/codebase-facts.py` zählt
+  Funktionen nur noch in Code und Tests, nicht in Python-Kopien unter
+  `docs/`. Abschlussprüfung des Looks: Inhaltsverzeichnis-Glas endet nach dem
+  letzten Eintrag, dunkles Glas gedämpft, Lesefläche hält auch ohne
+  Seitenleisten Randabstand, Linse gleitet sichtbar. Konsequenz: DESIGN.md
+  und PRODUCT.md beschreiben beide Darstellungen; der Suchdialog bleibt als
+  Shadow-DOM-Komponente des Themes unverändert.
+
+* 2026-11-13: Wiki: Codebase-Seite und zweite Darstellung „lebendig“.
+  Problem: Eine Codebase-Übersicht (Glass-Artefakt) lag nur als eingefrorener
+  Schnappschuss mit englischen Texten und fest eingetragenen Zahlen vor; das
+  Wiki hatte nur einen, bewusst schlichten Look. Änderung: neue Seite
+  Projekt → „Codebase im Überblick“ (`docs/uebersicht/codebase.md`); Zahlen
+  und Tabellen erzeugt `scripts/codebase-facts.py --write` aus Git und dem
+  Python-Syntaxbaum (`docs-site/assets/data/codebase.json`, Block zwischen
+  den Markern der Seite, Suchmethoden der Befunde stehen mit dabei). Die
+  Bühne aus dem Artefakt liegt deutsch, hell/dunkel und bedienbar unter
+  `docs-site/assets/codebase/`. Umschalter im Kopf zwischen „ruhig“ (bisheriger
+  Stand, gilt auch ohne JavaScript) und „lebendig“ (Glas, Atmosphäre je Weg,
+  gleitende Navigationslinse, Seiteneintritt; Schriften Bricolage Grotesque,
+  Onest, Martian Mono lokal unter SIL OFL). Vorgabe für Erstbesucher:
+  lebendig; die Wahl merkt sich der Browser. Konsequenz: Die Codebase-Zahlen
+  aktualisiert nur ein bewusster `--write`-Lauf (kein `--check` im Build,
+  die Daten ändern sich mit jedem Commit). Bestehende Browsertests laufen in
+  „ruhig“; neue Tests decken Umschalter, Kontrast, reduzierte Bewegung und die
+  Codebase-Seite ab.
 * 2026-11-14: **Installer P0a, Aufgabe 1 (L1).** Die kommentierte Paketliste
   `packaging/apt-packages.txt` deckt die aktiven Drittmodule und UVC-Werkzeuge ab.
   Der Installer überspringt vorhandene Pakete/Editable-Installation, behält
