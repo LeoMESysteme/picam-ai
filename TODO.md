@@ -1,7 +1,7 @@
 # TODO — Stand 2026-11-18
 
 > **KRITISCHER NUTZERAUFTRAG 2026-11-11:** Vor Bridge-/EXE-Features den Workbench-Blocker bearbeiten.
-> Einstieg: [/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md](/home/me-systeme/picam-ai/docs/WORKBENCH_BLOCKER.md).
+> Einstieg: [docs/WORKBENCH_BLOCKER.md](docs/WORKBENCH_BLOCKER.md).
 > Originale, Quellstände, Logs und Regressionen sind im Hauptcheckout gesichert.
 > Ziel Freitag 2026-11-13; keine Hardwarefreigabe ohne Beleg.
 
@@ -29,7 +29,7 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 4. 20–60 % ungültige Takte durch die Nachführung, siehe unten.
 5. Bedienfallen zwischen Werkbank und Brücke (Kopplung je Weg, Port-Belegung, Moduswechsel).
 
-Punkte 2 und 3 sind auf `wip/bruecke-ux3` (Gestaltungsrunde 3, mit `feat/integration` zusammengeführt, Windows-Testsuite grün) umgesetzt, aber nicht gemergt und unter Windows **nicht** nachgeprüft. Nächster Schritt: Sichtprüfung nach [windows/bridge/PRUEFUNG-UX3.md](windows/bridge/PRUEFUNG-UX3.md) (Mittwoch 18.11.), Offscreen-Bilder unter `docs/quellen/ux3-tour-2026-11/`; erst danach Merge nach `feat/integration`.
+~~Punkte 2 und 3~~ erledigt: Gestaltungsrunde 3 (`wip/bruecke-ux3`) hat Leonhard am 18.11. unter Windows geprüft („bereit für 1.0“), gemergt; EXE 1.0.0 mit `windows/bridge/build-release.cmd`. Prüfanleitung `windows/bridge/PRUEFUNG-UX3.md`, Bilder unter `docs/quellen/ux3-tour-2026-11/`.
 
 **Wiki:** Vergleich und Erklärung der drei Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt: Strecke, Hardware, Rate, Störverhalten, Rückmeldung, Einrichtung, Abnahmestand) als eigene Wiki-Seite eintragen. Vorlage: [docs/quellen/ausgabewege-vergleich-2026-11-13.md](docs/quellen/ausgabewege-vergleich-2026-11-13.md). Passt zur offenen Idee „UART-Anschluss als Grafik im Wiki“. **Entwurf liegt vor (13.11. abends):** [docs/superpowers/specs/2026-11-13-wiki-ausgabewege-entwurf.md](docs/superpowers/specs/2026-11-13-wiki-ausgabewege-entwurf.md), Einhängen nach dem Merge der Wiki-Session (`feat/wiki-lebendig`).
 
