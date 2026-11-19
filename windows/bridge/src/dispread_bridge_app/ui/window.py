@@ -743,7 +743,7 @@ class MainWindow(QWidget):
     # ---------------------------------------------------------------- Beenden
     def build_exit_dialog(self) -> ExitDialog:
         c = self.controller.context()
-        sending = texts.is_transmitting(c)     # auch Testfreigabe und Demo schreiben an COM
+        sending = texts.is_transmitting(c)     # auch Weitergabe und Demo schreiben an COM
         text = texts.EXIT_TEXT_ACTIVE if sending else texts.EXIT_TEXT_LOCKED
         return ExitDialog(text, self, transmitting=sending)
 

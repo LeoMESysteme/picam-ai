@@ -153,7 +153,7 @@ function stamp(ms) { return new Date(ms).toISOString().replace(/[-:]/g, '').repl
 const ok = (data = {ok: true}) => ({ok: true, error: null, data});
 const fail = (error) => ({ok: false, error, data: {error}});
 
-import {BRIDGE_NOTE, LOCK_NOTICE, SERIAL_NOTE} from '../run/output.js';
+import {BRIDGE_NOTE, SERIAL_NOTE} from '../run/output.js';
 
 export function createScenario({clock = () => globalThis.performance.now(), wall = () => Date.now(), base = null} = {}) {
   // phase: idle | setup | failed | ready | confirmed | run | stopped
@@ -384,7 +384,7 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       session_id: sessionId,
       setup: phase === 'idle' ? null : setupBlock(),
       profile: profile ? {...profile} : null,
-      run_block: null, test_run: null, reader_tolerance: null,
+      run_block: null, run_hint: null, last_start_rejection: null, test_run: null, reader_tolerance: null,
       run: runPhase ? runBlock() : null,
       diagnostics: {enabled: Boolean(runOpts?.diagnostics && runPhase), reason: runOpts?.diagnostics ? null : 'kein Diagnoselauf'},
       diagnose_kopie: false, diagnostic_leftovers: [], previous_region_hint: null,
@@ -403,13 +403,11 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
     const out = outputChoice;
     if (!out) return {transport: 'off', state: 'off'};
     const serial = out.transport === 'serial';
-    const {acknowledge_unaccepted: ack, transport: _t, ...config} = out;
-    const released = !serial && ack === true;
+    const {acknowledge_unaccepted: _a, transport: _t, ...config} = out;
     return {transport: out.transport, state: phase === 'stopped' ? 'stopped' : serial ? 'serial_ready' : 'waiting',
       config: serial || out.transport === 'tcp' ? config : {port: '/dev/ttyAMA0', baudrate: 115200},
-      error: null, release_block: serial || released ? null : LOCK_NOTICE, last_ack: null, acceptance: 'fehlt',
-      ack_scope: 'Übungslauf: simuliert, nichts gesendet', ...(serial ? {release_note: SERIAL_NOTE} : {}),
-      ...(released ? {release: 'test_unaccepted', release_note: BRIDGE_NOTE} : {})};
+      error: null, release_block: null, last_ack: null, acceptance: 'abgenommen',
+      ack_scope: 'Übungslauf: simuliert, nichts gesendet', release_note: serial ? SERIAL_NOTE : BRIDGE_NOTE};
   }
 
   // ---- Bild und HUD ----

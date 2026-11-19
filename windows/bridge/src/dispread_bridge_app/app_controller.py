@@ -628,8 +628,8 @@ class AppController:
                 if test_release and not self._tr_active:
                     self._tr_active, self._tr_written, self._tr_omitted = True, 0, 0
                     self._counter_entry = None
-                    self._entries.appendleft(JournalEntry(now, f'Testfreigabe aktiv (Lauf {run_now or "?"})',
-                                                          'echte Werte, nicht abgenommen', tone='warn'))
+                    self._entries.appendleft(JournalEntry(now, f'Weitergabe aktiv (Lauf {run_now or "?"})',
+                                                          'echte Werte', tone='info'))
                 elif not test_release and self._tr_active:
                     self._tr_active = False
                     self._counter_entry = None
@@ -663,8 +663,8 @@ class AppController:
             if outcome == 'written':
                 # Eine laufende Zaehlerzeile, die aktualisiert statt neu angehaengt wird.
                 n = self._tr_written if test_release else self._written
-                entry = (JournalEntry(now, f'Testfreigabe: {n} {"Wert" if n == 1 else "Werte"} weitergegeben',
-                                      'COM-Weitergabe · nicht abgenommen · kein GSVmulti-Empfangsnachweis', tone='warn')
+                entry = (JournalEntry(now, f'{n} {"Wert" if n == 1 else "Werte"} weitergegeben',
+                                      'COM-Weitergabe · kein GSVmulti-Empfangsnachweis', tone='info')
                          if test_release else
                          JournalEntry(now, f'Demo: {n} {"Wert" if n == 1 else "Werte"} weitergegeben',
                                       'COM-Weitergabe · kein GSVmulti-Empfangsnachweis', tone='info'))
@@ -1318,7 +1318,7 @@ class AppController:
                 pi_name=p.name if p else None, route=route, run_id=run_id,
                 mode='operate' if (self._setup_done or self._overview) else 'setup',
                 setup=SetupState(self._step, variant, data),
-                dut_locked=True,                         # nie freigegeben: Abnahme fehlt (OQ-06/OQ-47)
+                dut_locked=True,                         # Freigabe-Sperrzustand wird nicht gefuehrt; Ausgabeart traegt test_release/demo
                 demo=demo, test_release=test_release,
                 forwarded=self._tr_written if test_release else 0, omitted=self._tr_omitted if test_release else 0,
                 waiting_for_run=authenticated and r.output == 'output_off',

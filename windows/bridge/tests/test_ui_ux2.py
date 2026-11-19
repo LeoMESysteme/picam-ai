@@ -406,5 +406,5 @@ def test_tile_words_get_soft_hyphens_only_when_too_narrow(win):
     assert texts.hyphenate('nicht abgenommen').replace('­', '') == 'nicht abgenommen'
     _, wide = win('B1tr', size=(440, 720))
     out = wide.status_view.chips[3]
-    assert '­' not in out.word.text() or out.word.width() < out.word.fontMetrics().horizontalAdvance('Testfreigabe')
+    assert '­' not in out.word.text() or out.word.width() < out.word.fontMetrics().horizontalAdvance(out.word.text().replace('­', ''))
     assert '­' not in out.accessibleName()

@@ -6,28 +6,19 @@ export const PATHS = [['off', 'Aus'], ['serial', 'UART direkt'], ['uart', 'UART 
 export const NAMES = {serial: 'UART direkt', uart: 'UART über Brücke', tcp: 'Netzwerk über Brücke'};
 export const BAUDRATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
 export const DEFAULTS = {port: '/dev/ttyAMA0', baudrate: 115200, prefix: '%', tcpPort: 5000};
-export const LOCK_NOTICE = 'DUT-Ausgabe gesperrt: Windows-Abnahme fehlt. Verbindung und Diagnose sind vorbereitet; ' +
-  'Messwerte werden noch nicht an GSVmulti ausgegeben.';
-export const SERIAL_NOTE = 'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Werte werden ausgelassen; ' +
-  'GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
+export const LOCK_NOTICE = 'DUT-Ausgabe gesperrt. Verbindung und Diagnose sind vorbereitet; ' +
+  'Messwerte werden nicht an GSVmulti ausgegeben.';
+export const SERIAL_NOTE = 'Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
 // Vierkanal-Takt: wortgleich SERIAL_4CH_RELEASE_NOTE / BRIDGE_4CH_RELEASE_NOTE (dispread.live.output).
-export const SERIAL_4CH_NOTE = 'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. ' +
-  'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); ' +
+export const SERIAL_4CH_NOTE = 'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); ' +
   'der Zeitkanal ist vorläufig.';
-export const BRIDGE_4CH_NOTE = 'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. ' +
-  'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); ' +
+export const BRIDGE_4CH_NOTE = 'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); ' +
   'verlorene Takte füllt die Brücken-App mit solchen Zeilen auf (höchstens 50). Der Zeitkanal ist vorläufig.';
-export const SERIAL_ACK = 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe';
-// Testfreigabe ueber die Bruecke (R1/R2): wortgleich BRIDGE_RELEASE_NOTE (dispread.live.output), per Test abgeglichen.
-export const BRIDGE_NOTE = 'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. Ungültige und veraltete Werte werden ' +
-  'ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
-export const BRIDGE_ACK = 'Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe';
-export const BRIDGE_NO_ACK = 'Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.';
+// Brueckenwege (R1/R2): wortgleich BRIDGE_RELEASE_NOTE (dispread.live.output), per Test abgeglichen.
+export const BRIDGE_NOTE = 'Ungültige und veraltete Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.';
 export const UART_RATE_NOTE = 'UART über Brücke läuft mit 460 800 Baud und trägt den Vierkanal-Takt bis 10 Hz. Eine ältere Windows-App mit 115 200 Baud schafft nur etwa 3–4 Werte/s; dann neue App installieren oder Netzwerk verwenden.';
-export const RELEASE_TAG = 'Testfreigabe – nicht abgenommen';
 export const TEST_BLOCK = 'Testlauf erlaubt keine externe Ausgabe. Verbindungsweg auf Aus stellen.';
 export const UNCONFIRMED = 'GSVmulti-Empfang unbestätigt.';
-export const MARKER = 'nicht abgenommen';
 // Format und Takt (Spec 2026-11-11 §3.5/§6 F3). Warnung wortgleich aus der Spec.
 export const FORMAT_WARNING = 'Einkanal-Ausgabe: Bei Übergang (TRANSITION) und unlesbarer Anzeige (UNREADABLE) werden keine Zeilen gesendet. ' +
   'GSVmulti zeichnet die Lücken nicht auf; Laufzeit und Zeitachse der Aufnahme sind deshalb nicht genau.';
@@ -58,7 +49,6 @@ const STATES = {disconnected: 'Verbindung unterbrochen – lokaler Lauf läuft w
 const OUTCOMES = {failed: 'fehlgeschlagen', expired: 'veraltet – nicht weitergegeben', unconfirmed: 'unbestätigt'};
 
 export const isOff = (output) => !output || output.transport === 'off';
-export const isReleased = (output) => !isOff(output) && output.release === 'test_unaccepted';
 export const stateWord = (output) => STATES[output?.state] || output?.state || 'Verbindungszustand unbekannt';
 
 // Kurzform fuer die Statusleiste: "<Weg> · <Zustand>" (Zustand ohne Erklaerzusatz).
@@ -70,7 +60,6 @@ export function outputTone(output) {
   if (isOff(output)) return '';
   if (['failed', 'audit_failed'].includes(output.state)) return 'err';
   if (['disconnected', 'waiting'].includes(output.state)) return 'warn';
-  if (isReleased(output)) return 'warn';
   return '';
 }
 
@@ -87,8 +76,8 @@ export function outputLines(output) {
     output.release_note, output.release_block, output.error, attempt,
     ack && output.ack_scope ? `Geltung der Quittung: ${output.ack_scope}` : null, UNCONFIRMED].filter(Boolean);
 }
-// Marker fuer Dock/Inspektor: UART direkt und Testfreigabe tragen "nicht abgenommen".
-export const markerText = (output) => output?.transport === 'serial' ? MARKER : isReleased(output) ? RELEASE_TAG : null;
+// Marker fuer Dock/Inspektor: seit 1.0 gibt es keinen Abnahme-Hinweis mehr.
+export const markerText = () => null;
 export const outputView = (output) => outputLines(output).join('\n');
 
 // Konfiguration im Lauf, schreibgeschuetzt (config aus status.output).
@@ -104,18 +93,16 @@ export function configText(output) {
 const formatPart = (fields) => !fields.format ? {}
   : fields.format === '4ch' ? {format: '4ch', rate_hz: Number(fields.rateHz)} : {format: '1ch'};
 
-// POST-Koerper `output`. fields = {port, baudrate, prefix, tcpPort, ack, format, rateHz}.
+// POST-Koerper `output`. fields = {port, baudrate, prefix, tcpPort, format, rateHz}.
 export function outputBody(choice, fields = {}) {
   if (choice === 'serial') {
     // Vierkanal verlangt Praefix % (Server lehnt anderes ab).
     const prefix = fields.format === '4ch' ? '%' : fields.prefix;
     return {transport: 'serial', port: fields.port, baudrate: Number(fields.baudrate), prefix,
-      acknowledge_unaccepted: fields.ack === true, ...formatPart(fields)};
+      ...formatPart(fields)};
   }
-  // Brueckenwege: Testfreigabe nur mit gesetztem Haken, sonst bleibt das Feld weg (Ausgabe gesperrt).
-  const release = fields.ack === true ? {acknowledge_unaccepted: true} : {};
-  if (choice === 'tcp') return {transport: 'tcp', tcp_port: Number(fields.tcpPort), ...release, ...formatPart(fields)};
-  if (choice === 'uart') return {transport: 'uart', ...release, ...formatPart(fields)};
+  if (choice === 'tcp') return {transport: 'tcp', tcp_port: Number(fields.tcpPort), ...formatPart(fields)};
+  if (choice === 'uart') return {transport: 'uart', ...formatPart(fields)};
   return {transport: 'off'};
 }
 
@@ -152,13 +139,8 @@ export function saveChoice(choice, storage = globalThis.localStorage) {
 export function outputItem(output, esc = String) {
   if (isOff(output)) return {hidden: true, html: ''};
   const way = `GSVmulti: ${NAMES[output.transport] || output.transport} · `;
-  const mark = output.transport === 'serial' ? ` <span class="tag">${MARKER}</span>`
-    : isReleased(output) ? ` <span class="tag warn" title="${esc(output.release_note || BRIDGE_NOTE)}">${RELEASE_TAG}</span>`
-    : ` <span class="tag" title="${esc(LOCK_NOTICE)}">gesperrt</span>`;
-  // Testfreigabe: Marker zuerst, damit die Kuerzung der Leiste ihn nie abschneidet.
-  const lead = isReleased(output) ? `${mark.trim()} ` : '';
   const fmt = isFourChannel(output) ? ` <span class="tx">· ${esc(tickShort(output))}</span>`
     : ` <span class="tag warn" data-part="one-ch" title="${esc(FORMAT_WARNING)}">Einkanal</span>`;
-  return {hidden: false, cls: outputTone(output), html: `${lead}<span class="tx">${esc(way)}<b>${esc(shortState(output))}</b></span>${lead ? '' : mark}${fmt}`,
+  return {hidden: false, cls: outputTone(output), html: `<span class="tx">${esc(way)}<b>${esc(shortState(output))}</b></span>${fmt}`,
     title: [outputView(output), tickLine(output)].join('\n')};
 }

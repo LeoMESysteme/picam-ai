@@ -565,6 +565,31 @@ test('Bestätigen setzt sich bei neuer Revision zurück', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('Bestätigen: Standard- und angepasste Toleranz sind gleichwertige Wahl, run_hint warnt ohne Sperre', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  const hint = 'Mit Standardtoleranz hat der Leser 0 von 2 Standbildern gelesen. Ein Lauf liefert voraussichtlich viele unlesbare Werte.';
+  await hook(page, '/__test__/state', { state: 'setup_ready', run_block: null, run_hint: hint,
+    setup: { overall: 'WARNUNG', checks: { raster: 'WARNUNG' }, overlays: ['overlay_source'], step: 'vorschlag',
+      proposal_revision: 'rev-tol', gegenlesen: { status: 'WARNUNG', metrics: { tolerance: { possible: true, factor: 1.5 } } } } });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(inspector.locator('[data-part="run-hint"]')).toHaveText(hint);
+  const std = inspector.getByRole('radio', { name: 'Standardtoleranz' });
+  const adj = inspector.getByRole('radio', { name: 'Angepasste Toleranz ×1.5' });
+  await expect(std).toBeChecked();
+  await expect(inspector.locator('[data-part="tolerance-text"]')).toContainText('Risiko von Fehllesungen');
+  await expect(inspector).not.toContainText(/nicht validiert|nur ein Testlauf/);
+  await adj.check();
+  await inspector.getByLabel('Name').fill('L. Hentschke');
+  await inspector.getByLabel('Einheit mV/V und Format geprüft').check();
+  await inspector.getByLabel(/WARNUNG zur Kenntnis genommen/).check();
+  const request = page.waitForRequest('**/live/confirm');
+  await inspector.getByRole('button', { name: 'Bestätigen', exact: true }).click();
+  expect((await request).postDataJSON().use_tolerance).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test('Rahmenbereich-Klick sperrt bis zur Antwort', async ({ page }) => {
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -1895,7 +1920,7 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   expect(await bodyOf('UART über Brücke')).toEqual({ transport: 'uart', format: '4ch', rate_hz: 10 });
   await confirmedState(page);
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
-  await expect(pop.locator('[data-part="out-lock"]')).toHaveText(/^DUT-Ausgabe gesperrt: Windows-Abnahme fehlt\./);
+  await expect(pop.locator('[data-part="out-lock"]')).toHaveCount(0);
   await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
   await pop.getByText('Erweitert: Demo-/Entwicklungsweg').click();
   await pop.getByLabel('TCP-Port').fill('5001');
@@ -1904,51 +1929,43 @@ test('Ausgabe: POST-Körper je Weg, UART direkt nur mit Haken, Wahl bleibt erhal
   await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
   expect((await sentTcp).postDataJSON().output).toEqual({ transport: 'tcp', tcp_port: 5001, format: '4ch', rate_hz: 10 });
 
-  // UART direkt: Hinweis wörtlich, Start gesperrt bis zum Haken, Haken wird nie gemerkt.
+  // UART direkt: Hinweis wörtlich, kein Haken nötig.
   await confirmedState(page);
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await pop.getByText('UART direkt', { exact: true }).click();
   // Vorgabe ist der Vierkanal-Takt: Hinweis zu Kanal 1 hält (13.11.).
-  await expect(pop).toContainText('Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); der Zeitkanal ist vorläufig.');
-  const ack = pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' });
+  await expect(pop).toContainText('Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); der Zeitkanal ist vorläufig.');
+  await expect(pop.getByRole('checkbox', { name: /Mir ist bewusst/ })).toHaveCount(0);
   await expect(pop.getByLabel('Port', { exact: true })).toHaveValue('/dev/ttyAMA0');
   await expect(pop.getByLabel('Baudrate')).toHaveValue('115200');
   await expect(pop.getByLabel('Präfix')).toHaveValue('%');
   await noOverflow(page);
-  await expect(startBtn).toBeDisabled();
-  await expect(pop.getByRole('button', { name: 'Lauf starten', exact: true })).toBeDisabled();
-  await ack.check();
   await expect(startBtn).toBeEnabled();
-  // Neue Revision verlangt den Haken neu.
-  await hook(page, '/test/revision', {});
-  await expect(ack).not.toBeChecked();
-  await expect(startBtn).toBeDisabled();
-  await ack.check();
+  await expect(pop.getByRole('button', { name: 'Lauf starten', exact: true })).toBeEnabled();
   await pop.getByLabel('Baudrate').selectOption('230400');
   const sentSerial = page.waitForRequest((r) => r.url().endsWith('/live/run/start'));
   await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
   expect((await sentSerial).postDataJSON().output).toEqual({ transport: 'serial', port: '/dev/ttyAMA0',
-    baudrate: 230400, prefix: '%', acknowledge_unaccepted: true, format: '4ch', rate_hz: 10 });
+    baudrate: 230400, prefix: '%', format: '4ch', rate_hz: 10 });
 
   // Lauf: Zeile im Dock, Inspektor, Statusleiste mit Marker; Gruppe schreibgeschützt.
   const left = page.getByRole('complementary', { name: 'Ablauf' });
   await expect(left.locator('[data-part="output"]')).toContainText('UART direkt: Schnittstelle bereit');
   await expect(left.locator('[data-part="output"]')).toContainText('GSVmulti-Empfang unbestätigt.');
-  await expect(left.locator('[data-part="output"] .tag')).toHaveText('nicht abgenommen');
+  await expect(left.locator('[data-part="output"] .tag')).toHaveCount(0);
   const bar = page.getByRole('contentinfo');
   await expect(bar.locator('[data-item="output"]')).toContainText('GSVmulti: UART direkt · Schnittstelle bereit');
-  await expect(bar.locator('[data-item="output"] .tag')).toHaveText('nicht abgenommen');
+  await expect(bar.locator('[data-item="output"] .tag')).toHaveCount(0);
   const inspector = page.getByRole('complementary', { name: 'Inspektor' });
   await inspector.getByRole('tab', { name: 'Referenz' }).click();
   await expect(inspector.locator('[data-part="output"]')).toContainText('GSVmulti-Empfang unbestätigt.');
   await expect(inspector.locator('[data-part="output"]')).toContainText('230400 Baud');
   await noOverflow(page);
-  // Nach dem Neuladen ist die Wahl (nicht der Haken) gemerkt.
+  // Nach dem Neuladen ist die Wahl gemerkt.
   await confirmedState(page);
   await page.reload();
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await expect(pop.getByRole('radio', { name: 'UART direkt' })).toBeChecked();
-  await expect(pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' })).not.toBeChecked();
   expect(errors).toEqual([]);
 });
 
@@ -1958,7 +1975,7 @@ async function startBody(page: Page, pop: Locator) {
   return (await sent).postDataJSON().output;
 }
 
-test('Ausgabe: Testfreigabe über die Brücke nur mit Haken, Anzeige beider Zustände', async ({ page }) => {
+test('Ausgabe: Brücke ohne Haken, Hinweis und Anzeige im Lauf', async ({ page }) => {
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
@@ -1966,42 +1983,44 @@ test('Ausgabe: Testfreigabe über die Brücke nur mit Haken, Anzeige beider Zust
   const title = page.getByRole('banner');
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
-  const ack = pop.getByRole('checkbox', { name: 'Testfreigabe: echte Werte an GSVmulti senden – nicht abgenommen, keine Messfreigabe' });
-  await expect(ack).toBeHidden();
+  await expect(pop.getByRole('checkbox', { name: /Testfreigabe/ })).toHaveCount(0);
   await pop.getByText('UART über Brücke', { exact: true }).click();
-  await expect(pop.locator('[data-part="out-release-note"]')).toContainText('Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe.');
+  await expect(pop.locator('[data-part="out-release-note"]')).toContainText('Ungültige Takte tragen Gültigkeit 0');
+  await expect(pop.locator('[data-part="out-release-note"]')).not.toContainText('abgenommen');
   await expect(pop.locator('[data-part="out-rate"]')).toHaveText('UART über Brücke läuft mit 460 800 Baud und trägt den Vierkanal-Takt bis 10 Hz. Eine ältere Windows-App mit 115 200 Baud schafft nur etwa 3–4 Werte/s; dann neue App installieren oder Netzwerk verwenden.');
-  await expect(ack).not.toBeChecked();
-  await expect(pop.locator('[data-part="out-lock"]')).toContainText('Ohne Haken bleibt die Ausgabe gesperrt – GSVmulti erhält keine Messwerte.');
   await noOverflow(page);
-  // Ohne Haken: Start ist nicht blockiert, das Feld fehlt.
   expect(await startBody(page, pop)).toEqual({ transport: 'uart', format: '4ch', rate_hz: 10 });
-  // Netzwerk mit Haken; der Hinweis zur UART-Rate gehört nur zu UART.
+  // Netzwerk; der Hinweis zur UART-Rate gehört nur zu UART.
   await confirmedState(page);
   await title.getByRole('button', { name: 'Laufoptionen' }).click();
   await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
   await expect(pop.locator('[data-part="out-rate"]')).toBeHidden();
-  await ack.check();
-  await expect(pop.locator('[data-part="out-lock"]')).toBeHidden();
-  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/r2-werkbank-popover.png' });
-  expect(await startBody(page, pop)).toEqual({ transport: 'tcp', tcp_port: 5000, acknowledge_unaccepted: true, format: '4ch', rate_hz: 10 });
+  expect(await startBody(page, pop)).toEqual({ transport: 'tcp', tcp_port: 5000, format: '4ch', rate_hz: 10 });
   const left = page.getByRole('complementary', { name: 'Ablauf' });
-  await expect(left.locator('[data-part="output"]')).toContainText('Testfreigabe über die Brücke – nicht abgenommen');
-  await expect(left.locator('[data-part="output"]')).not.toContainText('DUT-Ausgabe gesperrt');
-  await expect(left.locator('[data-part="output"] .tag')).toHaveText('Testfreigabe – nicht abgenommen');
+  await expect(left.locator('[data-part="output"]')).toContainText('Ungültige und veraltete Werte werden ausgelassen');
+  await expect(left.locator('[data-part="output"]')).not.toContainText(/gesperrt|abgenommen|Testfreigabe/);
+  await expect(left.locator('[data-part="output"] .tag')).toHaveCount(0);
   const bar = page.getByRole('contentinfo').locator('[data-item="output"]');
-  await expect(bar.locator('.tag')).toHaveText('Testfreigabe – nicht abgenommen');
-  await expect(bar).toHaveClass(/warn/);
+  await expect(bar.locator('.tag')).toHaveCount(0);
   await noOverflow(page);
-  await page.screenshot({ path: '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots/r2-werkbank-dock.png' });
-  // Neue Sitzung verlangt den Haken neu.
-  await confirmedState(page);
-  await title.getByRole('button', { name: 'Laufoptionen' }).click();
-  await expect(ack).not.toBeChecked();
   expect(errors).toEqual([]);
 });
 
-test('Ausgabe: Testmodus sendet nie die Testfreigabe', async ({ page }) => {
+test('Laufoptionen: run_hint warnt, ohne den Start zu sperren', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await login(page);
+  const hint = 'Mit Standardtoleranz hat der Leser 0 von 2 Standbildern gelesen.';
+  await confirmedState(page, { run_hint: hint });
+  await page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  await expect(pop.locator('[data-part="hint"]')).toHaveText(hint);
+  await expect(pop.locator('[data-part="block"]')).toBeHidden();
+  await expect(pop.getByRole('button', { name: 'Lauf starten', exact: true })).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
+test('Ausgabe: Testmodus bietet keine Ausgabe an', async ({ page }) => {
   const errors = watchErrors(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await login(page);
@@ -2010,7 +2029,6 @@ test('Ausgabe: Testmodus sendet nie die Testfreigabe', async ({ page }) => {
   await page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' }).click();
   const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
   await pop.getByText('Netzwerk über Brücke', { exact: true }).click();
-  await pop.getByRole('checkbox', { name: /^Testfreigabe: echte Werte/ }).check();
   await pop.getByText('Testmodus (nur zu Testzwecken)').click();
   await pop.getByRole('checkbox', { name: /Lesesperre übergehen/ }).check();
   await expect(pop.getByRole('radio', { name: 'Aus' })).toBeChecked();
@@ -2168,31 +2186,6 @@ test('Ausgabe: Testlauf sperrt Format und Takt und sendet keine Ausgabe', async 
   await expect(pop.locator('[data-part="out-format"]')).toBeHidden();
   await expect(pop.locator('[data-part="out-rate-hz"]')).toBeDisabled();
   await expect(pop.locator('[data-part="fmt-1ch"]')).toBeDisabled();
-  expect(errors).toEqual([]);
-});
-
-test('Ausgabe: UART direkt ohne Haken sendet über Enter und runStart nichts', async ({ page }) => {
-  const errors = watchErrors(page);
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await login(page);
-  await confirmedState(page);
-  const posts: string[] = [];
-  page.on('request', (r) => { if (r.url().endsWith('/live/run/start')) posts.push(r.url()); });
-  await page.getByRole('banner').getByRole('button', { name: 'Laufoptionen' }).click();
-  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
-  await pop.getByText('UART direkt', { exact: true }).click();
-  await expect(pop.getByRole('checkbox', { name: 'Mir ist bewusst: nicht abgenommen, keine Messfreigabe' })).not.toBeChecked();
-  await pop.locator('[data-part="plan"]').press('Enter');
-  await expect(pop.locator('[data-part="error"]')).toContainText('Haken');
-  await page.waitForTimeout(300);
-  expect(posts).toEqual([]);
-  await page.keyboard.press('Escape');
-  // Den Handler direkt auslösen: Auch ohne disabled-Schutz muss start() ablehnen.
-  await page.getByRole('banner').getByRole('button', { name: 'Lauf starten', exact: true }).dispatchEvent('click');
-  await expect(pop).toBeVisible();
-  await expect(pop.locator('[data-part="error"]')).toContainText('Haken');
-  await page.waitForTimeout(300);
-  expect(posts).toEqual([]);
   expect(errors).toEqual([]);
 });
 

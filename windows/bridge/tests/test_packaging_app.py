@@ -95,6 +95,19 @@ def test_selftest_ok_when_not_requiring_frozen(monkeypatch):
     assert report["errors"] == [] and report["ok"] is True
 
 
+def test_release_build_path_is_clean_and_distinct():
+    assert "[switch]$Release" in PS1 and "dist-release" in PS1 and 'channel = "$Channel"' in PS1
+    assert "nicht eingecheckte" in PS1 and "$Dirty" in PS1          # Release verweigert bei geaendertem Arbeitsbaum
+    assert '$Suffix = if ($Release) { "" }' in PS1                   # Release-Name ohne Commit/-test
+    rel = (BRIDGE / "build-release.cmd").read_bytes()
+    assert b"\r\n" in rel and b"\n" not in rel.replace(b"\r\n", b"")
+    assert b"BUILD_RELEASE=1" in rel and b"build-test.cmd" in rel
+    iss = (BRIDGE / "packaging" / "setup-app.iss").read_text(encoding="utf-8")
+    assert "#ifdef Release" in iss and "VersionInfoVersion={#AppVersion}.0" in iss
+    assert "interner Test" in iss                                    # Testbuild bleibt unveraendert
+    assert (BRIDGE / "pyproject.toml").read_text(encoding="utf-8").count('version = "1.0.0"') == 1
+
+
 def test_double_click_starter_bypasses_policy_only_for_this_run():
     raw = (BRIDGE / "build-test.cmd").read_bytes()
     assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")   # reine CRLF-Zeilen, sonst zerbricht cmd.exe goto

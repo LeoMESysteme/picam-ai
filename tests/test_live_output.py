@@ -59,13 +59,13 @@ def test_serial_session_records_missing_acceptance_and_acknowledgement(tmp_path,
     session.start()
     try:
         output = json.loads(session.session_path.read_text())['output']
-        assert output['acceptance'] == 'fehlt'
+        assert output['acceptance'] == 'abgenommen'
         assert output['acknowledged_unaccepted'] is True
         assert output['capabilities']['provisional'] is True
     finally:
         session.stop()
     output = json.loads(session.session_path.read_text())['output']
-    assert output['acceptance'] == 'fehlt'
+    assert output['acceptance'] == 'abgenommen'
     assert output['acknowledged_unaccepted'] is True
 
 
@@ -438,8 +438,10 @@ def test_unexpected_audit_exception_latches_without_stopping_reader(tmp_path, mo
 
 
 class Publisher:
-    def __init__(self, config, out_dir):
+    def __init__(self, config, out_dir, **kwargs):
         self.config, self.out_dir = config, out_dir
+        self.kwargs = kwargs
+        self.release = kwargs.get('release')
         self.started = self.stopped = False
         self.records = []
 
@@ -456,7 +458,7 @@ class Publisher:
         self.stopped = True
 
     def status(self):
-        return {"transport": self.config.transport, "state": "disconnected", "release_block": "Windows-Abnahme fehlt",
+        return {"transport": self.config.transport, "state": "disconnected", "release_block": "kein freigegebener Lauf am Pi",
                 "error": None, "last_ack": None, "ack_scope": "COM driver write, not GSVmulti reception"}
 
     def metadata(self):
@@ -571,7 +573,7 @@ def test_unified_service_output_contract(tmp_path, monkeypatch, config, transpor
         else:
             assert {'transport', 'state', 'config', 'error', 'release_block'} <= output.keys()
             assert {'last_ack', 'ack_scope', 'acceptance'} <= output.keys()
-            assert output['acceptance'] == 'fehlt'
+            assert output['acceptance'] == 'abgenommen'
             assert output['config']['transport'] == transport
             if transport == 'serial':
                 assert status['run']['output'] == service._session.output_status()
@@ -580,7 +582,6 @@ def test_unified_service_output_contract(tmp_path, monkeypatch, config, transpor
                 assert output['last_ack'] is None
                 assert output['ack_scope'] == 'lokale Annahme'
                 assert output['release_note'] == (
-                    'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
                     'Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.')
                 assert status['run']['output']['prefix'] == (config or {}).get('prefix', '%')
             else:
@@ -712,61 +713,60 @@ def test_bridge_stop_runs_once_and_always_closes_audit(tmp_path, stop_fails):
 
 @pytest.mark.parametrize('transport', ['uart', 'tcp'])
 def test_explicit_legacy_v1_demo_publisher_keeps_dut_lock(tmp_path, monkeypatch, transport):
+    """Seit 1.0 gibt jeder echte Lauf seinen Brueckenweg frei (Wire-Marker unveraendert).
+    Der v1-Altpublisher kann den Marker nicht tragen: der Lauf startet dann nicht,
+    statt still ohne Weitergabe zu laufen. Die DUT-Sperre im v1-Publisher selbst bleibt."""
     from dispread.gsv_transport import RELEASE_BLOCK, OutputPublisher
+    from dispread.live.session import StartRefused
 
-    # Echte Publisher-Logik und Audit, aber kein Port oder Socket im Test.
     monkeypatch.setattr(OutputPublisher, '_worker', lambda self: None)
-    session = _session(tmp_path, [embed('+ 1.2345 ')], output={'transport': transport},
-                       output_factory=OutputPublisher)
-    session._config = replace(session._config, confirm_frames=1)
-    session.start()
-    try:
-        item = session.step()
-        assert item.status.value == 'valid'
-        assert json.loads(session.records_path.read_text()) == item.to_dict()
-        output = session.unified_output_status()
-        assert output['config']['transport'] == transport
-        assert output['error'] is None and output['last_ack'] is None
-        assert output['release_block'] == RELEASE_BLOCK
-        reply = session._output.handle({'version': 1, 'type': 'poll', 'request_id': 'dut'})
-        assert reply['type'] == 'idle' and 'record' not in reply
-        assert reply['release_block'] == RELEASE_BLOCK
-    finally:
-        session.stop()
-    data = json.loads(session.session_path.read_text())['output']
-    assert data['formatter']['provisional'] is True
-    assert data['release_block'] == RELEASE_BLOCK
+    publishers = []
+
+    def legacy_factory(cfg, out_dir, **kw):
+        publishers.append(OutputPublisher(cfg, out_dir))
+        return publishers[-1]
+
+    with pytest.raises(StartRefused, match='Freigabe vom Brückenweg nicht übernommen'):
+        _session(tmp_path, [embed('+ 1.2345 ')], output={'transport': transport},
+                 output_factory=legacy_factory)
+    reply = publishers[0].handle({'version': 1, 'type': 'poll', 'request_id': 'dut'})
+    assert reply['type'] == 'idle' and 'record' not in reply
+    assert reply['release_block'] == RELEASE_BLOCK
 
 
 @pytest.mark.parametrize('legacy', [False, True])
 @pytest.mark.parametrize('ack', ['missing', False, None, 1, 'true'])
 @pytest.mark.parametrize('fake', [False, True])
-def test_serial_requires_explicit_ack_before_start(tmp_path, monkeypatch, legacy, ack, fake):
+def test_serial_starts_without_acknowledgement(tmp_path, monkeypatch, legacy, ack, fake):
+    """Seit der Abnahme (2026-11-13) startet UART direkt ohne Haken.
+
+    Vorher wurde jede Variante ohne ``acknowledge_unaccepted is True`` abgelehnt; das Feld
+    wird noch angenommen, aendert aber nichts mehr.
+    """
     from live_ui_server import FakeLiveService
 
-    service = FakeLiveService(tmp_path / 'preview.png') if fake else LiveService(FakeOwner(), tmp_path)
-    before = service.status()
-    files_before = list(tmp_path.iterdir())
     config = {'port': '/fake/output'}
     if not legacy:
         config['transport'] = 'serial'
     if ack != 'missing':
         config['acknowledge_unaccepted'] = ack
-    monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Kein Portzugriff ohne Bestaetigung'))
-    with pytest.raises(LiveError, match='^Ausgabe: UART direkt ist nicht abgenommen – Hinweis bestätigen$'):
-        service.start_run(reference=False, output=config)
-    after = service.status()
-    assert after['run'] is before['run'] is None
+    monkeypatch.setattr('serial.Serial', FakeSerial)
     if fake:
-        # Nur Startfolgen vergleichen, keine zeitabhaengigen Vorschauwerte.
-        keys = ('state', 'error', 'output', 'session_id', 'test_run')
-        assert {key: after[key] for key in keys} == {key: before[key] for key in keys}
+        service = FakeLiveService(tmp_path / 'preview.png')
     else:
-        # Freier Plattenplatz kann sich durch parallele Tests aendern.
-        assert {key: value for key, value in after.items() if key != 'storage'} == {
-            key: value for key, value in before.items() if key != 'storage'}
-        assert service._owner.restarts == 0
-    assert list(tmp_path.iterdir()) == files_before
+        service = LiveService(FakeOwner(), tmp_path)
+        service._state, service._profile_path = 'confirmed', tmp_path / 'profile.json'
+
+        def factory(owner, profile, settings, out_dir, **kwargs):
+            return _session(tmp_path, [], out_dir=out_dir, **kwargs)
+
+        monkeypatch.setattr('dispread.live.service.LiveSession', factory)
+    try:
+        service.start_run(reference=False, output=config)
+        assert service.status()['run'] is not None
+        assert service.status()['output']['transport'] == 'serial'
+    finally:
+        service.stop_run()
 
 
 @pytest.mark.parametrize('config,transport', OUTPUT_CASES)
@@ -785,10 +785,11 @@ def test_fake_output_status_matches_real_transport_keys(tmp_path, monkeypatch, c
     if transport in ('uart', 'tcp'):
         assert real_status['state'] == 'waiting'
         assert real_status['ack_scope'] == 'COM driver write, not GSVmulti reception'
-        assert real_status['acceptance'] == 'fehlt'
+        assert real_status['acceptance'] == 'abgenommen'
         # G1 ergaenzt Konfiguration/Abnahmestand, die Bruecke selbst bleibt unveraendert.
+        # Seit 1.0 traegt jeder echte Brueckenlauf den Hinweis release_note.
         assert OutputPublisher(session._output.config, tmp_path).status().keys() == (
-            real_status.keys() - {'config', 'acceptance'})
+            real_status.keys() - {'config', 'acceptance', 'release_note'})
 
 
 def test_serial_last_ack_records_only_completed_driver_writes(tmp_path, monkeypatch):
@@ -856,8 +857,8 @@ def test_paired_client_loss_keeps_camera_and_record_audit_running(tmp_path):
     hub = BridgeHub('pi', tmp_path / 'bridge', clock=lambda: now[0])
     hub.reserve_real_run('real-run')
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, output={'transport': 'tcp'},
-                       output_factory=lambda config, out_dir: PairedOutputPublisher(
-                           config, out_dir, hub=hub, run_id='real-run'))
+                       output_factory=lambda config, out_dir, **kw: PairedOutputPublisher(
+                           config, out_dir, hub=hub, run_id='real-run', **kw))
     session.bridge_run_id = 'real-run'
     session._config = replace(session._config, confirm_frames=1)
     session.start()
@@ -874,7 +875,8 @@ def test_paired_client_loss_keeps_camera_and_record_audit_running(tmp_path):
         assert len(records) == 3
         assert session._output._latest.frame_sequence == records[-1]['frame_sequence']
         assert session._output._pending is None
-        assert session.unified_output_status()['release_block']
+        # Der Lauf ist freigegeben (Abnahme 2026-11-13); der Clientverlust sperrt nichts nachtraeglich.
+        assert session.unified_output_status()['release_block'] is None
     finally:
         session.stop()
         hub.release_real_run('real-run')
@@ -912,8 +914,11 @@ def _bridge_session(tmp_path, *, ack, transport='tcp'):
 
 
 @pytest.mark.parametrize('ack', [False, True])
-def test_bridge_test_release_is_marked_in_status_and_session_json(tmp_path, ack):
-    from dispread.bridge.output_state import RELEASE_BLOCK
+def test_bridge_release_is_marked_in_status_and_session_json(tmp_path, ack):
+    """Jeder echte Brueckenlauf ist freigegeben, mit oder ohne altes Haken-Feld.
+
+    Wire-Marker bleibt ``test_unaccepted``; Abnahme steht auf ``abgenommen``.
+    """
     from dispread.live.output import BRIDGE_RELEASE_NOTE
 
     hub, session = _bridge_session(tmp_path, ack=ack)
@@ -921,44 +926,34 @@ def test_bridge_test_release_is_marked_in_status_and_session_json(tmp_path, ack)
     lease = hub.attach('pc', 'network')
     try:
         status = session.unified_output_status()
-        assert status['acceptance'] == 'fehlt'
+        assert status['acceptance'] == 'abgenommen'
         assert status['config']['acknowledge_unaccepted'] is ack
         hello = hub._hello(lease, 'h')
         session.step()
         reply = hub.exchange(lease.lease_id, dict(version=2, type='poll', request_id='p', pi_id='pi',
                                                   client_id='pc', lease_id=lease.lease_id, run_id='real-run'))
-        if ack:
-            assert status['release_block'] is None and status['release'] == 'test_unaccepted'
-            assert status['release_note'] == BRIDGE_RELEASE_NOTE
-            assert hello['release'] == 'test_unaccepted' and hello['release_block'] is None
-            assert (reply['type'], reply['demo'], reply['release']) == ('record', False, 'test_unaccepted')
-            assert reply['record']['raw_text'] == '+1.2345'
-        else:
-            assert status['release_block'] == RELEASE_BLOCK and status['release'] is None
-            assert 'release_note' not in status
-            assert 'release' not in hello and hello['release_block'] == RELEASE_BLOCK
-            assert reply['type'] == 'idle' and reply['release_block'] == RELEASE_BLOCK
+        assert status['release_block'] is None and status['release'] == 'test_unaccepted'
+        assert status['release_note'] == BRIDGE_RELEASE_NOTE
+        assert hello['release'] == 'test_unaccepted' and hello['release_block'] is None
+        assert (reply['type'], reply['demo'], reply['release']) == ('record', False, 'test_unaccepted')
+        assert reply['record']['raw_text'] == '+1.2345'
     finally:
         session.stop()
         hub.close()
     data = json.loads(session.session_path.read_text())['output']
-    assert data['acceptance'] == 'fehlt'
-    assert data['acknowledged_unaccepted'] is ack
+    assert data['acceptance'] == 'abgenommen'
+    assert data['acknowledged_unaccepted'] is True
     assert data['wire_transport'] == 'wss'
-    if ack:
-        assert data['release'] == 'test_unaccepted' and data['release_block'] is None
-        assert data['acknowledged_at_utc']
-        assert data['acknowledged_by'] == 'Leonhard Hentschke'
-        assert data['status']['release_note'] == BRIDGE_RELEASE_NOTE
-    else:
-        assert data['release_block'] == RELEASE_BLOCK and data['acknowledged_at_utc'] is None
-        assert data['acknowledged_by'] is None
+    assert data['release'] == 'test_unaccepted' and data['release_block'] is None
+    assert data['acknowledged_at_utc']
+    assert data['acknowledged_by'] == 'Leonhard Hentschke'
+    assert data['status']['release_note'] == BRIDGE_RELEASE_NOTE
 
 
 def test_acknowledged_session_refuses_publisher_that_ignores_release(tmp_path):
     from dispread.live.session import StartRefused
 
-    with pytest.raises(StartRefused, match='Testfreigabe'):
+    with pytest.raises(StartRefused, match='Freigabe vom Brückenweg'):
         _session(tmp_path, [], output={'transport': 'tcp', 'acknowledge_unaccepted': True},
                  output_factory=lambda cfg, out_dir, **kw: Publisher(cfg, out_dir))
 
@@ -984,7 +979,8 @@ def test_service_passes_confirmed_test_release_to_paired_publisher(tmp_path, mon
         service.stop_run()
     service.start_run(reference=False, output={'transport': 'tcp'})
     try:
-        assert hub.status()['release'] is None and hub.status()['release_block']
+        # Ohne Haken ebenfalls freigegeben (Abnahme 2026-11-13).
+        assert hub.status()['release'] == 'test_unaccepted' and hub.status()['release_block'] is None
     finally:
         service.stop_run()
         service.close()
@@ -1122,14 +1118,20 @@ def test_four_channel_stop_mid_write_finishes_exactly_one_telegram(tmp_path, mon
         out.stop()
 
 
-@pytest.mark.parametrize('test_run,ack', [(None, False), ({'testlauf': True}, True)])
-def test_four_channel_release_refused_before_any_port_open(tmp_path, monkeypatch, test_run, ack):
+def test_four_channel_release_refused_for_test_run_before_any_port_open(tmp_path, monkeypatch):
+    """Testlaeufe haben weiter keine externe Ausgabe; der fehlende Haken ist kein Grund mehr."""
     from dispread.live.session import StartRefused
 
-    monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Port ohne Freigabe'))
+    monkeypatch.setattr('serial.Serial', lambda *a, **kw: pytest.fail('Port im Testlauf'))
     with pytest.raises(StartRefused):
         _session(tmp_path, [], output={'port': '/fake/output', 'format': '4ch',
-                                      'acknowledge_unaccepted': ack}, test_run=test_run)
+                                      'acknowledge_unaccepted': True}, test_run={'testlauf': True})
+
+
+def test_four_channel_starts_without_acknowledgement(tmp_path, monkeypatch):
+    monkeypatch.setattr('serial.Serial', FakeSerial)
+    session = _session(tmp_path, [], output={'port': '/fake/output', 'format': '4ch'})
+    assert session.output_status()['port'] == '/fake/output'
 
 
 # --- B2 (2026-11-11): Format und Takt auch fuer die Brueckenwege uart/tcp -------------

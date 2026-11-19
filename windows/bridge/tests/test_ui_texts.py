@@ -150,7 +150,7 @@ def _tr(**kw):
 def test_test_release_chips_are_warn_never_ok():
     r, w, c = _tr()
     cv = {x.key: x for x in texts.chips(r, w, c)}
-    assert (cv['output'].word, cv['output'].tone, cv['output'].sub) == ('Testfreigabe', 'warn', 'nicht abgenommen')
+    assert (cv['output'].word, cv['output'].tone, cv['output'].sub) == ('Weitergabe', 'info', '')
     assert (cv['forward'].word, cv['forward'].sub) == ('Übergeben', '3 Werte')
     assert cv['forward'].tone == 'warn'
     assert cv['gsv'].tone != 'ok'
@@ -167,9 +167,9 @@ def test_test_release_omitted_counter_and_singular():
 def test_test_release_headline_line_and_no_lock_bar():
     r, w, c = _tr()
     h = texts.headline(r, w, c)
-    assert (h.text, h.tone) == ('Verbunden – Testfreigabe aktiv', 'warn')
+    assert (h.text, h.tone) == ('Verbunden – Weitergabe aktiv', 'warn')
     text, tone = texts.dut_line(c)
-    assert tone == 'warn' and text == 'Testfreigabe – nicht abgenommen, keine Messfreigabe'
+    assert tone == 'warn' and text == texts.TEST_RELEASE_LINE
     assert 'GSVmulti zeigt dann den letzten Wert unmarkiert weiter.' in texts.dut_info(c)
     bar = texts.action_bar(r, w, c)
     assert bar is None or 'absichtlich keine Messwerte' not in bar.text + bar.title

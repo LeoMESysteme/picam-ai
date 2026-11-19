@@ -454,8 +454,8 @@ def test_build_info_fields_shape_footer_and_channel(tmp_path):
 
 def test_unknown_commit_reads_as_unknown_source(tmp_path):
     import types
-    info = types.SimpleNamespace(version='0.1.0.dev0', commit='unbekannt', channel=None)
-    assert make(tmp_path, build_info=info).context().version == '0.1.0.dev0 · Quelle unbekannt'
+    info = types.SimpleNamespace(version='1.0.0', commit='unbekannt', channel=None)
+    assert make(tmp_path, build_info=info).context().version == '1.0.0 · Quelle unbekannt'
 
 
 def _connected(tmp_path, identity, output='output_off', start_error=None):
@@ -650,8 +650,8 @@ def test_test_release_journal_counters_and_transitions(tmp_path):
     c._emit(_tr_ev('omitted'))
     c._emit(_tr_ev('written'))
     titles = [e.title for e in c.context().journal]
-    assert titles[-1].startswith('Testfreigabe aktiv (Lauf ')
-    assert 'Testfreigabe: 4 Werte weitergegeben' in titles and 'Wert ausgelassen' in titles
+    assert titles[-1].startswith('Weitergabe aktiv (Lauf ')
+    assert '4 Werte weitergegeben' in titles and 'Wert ausgelassen' in titles
     assert (c._tr_written, c._tr_omitted) == (4, 1)
     c._emit(_tr_ev('idle', release=False))
     assert [e.title for e in c.context().journal[:2]] == ['Wartet auf Messlauf', 'Ausgabe wieder gesperrt']

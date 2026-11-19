@@ -5,6 +5,39 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-18: **Version 1.0: Testfreigabe entfällt, angepasste Toleranz ist eine echte Wahl.**
+  Herr Kaulitz hat Werkbank und Ausgabewege am 13.11. abgenommen, Leonhard hat
+  die EXE am 18.11. geprüft. Geändert:
+  - Ausgabewege brauchen keine Bestätigung „nicht abgenommen“ mehr; jeder echte
+    Lauf gibt seinen Brückenweg frei. Auf der Leitung bleibt der Marker
+    `release: "test_unaccepted"` unverändert (kein Protokollwechsel, alte und neue
+    Gegenstellen bleiben kompatibel). Ohne Marker kommt weiterhin kein Wert an COM.
+  - `acceptance` in Status und `session.json` ist `abgenommen`; Ausgabehinweise
+    beschreiben nur noch das Verhalten (Gültigkeit 0, Kanal 1 hält, Zeitkanal
+    vorläufig), ohne „Prototyp/Testfreigabe – keine Messfreigabe“.
+  - Liest das Gegenlesen die Standbilder nur mit angepasster Toleranz, ist der
+    Lauf nicht mehr gesperrt. Der Bediener wählt Standard- oder angepasste
+    Toleranz; die angepasste nennt das höhere Risiko von Fehllesungen, die
+    Standardtoleranz bekommt den Hinweis `run_hint` (viele unlesbare Werte zu
+    erwarten). Gesperrt bleibt bei Widerspruch zur Referenz oder wenn auch die
+    angepasste Toleranz nicht reicht; der Testlauf bleibt dafür.
+  Konsequenz: Leonhards Läufe am 18.11. mit angepasster Toleranz (Licht von
+  oben, Schattenbild der Punkte) liefen ohne Probleme; die Wahl ist jetzt
+  regulär statt Notlösung.
+  - Werkbank-Oberfläche: Bestätigung mit Auswahl „Standardtoleranz“ /
+    „Angepasste Toleranz ×f“ und Risikohinweis; `run_hint` als nicht sperrende
+    Warnung in Bestätigung und Laufoptionen; Haken „Mir ist bewusst … nicht
+    abgenommen“ für UART direkt und Brücke entfernt; Statusleiste ohne
+    Testfreigabe-Marker.
+  - Windows-Brücken-App 1.0.0: „Testfreigabe“ heißt „Weitergabe“, Abzeichen
+    „nicht abgenommen“ entfällt, gesperrte Ausgabe heißt „vom Pi nicht
+    freigegeben“. Neuer Doppelklick-Build `windows/bridge/build-release.cmd`
+    (Kanal „Release“, `GSVmulti-Bruecke-1.0.0.zip` und
+    `GSVmulti-Bruecke-Setup-1.0.0.exe`, verweigert bei nicht eingecheckten
+    Änderungen); der interne Testbuild bleibt unverändert.
+  - Ein v1-Altpublisher ohne Freigabe-Marker lässt den Lauf jetzt nicht
+    starten („Freigabe vom Brückenweg nicht übernommen“), statt still ohne
+    Weitergabe zu laufen.
 * 2026-11-18: **Einrichtung prüft die Nachführung wie im Lauf.** Am 18.11.
   bestanden alle Einrichtungen, die Läufe verloren aber bis zu 73 % der Bilder
   an `rahmen_unstimmig`. Ursache war wenig Licht: Gain am Anschlag 128

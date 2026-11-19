@@ -23,13 +23,15 @@ export function confirmModel(status) {
     needAck: setup.overall === 'WARNUNG',
     ackReason: warnReasons.length ? warnReasons.join(', ') : null,
     tolerance: tolerance?.possible
-      ? `Angepasste Toleranz ×${tolerance.factor} verwenden – Lesung nur in dieser Aufstellung gegen den Referenzwert geprüft, nicht validiert`
+      ? {factor: tolerance.factor,
+        note: tolerance.hinweis || `Angepasste Lesetoleranz ×${tolerance.factor}: liest diese Aufstellung, erhöht aber das Risiko von Fehllesungen gegenüber der Standardtoleranz. Geprüft nur in dieser Aufstellung gegen den Referenzwert.`}
       : null,
     block: status?.run_block && visible
       ? (tolerance?.possible
-        ? 'Achtung: Der strikte Lauf ist gesperrt. Angepasste Toleranz kann ausdrücklich gewählt werden; sonst ist nur ein Testlauf möglich.'
+        ? 'Achtung: Mit Standardtoleranz ist der Lauf gesperrt. Die angepasste Toleranz kann gewählt werden.'
         : 'Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.')
       : null,
+    runHint: visible && !status?.run_block ? status?.run_hint || null : null,
     runBlock: visible ? status?.run_block || null : null,
     hint: visible && metrics.hinweis ? `Hinweis: ${metrics.hinweis}` : null,
   };
@@ -52,12 +54,18 @@ const TEMPLATE = `
   <h3>Mit Namen bestätigen</h3>
   <p class="blockmsg err-t" data-part="block" role="alert" hidden></p>
   <div class="runblock" data-part="runblock" hidden><strong>Lauf gesperrt — Leser konnte die Einrichtungsbilder nicht lesen</strong><p data-part="runblock-reason"></p></div>
+  <p class="note warn-t" role="status" data-part="run-hint" hidden></p>
   <p class="mut" data-part="hint" hidden></p>
   <label class="f" for="confirm-name">Name</label>
   <input type="text" id="confirm-name" data-field="name" placeholder="Vor- und Nachname" autocomplete="off" spellcheck="false">
   <label class="ck"><input type="checkbox" data-field="format"><span>Einheit mV/V und Format geprüft</span></label>
   <label class="ck" data-part="ack" hidden><input type="checkbox" data-field="ack"><span>WARNUNG zur Kenntnis genommen<span class="mut" data-part="ack-why"></span></span></label>
-  <label class="ck" data-part="tolerance" hidden><input type="checkbox" data-field="tolerance"><span data-part="tolerance-text"></span></label>
+  <fieldset class="outgrp" data-part="tolerance" hidden><legend>Lesetoleranz</legend>
+    <div class="seg" role="radiogroup" aria-label="Lesetoleranz">
+      <label><input type="radio" name="confirm-tolerance" data-field="tolerance-standard" checked><span>Standardtoleranz</span></label>
+      <label><input type="radio" name="confirm-tolerance" data-field="tolerance"><span data-part="tolerance-label"></span></label>
+    </div>
+    <p class="note" data-part="tolerance-text"></p></fieldset>
   <div class="fa"><button type="button" class="primary" data-part="submit">Bestätigen</button></div>
   <div class="fh" data-part="state" aria-live="polite"></div>
   <div class="fh err-t" data-part="error" role="alert" hidden></div>`;
@@ -83,6 +91,7 @@ export function mountConfirm(host, client, {locked = () => false, onChange = () 
   function reset() {
     field('name').value = '';
     for (const name of ['format', 'ack', 'tolerance']) field(name).checked = false;
+    field('tolerance-standard').checked = true;
     error = null;
   }
 
@@ -95,11 +104,13 @@ export function mountConfirm(host, client, {locked = () => false, onChange = () 
     set('block', model.block);
     q('[data-part="runblock"]').hidden = !model.runBlock;
     q('[data-part="runblock-reason"]').textContent = model.runBlock || '';
+    set('run-hint', model.runHint);
     set('hint', model.hint);
     q('[data-part="ack"]').hidden = !model.needAck;
     q('[data-part="ack-why"]').textContent = model.ackReason ? ` (${model.ackReason})` : '';
     q('[data-part="tolerance"]').hidden = !model.tolerance;
-    q('[data-part="tolerance-text"]').textContent = model.tolerance || '';
+    q('[data-part="tolerance-label"]').textContent = model.tolerance ? `Angepasste Toleranz ×${model.tolerance.factor}` : '';
+    q('[data-part="tolerance-text"]').textContent = model.tolerance ? model.tolerance.note : '';
     const submit = q('[data-part="submit"]');
     submit.disabled = !ready();
     const f = fields();
@@ -128,7 +139,7 @@ export function mountConfirm(host, client, {locked = () => false, onChange = () 
         lastKey = model.key;
       }
       // Wie auf der alten Live-Seite: ohne moegliche Toleranz kein Haken.
-      if (!model.tolerance) field('tolerance').checked = false;
+      if (!model.tolerance) { field('tolerance').checked = false; field('tolerance-standard').checked = true; }
       if (!model.needAck) field('ack').checked = false;
       host.hidden = !model.visible;
       paint();

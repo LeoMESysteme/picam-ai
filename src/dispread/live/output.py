@@ -31,23 +31,21 @@ MAX_TELEGRAM_BYTES = MAX_DISPLAY_TEXT_LENGTH + 1 + 2  # Praefix + CRLF.
 FRAME_INTERVAL_NS = 33_000_000
 MIN_LIVE_BAUDRATE = 9600  # 19 * 10 / 9600 = 19,79 ms; 4800 schon 39,58 ms.
 WRITE_TIMEOUT_S = 1.0
+# Abnahme der Ausgabewege durch Herrn Kaulitz am 2026-11-13; Hinweise beschreiben
+# nur noch das Verhalten, keine Testfreigabe mehr (Leonhard, 2026-11-18).
+OUTPUT_ACCEPTANCE = 'abgenommen'
 SERIAL_RELEASE_NOTE = (
-    'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
     'Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.'
 )
 SERIAL_4CH_RELEASE_NOTE = (
-    'Prototyp – nicht am Windows-PC abgenommen, keine Messfreigabe. '
     'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); '
     'der Zeitkanal ist vorläufig.'
 )
-# R1 (Nutzerentscheidung 2026-11-09): Testfreigabe ueber die Bruecke wie UART direkt.
 BRIDGE_RELEASE_NOTE = (
-    'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. '
     'Ungültige und veraltete Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.'
 )
 # B2 (2026-11-11): Vierkanal-Takt ueber die Bruecke.
 BRIDGE_4CH_RELEASE_NOTE = (
-    'Testfreigabe über die Brücke – nicht abgenommen, keine Messfreigabe. '
     'Ungültige Takte tragen Gültigkeit 0, Kanal 1 hält den letzten gültigen Wert (vor dem ersten: 99999999.0); '
     'verlorene Takte füllt die Brücken-App mit solchen Zeilen auf (höchstens 50). Der Zeitkanal ist vorläufig.'
 )
@@ -182,9 +180,12 @@ def bridge_tick_options(config: dict) -> dict:
 
 
 def require_output_acknowledgement(config: dict) -> None:
-    """P4-3 erst nach ausdruecklicher Bestaetigung der fehlenden Abnahme."""
-    if config['transport'] == 'serial' and config.get('acknowledge_unaccepted') is not True:
-        raise ValueError('Ausgabe: UART direkt ist nicht abgenommen – Hinweis bestätigen')
+    """Seit der Abnahme (2026-11-13) keine Bestaetigung mehr noetig.
+
+    ``acknowledge_unaccepted`` wird von aelteren Seiten noch gesendet und weiter
+    angenommen; es aendert nichts mehr.
+    """
+    del config
 
 
 class LiveOutput:

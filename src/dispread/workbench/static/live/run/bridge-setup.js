@@ -69,8 +69,7 @@ export function readinessRows(status, output = null) {
   ];
   // Format des laufenden (bzw. gewaehlten) Laufs; ohne Ausgabe keine Zeile.
   if (output && output.transport && output.transport !== 'off') rows.push({label: 'Format', value: formatLabel(output)});
-  if (status.release === 'test_unaccepted') rows.push({label: 'Ausgabe', value: 'Testfreigabe – nicht abgenommen', tone: 'warn'});
-  else if (status.release_block) rows.push({label: 'Ausgabe', value: String(status.release_block), tone: 'warn'});
+  if (status.release_block) rows.push({label: 'Ausgabe', value: String(status.release_block), tone: 'warn'});
   return rows;
 }
 

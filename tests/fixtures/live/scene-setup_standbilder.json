@@ -163,6 +163,7 @@
   "simulate": false,
   "profile": null,
   "run_block": null,
+  "run_hint": null,
   "test_run": null,
   "diagnostics": {
     "enabled": false,

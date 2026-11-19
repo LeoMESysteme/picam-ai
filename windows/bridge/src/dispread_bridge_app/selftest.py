@@ -1,4 +1,4 @@
-"""Selbsttest der gebauten App (interner Testbuild). Kein Fenster, keine Verbindung.
+"""Selbsttest der gebauten App (gebaute App). Kein Fenster, keine Verbindung.
 
 Die EXE hat keine Konsole (console=False); das Ergebnis geht deshalb als JSON in
 die mit --self-test-out angegebene Datei (und zusätzlich nach stdout, falls
@@ -25,7 +25,7 @@ FORBIDDEN_PREFIXES = ('dispread.workbench',)
 def run_self_test(*, require_frozen: bool = False, create_app: bool = True) -> dict:
     frozen = bool(getattr(sys, 'frozen', False))
     report = {
-        'schema': 1, 'kind': 'interner_testbuild_selbsttest', 'frozen': frozen,
+        'schema': 1, 'kind': 'selbsttest', 'frozen': frozen,
         'python': platform.python_version(), 'platform': sys.platform,
         'machine': platform.machine(), 'imports': {}, 'qt_platform': None,
         'qt_platform_plugin_found': None, 'build_info': None,

@@ -335,9 +335,9 @@ export function renderStatusbar(status, hudProc = null) {
   setItem(items.reference, referenceItem(status?.reference));
   setItem(items.output, outputItem(status?.output, esc));
   const tolerance = status?.reader_tolerance;
-  setItem(items.tolerance, {hidden: !tolerance, cls: 'warn',
-    html: `<span class="sq warn"></span><span class="tx">Lesetoleranz <b>×${esc(tolerance?.factor)}</b> nicht validiert</span>`,
-    title: tolerance ? `Angepasste Lesetoleranz ×${tolerance.factor}: Werte nur in dieser Aufstellung gegen Referenz geprüft, nicht validiert.` : ''});
+  setItem(items.tolerance, {hidden: !tolerance, cls: '',
+    html: `<span class="tx">Lesetoleranz <b>×${esc(tolerance?.factor)}</b> angepasst</span>`,
+    title: tolerance ? `Angepasste Lesetoleranz ×${tolerance.factor}: Werte nur in dieser Aufstellung gegen Referenz geprüft.` : ''});
   // TC 2026-11-11: ruhiger Warnhinweis, Volltext im Titel und im Inspektor (Nachführung).
   const shown = ['running', 'stopped'].includes(status?.state);
   const deactivated = shown ? status?.run?.region_deactivated : null;

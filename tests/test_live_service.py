@@ -1348,7 +1348,8 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
     assert confirmation == {
         "confirmed_by": "Tester", "confirmed_at_utc": profile["confirmed_at_utc"],
         "unit": "mV/V", "format_id": "gsv2as_v1", "format_checked": True,
-        "warning_acknowledged": acknowledged, "setup_overall": overall, "run_block": None, "reader_tolerance": None,
+        "warning_acknowledged": acknowledged, "setup_overall": overall, "run_block": None, "run_hint": None,
+        "reader_tolerance": None,
     }
     assert datetime.fromisoformat(confirmation["confirmed_at_utc"]).utcoffset().total_seconds() == 0
 
@@ -1851,7 +1852,9 @@ def test_confirm_adaptive_tolerance_marks_artifacts_and_run(tmp_path, proposal, 
     proposal['setup_checks']['checks']['gegenlesen'] = {'status': 'WARNUNG', 'metrics': metrics}
     service = ready_service(tmp_path, proposal)
     monkeypatch.setattr(service, "_check_run_start_focus", lambda *_: {"status": "OK", "text": "Fokusvergleich"})
-    assert 'Schatten entfernen.' in service.status()['run_block']
+    # 18.11.: Standard bleibt waehlbar, wenn die angepasste Toleranz moeglich ist; nur ein Hinweis.
+    assert service.status()['run_block'] is None
+    assert '×1.44' in service.status()['run_hint']
     assert service.status()['setup']['gegenlesen']['metrics'] == metrics
     kwargs = dict(session_id=service.status()['session_id'], confirmed_by='Operator', format_checked=True,
                   use_tolerance=use_tolerance)
@@ -1867,8 +1870,9 @@ def test_confirm_adaptive_tolerance_marks_artifacts_and_run(tmp_path, proposal, 
         assert tolerance['d_max_templates'] == 1.92
         assert tolerance['d_max_run'] == 1.92 * 1.44
         assert tolerance['max_d_best'] == 2.2
-        assert 'nicht validiert' in tolerance['hinweis']
-        assert status['run_block'] is None
+        assert 'Fehllesungen' in tolerance['hinweis'] and '×1.44' in tolerance['hinweis']
+        assert status['run_block'] is None and status['run_hint'] is None
+        assert confirmation['run_hint'] is None
         captured = []
 
         class Session(MarkerSession):
@@ -1885,7 +1889,8 @@ def test_confirm_adaptive_tolerance_marks_artifacts_and_run(tmp_path, proposal, 
             service.close()
     else:
         assert status['reader_tolerance'] is None
-        assert status['run_block']
+        assert status['run_block'] is None and '×1.44' in status['run_hint']
+        assert confirmation['run_hint'] == status['run_hint']
         captured = []
 
         class Session(MarkerSession):
@@ -1894,11 +1899,11 @@ def test_confirm_adaptive_tolerance_marks_artifacts_and_run(tmp_path, proposal, 
                 super().__init__(*a, **kw)
         monkeypatch.setattr('dispread.live.service.LiveSession', Session)
         try:
-            # Ohne Toleranz nur als Testlauf - und dann mit dem strengen Leser.
-            service.start_run(test_override=True)
+            # Standardlauf bleibt waehlbar (mit Hinweis) und nutzt den strengen Leser.
+            service.start_run()
             assert captured[0]['reader_d_max_factor'] == 1.0
             assert captured[0]['reader_tolerance'] is None
-            assert captured[0]['test_run'] is not None
+            assert captured[0]['test_run'] is None
         finally:
             service.close()
     service.start_setup()

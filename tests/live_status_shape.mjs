@@ -150,14 +150,14 @@ const root = fields({
                     level: choice('ok', 'warn', 'error'), message: string }),
   system: fields({ cpu_percent: nullable(percentage), cpu_window_s: nonnegative }),
   release_notice: string, session_id: nullable(string), setup: nullable(setup), profile: nullable(object),
-  run_block: nullable(string), test_run: nullable(object), reader_tolerance: nullable(object), run: nullable(run),
+  run_block: nullable(string), run_hint: nullable(string), test_run: nullable(object), reader_tolerance: nullable(object), run: nullable(run),
   diagnostics: fields({ enabled: boolean }), diagnose_kopie: boolean,
   diagnostic_leftovers: array(fields({ path: string, bytes: nullable(nonnegative) })),
   last_mark: nullable(object), reference: fields({ enabled: boolean,
     latest: nullable(fields({ cell_text: string, raw: string, value: number, age_s: nonnegative })),
     schedule_step: nullable(fields({ index: integer, factor: number, since_s: nonnegative })),
   }), reference_eval: nullable(referenceEval),
-  previous_region_hint: nullable(previousRegionHint),
+  previous_region_hint: nullable(previousRegionHint), last_start_rejection: nullable(object),
 });
 
 /** Throws TypeError with a field path if required status fields have a wrong shape. */

@@ -1,4 +1,4 @@
-; INTERNER, UNSIGNIERTER, UNQUALIFIZIERTER Test-Installer der GUI. Nur ueber build-test.ps1.
+; Installer der GUI (ohne /DRelease: interner, unsignierter Test-Installer). Nur ueber build-test.ps1 / build-release.cmd.
 ; Benutzerinstallation ohne Administratorrechte. Kein Treiber, kein com0com, kein Autostart.
 #ifndef AppDir
   #error AppDir muss den PyInstaller-Ordner nennen
@@ -18,9 +18,15 @@
 
 [Setup]
 AppId={{B3C2A3E1-5D0F-4C57-9E3A-6F1B2A7C4D18}
-AppName=GSVmulti-Bruecke (interner Test)
-AppVersion={#AppVersion}-{#AppCommit}
-VersionInfoVersion=0.0.0.0
+#ifdef Release
+  AppName=GSVmulti-Bruecke
+  AppVersion={#AppVersion}
+  VersionInfoVersion={#AppVersion}.0
+#else
+  AppName=GSVmulti-Bruecke (interner Test)
+  AppVersion={#AppVersion}-{#AppCommit}
+  VersionInfoVersion=0.0.0.0
+#endif
 AppPublisher=ME Systeme
 DefaultDirName={localappdata}\Programs\GSVmulti-Bruecke
 DefaultGroupName=GSVmulti-Bruecke
@@ -29,11 +35,19 @@ ArchitecturesAllowed=x64os
 ArchitecturesInstallIn64BitMode=x64os
 MinVersion=10.0.22000
 OutputDir={#SetupOutput}
-OutputBaseFilename=GSVmulti-Bruecke-Setup-{#AppVersion}-{#AppCommit}-test
+#ifdef Release
+  OutputBaseFilename=GSVmulti-Bruecke-Setup-{#AppVersion}
+#else
+  OutputBaseFilename=GSVmulti-Bruecke-Setup-{#AppVersion}-{#AppCommit}-test
+#endif
 Compression=lzma2
 SolidCompression=yes
 SignedUninstaller=no
-UninstallDisplayName=GSVmulti-Bruecke (interner Test, unsigniert)
+#ifdef Release
+  UninstallDisplayName=GSVmulti-Bruecke
+#else
+  UninstallDisplayName=GSVmulti-Bruecke (interner Test, unsigniert)
+#endif
 DisableProgramGroupPage=yes
 ChangesAssociations=yes
 

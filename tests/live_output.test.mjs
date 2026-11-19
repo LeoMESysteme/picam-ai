@@ -4,9 +4,9 @@ import {outputBody, outputItem, outputTone, outputView, loadChoice, saveChoice, 
   from '../src/dispread/workbench/static/live/run/output.js';
 
 const bridge = (transport, state, extra = {}) => ({transport, state, config: {}, error: null,
-  release_block: LOCK_NOTICE, last_ack: null, ack_scope: 'COM driver write, not GSVmulti reception', acceptance: 'fehlt', ...extra});
+  release_block: null, release_note: BRIDGE_NOTE, last_ack: null, ack_scope: 'COM driver write, not GSVmulti reception', acceptance: 'abgenommen', ...extra});
 const serial = (state, extra = {}) => ({transport: 'serial', state, config: {port: '/dev/ttyAMA0', baudrate: 115200, prefix: '%'},
-  error: null, release_block: null, release_note: SERIAL_NOTE, last_ack: null, ack_scope: 'lokale Annahme', acceptance: 'fehlt', ...extra});
+  error: null, release_block: null, release_note: SERIAL_NOTE, last_ack: null, ack_scope: 'lokale Annahme', acceptance: 'abgenommen', ...extra});
 
 test('aus: eine Zeile, kein Empfangshinweis', () => {
   assert.equal(outputView({transport: 'off', state: 'off'}), 'Ausgabe ausgeschaltet');
@@ -14,10 +14,10 @@ test('aus: eine Zeile, kein Empfangshinweis', () => {
   assert.equal(outputItem({transport: 'off', state: 'off'}).hidden, true);
 });
 
-test('Bruecke: Zustandstexte, Sperre und unbestaetigter Empfang', () => {
+test('Bruecke: Zustandstexte und unbestaetigter Empfang', () => {
   const view = outputView(bridge('uart', 'disconnected'));
   assert.equal(view.split('\n')[0], 'UART über Brücke: Verbindung unterbrochen – lokaler Lauf läuft weiter');
-  assert.match(view, /DUT-Ausgabe gesperrt: Windows-Abnahme fehlt/);
+  assert.doesNotMatch(view, /Abnahme|DUT-Ausgabe gesperrt/);
   assert.ok(view.endsWith('GSVmulti-Empfang unbestätigt.'));
   assert.equal(outputView(bridge('tcp', 'waiting')).split('\n')[0], 'Netzwerk über Brücke: Warte auf Windows-Brücke');
   assert.match(outputView(bridge('tcp', 'bridge_connected')), /^Netzwerk über Brücke: Brücke erreichbar/);
@@ -39,8 +39,8 @@ test('seriell: Hinweis woertlich, Marker, Fehler', () => {
   assert.equal(view.split('\n')[0], 'UART direkt: Schnittstelle bereit');
   assert.ok(view.includes(SERIAL_NOTE));
   assert.match(outputView(serial('failed', {error: 'Port weg'})), /Schnittstelle fehlgeschlagen\n.*\nPort weg\n/);
-  assert.match(outputItem(serial('serial_ready')).html, /nicht abgenommen/);
-  assert.doesNotMatch(outputItem(bridge('uart', 'waiting')).html, /nicht abgenommen/);
+  assert.doesNotMatch(outputItem(serial('serial_ready')).html, /nicht abgenommen|Testfreigabe/);
+  assert.doesNotMatch(outputItem(bridge('uart', 'waiting')).html, /nicht abgenommen|Testfreigabe/);
 });
 
 test('Statusleiste: Ton und Text', () => {
@@ -56,9 +56,8 @@ test('POST-Koerper je Weg', () => {
   assert.deepEqual(outputBody('off'), {transport: 'off'});
   assert.deepEqual(outputBody('uart'), {transport: 'uart'});
   assert.deepEqual(outputBody('tcp', {tcpPort: '5001'}), {transport: 'tcp', tcp_port: 5001});
-  assert.deepEqual(outputBody('serial', {port: '/dev/ttyAMA0', baudrate: '115200', prefix: '%', ack: true}),
-    {transport: 'serial', port: '/dev/ttyAMA0', baudrate: 115200, prefix: '%', acknowledge_unaccepted: true});
-  assert.equal(outputBody('serial', {port: 'p', baudrate: '9600', prefix: '%'}).acknowledge_unaccepted, false);
+  assert.deepEqual(outputBody('serial', {port: '/dev/ttyAMA0', baudrate: '115200', prefix: '%'}),
+    {transport: 'serial', port: '/dev/ttyAMA0', baudrate: 115200, prefix: '%'});
 });
 
 test('Wahl wird gemerkt, kaputter Speicher stoert nicht', () => {
@@ -76,24 +75,21 @@ test('Wahl wird gemerkt, kaputter Speicher stoert nicht', () => {
 const released = (transport, state, extra = {}) => bridge(transport, state, {release: 'test_unaccepted', release_block: null,
   release_note: BRIDGE_NOTE, ...extra});
 
-test('Testfreigabe: Hinweis woertlich, Marker, Warn-Ton, keine Sperrzeile', () => {
+test('Bruecke: Hinweis woertlich, kein Abnahme-Marker, keine Sperrzeile', () => {
   const view = outputView(released('tcp', 'bridge_connected'));
   assert.ok(view.includes(BRIDGE_NOTE));
-  assert.doesNotMatch(view, /DUT-Ausgabe gesperrt/);
-  assert.equal(outputTone(released('tcp', 'bridge_connected')), 'warn');
+  assert.doesNotMatch(view, /DUT-Ausgabe gesperrt|abgenommen|Prototyp/);
+  assert.equal(outputTone(released('tcp', 'bridge_connected')), '');
   assert.equal(outputTone(released('uart', 'audit_failed')), 'err');
   const item = outputItem(released('uart', 'waiting'));
-  assert.match(item.html, /Testfreigabe – nicht abgenommen/);
-  assert.doesNotMatch(item.html, />gesperrt</);
-  assert.equal(markerText(released('tcp', 'waiting')), 'Testfreigabe – nicht abgenommen');
+  assert.doesNotMatch(item.html, /Testfreigabe|nicht abgenommen|>gesperrt</);
+  assert.equal(markerText(released('tcp', 'waiting')), null);
   assert.equal(markerText(bridge('tcp', 'waiting')), null);
-  assert.match(outputItem(bridge('tcp', 'waiting')).html, />gesperrt</);
 });
 
-test('Testfreigabe: POST-Koerper nur mit Haken', () => {
-  assert.deepEqual(outputBody('uart', {ack: true}), {transport: 'uart', acknowledge_unaccepted: true});
-  assert.deepEqual(outputBody('tcp', {tcpPort: '5001', ack: true}), {transport: 'tcp', tcp_port: 5001, acknowledge_unaccepted: true});
-  assert.deepEqual(outputBody('uart', {ack: false}), {transport: 'uart'});
+test('Bruecke: POST-Koerper sendet keine Bestaetigung mehr', () => {
+  assert.deepEqual(outputBody('uart', {ack: true}), {transport: 'uart'});
+  assert.deepEqual(outputBody('tcp', {tcpPort: '5001', ack: true}), {transport: 'tcp', tcp_port: 5001});
   assert.deepEqual(outputBody('off', {ack: true}), {transport: 'off'});
 });
 
@@ -111,9 +107,9 @@ test('Format: Vorgaben, Warnung woertlich, Takt 1-10 ganzzahlig', () => {
 
 test('outputBody: Format und Takt je Weg', () => {
   assert.deepEqual(ob('tcp', {tcpPort: 5000, format: '4ch', rateHz: '5'}), {transport: 'tcp', tcp_port: 5000, format: '4ch', rate_hz: 5});
-  assert.deepEqual(ob('uart', {format: '1ch', rateHz: 5, ack: true}), {transport: 'uart', acknowledge_unaccepted: true, format: '1ch'});
+  assert.deepEqual(ob('uart', {format: '1ch', rateHz: 5, ack: true}), {transport: 'uart', format: '1ch'});
   assert.deepEqual(ob('serial', {port: '/dev/ttyAMA0', baudrate: 115200, prefix: 'x', ack: true, format: '4ch', rateHz: 10}),
-    {transport: 'serial', port: '/dev/ttyAMA0', baudrate: 115200, prefix: '%', acknowledge_unaccepted: true, format: '4ch', rate_hz: 10});
+    {transport: 'serial', port: '/dev/ttyAMA0', baudrate: 115200, prefix: '%', format: '4ch', rate_hz: 10});
   assert.deepEqual(ob('off', {format: '4ch', rateHz: 10}), {transport: 'off'});
 });
 

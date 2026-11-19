@@ -400,7 +400,7 @@ def test_session_checklist_and_badges_in_setup(win, tmp_path):
     assert not sv.next_button.isEnabled()
     badges = {b.label.text(): b for b in sv.findChildren(Badge)}
     assert badges['Einkanal'].info.toolTip() == texts.SINGLE_CHANNEL_WARNING          # wörtlich
-    assert badges['nicht abgenommen'] and badges['Pflicht']
+    assert 'nicht abgenommen' not in badges and badges['Pflicht']
     assert sv.buttons['open_session_folder'].toolTip() == texts.OPEN_FOLDER
     assert sv.buttons['make_session'].toolTip() == texts.SESSION_AGAIN
     for k in ('record_hidden_ok', 'session_ok'):
@@ -454,7 +454,7 @@ def test_test_release_line_replaces_lock_line_with_info_for_the_rest(win):
     assert h.dut.text() == texts.TEST_RELEASE_LINE and len(texts.TEST_RELEASE_LINE) <= 70
     assert 'unmarkiert' in h.dut_info.toolTip()
     names = {b.label.text() for b in h.findChildren(Badge)}
-    assert {'Testfreigabe', 'nicht abgenommen'} <= names
+    assert 'Weitergabe' in names and 'nicht abgenommen' not in names
 
 
 # ================================================================ B-09 / B-18 / B-19

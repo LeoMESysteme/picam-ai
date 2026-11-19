@@ -118,7 +118,7 @@ class _DataLink:
                     self.peer_output_format = reply.get('output_format')
                 elif reply['type'] == 'record':
                     # Ein echter Wert ist nur zulaessig, wenn der Pi die
-                    # Testfreigabe fuer genau diesen Lauf vorher gemeldet hat.
+                    # Weitergabe fuer genau diesen Lauf vorher gemeldet hat.
                     if reply['demo'] is not True and (self._peer_release != TEST_RELEASE
                                                       or reply.get('release') != TEST_RELEASE):
                         raise ConnectionError('peer_invalid')
@@ -127,7 +127,7 @@ class _DataLink:
                     self._peer_state, self._peer_release_block = 'ready', None
                 elif reply['type'] == 'tick':
                     # B2: ein Takt traegt immer echte Werte bzw. Fehlwerte und
-                    # setzt dieselbe vorher angekuendigte Testfreigabe voraus.
+                    # setzt dieselbe vorher angekuendigte Weitergabe voraus.
                     if self._peer_release != TEST_RELEASE or reply['release'] != TEST_RELEASE:
                         raise ConnectionError('peer_invalid')
                     self._peer_state, self._peer_release_block = 'ready', None

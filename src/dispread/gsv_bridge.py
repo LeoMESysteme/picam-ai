@@ -149,7 +149,7 @@ class BridgeSession:
         released = reply.get("demo") is not True
         if released and (reply.get("demo") is not False or reply.get("release") != TEST_RELEASE
                          or self.release_gate is None or not self.release_gate(link, reply.get("run_id"))):
-            raise BridgeError("DUT-Ausgabe gesperrt: GSVmulti-Abnahme fehlt, keine Pi-Testfreigabe")
+            raise BridgeError("DUT-Ausgabe gesperrt: keine Freigabe des Pi für diesen Lauf")
         formatter = self.release_formatter if released else self.formatter
         demo_4ch = not released and self.demo_format is not None and self.demo_format() == "4ch"
         if demo_4ch:
@@ -343,7 +343,7 @@ class BridgeSession:
         if not isinstance(run_id, str) or not run_id or len(run_id) > 256:
             raise BridgeError("invalid run metadata")
         if reply.get("release") != TEST_RELEASE or self.release_gate is None or not self.release_gate(link, run_id):
-            raise BridgeError("DUT-Ausgabe gesperrt: GSVmulti-Abnahme fehlt, keine Pi-Testfreigabe")
+            raise BridgeError("DUT-Ausgabe gesperrt: keine Freigabe des Pi für diesen Lauf")
         if self.journal is None or self.pi_id is None:
             raise BridgeError("tick output requires the durable delivery journal")
         held = self._held[1] if self._held[0] == run_id else None

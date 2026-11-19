@@ -19,10 +19,10 @@ from .port import JournalEntry, UiContext
 APP_TITLE = 'GSVmulti-Brücke'
 DUT_LOCK_LINE = 'DUT-Ausgabe gesperrt – die Brücke gibt keine Messwerte frei'
 DUT_LOCK_DEFAULT_SEE = DUT_LOCK_LINE
-TEST_RELEASE_LINE = 'Testfreigabe – nicht abgenommen, keine Messfreigabe'
+TEST_RELEASE_LINE = 'Weitergabe aktiv – echte Werte werden an COM geschrieben'
 TEST_RELEASE_INFO = ('Ungültige Werte werden ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter.')
-TEST_RELEASE_HINT = ('Der Pi-Bediener hat echte Werte ausdrücklich zum Test freigegeben. Das ist keine Abnahme '
-                     'und kein Nachweis des GSVmulti-Empfangs.')
+TEST_RELEASE_HINT = ('Der Pi gibt echte Werte für diesen Lauf frei. Das ist kein Nachweis '
+                     'des GSVmulti-Empfangs.')
 NO_PI = 'Kein Pi gekoppelt · Weg noch offen'
 DIRECT_TITLE = 'UART direkt – Adapter noch offen'
 NO_PI_WAY_SET = 'Kein Pi gekoppelt'
@@ -224,7 +224,6 @@ SESSION_PATH = 'Datei'
 SESSION_FOLDER = 'Ordner'
 SESSION_PORT = 'Port in der Session'
 SESSION_TEMPLATE = 'Vorlage'
-SESSION_NOT_ACCEPTED = ('Nicht abgenommen – erst nach Öffnen in GSVmulti und dem Empfangstest belegt.')
 SESSION_WHAT = ('Kopie der geprüften Session aus dem Testlauf vom 06.11.2026; geändert wird nur der Port. '
                 'Vorhandene GSVmulti-Sessions bleiben unverändert.')
 SESSION_HOWTO = ('In GSVmulti öffnen: GSVmulti starten, die erzeugte Datei (.ucf) als Session öffnen und '
@@ -263,7 +262,6 @@ def single_channel_warning(ctx) -> str:
     return ''
 CHECK_REQUIRED = 'Pflicht'
 CHECK_REQUIRED_TIP = 'Ohne diese Einstellung fehlen Daten in der Aufnahme. „Weiter“ bleibt gesperrt, bis sie bestätigt ist.'
-BADGE_NOT_ACCEPTED = 'nicht abgenommen'
 BADGE_READONLY = 'schreibgeschützt'
 BADGE_SINGLE_CHANNEL = 'Einkanal'
 CHECKLIST_TITLE = 'In GSVmulti einstellen'
@@ -386,7 +384,7 @@ RUN_ACTIVE_TEXT = (
 LOCKED_REASON = 'Während einer aktiven Verbindung nicht änderbar – erst trennen'
 OUTPUT_TEXT = {
     'output_off': ('Auf dem Pi läuft keine Ausgabe.', 'Starten Sie dort einen Lauf; die Brücke startet keinen.'),
-    'dut_release_blocked': ('Die DUT-Ausgabe ist gesperrt (Abnahme fehlt).', 'Nichts tun: es werden keine Messwerte an COM geschrieben.'),
+    'dut_release_blocked': ('Die DUT-Ausgabe ist gesperrt (vom Pi nicht freigegeben).', 'Nichts tun: es werden keine Messwerte an COM geschrieben.'),
     'peer_release_blocked': ('Der Pi meldet eine Sperre.', 'Ursache auf dem Pi klären; die Brücke deutet den Grund nicht.'),
     'run_ended': ('Der Lauf auf dem Pi ist beendet; die Verbindung besteht weiter.', 'Starten Sie bei Bedarf einen neuen Lauf auf dem Pi.'),
     'peer_output_unknown': ('Der Ausgabestand des Pi ist unbekannt.', 'Warten Sie auf die nächste Pi-Meldung oder verbinden Sie neu.'),
@@ -448,7 +446,7 @@ NOT_SET = 'nicht festgelegt'
 BACKOFF_DETAIL = ('Mögliche Ursachen: Pi-Dienst, Netzwerk oder Strom des Pi. Wiederholung nach 1, 2, 4, 8 s, dann '
                   'alle 8 s. „Automatik stoppen“ beendet das automatische Wiederverbinden.')
 RUN_LOCK_SENTENCE = ('GSVmulti erhält absichtlich keine Messwerte – die DUT-Ausgabe ist gesperrt '
-                     '(Windows-Abnahme fehlt). Das ist kein Fehler.')
+                     '(vom Pi nicht freigegeben). Das ist kein Fehler.')
 _CLOCK = _re.compile(r'^\d\d:\d\d:\d\d$')
 
 
@@ -512,7 +510,7 @@ def headline(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) 
         if worker is not None and not worker.output_ready and worker.state not in ('idle', 'starting', 'stopped'):
             return Headline('Verbunden – Übertragung nicht bereit', 'warn')
         if _test_release(readiness):
-            return Headline('Verbunden – Testfreigabe aktiv', 'warn')
+            return Headline('Verbunden – Weitergabe aktiv', 'warn')
         if ctx.release and not ctx.dut_locked and not ctx.demo:
             return Headline('Verbunden – Lauf wird übertragen', 'ok')
         if ctx.demo:
@@ -566,12 +564,11 @@ def dut_info(ctx) -> str:
 DEMO_TIP = 'Die Werte sind synthetisch und dürfen nicht in einer Kalibriermessung landen.'
 NO_RECEIPT_TIP = ('Weitergabe ist nicht Empfang: Die Brücke belegt nur, dass der Windows-Port die Werte angenommen '
                   'hat. Ob GSVmulti sie gelesen hat, belegt erst der Empfangstest.')
-BADGE_DEMO, BADGE_TEST_RELEASE, BADGE_NO_RECEIPT = 'Demo', 'Testfreigabe', 'kein Empfangsnachweis'
-TEST_NOT_ACCEPTED_TIP = 'Echte Werte, aber keine Abnahme und keine Messfreigabe der Brücke.'
+BADGE_DEMO, BADGE_TEST_RELEASE, BADGE_NO_RECEIPT = 'Demo', 'Weitergabe', 'kein Empfangsnachweis'
 
 
 def header_badges(readiness, ctx) -> tuple[tuple[str, str], ...]:
-    """Wiederkehrende Einschränkungen als Abzeichen (Text, ⓘ): Demo, Testfreigabe, nicht abgenommen, kein
+    """Wiederkehrende Einschränkungen als Abzeichen (Text, ⓘ): Demo, Weitergabe, kein
     Empfangsnachweis, Einkanal. Nichts davon ist grün."""
     if ctx.route_mode == 'uart_direct' or readiness.peer != 'authenticated':
         return ()
@@ -580,7 +577,6 @@ def header_badges(readiness, ctx) -> tuple[tuple[str, str], ...]:
         out.append((BADGE_DEMO, DEMO_TIP))
     if ctx.test_release:
         out.append((BADGE_TEST_RELEASE, TEST_RELEASE_HINT))
-        out.append((BADGE_NOT_ACCEPTED, TEST_NOT_ACCEPTED_TIP))
     if not (ctx.receipt is not None and ctx.receipt.proven):
         out.append((BADGE_NO_RECEIPT, NO_RECEIPT_TIP))
     if single_channel_warning(ctx):
@@ -720,7 +716,7 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
     elif readiness.output == 'ended':
         out = ChipView('output', 'Ausgabe', 'Lauf beendet', 'info')
     elif _test_release(readiness):
-        out = ChipView('output', 'Ausgabe', 'Testfreigabe', 'warn', 'nicht abgenommen')
+        out = ChipView('output', 'Ausgabe', 'Weitergabe', 'info')
     elif readiness.output == 'blocked':
         out = (ChipView('output', 'Ausgabe', 'DUT gesperrt', 'warn') if readiness.next_action == 'dut_release_blocked'
                else ChipView('output', 'Ausgabe', 'Gesperrt (Pi)', 'warn', 'Sperrgrund vom Pi'))
@@ -736,7 +732,7 @@ def chips(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) -> 
         out = ChipView('output', 'Ausgabe', 'DUT gesperrt', 'warn')
     else:
         out = _unknown('output', 'Ausgabe')
-    hints = {'Testfreigabe': TEST_RELEASE_HINT, 'Freigegeben': 'Dieser Zustand existiert erst nach der Windows-Abnahme.',
+    hints = {'Weitergabe': TEST_RELEASE_HINT, 'Freigegeben': 'Der Pi hat die Ausgabe für diesen Lauf freigegeben.',
              'Wartet auf Lauf': 'Die Brücke startet keinen Lauf.',
              'DUT gesperrt': 'Die Brücke gibt nichts frei und startet keine Messung.',
              'Demo-Werte': 'Nicht für Kalibrierungen verwenden.'}
@@ -896,7 +892,7 @@ def action_bar(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext
 
 
 OUTPUT_JOURNAL = {'ended': 'Lauf auf dem Pi beendet', 'blocked': 'Ausgabe gesperrt', 'output_off': 'Keine Ausgabe',
-                  'test_release': 'Testfreigabe aktiv', 'demo_only': 'Demo-Ausgabe', 'unavailable': 'Ausgabe unbekannt'}
+                  'test_release': 'Weitergabe aktiv', 'demo_only': 'Demo-Ausgabe', 'unavailable': 'Ausgabe unbekannt'}
 DEMO_ABORTED = 'Empfangstest unterbrochen'
 DEMO_FINISHED = 'Empfangstest beendet'
 
@@ -1064,7 +1060,7 @@ SETUP: dict[str, dict] = {
         _WIRING], nxt='Verbinden', header='uart',
         gate=('clear:adapter', 'Erst einen Adapter wählen')),
     'E3ok': _s(3, 'Pi verbunden', [
-        ('info', 'ok', 'Pi verbunden', 'Identität geprüft. Noch keine Messfreigabe.', ()),
+        ('info', 'ok', 'Pi verbunden', 'Identität geprüft.', ()),
         ('fields', '', (('Weg', 'Netzwerk (LAN)'), ('Endpunkt', '{endpoint}'), ('Protokoll', '{protocol}')),
          None, '')], ready=True),
     'E3fail': _s(3, 'Verbindung herstellen', [

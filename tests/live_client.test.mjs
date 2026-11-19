@@ -177,9 +177,9 @@ test('server-suppressed test record explains rejection using the German cause te
 test('tolerance marks valid detail but STALE still wins', () => {
   const status = {...running, reader_tolerance: {factor: 1.44}};
   assert.equal(statusView(status).headline, '+1.2345 mV/V');
-  assert.match(statusView(status).detail, /^erweiterte Toleranz ×1.44 – nicht validiert/);
+  assert.match(statusView(status).detail, /^angepasste Toleranz ×1.44/);
   assert.equal(statusView({...status, run: {...status.run, latest_age_s: .9}}).headline, 'STALE');
-  assert.doesNotMatch(statusView({...status, run: {...status.run, latest_age_s: .9}}).detail, /erweiterte Toleranz/);
+  assert.doesNotMatch(statusView({...status, run: {...status.run, latest_age_s: .9}}).detail, /angepasste Toleranz/);
 });
 
 test('restoration is shown until service finishes stopping', () => {
@@ -602,8 +602,9 @@ test('confirm: fields and texts as on the old page, readiness needs name, format
   status.run_block = 'Lauf gesperrt: Gegenlesen WARNUNG';
   status.setup.gegenlesen = {status: 'WARNUNG', metrics: {hinweis: 'Zelle 8 knapp', tolerance: {possible: true, factor: 1.5}}};
   const blocked = confirmModel(status);
-  assert.equal(blocked.tolerance, 'Angepasste Toleranz ×1.5 verwenden – Lesung nur in dieser Aufstellung gegen den Referenzwert geprüft, nicht validiert');
-  assert.equal(blocked.block, 'Achtung: Der strikte Lauf ist gesperrt. Angepasste Toleranz kann ausdrücklich gewählt werden; sonst ist nur ein Testlauf möglich.');
+  assert.equal(blocked.tolerance.factor, 1.5);
+  assert.match(blocked.tolerance.note, /Risiko von Fehllesungen gegenüber der Standardtoleranz/);
+  assert.equal(blocked.block, 'Achtung: Mit Standardtoleranz ist der Lauf gesperrt. Die angepasste Toleranz kann gewählt werden.');
   assert.equal(blocked.hint, 'Hinweis: Zelle 8 knapp');
   status.setup.gegenlesen.metrics.tolerance = {possible: false};
   assert.equal(confirmModel(status).block, 'Achtung: Mit diesem Vorschlag ist der Lauf gesperrt (siehe unten). Bestätigen ist möglich, ein Lauf nur als Testlauf.');

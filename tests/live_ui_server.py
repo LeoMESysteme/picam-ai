@@ -20,14 +20,14 @@ import cv2
 import numpy as np
 from aiohttp import web
 
+from dispread.bridge.protocol import TEST_RELEASE
 from dispread.charcells import CharGrid
-from dispread.gsv_transport import RELEASE_BLOCK
 from dispread.live import RELEASE_NOTICE
 from dispread.live.output import (
     BRIDGE_RELEASE_NOTE,
+    OUTPUT_ACCEPTANCE,
     SERIAL_RELEASE_NOTE,
     normalize_output,
-    require_output_acknowledgement,
 )
 from dispread.live.preview import PreviewFrame
 from dispread.live.service import OVERLAYS
@@ -285,7 +285,7 @@ class FakeLiveService:
                 "storage": {"free_bytes": 4_200_000_000, "reserve_bytes": 2_000_000_000, "level": "warn",
                             "message": "4.20 GB frei"},
                 "system": {"cpu_percent": 37.5, "cpu_window_s": 1.0},
-                "step": None, "simulate": False, "profile": None, "run_block": None, "test_run": None,
+                "step": None, "simulate": False, "profile": None, "run_block": None, "run_hint": None, "test_run": None,
                 "diagnostics": {"enabled": False, "reason": "kein Diagnoselauf"},
                 "diagnose_kopie": False, "last_mark": None, "previous_region_hint": None,
                 "last_start_rejection": None,
@@ -433,22 +433,20 @@ class FakeLiveService:
             config = normalize_output(output, reference_port='/dev/ttyUSB0' if reference else None)
             if test_override and config['transport'] != 'off':
                 raise ValueError('Testlauf erlaubt keine externe Ausgabe')
-            require_output_acknowledgement(config)
         except ValueError as exc:
             raise LiveError(str(exc)) from exc
         transport = config['transport']
         self.set_scene("running_valid")
         with self._lock:
-            released = transport in ('uart', 'tcp') and config['acknowledge_unaccepted'] is True
             self._status['output'] = ({'transport': 'off', 'state': 'off'} if transport == 'off' else {
                 'transport': transport, 'state': 'serial_ready' if transport == 'serial' else 'waiting',
                 'config': config, 'error': None,
-                'release_block': None if transport == 'serial' or released else RELEASE_BLOCK,
-                'last_ack': None, 'acceptance': 'fehlt',
+                'release_block': None,
+                # Wie der echte Brueckenpublisher: jeder echte Lauf traegt den Wire-Marker.
+                **({} if transport == 'serial' else {'release': TEST_RELEASE}),
+                'last_ack': None, 'acceptance': OUTPUT_ACCEPTANCE,
                 'ack_scope': 'lokale Annahme' if transport == 'serial' else 'COM driver write, not GSVmulti reception',
-                **({'release_note': SERIAL_RELEASE_NOTE} if transport == 'serial' else {}),
-                **({'release': 'test_unaccepted' if released else None} if transport != 'serial' else {}),
-                **({'release_note': BRIDGE_RELEASE_NOTE} if released else {}),
+                'release_note': SERIAL_RELEASE_NOTE if transport == 'serial' else BRIDGE_RELEASE_NOTE,
                 # Vierkanal: Taktstatistik wie tick_status (B1/B2); per /test/output ueberschreibbar.
                 **({'tick': {'rate_hz': config['rate_hz'], 'seq': 0, 'total': 0, 'valid': 0, 'invalid': 0, 'missed': 0}}
                    if config.get('format') == '4ch' else {}),

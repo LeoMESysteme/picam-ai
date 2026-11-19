@@ -19,7 +19,7 @@ from dispread.records import TimeBaseKind, ValueRecord, ValueStatus
 from dispread.sink.protocol.user_defined import UserDefinedFormatter
 from dispread.sink.protocol.userdefined_4ch import TickFormatter
 
-RELEASE_BLOCK = "DUT-Ausgabe gesperrt: Windows-Abnahme für Ungültig-/Altwertbehandlung fehlt"
+RELEASE_BLOCK = "DUT-Ausgabe gesperrt: kein freigegebener Lauf am Pi für diesen Weg"
 #: Bounded wait at run end so that already generated ticks can still be fetched.
 TICK_DRAIN_TIMEOUT_S = 1.0
 

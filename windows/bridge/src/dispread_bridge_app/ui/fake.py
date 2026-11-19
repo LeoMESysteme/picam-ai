@@ -30,9 +30,9 @@ _HEUTE = (
     J('14:32:07', 'Neuer Lauf erkannt', 'Lauf 7 · DUT-Ausgabe gesperrt', tone='ok'),
     J('14:31:55', 'Pi-Lauf beendet', 'Lauf 6'),
     J('14:12:40', 'Verbindung unterbrochen', 'wieder verbunden · Netzwerk (LAN), gleicher Pi', '4 s', 'warn', fault=True),
-    J('14:05:12', 'Lauf 6 verbunden – Ausgabe gesperrt', 'Windows-Abnahme fehlt · keine Werte an COM geschrieben'),
+    J('14:05:12', 'Lauf 6 verbunden – Ausgabe gesperrt', 'Pi hat keine Ausgabe freigegeben · keine Werte an COM geschrieben'),
     J('13:58:30', 'Pi verbunden (Identität geprüft)', 'Prüfstand 2 · pi-4b7e09c1', tone='ok'),
-    J('13:58:29', 'Brücke gestartet', 'Version 0.1.0.dev0', tone='ok'),
+    J('13:58:29', 'Brücke gestartet', 'Version 1.0.0', tone='ok'),
     J('17:02:11', 'Brücke beendet', 'Auf Wunsch des Bedieners', day='Gestern'),
     J('16:20:03', 'COM4 (Brückenseite): Schreibfehler', 'Demo · Wert nicht erneut gesendet · weiter mit dem nächsten Wert',
       '1 Wert', 'warn', 'Gestern', True),
@@ -42,7 +42,7 @@ _HEUTE = (
 _OK = Readiness('ready', 'not_required', 'authenticated', 'demo_only', 'driver_ready', 'unconfirmed', None)
 _IDLE = WorkerStatus('idle', False, False, None)
 _RUN = WorkerStatus('running', True, True, None)
-_BASE = UiContext(bridge_port='COM4', gsv_port='COM5', version='0.1.0.dev0', protocol='Version 2',
+_BASE = UiContext(bridge_port='COM4', gsv_port='COM5', version='1.0.0', protocol='Version 2',
                   pi_name='Prüfstand 2', route='Netzwerk (LAN)', run_id='7', pi_id='pi-4b7e09c1',
                   endpoint='https://192.168.10.24:8443', fingerprint=_FP,
                   last_report='Leerlauf, Ausgabe gesperrt – es werden keine Werte an COM geschrieben',
@@ -104,9 +104,9 @@ STATES: dict[str, tuple] = {
              replace(_BASE, test_release=True, forwarded=128, omitted=5,
                      last_ack='COM-Weitergabe bestätigt – kein GSVmulti-Empfangsnachweis',
                      journal=(J('14:41:09', 'Wert ausgelassen', 'ungültig oder veraltet – nichts an COM geschrieben', tone='warn'),
-                              J('14:40:02', 'Testfreigabe: 128 Werte weitergegeben',
-                                'COM-Weitergabe · nicht abgenommen · kein GSVmulti-Empfangsnachweis', tone='warn'),
-                              J('14:38:11', 'Testfreigabe aktiv (Lauf 7)', 'echte Werte, nicht abgenommen', tone='warn')) + _HEUTE)),
+                              J('14:40:02', '128 Werte weitergegeben',
+                                'COM-Weitergabe · kein GSVmulti-Empfangsnachweis', tone='info'),
+                              J('14:38:11', 'Weitergabe aktiv (Lauf 7)', 'echte Werte', tone='info')) + _HEUTE)),
     'B2': (_OK, _RUN, replace(_BASE, waiting_for_run=True, run_id=None)),
     'B3': (replace(_OK, peer='backoff', output='unavailable', com='unknown', next_action='reconnect'),
            None, replace(_BASE, retry_in_s=4, last_report='14:32:20')),

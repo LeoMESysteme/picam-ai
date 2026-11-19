@@ -7,7 +7,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$Python,
     [string]$Inno,
-    [string]$OutputDirectory = ""
+    [string]$OutputDirectory = "",
+    [switch]$Release   # Release-Build (build-release.cmd): saubere Version, Kanal "Release", dist-release; verweigert bei geaendertem Arbeitsbaum
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -39,7 +40,7 @@ if ($Inno) { $Inno = (Resolve-Path -LiteralPath $Inno).Path }
 # $PSScriptRoot ist in Windows PowerShell 5.1 in Parametervorgaben leer;
 # deshalb erst hier auswerten, mit Rueckfall auf den Skriptpfad.
 $BridgeRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
-if (-not $OutputDirectory) { $OutputDirectory = Join-Path $BridgeRoot "dist-test" }
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $BridgeRoot $(if ($Release) { "dist-release" } else { "dist-test" }) }
 $RepoRoot = (Resolve-Path (Join-Path $BridgeRoot "../..")).Path
 $Version = ([regex]::Match((Get-Content -LiteralPath (Join-Path $BridgeRoot "pyproject.toml") -Raw), '(?m)^version\s*=\s*"([^"]+)"')).Groups[1].Value
 if (-not $Version) { throw "Version in pyproject.toml nicht gefunden." }
@@ -58,6 +59,10 @@ if (Test-Path -LiteralPath (Join-Path $RepoRoot ".git")) {
 }
 $Commit12 = if ($Commit.Length -ge 12) { $Commit.Substring(0, 12) } else { $Commit }
 $CommitLabel = if ($Dirty) { "$Commit+geaendert" } else { $Commit }
+if ($Release) {
+    if ($Commit -eq "unbekannt") { throw "Release-Build gesperrt: Git-Commit nicht ermittelbar (Quelle muss ein Git-Arbeitsbaum sein)." }
+    if ($Dirty) { throw "Release-Build gesperrt: der Arbeitsbaum hat nicht eingecheckte Aenderungen. Erst committen, dann bauen." }
+}
 
 $BuildId = [Guid]::NewGuid().ToString("N").Substring(0, 12)
 $BuildRoot = Join-Path $BridgeRoot ".build-test/$BuildId"
@@ -66,10 +71,13 @@ $VenvPython = Join-Path $Venv "Scripts/python.exe"
 $DistPath = Join-Path $BuildRoot "dist"
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 $BuildInfo = Join-Path $BridgeRoot "src/dispread_bridge_app/build_info.py"
-$PackageName = "GSVmulti-Bruecke-$Version-$Commit12-test"
+$Channel = if ($Release) { "Release" } else { "Interner Testbuild - nicht qualifiziert" }
+$Suffix = if ($Release) { "" } else { "-$Commit12-test" }
+$PackageName = "GSVmulti-Bruecke-$Version$Suffix"
 
 New-Item -ItemType Directory -Path $BuildRoot, $OutputDirectory -Force | Out-Null
-Write-Output "== INTERNER TESTBUILD: unsigniert, unqualifiziert, nur interner Test =="
+if ($Release) { Write-Output "== RELEASE-BUILD $Version (Commit $Commit12) ==" }
+else { Write-Output "== INTERNER TESTBUILD: unsigniert, unqualifiziert, nur interner Test ==" }
 
 Invoke-Checked $Python @("-I", "-m", "venv", $Venv)
 Invoke-Checked $VenvPython @("-I", "-m", "pip", "--isolated", "install", "--index-url", "https://pypi.org/simple",
@@ -79,7 +87,7 @@ $Info = @"
 version = "$Version"
 commit = "$CommitLabel"
 build_time_utc = "$([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))"
-channel = "Interner Testbuild - nicht qualifiziert"
+channel = "$Channel"
 "@
 [System.IO.File]::WriteAllText($BuildInfo, $Info, (New-Object System.Text.UTF8Encoding($false)))
 try {
@@ -120,9 +128,10 @@ Write-Output "SHA256 $ZipHash"
 if ($Inno) {
     $SetupOut = Join-Path $BuildRoot "setup"
     New-Item -ItemType Directory -Path $SetupOut -Force | Out-Null
-    Invoke-Checked $Inno @("/DAppDir=$AppDir", "/DAppVersion=$Version", "/DAppCommit=$Commit12", "/DSetupOutput=$SetupOut",
-        (Join-Path $BridgeRoot "packaging/setup-app.iss"))
-    $SetupName = "GSVmulti-Bruecke-Setup-$Version-$Commit12-test.exe"
+    $IsccArgs = @("/DAppDir=$AppDir", "/DAppVersion=$Version", "/DAppCommit=$Commit12", "/DSetupOutput=$SetupOut")
+    if ($Release) { $IsccArgs += "/DRelease=1" }
+    Invoke-Checked $Inno ($IsccArgs + (Join-Path $BridgeRoot "packaging/setup-app.iss"))
+    $SetupName = "GSVmulti-Bruecke-Setup-$Version$Suffix.exe"
     $SetupBuilt = Join-Path $SetupOut $SetupName
     if (-not (Test-Path -LiteralPath $SetupBuilt -PathType Leaf)) { throw "Setup nicht erzeugt." }
     $Setup = Join-Path $OutputDirectory $SetupName
@@ -132,4 +141,5 @@ if ($Inno) {
     Write-Output "SHA256 $((Get-FileHash -LiteralPath $Setup -Algorithm SHA256).Hash.ToLowerInvariant())"
 }
 Write-Output "Quelle: $CommitLabel  Version: $Version"
-Write-Output "Unsigniert, unqualifiziert, nur interner Test. Kein Ersatz fuer build.ps1; keine Windows-Abnahme (N1/N2/N3)."
+if ($Release) { Write-Output "Release $Version gebaut (unsigniert). Hochladen als Forgejo-Release: ZIP und ggf. Setup aus $OutputDirectory." }
+else { Write-Output "Unsigniert, unqualifiziert, nur interner Test. Kein Ersatz fuer build.ps1; keine Windows-Abnahme (N1/N2/N3)." }

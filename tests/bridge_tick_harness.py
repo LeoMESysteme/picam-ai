@@ -370,6 +370,9 @@ def run_session_ticks(tmp: Path, identity, *, transport: str, ack: bool = True, 
                 output_factory=lambda cfg, out_dir, **kw: PairedOutputPublisher(cfg, out_dir, hub=hub,
                                                                                 run_id=run_id, **kw))
             session.bridge_run_id = run_id
+            if not ack:
+                # Lauf ohne Freigabe des Pi: Marker nachtraeglich am Publisher entfernen.
+                session._output.release = None
             session.start()
             stop = threading.Event()
             reader = threading.Thread(target=session.run, args=(stop,), daemon=True, name='b2-live')

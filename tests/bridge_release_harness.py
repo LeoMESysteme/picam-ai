@@ -247,6 +247,10 @@ def _session(tmp, owner, hub, run_id, *, transport, ack):
         output_factory=lambda cfg, out_dir, **kw: PairedOutputPublisher(cfg, out_dir, hub=hub, run_id=run_id, **kw),
     )
     session.bridge_run_id = run_id
+    if not ack:
+        # Seit 2026-11-13 gibt die Session jeden echten Lauf frei. Fuer den Sperrtest nimmt
+        # der Publisher den Marker nachtraeglich weg (Lauf ohne Freigabe des Pi).
+        session._output.release = None
     return session
 
 

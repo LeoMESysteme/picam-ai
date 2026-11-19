@@ -9,16 +9,20 @@ rem Mit Argumenten gehen diese unveraendert durch, z. B.:
 rem   build-test.cmd -Python C:\Python313\python.exe -Inno "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 setlocal
 set "SCRIPT=%~dp0build-test.ps1"
+set "EXTRA="
+set "OUT=dist-test"
+if defined BUILD_RELEASE set "EXTRA=-Release"
+if defined BUILD_RELEASE set "OUT=dist-release"
 if not "%~1"=="" goto run_args
 set "PY="
 for /f "usebackq delims=" %%P in (`py -3.13 -c "import sys; print(sys.executable)" 2^>nul`) do set "PY=%%P"
 if not defined PY goto no_python
 echo Python: %PY%
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" -Python "%PY%"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" -Python "%PY%" %EXTRA%
 set "RC=%ERRORLEVEL%"
 goto done
 :run_args
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %*
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %EXTRA% %*
 set "RC=%ERRORLEVEL%"
 goto done
 :no_python
@@ -28,8 +32,8 @@ set "RC=1"
 :done
 echo.
 if not "%RC%"=="0" goto failed
-echo Fertig. Der Ordner dist-test wird geoeffnet.
-if exist "%~dp0dist-test" start "" explorer.exe "%~dp0dist-test"
+echo Fertig. Der Ordner %OUT% wird geoeffnet.
+if exist "%~dp0%OUT%" start "" explorer.exe "%~dp0%OUT%"
 goto end
 :failed
 echo Build fehlgeschlagen (Exit %RC%). Meldung oben lesen.

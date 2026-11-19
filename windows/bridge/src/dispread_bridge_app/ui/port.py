@@ -112,9 +112,9 @@ class UiContext:
     demo: bool = False
     waiting_for_run: bool = False
     retry_in_s: int | None = None
-    test_release: bool = False              # Testfreigabe des Pi aktiv (R1): echte Werte, nicht abgenommen
-    forwarded: int = 0                      # Testfreigabe: an den Port übergebene Werte dieses Laufs
-    omitted: int = 0                        # Testfreigabe: ausgelassene (ungültige/veraltete) Werte
+    test_release: bool = False              # Pi-Weitergabe aktiv (Wire-Marker test_unaccepted): echte Werte
+    forwarded: int = 0                      # Weitergabe: an den Port übergebene Werte dieses Laufs
+    omitted: int = 0                        # Weitergabe: ausgelassene (ungültige/veraltete) Werte
     com_issue: str | None = None            # busy | write_failed | unclear (nur Demo)
     bridge_port: str | None = None      # echter Wert vom Portpaar; None = nicht festgelegt
     gsv_port: str | None = None
@@ -123,7 +123,7 @@ class UiContext:
     receipt: Receipt | None = None
     switch_locked: bool = False
     version: str | None = None          # App-Version; None = unbekannt
-    channel: str | None = None          # z. B. "Interner Testbuild - nicht qualifiziert"
+    channel: str | None = None          # z. B. "Release"
     pi_id: str = ''
     endpoint: str = ''
     fingerprint: str = ''

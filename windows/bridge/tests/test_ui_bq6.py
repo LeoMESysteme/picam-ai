@@ -363,7 +363,7 @@ def test_real_run_bar_chip_and_lifesign(fake_win):
     # Runde 3 (R3-2): im Normalbetrieb keine Infobar; die Erklärung der Sperre steht im ⓘ der Sperrzeile,
     # das Lebenszeichen im Detailfenster der Pi-Kachel.
     assert texts.action_bar(r, wk, c) is None
-    assert 'GSVmulti erhält absichtlich keine Messwerte – die DUT-Ausgabe ist gesperrt (Windows-Abnahme fehlt). ' \
+    assert 'GSVmulti erhält absichtlich keine Messwerte – die DUT-Ausgabe ist gesperrt (vom Pi nicht freigegeben). ' \
            'Das ist kein Fehler.' in texts.dut_info(c)
     chips = texts.chips(r, wk, c)
     assert ('Letzte Meldung', '14:32:20') in chips[2].details
@@ -649,7 +649,7 @@ def test_b1tr_shows_test_release_and_shot(fake_win):
     fc, w = fake_win('B1tr')
     QTest.qWait(50)
     texts_all = ' '.join(lbl.text() for lbl in w.findChildren(QLabel))
-    assert 'Testfreigabe aktiv' in texts_all and 'nicht abgenommen' in texts_all
+    assert 'Weitergabe aktiv' in texts_all and 'nicht abgenommen' not in texts_all
     assert 'Übergeben' in texts_all and '128 Werte' in texts_all
     assert 'GSVmulti erhält absichtlich keine Messwerte' not in texts_all
     out = Path('/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots')

@@ -45,6 +45,7 @@ from dispread.live.frame_tracking import FrameTrackingConfig
 from dispread.live.output import (
     BRIDGE_4CH_RELEASE_NOTE,
     BRIDGE_RELEASE_NOTE,
+    OUTPUT_ACCEPTANCE,
     SERIAL_4CH_RELEASE_NOTE,
     SERIAL_RELEASE_NOTE,
     LiveOutput,
@@ -340,13 +341,14 @@ class LiveSession:
                        if key not in ('transport', 'acknowledge_unaccepted')}
             self._output = LiveOutput(options, self._out_dir / 'tx.jsonl')
         elif self._output_transport != 'off':
-            # Testfreigabe nur aus der Laufbestaetigung des Pi-Bedieners (R1).
-            self._bridge_acknowledged = self._output_config['acknowledge_unaccepted'] is True
+            # Seit der Abnahme (2026-11-13) gibt jeder echte Lauf seinen Brueckenweg frei.
+            # Auf der Leitung bleibt der Marker TEST_RELEASE (Protokoll unveraendert).
+            self._bridge_acknowledged = True
             self._output = output_factory(bridge_config(self._output_config), self._out_dir,
                                           **({'release': TEST_RELEASE} if self._bridge_acknowledged else {}),
                                           **bridge_tick_options(self._output_config))
             if self._bridge_acknowledged and getattr(self._output, 'release', None) != TEST_RELEASE:
-                raise StartRefused('Ausgabe: Testfreigabe vom Brückenweg nicht übernommen')
+                raise StartRefused('Ausgabe: Freigabe vom Brückenweg nicht übernommen')
         self._output_error_saved = False
         self._diagnostics = DiagnosticRecorder(self._out_dir, enabled=diagnostics,
                                                staging_root=diagnostic_staging_root, monotonic=monotonic)
@@ -990,7 +992,7 @@ class LiveSession:
         if self._output_transport == 'serial':
             return status
         note = BRIDGE_4CH_RELEASE_NOTE if self._output_config.get('format') == '4ch' else BRIDGE_RELEASE_NOTE
-        return {**status, 'config': dict(self._output_config), 'acceptance': 'fehlt',
+        return {**status, 'config': dict(self._output_config), 'acceptance': OUTPUT_ACCEPTANCE,
                 **({'release_note': note} if self._bridge_acknowledged else {})}
 
     def unified_output_status(self) -> dict:
@@ -1012,7 +1014,7 @@ class LiveSession:
             'config': dict(self._output_config),
             'error': status['first_error'],
             'release_block': None,
-            'acceptance': 'fehlt',
+            'acceptance': OUTPUT_ACCEPTANCE,
             'release_note': SERIAL_4CH_RELEASE_NOTE if 'tick' in status else SERIAL_RELEASE_NOTE,
         }
 
@@ -1064,10 +1066,10 @@ class LiveSession:
             # OQ-74: Fokuspruefung nach dem Kameraneustart am Laufstart (Audit).
             data["focus_check"] = self.focus_check
         if self._output_transport == 'serial':
-            data['output'] = {**self.output_status(), 'acceptance': 'fehlt', 'acknowledged_unaccepted': True}
+            data['output'] = {**self.output_status(), 'acceptance': OUTPUT_ACCEPTANCE, 'acknowledged_unaccepted': True}
         elif self._output is not None:
             data['output'] = {**self._output.metadata(), 'status': self.unified_output_status(),
-                              'acceptance': 'fehlt',
+                              'acceptance': OUTPUT_ACCEPTANCE,
                               'acknowledged_unaccepted': self._bridge_acknowledged,
                               'acknowledged_at_utc': self._bridge_acknowledged_at_utc,
                               'acknowledged_by': (getattr(self, 'bridge_acknowledged_by', None)

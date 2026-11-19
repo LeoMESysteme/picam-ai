@@ -44,7 +44,7 @@ def _assert_released(result, transport):
     output = result['session']['output']
     assert output['acknowledged_unaccepted'] is True and output['acknowledged_at_utc']
     assert output['release'] == 'test_unaccepted' and output['release_block'] is None
-    assert output['acceptance'] == 'fehlt' and output['formatter']['provisional'] is True
+    assert output['acceptance'] == 'abgenommen' and output['formatter']['provisional'] is True
     assert output['status']['release_note'] == BRIDGE_RELEASE_NOTE
     assert output['transport'] == transport
     assert result['session']['run_id'] == result['pi_events'][0]['run_id']
@@ -70,7 +70,8 @@ def test_without_confirmation_nothing_reaches_com(tmp_path, identity, transport)
     assert (snapshot.output, snapshot.next_action) == ('blocked', 'dut_release_blocked')
     assert status.demo_only is True
     output = result['session']['output']
-    assert output['acknowledged_unaccepted'] is False and output['release_block'] == RELEASE_BLOCK
+    # Ohne Marker am Publisher bleibt die Sperre im Hub bestehen (unveraendert).
+    assert output['release_block'] == RELEASE_BLOCK and output['release'] is None
     assert not any(e['event'] == 'offered' for e in result['pi_events'])
 
 

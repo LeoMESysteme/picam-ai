@@ -20,7 +20,7 @@ export function statusView(status, {sinceS = 0} = {}) {
   }
   const view = recordView(status, sinceS);
   if (status.reader_tolerance && view.cls === 'valid') {
-    view.detail = `erweiterte Toleranz ×${status.reader_tolerance.factor} – nicht validiert · ${view.detail}`;
+    view.detail = `angepasste Toleranz ×${status.reader_tolerance.factor} · ${view.detail}`;
   }
   if (status.test_run && status.state === 'running') {
     view.headline = `TESTLAUF · ${view.headline}`;

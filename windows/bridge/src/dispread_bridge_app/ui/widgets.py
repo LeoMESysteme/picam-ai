@@ -60,7 +60,7 @@ class InfoIcon(QLabel):
 
 
 class Badge(QFrame):
-    """Abzeichen für eine wiederkehrende Einschränkung („nicht abgenommen“, „Demo“, „Einkanal“ …): Umriss
+    """Abzeichen für eine wiederkehrende Einschränkung („Demo“, „Einkanal“ …): Umriss
     ``stroke_strong``, 9-pt-Beschriftung, Radius 4, nie grün. Die Erklärung steht im ⓘ im Abzeichen."""
 
     def __init__(self, text: str, tip: str = '', parent=None, name: str = ''):

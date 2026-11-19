@@ -64,8 +64,29 @@ class LiveInputError(LiveError):
     """Ungueltige Anfrage; HTTP 400 statt eines Zustandskonflikts."""
 
 
+def _tolerance_possible(metrics: dict) -> bool:
+    return (metrics.get("tolerance") or {}).get("possible") is True and not metrics.get("contradictions")
+
+
+def run_hint_reason(proposal: dict | None) -> str | None:
+    """Nicht sperrender Hinweis (18.11., Leonhard): Standard bleibt waehlbar, wenn die
+    angepasste Toleranz die Standbilder liest. Der Leser lehnt Unlesbares weiter ab;
+    der Lauf liefert dann UNREADABLE, nie einen geratenen Wert."""
+    check = (proposal or {}).get("setup_checks", {}).get("checks", {}).get("gegenlesen")
+    if not isinstance(check, dict) or check.get("status") == "OK":
+        return None
+    metrics = check.get("metrics", {})
+    if not _tolerance_possible(metrics):
+        return None
+    return (
+        f"Mit Standardtoleranz hat der Leser {metrics.get('read_count', 0)} von {metrics.get('frames', 0)} "
+        "Standbildern gelesen. Ein Lauf liefert voraussichtlich viele unlesbare Werte. Angepasste Toleranz "
+        f"×{metrics['tolerance']['factor']} wählen oder Licht/Ausrichtung verbessern und neu einrichten."
+    )
+
+
 def run_block_reason(proposal: dict | None) -> str | None:
-    """Nur erfolgreiches Gegenlesen erlaubt einen normalen Lauf."""
+    """Gegenlesen OK oder angepasste Toleranz moeglich erlaubt einen normalen Lauf."""
     check = (proposal or {}).get("setup_checks", {}).get("checks", {}).get("gegenlesen")
     if not isinstance(check, dict):
         return "Lauf gesperrt: Einrichtung ohne Gegenlesen. Neu einrichten."
@@ -73,6 +94,8 @@ def run_block_reason(proposal: dict | None) -> str | None:
     if status == "OK":
         return None
     metrics = check.get("metrics", {})
+    if _tolerance_possible(metrics):
+        return None
     hint = f" {metrics['hinweis']}" if metrics.get("hinweis") else ""
     if metrics.get("rejection_reasons", {}).get("zelle_widerspricht_referenz") and metrics.get("contradictions"):
         first = metrics["contradictions"][0]
@@ -193,6 +216,7 @@ class LiveService:
         self._setup_grid: dict | None = None
         self._stability_frames: tuple[np.ndarray, ...] = ()
         self._run_block: str | None = None
+        self._run_hint: str | None = None
         self._test_run: dict | None = None
         self._reader_tolerance: dict | None = None
         self._profile_path: Path | None = None
@@ -370,6 +394,7 @@ class LiveService:
                 "setup": setup,
                 "profile": self._profile_info,
                 "run_block": self._run_block,
+                "run_hint": self._run_hint,
                 "test_run": self._test_run,
                 "reader_tolerance": self._reader_tolerance,
                 "run": run,
@@ -549,7 +574,7 @@ class LiveService:
                 self._session_dir, self._proposal = session_dir, None
                 self._setup_grid = None
                 self._stability_frames = ()
-                self._run_block = self._test_run = self._reader_tolerance = None
+                self._run_block = self._run_hint = self._test_run = self._reader_tolerance = None
                 self._profile_path = self._profile_camera = self._profile_info = None
                 self._focus_reference = None
                 self._diagnostic_copies = [s for s in [*self._diagnostic_copies, self._session]
@@ -698,6 +723,7 @@ class LiveService:
                 self._cache_setup_grid(proposal)
                 self._proposal, self._state, self._step = proposal, "setup_ready", "vorschlag"
                 self._run_block = run_block_reason(proposal)
+                self._run_hint = run_hint_reason(proposal)
         except Exception as exc:  # noqa: BLE001 - jeder Abbruch geht als Meldung an die Seite
             with self._lock:
                 step = self._setup_step
@@ -931,6 +957,7 @@ class LiveService:
                 self._cache_setup_grid(updated)
                 self._proposal = updated
                 self._run_block = run_block_reason(updated)
+                self._run_hint = run_hint_reason(updated)
             return {"proposal_revision": updated["live_tracking"]["proposal_revision"],
                     "centre_results": updated["live_tracking"]["proposal"]["metrics"]["centre_results"]}
 
@@ -963,8 +990,9 @@ class LiveService:
                     "factor": tolerance["factor"], "d_max_templates": tolerance["d_max"],
                     "d_max_run": tolerance["d_max"] * tolerance["factor"],
                     "max_d_best": tolerance["max_d_best"],
-                    "hinweis": "Angepasste Lesetoleranz: Lesung nur in dieser Aufstellung gegen den "
-                               "Referenzwert geprueft, nicht validiert.",
+                    "hinweis": (f"Angepasste Lesetoleranz ×{tolerance['factor']}: liest diese Aufstellung, "
+                                "erhöht aber das Risiko von Fehllesungen gegenüber der Standardtoleranz. "
+                                "Geprüft nur in dieser Aufstellung gegen den Referenzwert."),
                 }
             try:
                 profile: SessionProfile = live_setup.confirm_proposal(
@@ -985,6 +1013,7 @@ class LiveService:
                 "warning_acknowledged": bool(acknowledge_warning),
                 "setup_overall": overall,
                 "run_block": None if reader_tolerance else run_block_reason(proposal),
+                "run_hint": None if reader_tolerance else run_hint_reason(proposal),
                 "reader_tolerance": reader_tolerance,
             }
             (session_dir / "confirmation.json").write_text(
@@ -1001,6 +1030,7 @@ class LiveService:
                                       "warning_acknowledged": overall == "WARNUNG",
                                       "tracking_mode": "rahmenbereiche" if profile.live_tracking is not None else "ecc_alt"}
                 self._run_block = confirmation["run_block"]
+                self._run_hint = confirmation["run_hint"]
                 self._reader_tolerance = reader_tolerance
                 self._state = "confirmed"
                 # R13-25 Review: die acht Einzelbilder (~50 MB) braucht nur

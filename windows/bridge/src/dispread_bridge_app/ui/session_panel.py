@@ -91,7 +91,7 @@ class SessionPanel(QWidget):
             lay.addWidget(ValueField(texts.SESSION_PORT, port))
         elif not port and not path:
             lay.addWidget(label(texts.SESSION_NO_PORT, 'caption'))
-        badges = [Badge(texts.BADGE_NOT_ACCEPTED, texts.SESSION_NOT_ACCEPTED, name='badge_not_accepted')] if path else []
+        badges = []
         if single_channel:
             badges.append(Badge(texts.BADGE_SINGLE_CHANNEL, texts.SINGLE_CHANNEL_WARNING, name='badge_single_channel'))
         if badges:

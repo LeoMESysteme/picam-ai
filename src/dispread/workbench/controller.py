@@ -521,7 +521,7 @@ class Controller:
                 ):
                     raise ValueError("run braucht bestaetigte ROI, Livebild und uebernommene feste Belichtung")
                 self.mode = mode
-                self.log("info", f"Modus: {mode}; keine Messwertfreigabe in diesem Prototyp")
+                self.log("info", f"Modus: {mode}")
             elif op == "camera.set":
                 data = copy.deepcopy(self.config)
                 self._apply_camera_key(data, args["key"], args["value"])

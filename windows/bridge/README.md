@@ -297,6 +297,18 @@ Paketierungsreferenz: [Inno-Architekturgrenzen](https://jrsoftware.org/ishelp/to
 `QT_QPA_PLATFORM=offscreen PYTHONPATH=src:../../src python -m pytest -q tests/test_ui*.py`.
 Nur unter Linux geprüft, keine Windows-Abnahme.
 
+## Release bauen (1.0.0)
+
+Voraussetzung: Windows-11-x64-PC mit Python ≥ 3.13 x64, Git-Arbeitsbaum **ohne nicht eingecheckte
+Änderungen** (der Release-Build verweigert sonst, damit der Commit eindeutig ist). Die Version steht
+in `pyproject.toml` und `src/dispread_bridge_app/__init__.py` (beide gleich halten).
+
+**Doppelklick auf `windows\bridge\build-release.cmd`** (Argumente wie bei `build-test.cmd`, z. B.
+`-Inno "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"` für das Setup). Es ruft `build-test.ps1 -Release`
+auf und legt unter `windows\bridge\dist-release\` ab: `GSVmulti-Bruecke-1.0.0.zip` und mit `-Inno`
+`GSVmulti-Bruecke-Setup-1.0.0.exe`. Kanal in der Fußzeile: „Release“. Die EXE besteht vorher den
+Selbsttest; ZIP/Setup danach als Forgejo-Release hochladen. Unsigniert.
+
 ## Interner Testbuild (GUI)
 
 Auf einem Windows-11-x64-PC mit Python ≥ 3.13 x64: **Doppelklick auf `windows\bridge\build-test.cmd`.**

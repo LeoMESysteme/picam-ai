@@ -287,7 +287,7 @@ def test_settings_session_export_result_not_green_and_hints(win, tmp_path):
     assert call[2] == 'COM5'
     sw = w.tool_windows['settings']
     shown, tips = texts_of(sw), tips_of(sw)
-    assert texts.SESSION_DONE in tips and texts.SESSION_NOT_ACCEPTED in tips and texts.BADGE_NOT_ACCEPTED in shown
+    assert texts.SESSION_DONE in tips and 'nicht abgenommen' not in shown
     assert texts.autoscale_hint('COM5') in tips and 'Kanal 5_1' in shown
     assert 'record_hidden_ok' not in sw.panel.checks                          # Normalfall: kein Pflichthinweis
     values = {f.value for f in sw.findChildren(ValueField)}
