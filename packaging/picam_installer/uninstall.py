@@ -359,7 +359,12 @@ def main(argv):
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
-    print('Entfernt: ' + result['prefix'] if result['applied'] else 'Deinstallationsplan (nichts geändert):')
+    if result['applied']:
+        prefix_gone = not Path(result['prefix']).exists()
+        print('Deinstalliert: Programm aus ' + result['prefix'] + (' entfernt (Ordner gelöscht).' if prefix_gone
+                                                                    else ' entfernt; der Ordner bleibt (siehe unten).'))
+    else:
+        print('Deinstallationsplan (nichts geändert):')
     if not result['applied']:
         for action in result['actions']:
             print(f'  · {action["text"]}: ' + (' '.join(action['argv']) if 'argv' in action else action['path']))
