@@ -129,11 +129,43 @@ def socket_request(path: str | None, op: str, timeout: float = 3.0, args: dict |
     async def ask():
         return await asyncio.wait_for(request(op, args, socket_path=path), timeout)
     try:
-        return asyncio.run(ask())
+        return _run_coroutine(ask, timeout + 2.0)
     except (TimeoutError, OSError, ValueError, ImportError, RuntimeError):
         return None
     except Exception:  # aiohttp.ClientError u. a.: Quelle gilt als nicht erreichbar
         return None
+
+
+def _run_coroutine(factory, wait_s: float):
+    """``asyncio.run`` auch dann, wenn in diesem Thread schon eine Schleife läuft.
+
+    Die Konsole (Textual) ruft die Laufprüfung vor einer sudo-Aktion im eigenen
+    Event-Loop auf; ``asyncio.run`` lehnt das ab. Dann läuft die Abfrage in einem
+    eigenen Thread mit eigener Schleife (raspi01, 20.11.: Stoppen scheiterte so
+    stillschweigend an „Laufstatus unbekannt“).
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(factory())
+    import threading
+
+    outcome: dict = {}
+
+    def worker() -> None:
+        try:
+            outcome['value'] = asyncio.run(factory())
+        except BaseException as error:  # noqa: BLE001 - an den Aufrufer weiterreichen
+            outcome['error'] = error
+
+    thread = threading.Thread(target=worker, name='picam-socket', daemon=True)
+    thread.start()
+    thread.join(wait_s)
+    if thread.is_alive():
+        raise TimeoutError('Steuerung antwortet nicht')
+    if 'error' in outcome:
+        raise outcome['error']
+    return outcome.get('value')
 
 
 def peer_certificate(host: str, port: int, timeout: float = 3.0):

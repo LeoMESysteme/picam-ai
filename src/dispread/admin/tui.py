@@ -964,6 +964,14 @@ class PicamApp(App[int]):
         self._log_thread.start()
 
     def _log_reader(self) -> None:
+        """Protokoll lesen; endet still, wenn die Konsole beendet wird (raspi01: Exception beim Beenden)."""
+        try:
+            self._read_journal()
+        except (RuntimeError, ValueError, OSError):
+            # App schon beendet (call_from_thread) oder Pipe beim Beenden geschlossen.
+            return
+
+    def _read_journal(self) -> None:
         from . import service
 
         if self._journal_source is not None:

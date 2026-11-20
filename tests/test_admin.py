@@ -463,3 +463,22 @@ def test_color_system_truecolor_when_terminal_does_not_say():
     env = {'TERM': 'xterm-256color', 'PICAM_COLORS': '256'}
     assert choose_color_system(env) == '256'
     assert choose_color_system({'TERM': 'x', 'TEXTUAL_COLOR_SYSTEM': 'standard'}) is None
+
+
+def test_socket_request_works_inside_running_event_loop(tmp_path, monkeypatch):
+    """Regression raspi01: Laufprüfung vor sudo-Stopp lief im Textual-Loop, asyncio.run scheiterte."""
+    import asyncio
+
+    from dispread.workbench import cli as workbench_cli
+
+    sock = tmp_path / 'control.sock'
+    sock.write_text('')
+
+    async def fake_request(op, args, socket_path=None):
+        return {'state': 'idle', 'op': op}
+    monkeypatch.setattr(workbench_cli, 'request', fake_request)
+
+    async def inside_loop():
+        return probes.socket_request(str(sock), 'live.status')
+    assert asyncio.run(inside_loop()) == {'state': 'idle', 'op': 'live.status'}
+    assert probes.socket_request(str(sock), 'live.status') == {'state': 'idle', 'op': 'live.status'}
