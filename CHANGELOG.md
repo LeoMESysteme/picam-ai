@@ -5,6 +5,46 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-20 (nachmittags/abends): **Werkbank-Einrichtung ohne RS232, picam-Konsole
+  mit Tabs und Formsprache, Installer-Unit repariert.** Problem: Ohne GSV-2AS-RS232
+  (im Betrieb nicht angeschlossen) scheiterte die Einrichtung erst nach Fokus, Kamera
+  und Belichtung („kein GSV-2AS an /dev/ttyUSB0“); die Hand-Eingabe war hinter „▾“
+  versteckt („empfohlen: leer lassen“) und streng formatiert. Die Konsole war mit Text
+  überladen und zu dunkel; auf raspi01 startete der Dienst nicht
+  (`WorkingDirectory= path is not absolute`). Geändert:
+  - Werkbank: `live.status.setup_reference` (`serial_present`, `port`, nur Existenz
+    geprüft); ohne Adapter und ohne Wert antwortet `/live/setup` sofort mit 409
+    `needs_cell_text`. Geführte Eingabe als LCD-Kästchen („+“ fest, 7 Zellen, „mV/V“
+    fest; Komma → Punkt, Leerstelle, `?` für schwankende Ziffern, Vorschau „So muss
+    die Anzeige aussehen“), auch für Neu einrichten, Übung und „Anzeige bewegt“.
+    `normalize_cell_text` nimmt `0,4678`, `+0.4678 mV/V` usw. an und lehnt alles ab,
+    was Raten erfordern würde (Minus, zwei Punkte, mehr als 6 Ziffern, ≥ 3 führende
+    Nullen). Angepasste Toleranz auch mit Hand-Eingabe, aber nur wenn alle
+    Standbilder in den vergleichbaren Zellen gleich lesen (sonst `anzeige_veraendert`);
+    `reference_kind` steht in `confirmation.json` und im Toleranzvermerk. Ohne Adapter
+    ist „Referenz mitschreiben“ vorab aus und der Werteplan gesperrt.
+  - Konsole: Tabs oben (Dashboard, Lauf, Dienst, Kamera, Ausgabe, Zertifikat,
+    Speicher, Netzwerk, UART, Konto, Protokoll, Einstellungen), `Tab` wechselt Tabs,
+    Pfeile wählen im Tab; Design „Karten + Abzeichen“: Live-Werte in eingesetzten
+    Feldern, Zustände als Abzeichen mit Symbol, eine kursive Hilfezeile je Abschnitt
+    (Rest auf `i`), Knöpfe mit Tastenchip; Farbvarianten `PICAM_THEME=schiefer|petrol|hell`
+    mit getesteten Kontrasten; Fehler-Popups; Echtfarben auch ohne `COLORTERM`
+    (SSH aus Windows), `PICAM_COLORS=256` schaltet zurück. Symbole, die im
+    Windows-Terminal verrutschen (✔ ⚙ ⏸ ⏹ ℹ), sind gesperrt (`scripts/picam-glyphs.py`).
+  - Backend dazu: Socket-Op `live.camera.restart` (gesperrt bei Lauf/Einrichtung/
+    Diagnosekopie), `live.status.run.proc` (fps, Latenz, Margin, Alter),
+    `renew-tls` (nur ohne Brücke, da die Windows-App den Zertifikats-Hash prüft),
+    `install.sh --uninstall` (Daten bleiben, `--purge-data` löscht).
+  - Fehler behoben: Startbild ruckelte (erste Prüfung importierte OpenCV für eine
+    Konstante; jetzt `dispread.live.storage`), Protokoll brach bei verborgenem Tab auf
+    20 Zeichen um, Statusprüfung bei offenem Dialog brach die Konsole ab, „Brücke
+    nicht verbunden“ war grün. Installer: `WorkingDirectory=` unquotiert, Test mit
+    `systemd-analyze verify`.
+  Konsequenz: Einrichtung und Laufstart brauchen kein RS232 mehr; ohne
+  Timing-Kalibrierung bleibt der Laufstart gesperrt (raspi01, siehe Laborjournal).
+  Prüfstand vor `419da9b` (Leonhard): 4828 bestanden, 20 übersprungen, 2 xfailed;
+  Playwright 71/71.
+
 * 2026-11-20 (mittags): **picam-Konsole: Startbild, große Fenster, dezente
   Bewegung.** Problem: Nach der Sichtprüfung fehlte eine Startseite, und in
   großen Terminalfenstern blieben große Flächen leer. Geändert:

@@ -4928,3 +4928,33 @@ und erlaubt keine Aussage über die Trefferrate im Betrieb. Die
 Geometriesicherheit neuer Bereiche ist damit noch offen. Die
 Produktnachführung nutzt weiterhin den bestätigten Vorschlag und die
 bisherigen Prüfgrenzen.
+
+---
+
+## 2026-11-20 — Erstinstallation auf raspi01 (Debian 13, ohne RS232)
+
+**Ziel:** `feat/picam-admin` mit geführtem Installer auf einem zweiten Pi installieren.
+
+**Aufbau:** raspi01, Debian 13, Python 3.13.5, Logitech StreamCam an USB 3
+(`/dev/video0`, 1920×1080 YUYV), kein GSV-2AS-RS232. Durchgeführt von Leonhard.
+
+**Beobachtung:**
+
+- Ein normales Branch-Archiv (GitHub-Zip) scheiterte an der Releaseprüfung –
+  beabsichtigt, der Installer nimmt nur Releasearchive mit Prüfsummen. Auf raspi06
+  wurde daraufhin mit der SHA-geprüften Lesevorlage `picam-admin-419da9b.tar.gz`
+  gebaut und übertragen.
+- Der Installer installierte fehlende Pakete, Release, venv, Konfiguration,
+  Zertifikat und systemd-Dienst. Der Dienst startete nicht:
+  `WorkingDirectory= path is not absolute`, weil der Installer den Pfad in
+  Anführungszeichen schrieb. Auf raspi01 von Hand korrigiert, danach
+  `active (running)` mit Autostart. Im Installer behoben (`f38bcc4`, Test mit
+  `systemd-analyze verify`).
+- picam zeigt Kamera bereit und Lesevorlage SHA-geprüft; es fehlt
+  `/var/lib/picam/calibration/timing-streamcam.json`. Die Werkbank lief unter der
+  Tailscale-Adresse auf Port 8080.
+
+**Schluss:** Installation trägt bis auf die Unit-Zeile; ein realer Messlauf auf
+raspi01 ist noch nicht validiert, weil die Timing-Kalibrierung fehlt und der
+Laufstart ohne sie gesperrt bleibt (keine Übernahme von raspi06).
+
