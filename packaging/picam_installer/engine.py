@@ -122,13 +122,22 @@ def quote_unit(value):
     return json.dumps(str(value).replace('%', '%%').replace('$', '$$'), ensure_ascii=False)
 
 
+def path_unit(value):
+    """Pfad für Einstellungen wie ``WorkingDirectory=``: systemd entfernt dort keine
+    Anführungszeichen (anders als in ``ExecStart=``), daher unquotiert; nur ``%`` maskieren."""
+    text = str(value)
+    if not text.startswith('/') or any(ord(char) < 32 for char in text):
+        raise ValueError(f'Pfad für die systemd-Unit ungültig: {text!r}')
+    return text.replace('%', '%%')
+
+
 def unit_text(*, python, config, user, mode, runtime):
     lines = ['[Unit]', 'Description=picam Werkbank', 'After=network.target', '', '[Service]', 'Type=simple']
     if mode == 'system':
         lines.extend(['User=' + user, 'RuntimeDirectory=picam', 'RuntimeDirectoryMode=0700'])
     else:
         lines.extend(['RuntimeDirectory=picam', 'RuntimeDirectoryMode=0700'])
-    lines.extend(['UMask=0077', 'WorkingDirectory=' + quote_unit(python.parent.parent.parent),
+    lines.extend(['UMask=0077', 'WorkingDirectory=' + path_unit(python.parent.parent.parent),
                   'ExecStart=' + quote_unit(python) + ' -m dispread.workbench.cli serve --config ' + quote_unit(config),
                   'Restart=on-failure', 'RestartSec=3', 'TimeoutStopSec=30', '', '[Install]',
                   'WantedBy=' + ('multi-user.target' if mode == 'system' else 'default.target'), ''])

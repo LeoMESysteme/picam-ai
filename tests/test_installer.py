@@ -6,6 +6,7 @@ import io
 import json
 import os
 import pwd
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -155,6 +156,42 @@ def test_home_with_spaces_is_quoted_in_unit_without_shell_execution():
     assert 'User=' not in text
     assert 'WantedBy=default.target' in text
     assert '/bin/sh' not in text
+
+
+def test_working_directory_is_unquoted_absolute_path():
+    """Regression raspi01: ``WorkingDirectory="/opt/picam/current"`` → „path is not absolute“."""
+    engine = installer()
+    text = engine.unit_text(python=Path('/opt/picam/current/.venv/bin/python'), config=Path('/etc/picam/config.toml'),
+                            user='operator', mode='system', runtime=Path('/run/picam'))
+    assert 'WorkingDirectory=/opt/picam/current\n' in text
+    spaced = engine.unit_text(python=Path('/home/A B/50%/.venv/bin/python'), config=Path('/home/A B/c.toml'),
+                              user='operator', mode='user', runtime=Path('/home/A B/run'))
+    assert 'WorkingDirectory=/home/A B/50%%\n' in spaced
+    with pytest.raises(ValueError):
+        engine.path_unit('relative/path')
+
+
+@pytest.mark.skipif(shutil.which('systemd-analyze') is None, reason='systemd-analyze fehlt')
+@pytest.mark.parametrize('mode', ['system', 'user'])
+def test_generated_unit_passes_systemd_analyze_verify(tmp_path, mode):
+    import getpass
+
+    engine = installer()
+    root = tmp_path / 'opt dir' / 'current'
+    python = root / '.venv/bin/python'
+    python.parent.mkdir(parents=True)
+    python.write_text('#!/bin/sh\n')
+    python.chmod(0o755)
+    config = tmp_path / 'config.toml'
+    config.write_text('[workbench]\n')
+    unit = tmp_path / 'picam-werkbank.service'
+    unit.write_text(engine.unit_text(python=python, config=config, user=getpass.getuser(), mode=mode,
+                                     runtime=tmp_path / 'run'))
+    command = ['systemd-analyze', *(['--user'] if mode == 'user' else []), 'verify', str(unit)]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    problems = [line for line in result.stderr.splitlines() if 'picam-werkbank.service' in line]
+    assert not problems, result.stderr
+    assert result.returncode == 0, result.stderr
 
 
 def test_bootstrap_help_works_without_any_installation():
