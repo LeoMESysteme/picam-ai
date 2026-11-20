@@ -29,6 +29,26 @@ Liegt das Archiv neben `install.sh` oder im aktuellen Ordner, findet der
 Installer es selbst; sonst fragt er nach Pfad oder HTTPS-Adresse (dann mit
 getrennt erhaltenem SHA-256).
 
+Bedienung im Terminal: Auswahlen sind Menüs (`↑`/`↓` oder `j`/`k` wählen,
+`Enter` übernimmt, `Leertaste` schaltet Komponenten an/aus, Ziffern wählen
+direkt, `Esc`/`q` bricht ab; bei Ja/Nein auch `j`/`n`). Freie Eingaben
+(Port, Ordner, eigene Adresse, Archivpfad) zeigen die Vorgabe
+(„Enter = …“) und melden Fehler sofort unter der Eingabe. Zu Beginn läuft
+kurz das ME-Logo (jede Taste überspringt, `PICAM_INTRO=0` oder `NO_COLOR`
+schalten es ab); lange Schritte zeigen Drehzeichen mit Laufzeit, die
+Installation eine Schrittliste mit ✓/✗ und Gesamtbalken. Ohne Terminal,
+mit `TERM=dumb` oder in Skripten bleibt die einfache Texteingabe.
+
+**Optionale Komponente me-fastfetch** (standardmäßig an, im Menü
+abwählbar, `--with-fastfetch`/`--without-fastfetch`): ME-Logo mit
+Systemübersicht beim SSH-Login des Bedienkontos. Installiert das Paket
+`fastfetch` (nur im Systemmodus), legt `~/.local/share/me-fastfetch/`,
+`~/.local/bin/me-fastfetch` und `~/.config/fastfetch/` im Konto an (dem
+Konto gehörend, abweichende Dateien vorher als `.vor-picam-<Zeit>`
+gesichert) und einen markierten Block in `~/.bashrc` (gesichert, nur bei
+interaktiven SSH-Logins). Ruft `.bashrc` fastfetch schon auf, bleibt sie
+unverändert. Ein Fehler hier macht die Produktinstallation nicht rückgängig.
+
 ## Verwalten mit `picam`
 
 `picam` ohne Argument öffnet im Terminal die Verwaltungskonsole. Oben
@@ -297,8 +317,12 @@ mit `--apply` wird er ausgeführt: Dienst stoppen und abmelden, Unit-Datei,
 `picam`-Verknüpfung (nur wenn sie in die Installation zeigt) und
 `releases/`, `current`, `previous` entfernen. Daten, Konfiguration,
 Kopplungen und Kalibrierung bleiben, damit eine Neuinstallation sie
-wiederfindet; `--purge-data` löscht auch sie. In der Konsole:
-Einstellungen, `x` (zeigt zuerst den Plan, dann Bestätigung durch Tippen).
+wiederfindet; `--purge-data` löscht auch sie. me-fastfetch: entfernt
+werden nur unveränderte Dateien laut Manifest und der markierte
+`.bashrc`-Block (gesichert); das Paket `fastfetch` nur mit
+`--remove-fastfetch-package` und nur, wenn der Installer es eingespielt hat.
+In der Konsole: Einstellungen, `x` (zeigt zuerst den Plan, dann
+Bestätigung durch Tippen).
 
 ## Zertifikat erneuern
 
