@@ -341,9 +341,9 @@ FACTS = {
         lambda: "provisional=True" in _source("src/dispread/sink/protocol/ascii_csv.py"),
     ),
     "harvest.min_step_ratio": (
-        "scripts/harvest.py:_MIN_STEP_RATIO",
+        "src/dispread/calibration/schedule.py:MIN_STEP_RATIO",
         ["training-ernte"],
-        lambda: module_constant("scripts/harvest.py", "_MIN_STEP_RATIO"),
+        lambda: module_constant("src/dispread/calibration/schedule.py", "MIN_STEP_RATIO"),
     ),
     "harvest.hold_s": (
         "scripts/harvest.py:_DEFAULT_HOLD_S",

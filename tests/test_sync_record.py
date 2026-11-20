@@ -10,7 +10,6 @@ anderen Prozesses unberuehrt.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import signal
@@ -30,17 +29,14 @@ SCRIPT = Path(__file__).parents[1] / "scripts" / "sync-record.py"
 
 
 def _load_sync_record_module():
-    """`sync-record.py` fuer In-Prozess-Tests laden (Bindestrich im Namen -
-    kein normaler `import`), wie das Skript selbst es mit
-    `gsv-registers.py` macht. Fuer den Kamera-Zweig gebraucht: `module.UvcSource`
-    laesst sich per Monkeypatch durch eine Fake-Klasse ersetzen (`UvcSource`
-    ist am Modulanfang importiert) - als Subprozess ginge das nicht ohne
-    eine echte Kamera."""
-    spec = importlib.util.spec_from_file_location("_sync_record_under_test", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+    """Aufnahmemodul fuer In-Prozess-Tests. Die Logik steht seit 2026-11-20 in
+    `dispread.calibration.record` (das Skript ist nur noch eine Huelle);
+    Monkeypatches (`module.UvcSource`, `module.cv2`, ...) muessen deshalb am
+    Paketmodul ansetzen. Die CLI-Tests rufen weiterhin das Skript als
+    Subprozess auf."""
+    from dispread.calibration import record
+
+    return record
 
 
 def _feed_pty(master_fd: int, lines: list[bytes], *, interval_s: float, stop_after: threading.Event) -> None:
@@ -1807,3 +1803,28 @@ def test_norm_schedule_mit_staging_root_landet_commands_jsonl_in_output(tmp_path
     assert session["commands_write_error"] is None
     assert session["restore_verification"]["matches_restore_point"] is True
     assert list(staging_root.iterdir()) == []
+
+
+def test_fortschritt_rueckruf_und_paket_vorgabeort(tmp_path):
+    """`run(progress=...)` (fuer `picam kalibrieren`) meldet die verstrichene
+    Zeit bis zur Dauer; ohne `--output` landet die Aufnahme unter
+    `default_output_root`. Die Aufnahme selbst ist unveraendert."""
+    module = _load_sync_record_module()
+    master, slave = os.openpty()
+    calls = []
+    args = module.parse_args(
+        ["--duration", "1.5", "--source", "synthetic", "--frame-rate", "10",
+         "--port", os.ttyname(slave), "--baudrate", "9600"]
+    )
+    try:
+        returncode = module.run(args, default_output_root=tmp_path / "vorgabe",
+                                progress=lambda elapsed, total: calls.append((elapsed, total)))
+    finally:
+        os.close(master)
+        os.close(slave)
+    assert returncode == 0
+    assert calls and all(total == 1.5 for _elapsed, total in calls)
+    assert calls[-1][0] == pytest.approx(1.5, abs=0.05)
+    assert [elapsed for elapsed, _ in calls] == sorted(elapsed for elapsed, _ in calls)
+    sessions = list((tmp_path / "vorgabe").glob("*/session.json"))
+    assert len(sessions) == 1 and json.loads(sessions[0].read_text())["aborted"] is False

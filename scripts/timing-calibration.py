@@ -7,7 +7,8 @@ fest auf 695 ms gemessen (CLAUDE.md) - mit der StreamCam ist das
 kameraspezifisch und muss neu gemessen werden. `harvest.py` verlangt seit dem
 Umstieg eine Kalibrierungsdatei mit zur Kamera passender USB-ID, dieses
 Skript erzeugt sie aus einem oder mehreren Berichten von
-`scripts/display-offset.py`.
+`scripts/display-offset.py`. Die Logik steht seit 2026-11-20 in
+`dispread.calibration.build` (auch fuer `picam kalibrieren`).
 
 Beispiel:
     scripts/timing-calibration.py session1/offset-analyse/offset-analyse.json \\
@@ -18,15 +19,14 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 from _devdata import input_path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from dispread.calibration.build import build_calibration, summary_lines  # noqa: E402
 from dispread.camera_settings import STREAMCAM_USB_ID  # noqa: E402
-from dispread.timing_calibration import calibration_from_offset_reports  # noqa: E402
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -45,24 +45,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
-    measured_at_utc = datetime.now(UTC).isoformat()
     try:
-        calibration = calibration_from_offset_reports(
-            args.reports, camera_usb_id=args.camera_usb_id, measured_at_utc=measured_at_utc
-        )
+        calibration = build_calibration(args.reports, args.out, camera_usb_id=args.camera_usb_id)
     except ValueError as exc:
         print(f"Fehler: {exc}", file=sys.stderr)
         return 2
-
-    calibration.save(args.out)
-
-    print(f"M = {calibration.guard_margin_ms:.1f} ms (Kamera {calibration.camera_usb_id})")
-    print(f"Anzeigeversatz = {calibration.display_offset_ms:.1f} ms")
-    for source in calibration.sources:
-        print(f"  Quelle: {source['offset_json']} (sha256 {source['sha256'][:12]}...)")
-    print(f"Geschrieben: {args.out}")
+    print("\n".join(summary_lines(calibration, args.out)))
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

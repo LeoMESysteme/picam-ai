@@ -93,7 +93,7 @@
       "value": 4.0
     },
     "harvest.min_step_ratio": {
-      "source": "scripts/harvest.py:_MIN_STEP_RATIO",
+      "source": "src/dispread/calibration/schedule.py:MIN_STEP_RATIO",
       "used_by": [
         "training-ernte"
       ],

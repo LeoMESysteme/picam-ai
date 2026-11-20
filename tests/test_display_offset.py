@@ -10,9 +10,9 @@ Befund. Diese Fassung projiziert stattdessen jedes Bild auf die Verbindungs-
 linie zweier Vorlagenbilder (Plateau davor/danach) - siehe Moduldocstring in
 `scripts/display-offset.py`.
 
-Das Skript hat einen Bindestrich im Namen und ist kein Package-Modul - wird
-per `importlib` direkt geladen (wie `scripts/gate-label.py`, CLI-Teil per
-Subprozess, siehe `tests/test_gate_label.py`).
+Die Logik steht seit 2026-11-20 in `dispread.calibration.offset` und wird
+direkt importiert; der CLI-Teil laeuft weiter ueber das Skript als
+Subprozess (wie in `tests/test_gate_label.py`).
 
 Zeitbasis: `capture_timestamp.value_ns` ist Nanosekunden (int),
 CLOCK_BOOTTIME; `serial.jsonl`s `t_boot` ist bereits Sekunden (float),
@@ -21,7 +21,6 @@ dieselbe Domaene.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -36,10 +35,11 @@ SCRIPT = REPO_ROOT / "scripts" / "display-offset.py"
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("display_offset_under_test", SCRIPT)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    """Seit 2026-11-20 steht die Auswertung in `dispread.calibration.offset`;
+    das Skript ist eine Huelle (CLI-Tests rufen es weiter als Subprozess)."""
+    from dispread.calibration import offset
+
+    return offset
 
 
 mod = _load_module()

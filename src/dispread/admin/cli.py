@@ -3,7 +3,8 @@
 Ohne Befehl öffnet sich in einem Terminal die Verwaltungskonsole, sonst gibt
 es den Status als Text aus. Ergebnisse gehen nach stdout, Meldungen nach
 stderr. Exit-Codes: 0 in Ordnung, 1 Fehler, 2 Warnung (nur ``doctor``),
-3 gesperrt (z. B. Stoppen während eines Laufs), 64 Aufruffehler, 130 Abbruch.
+3 gesperrt (z. B. Stoppen während eines Laufs oder fehlende Voraussetzung beim
+Kalibrieren), 64 Aufruffehler, 130 Abbruch.
 """
 
 from __future__ import annotations
@@ -11,8 +12,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import subprocess
 import sys
+from pathlib import Path
 
 from . import probes
 from .instance import discover
@@ -261,6 +264,22 @@ def cmd_update(args, instance) -> int:
     return EXIT_OK if ok else EXIT_FAIL
 
 
+def cmd_calibrate(args, instance, style) -> int:
+    """``picam kalibrieren``: messen, prüfen, importieren oder zurückstellen."""
+    from . import calibrate
+
+    console = calibrate.Console(style)
+    options = calibrate.Options(duration_s=args.dauer, hold_s=args.halten, port=args.port, baudrate=args.baudrate,
+                                profile=Path(args.profil) if args.profil else None, seed=args.seed, yes=args.yes)
+    if args.pruefen is not None:
+        return calibrate.check_file(instance, Path(args.pruefen) if args.pruefen else None, console)
+    if args.import_datei:
+        return calibrate.import_file(instance, Path(args.import_datei), console, yes=args.yes)
+    if args.rueckstellen:
+        return calibrate.restore_from_file(Path(args.rueckstellen), options, console)
+    return calibrate.calibrate(instance, options, console)
+
+
 def run_hint_command(command: str, instance) -> int:
     """Empfohlenen Befehl ausführen; picam-Befehle ohne Shell im selben Interpreter."""
     import shlex
@@ -271,6 +290,46 @@ def run_hint_command(command: str, instance) -> int:
             argv += ['--config', instance.config]
         return subprocess.call(argv + shlex.split(command)[1:])
     return subprocess.call(command, shell=True, cwd=instance.root or None)
+
+
+def setup_calibration(instance, style, ask=input, run=None, interactive: bool | None = None) -> int:
+    """Einrichtungsschritt Kalibrierung: neu messen, Datei prüfen/importieren oder später."""
+    from . import calibrate
+
+    run = run or (lambda argv: run_hint_command(shlex.join(['picam', *argv]), instance))
+    adapter = calibrate.adapter_present()
+    if adapter:
+        print(style.text(f'      [k] neu kalibrieren (Adapter an {calibrate.REFERENCE_PORT} gefunden, '
+                         'Werkbank kurz aus)'))
+    else:
+        print(style.text('      Neu kalibrieren braucht einen USB-RS232-Adapter am RS232-Ausgang des '
+                         f'Messverstärkers ({calibrate.REFERENCE_PORT} fehlt): Adapter stecken, dann '
+                         '„picam kalibrieren“.'))
+    print(style.text('      [p] vorhandene Datei prüfen oder importieren'))
+    print(style.text('      [s] später'))
+    if not (sys.stdin.isatty() if interactive is None else interactive):
+        return EXIT_WARN
+    try:
+        choice = ask('      Auswahl: ').strip().lower()
+    except EOFError:
+        return EXIT_WARN
+    if choice == 'k' and adapter:
+        code = run(['kalibrieren'])
+    elif choice == 'p':
+        default = instance.calibration or ''
+        try:
+            path = ask(f'      Datei [{default}]: ').strip() or default
+        except EOFError:
+            return EXIT_WARN
+        if not path:
+            return EXIT_WARN
+        same = bool(instance.calibration) and os.path.realpath(path) == os.path.realpath(instance.calibration)
+        code = run(['kalibrieren', '--pruefen', path] if same else ['kalibrieren', '--import', path])
+    else:
+        print(style.text(style.dim('      Später: picam kalibrieren')))
+        return EXIT_WARN
+    print(style.text(f'      {style.symbol(probes.OK if code == 0 else probes.FAIL)} Exit {code}'))
+    return code
 
 
 def cmd_setup(args, instance, style) -> int:
@@ -287,6 +346,9 @@ def cmd_setup(args, instance, style) -> int:
         print(style.text(f'{index}/{len(problems)}  {style.symbol(fact.level)} {fact.label}: {fact.value}'))
         if fact.hint:
             print(style.text(f'      {fact.hint}'))
+        if fact.key == 'kalibrierung':
+            done += setup_calibration(instance, style) == 0
+            continue
         if not fact.command:
             print(style.text(style.dim('      Von Hand erledigen.')))
             continue
@@ -352,6 +414,8 @@ def choose_color_system(environ=os.environ) -> str | None:
 
 
 def parser() -> argparse.ArgumentParser:
+    from . import calibrate
+
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument('--config', default=argparse.SUPPRESS,
                         help='config.toml der Instanz (sonst automatisch erkannt)')
@@ -395,6 +459,25 @@ def parser() -> argparse.ArgumentParser:
     clean.add_argument('--nur-diagnose', action='store_true', help='nur Diagnoseaufnahmen')
     clean.add_argument('--yes', '-y', action='store_true')
     sub.add_parser('setup', help='offene Einrichtungspunkte nacheinander durchgehen')
+    cal = sub.add_parser('kalibrieren', help='Timing-Kalibrierung messen (USB-RS232-Adapter nötig), prüfen '
+                         'oder importieren')
+    mode = cal.add_mutually_exclusive_group()
+    mode.add_argument('--pruefen', nargs='?', const='', default=None, metavar='DATEI',
+                      help='Kalibrierdatei prüfen und Werte zeigen (ohne DATEI: die aktive)')
+    mode.add_argument('--import', dest='import_datei', metavar='DATEI',
+                      help='woanders gemessene Datei prüfen und nach Bestätigung übernehmen')
+    mode.add_argument('--rueckstellen', metavar='RUECKSTELLPUNKT',
+                      help='Normierung/Dezimalpunkt des GSV aus einem Rückstellpunkt zurückschreiben')
+    cal.add_argument('--dauer', type=float, default=calibrate.DEFAULT_DURATION_S,
+                     help=f'Aufnahmedauer in Sekunden (Standard {calibrate.DEFAULT_DURATION_S:g})')
+    cal.add_argument('--halten', type=float, default=calibrate.DEFAULT_HOLD_S,
+                     help=f'Haltezeit je Normierungsstufe (Standard {calibrate.DEFAULT_HOLD_S:g} s)')
+    cal.add_argument('--port', default=calibrate.REFERENCE_PORT,
+                     help=f'USB-RS232-Adapter (Standard {calibrate.REFERENCE_PORT})')
+    cal.add_argument('--baudrate', type=int, default=calibrate.REFERENCE_BAUDRATE)
+    cal.add_argument('--profil', help='bestätigtes Werkbank-Profil (Standard: neueste Einrichtung)')
+    cal.add_argument('--seed', type=int, help='Startwert des Faktorplans (Standard: Uhrzeit)')
+    cal.add_argument('--yes', '-y', action='store_true', help='ohne Rückfrage (Import: ohne Eingabe)')
     sub.add_parser('url', help='Adresse der Werkbank')
     sub.add_parser('tui', help='Verwaltungskonsole öffnen')
     return root
@@ -452,6 +535,8 @@ def main(argv=None) -> int:
             return cmd_cleanup(args, instance)
         if command == 'setup':
             return cmd_setup(args, instance, style)
+        if command == 'kalibrieren':
+            return cmd_calibrate(args, instance, style)
     except KeyboardInterrupt:
         return EXIT_ABORT
     except BrokenPipeError:

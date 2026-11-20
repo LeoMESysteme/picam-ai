@@ -263,4 +263,6 @@ async def test_kamera_info_carries_full_hints():
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause(0.4)
         await open_tab(pilot, '4')
-        assert any('scripts/timing-calibration.py' in line for line in app.view().INFO)
+        info = app.view().INFO
+        assert any('picam kalibrieren --import' in line for line in info)
+        assert any('Befehl: picam kalibrieren' in line for line in info)

@@ -25,8 +25,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
-import random
 import subprocess
 import sys
 from pathlib import Path
@@ -35,39 +33,38 @@ from _devdata import input_path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from dispread.calibration.schedule import (  # noqa: E402
+    MIN_STEP_RATIO,
+    RECORD_FRAME_RATE,
+    RECORD_STAGING_ROOT,
+    ScheduleError,
+    build_schedule,
+    format_num,
+    round_sig,
+)
+from dispread.calibration.schedule import plan_factors as _plan_factors  # noqa: E402
+from dispread.gsv2as_serial import NORM_MAX, NORM_MIN  # noqa: E402
 from dispread.session_profile import SessionProfile, require_live_profile  # noqa: E402
 from dispread.timing_calibration import (  # noqa: E402
     DEFAULT_CALIBRATION_PATH,
     load_calibration_from_bytes,
 )
 
-#: Geraetebereich des Normierungsfaktors am GSV-2AS (CLAUDE.md, gemessen
-#: gegen scripts/sync-record.py::NORM_MIN/NORM_MAX). Nur zur Validierung,
-#: keine eigene Messung und kein neu erfundener Wert.
-_DEVICE_NORM_MIN, _DEVICE_NORM_MAX = 0.15, 1_580_000.0
-
-#: Zwei aufeinanderfolgende Faktoren im Plan muessen mindestens diesen
-#: Faktor auseinanderliegen, damit jeder Schritt ein grosser Wechsel ist
-#: (Plan, Task 4, Interfaces).
-_MIN_STEP_RATIO = 1.3
+#: Geraetebereich und Mindestschritt kommen aus `dispread.calibration.schedule`
+#: (seit 2026-11-20 dort, damit `picam kalibrieren` denselben Plan nutzt).
+_DEVICE_NORM_MIN, _DEVICE_NORM_MAX = NORM_MIN, NORM_MAX
+_MIN_STEP_RATIO = MIN_STEP_RATIO
 
 _DEFAULT_MIN_GAP_MS = 300.0
 _DEFAULT_MAX_GAP_MS = 800.0
 _DEFAULT_HOLD_S = 4.0
 
-#: sync-record.py --frame-rate, final-review.md I-1 (Ledger #9): fest, nicht
-#: an profile.camera.fps gekoppelt - Zielrate fuers Labeln, unabhaengig von
-#: der Kamera-fps (die duennt sync-record.py jetzt selbst aus, siehe dort).
-#: `run()` lehnt vorher ab, wenn profile.camera.fps kleiner als dieser Wert
-#: ist (die Ausduennung waere sonst wirkungslos).
-_SYNC_RECORD_FRAME_RATE = 15.0
-
-#: sync-record.py --staging-root: die Aufnahme laeuft zuerst in tmpfs (RAM)
-#: und wird erst danach auf die SD-Karte kopiert - gegen die am 2026-09-29
-#: gemessenen Schreibhaenger der Karte (Ernte sc6: 34 % verworfene Bilder,
-#: Telegrammluecken bis ~40 s), siehe sync-record.py 'Zwischenablage im RAM'.
-#: Reicht der Platz nicht, lehnt sync-record.py vor der Aufnahme ab.
-_SYNC_RECORD_STAGING_ROOT = Path("/dev/shm")
+#: sync-record.py --frame-rate und --staging-root, siehe
+#: `dispread.calibration.schedule` (RECORD_FRAME_RATE, RECORD_STAGING_ROOT).
+#: `run()` lehnt vorher ab, wenn profile.camera.fps kleiner als die
+#: Ziel-fps ist (die Ausduennung waere sonst wirkungslos).
+_SYNC_RECORD_FRAME_RATE = RECORD_FRAME_RATE
+_SYNC_RECORD_STAGING_ROOT = RECORD_STAGING_ROOT
 
 _SYNC_RECORD_SCRIPT = Path(__file__).parent / "sync-record.py"
 _GATE_LABEL_SCRIPT = Path(__file__).parent / "gate-label.py"
@@ -77,63 +74,17 @@ class HarvestError(RuntimeError):
     """Ernte-Lauf abgebrochen - keine Kamera/Port-Zugriffe mehr danach."""
 
 
-def _round_sig(value: float, digits: int) -> float:
-    """Rundet `value` auf `digits` signifikante Stellen."""
-    if value == 0:
-        return 0.0
-    shift = digits - int(math.floor(math.log10(abs(value)))) - 1
-    return round(value, shift)
+_round_sig = round_sig
+_format_num = format_num
 
 
-def plan_factors(
-    n_steps: int, seed: int, lo: float = 0.5, hi: float = 9000.0
-) -> list[float]:
-    """Erzeugt `n_steps` log-uniform verteilte Normierungsfaktoren.
-
-    Deterministisch je `seed`. Jeder Faktor ist auf 4 signifikante Stellen
-    gerundet, liegt im Geraetebereich (0,15...1 580 000) und mindestens um
-    den Faktor 1,3 vom vorherigen entfernt.
-    """
-    if n_steps < 1:
-        raise ValueError(f"n_steps muss >= 1 sein, ist {n_steps}")
-    if not (0 < lo < hi):
-        raise ValueError(f"0 < lo < hi verletzt: lo={lo}, hi={hi}")
-
-    rng = random.Random(seed)
-    log_lo, log_hi = math.log(lo), math.log(hi)
-    factors: list[float] = []
-    max_attempts = 100_000
-    attempts = 0
-    while len(factors) < n_steps:
-        attempts += 1
-        if attempts > max_attempts:
-            raise HarvestError(
-                f"plan_factors: nach {max_attempts} Versuchen keine {n_steps} "
-                "gueltigen Faktoren gefunden (Bereich/Mindestabstand zu eng?)"
-            )
-        candidate = _round_sig(math.exp(rng.uniform(log_lo, log_hi)), 4)
-        if not (_DEVICE_NORM_MIN <= candidate <= _DEVICE_NORM_MAX):
-            continue
-        if factors:
-            prev = factors[-1]
-            ratio = max(candidate, prev) / min(candidate, prev)
-            if ratio < _MIN_STEP_RATIO:
-                continue
-        factors.append(candidate)
-    return factors
-
-
-def _format_num(value: float) -> str:
-    """Kompakte Zahlendarstellung ohne unnoetige Nachkommastellen/Exponenten,
-    kompatibel mit `sync-record.py::_parse_norm_schedule` (nutzt `float()`)."""
-    text = f"{value:.10g}"
-    return text
-
-
-def build_schedule(factors: list[float], hold_s: float) -> str:
-    """Baut den `--norm-schedule`-String `'f1:hold,f2:hold,...'`."""
-    hold_text = _format_num(hold_s)
-    return ",".join(f"{_format_num(f)}:{hold_text}" for f in factors)
+def plan_factors(n_steps: int, seed: int, lo: float = 0.5, hi: float = 9000.0) -> list[float]:
+    """Siehe `dispread.calibration.schedule.plan_factors`; Fehlschlag als
+    `HarvestError` wie bisher."""
+    try:
+        return _plan_factors(n_steps, seed, lo, hi)
+    except ScheduleError as exc:
+        raise HarvestError(str(exc)) from exc
 
 
 def run(

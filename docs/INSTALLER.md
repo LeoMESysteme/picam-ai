@@ -85,6 +85,7 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam update --source ARCHIV` / `--rollback` | neue Version mit Rückweg, siehe unten |
 | `picam aufraeumen [--tage N]` | alte Läufe auflisten, nach Rückfrage löschen |
 | `picam setup` | offene Einrichtungspunkte nacheinander, Befehle einzeln nach Rückfrage |
+| `picam kalibrieren [--pruefen \| --import DATEI]` | Timing-Kalibrierung bei der Inbetriebnahme (USB-RS232-Adapter vorübergehend), siehe unten |
 | `picam url` | Adresse der Werkbank |
 
 `--no-color` (oder `NO_COLOR`) und `--ascii` gelten für alle Befehle.
@@ -295,6 +296,40 @@ erneuert. Der Installer kopiert weder Identitäten noch
 Timing-Kalibrierung vom bestehenden Pi. Eine fehlende gültige Kalibrierung
 sperrt weiterhin den Messstart. Softwareinstallation und erreichbare
 Werkbank sind keine Hardware- oder Messabnahme.
+
+### Timing-Kalibrierung bei der Inbetriebnahme (RS232 nur einmal)
+
+Die Kalibrierung misst die Zeit vom seriellen GSV-2AS-Telegramm bis zur
+Änderung auf dem Display (Versatz δ, Sicherheitsfenster M). Diese Größe
+ist nur mit dem RS232-Referenzstrom messbar; im Betrieb ist RS232 nicht
+nötig. Deshalb wird jeder neue Pi einmal bei der Inbetriebnahme mit einem
+vorübergehend angesteckten USB-RS232-Adapter (PL2303, `/dev/ttyUSB0`,
+38400 Baud) kalibriert:
+
+```bash
+picam kalibrieren            # oder: Konsole, Tab Kamera, „Kalibrieren …“ (m)
+```
+
+Ablauf: prüfen (Adapter liefert Telegramme, StreamCam an USB 3, bestätigte
+Werkbank-Einrichtung vorhanden, kein Lauf/keine Einrichtung/keine
+Diagnosekopie, Platz in `/dev/shm` und auf der Karte) → Plan und Rückfrage
+→ Werkbank anhalten → Normierung und Dezimalpunkt des GSV-2AS sichern →
+etwa 180 s aufnehmen mit Normierungssprüngen (`set norm`) → Normierung
+zurückstellen und prüfen → Werkbank wieder starten (auf jedem Weg, auch
+bei Abbruch) → auswerten → Datei nur bei gültigem Ergebnis (mindestens drei
+messbare Ereignisse, Nulltest bestanden, Kamera stimmt) atomar nach
+`<data>/calibration/timing-streamcam.json`. Aufnahme, Bericht, Sicherung
+der Normierung und Protokoll bleiben unter `<data>/calibration/runs/<Zeit>/`.
+Scheitert die Rückstellung, nennt picam den Befehl
+`picam kalibrieren --rueckstellen <Datei>`.
+
+Weitere Wege: `picam kalibrieren --pruefen [DATEI]` prüft eine Datei und
+zeigt ihre Werte; `--import DATEI` übernimmt eine anderswo gemessene Datei
+nur nach Warnung und getippter Bestätigung und legt eine Notiz mit Quelle
+und SHA-256 daneben (gilt nur bei gleicher Kamera, gleichem Display und
+Aufbau). `picam setup` bietet „kalibrieren“, „prüfen/importieren“ oder
+„später“. Ohne gültige Kalibrierung bleibt der Laufstart gesperrt; die
+Werte werden im Lauf nur vermerkt (`session.json`, `applied: false`).
 
 Lokale Steuerbefehle müssen den Socket dieser Instanz verwenden, etwa
 `dispread live status --socket /run/picam/control.sock` oder

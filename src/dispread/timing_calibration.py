@@ -104,7 +104,7 @@ def load_calibration_from_bytes(data: bytes, *, source: str = "<bytes>") -> Timi
         raise ValueError(
             f"Unbekannte schema_version {schema_version!r} in {source}, "
             f"unterstuetzt: {CALIBRATION_SCHEMA_VERSION}. Neu kalibrieren mit "
-            "scripts/timing-calibration.py."
+            "picam kalibrieren (Entwicklung: scripts/timing-calibration.py)."
         )
 
     missing_fields = [field_name for field_name in _REQUIRED_FIELDS if field_name not in d]

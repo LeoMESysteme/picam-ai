@@ -31,6 +31,20 @@ OCR-Laufzeit, aber **nicht** vom internen Messzeitpunkt des DUT. Der
 Displaybeitrag (M5) ist mit hoher Wahrscheinlichkeit der dominierende Term und
 wird von keiner Softwareoptimierung kleiner.
 
+## Kalibrierung neuer Geräte (seit 2026-11-20)
+
+Die Messkette (`scripts/sync-record.py`, `display-offset.py`,
+`timing-calibration.py`) liegt jetzt als Paket `dispread.calibration`
+(`record`, `offset`, `build`, `schedule`) im Produkt; die Skripte sind
+dünne Hüllen, die Statistik ist unverändert. `picam kalibrieren` fährt sie
+bei der Inbetriebnahme mit einem vorübergehend angesteckten
+USB-RS232-Adapter automatisch ab (Ablauf: [INSTALLER.md](INSTALLER.md)).
+Ohne RS232 ist dieselbe Größe (Telegramm → Display) nicht messbar; eine
+LED am GPIO würde eine andere Größe messen (Kamera-Latenz, M2) und wäre
+als eigenes Schema zu führen. Am Aufbau zu prüfen: ein voller Lauf auf
+raspi01, ob 180 s genug Ereignisse liefern, Dauer der Auswertung,
+Rückstellung der Normierung am echten Gerät.
+
 ## Messprogramm
 
 | ID | Messgröße | Verfahren | Status |

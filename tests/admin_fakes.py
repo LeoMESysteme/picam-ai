@@ -50,8 +50,7 @@ def facts(state: str = 'idle') -> dict:
                       ('SHA-256', 'stimmt')]),
         'kalibrierung': F('kalibrierung', 'Kalibrierung', probes.FAIL, 'fehlt',
                           [('Datei', '/var/lib/picam/calibration/timing-streamcam.json')],
-                          hint='Ohne Timing-Kalibrierung startet kein Messlauf. Am Aufbau messen '
-                               '(scripts/timing-calibration.py im Entwicklungs-Checkout) und die Datei hier ablegen.'),
+                          hint=probes.CALIBRATION_HINT, command='picam kalibrieren'),
         'uart': F('uart', 'UART', probes.OK, 'aktiv', [('Gerät', '/dev/ttyAMA0 vorhanden'),
                   ('Boot', 'enable_uart=1'), ('Konsole', 'nicht auf UART')]),
         'konto': F('konto', 'Konto', probes.OK, 'labor', [('Konto', 'labor'), ('Gruppen', 'dialout, video')]),
@@ -65,7 +64,7 @@ def facts(state: str = 'idle') -> dict:
         d['ausgabe'] = F('ausgabe', 'Ausgabe', probes.OK, 'Netzwerk (Brücke)', [('Weg', 'Netzwerk (Brücke)'),
                          ('Zustand', 'sending'), ('Brücke', 'verbunden')])
         d['bruecke'] = F('bruecke', 'Brücke', probes.OK, 'verbunden', [('Kopplungen', 'Netzwerk 1')])
-        d['kalibrierung'] = F('kalibrierung', 'Kalibrierung', probes.OK, 'vorhanden', [])
+        d['kalibrierung'] = F('kalibrierung', 'Kalibrierung', probes.OK, 'gültig', [])
     if state == 'setup':
         d['lauf'] = F('lauf', 'Lauf', probes.OK, 'Einrichtung läuft', [('Zustand', 'Einrichtung läuft')])
     if state == 'down':

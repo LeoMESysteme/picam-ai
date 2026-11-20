@@ -9,6 +9,11 @@ from typing import Any
 _sleep = time.sleep
 DEFAULT_RESTORE_POINT = Path("var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json")
 
+#: RS232-Referenzadapter (PL2303) am GSV-2AS: einzige Stelle fuer Port und
+#: Baudrate (8N1), genutzt von Einrichtung, Aufnahme und `picam kalibrieren`.
+REFERENCE_PORT = "/dev/ttyUSB0"
+REFERENCE_BAUDRATE = 38400
+
 SEMICOLON = 0x3B
 
 CMD_STOP = 0x23

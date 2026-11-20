@@ -26,13 +26,15 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from dispread.camera_settings import STREAMCAM_USB_ID
+
 from .instance import Instance
 
 OK, WARN, FAIL, OFF, UNKNOWN = 'ok', 'warn', 'fail', 'off', 'unknown'
 LEVEL_ORDER = {FAIL: 0, WARN: 1, UNKNOWN: 2, OFF: 3, OK: 4}
 #: Sichere Zustände für Dienststopp, wie scripts/werkbank-dienst.sh.
 STOP_SAFE_STATES = frozenset({'idle', 'setup_ready', 'setup_failed', 'confirmed', 'stopped'})
-CAMERA_USB_ID = '046d:0893'
+CAMERA_USB_ID = STREAMCAM_USB_ID
 UART_DEVICE = Path('/dev/ttyAMA0')
 BOOT_CONFIGS = (Path('/boot/firmware/config.txt'), Path('/boot/config.txt'))
 BOOT_CMDLINES = (Path('/boot/firmware/cmdline.txt'), Path('/boot/cmdline.txt'))
@@ -444,20 +446,59 @@ def fact_templates(instance: Instance) -> Fact:
     return Fact('vorlage', 'Lesevorlage', OK, 'geprüft', [('Datei', str(path)), ('SHA-256', 'stimmt')])
 
 
-def fact_calibration(instance: Instance, now=time.time) -> Fact:
+CALIBRATION_HINT = ('Ohne gültige Timing-Kalibrierung startet kein Messlauf. Einmalig mit gestecktem '
+                    'USB-RS232-Adapter am Messverstärker messen (picam kalibrieren) oder eine am gleichen '
+                    'Aufbau gemessene Datei prüfen und importieren (picam kalibrieren --import DATEI).')
+
+
+def _live_camera_id(live: dict | None) -> str | None:
+    camera = (live or {}).get('camera')
+    source = camera.get('source') if isinstance(camera, dict) else None
+    usb_id = source.get('usb_id') if isinstance(source, dict) else None
+    return usb_id if isinstance(usb_id, str) and usb_id else None
+
+
+def fact_calibration(instance: Instance, now=time.time, camera_id: str | None = None) -> Fact:
+    """Kalibrierdatei laden und prüfen (wie der Laufstart) und gegen die Kamera
+    abgleichen: ``camera_id`` aus dem Kamerastatus der Werkbank, sonst die
+    unterstützte StreamCam."""
+    from dispread.timing_calibration import load_calibration
+
+    from .calibrate import import_note_path
+
     if not instance.calibration:
         return Fact('kalibrierung', 'Kalibrierung', UNKNOWN, 'unbekannt')
     path = Path(instance.calibration)
     if not path.is_file():
-        tool = Path(instance.root or '.') / 'scripts' / 'timing-calibration.py'
         return Fact('kalibrierung', 'Kalibrierung', FAIL, 'fehlt', [('Datei', str(path))],
-                    hint=('Ohne Timing-Kalibrierung startet kein Messlauf. Am Aufbau messen '
-                          '(scripts/timing-calibration.py im Entwicklungs-Checkout) und die Datei hier ablegen.'),
-                    command=shlex.join([sys.executable, str(tool)]) if tool.is_file() else None)
-    age_days = int((now() - path.stat().st_mtime) // 86400)
-    return Fact('kalibrierung', 'Kalibrierung', OK, 'vorhanden',
-                [('Datei', str(path)), ('Stand', datetime.fromtimestamp(path.stat().st_mtime)
-                                        .strftime('%d.%m.%Y')), ('Alter', f'{age_days} Tage')])
+                    hint=CALIBRATION_HINT, command='picam kalibrieren')
+    try:
+        calibration = load_calibration(path)
+    except ValueError as error:
+        return Fact('kalibrierung', 'Kalibrierung', FAIL, 'ungültig', [('Datei', str(path)), ('Fehler', str(error))],
+                    hint='Die Datei ist unbrauchbar; der Laufstart bleibt gesperrt. ' + CALIBRATION_HINT,
+                    command='picam kalibrieren')
+    expected = camera_id or CAMERA_USB_ID
+    detail = [('Datei', str(path)), ('Kamera', calibration.camera_usb_id),
+              ('Versatz δ', f'{calibration.display_offset_ms:.0f} ms'),
+              ('Schutzabstand M', f'{calibration.guard_margin_ms:.0f} ms')]
+    try:
+        measured = datetime.fromisoformat(calibration.measured_at_utc.replace('Z', '+00:00'))
+        detail.append(('Gemessen', measured.astimezone().strftime('%d.%m.%Y')))
+        age_days = int((now() - measured.timestamp()) // 86400)
+        detail.append(('Alter', f'{age_days} Tage'))
+    except ValueError:
+        detail.append(('Gemessen', calibration.measured_at_utc))
+    note = import_note_path(path)
+    if note.is_file():
+        detail.append(('Herkunft', 'importiert, siehe ' + str(note)))
+    if calibration.camera_usb_id != expected:
+        return Fact('kalibrierung', 'Kalibrierung', FAIL, 'andere Kamera',
+                    detail + [('Erwartet', expected)],
+                    hint=(f'Die Kalibrierung gilt für Kamera {calibration.camera_usb_id}, angeschlossen ist '
+                          f'{expected}. Der Laufstart bleibt gesperrt. Mit dieser Kamera neu kalibrieren.'),
+                    command='picam kalibrieren')
+    return Fact('kalibrierung', 'Kalibrierung', OK, 'gültig', detail)
 
 
 def _boot_text(paths) -> tuple[Path | None, str]:
@@ -626,7 +667,7 @@ def collect(instance: Instance, run=run_command, live_source=None, bridge_source
     if include_setup:
         facts['netzwerk'] = fact_network(instance, run)
         facts['vorlage'] = fact_templates(instance)
-        facts['kalibrierung'] = fact_calibration(instance)
+        facts['kalibrierung'] = fact_calibration(instance, camera_id=_live_camera_id(live))
         facts['uart'] = fact_uart()
         facts['konto'] = fact_groups(instance)
         linger = fact_linger(instance, run)

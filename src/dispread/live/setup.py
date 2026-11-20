@@ -31,6 +31,7 @@ from dispread.dotlattice import evaluate_quad, fit_lattice
 from dispread.focus_sweep import DEFAULT_FOCUS_START, FocusMeasurements, climb_focus, sharpness
 from dispread.frames.uvc_source import UvcError
 from dispread.gsv2as_cell_text import cell_text_from_telegram
+from dispread.gsv2as_serial import REFERENCE_BAUDRATE, REFERENCE_PORT
 from dispread.lattice_offsets import refine_quad
 from dispread.live.frame_tracking import (
     FrameTracker,
@@ -86,8 +87,8 @@ FOCUS_ROI_MARGIN_FRACTION = 0.05
 FOCUS_END_RATIO = 0.6
 # Diagnoseausschnitt der Fokusbilder: ROI mit 25 % Rand je Seite (< 1 MB PNG).
 FOCUS_DIAGNOSTIC_MARGIN_FRACTION = 0.25
-SERIAL_PORT = "/dev/ttyUSB0"
-SERIAL_BAUDRATE = 38400
+SERIAL_PORT = REFERENCE_PORT
+SERIAL_BAUDRATE = REFERENCE_BAUDRATE
 
 
 def reference_adapter_present(port: str = SERIAL_PORT) -> bool:
