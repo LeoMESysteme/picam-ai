@@ -334,6 +334,23 @@ def fact_output(live: dict | None, bridge: dict | None, service: Fact) -> Fact:
     return Fact('ausgabe', 'Ausgabe', OK, _transport_word(transport), detail)
 
 
+def pairing_counts(database: Path) -> dict | None:
+    """Gekoppelte Windows-Apps je Weg, nur lesend; None, wenn nicht lesbar."""
+    import sqlite3
+
+    if not database.is_file():
+        return {}
+    try:
+        connection = sqlite3.connect(f'file:{database}?mode=ro', uri=True, timeout=2)
+        try:
+            rows = connection.execute('SELECT transport, COUNT(*) FROM clients GROUP BY transport').fetchall()
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return None
+    return {str(transport): int(count) for transport, count in rows}
+
+
 def fact_bridge(instance: Instance, bridge: dict | None, service: Fact) -> Fact:
     identity = Path(instance.bridge_directory) / 'identity.json' if instance.bridge_directory else None
     detail = []
@@ -346,12 +363,14 @@ def fact_bridge(instance: Instance, bridge: dict | None, service: Fact) -> Fact:
     if not identity.is_file():
         return Fact('bruecke', 'Brücke', FAIL, 'keine Identität', detail,
                     hint='Identität anlegen.', command='dispread bridge identity --provision')
-    pairing = identity.parent / 'pairing'
-    try:
-        pairs = len([p for p in pairing.iterdir() if p.suffix == '.json'])
-    except OSError:
-        pairs = 0
-    detail.append(('Kopplungen', str(pairs)))
+    counts = pairing_counts(identity.parent / 'pairing' / 'pairing.sqlite3')
+    pairs = sum(counts.values()) if counts is not None else None
+    if counts is None:
+        detail.append(('Kopplungen', 'nicht lesbar'))
+    else:
+        words = {'network': 'Netzwerk', 'uart': 'UART'}
+        detail.append(('Kopplungen', ', '.join(f'{words.get(k, k)} {n}' for k, n in sorted(counts.items()))
+                       or 'keine'))
     if bridge is None:
         level = OFF if service.level in (OFF, FAIL) else UNKNOWN
         return Fact('bruecke', 'Brücke', level, '–' if level == OFF else 'unbekannt', detail)
@@ -361,11 +380,11 @@ def fact_bridge(instance: Instance, bridge: dict | None, service: Fact) -> Fact:
                                     'ready': 'bereit'}.get(bridge.get('uart_state'), str(bridge.get('uart_state')))))
     if bridge.get('connected'):
         return Fact('bruecke', 'Brücke', OK, 'verbunden', detail)
-    if pairs == 0:
+    if pairs == 0:  # None (nicht lesbar) behauptet keine fehlende Kopplung
         return Fact('bruecke', 'Brücke', WARN, 'nicht gekoppelt', detail,
                     hint='Noch keine Windows-Brücke gekoppelt. In der Werkbank beim Laufstart '
                          '„Brücke einrichten…“ wählen: Profil laden, Code in die Windows-App eingeben.')
-    return Fact('bruecke', 'Brücke', OK, 'wartet', detail)
+    return Fact('bruecke', 'Brücke', OK, 'gekoppelt', detail + [('Verbindung', 'gerade keine')])
 
 
 def fact_storage(instance: Instance, live: dict | None) -> Fact:

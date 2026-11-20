@@ -424,3 +424,19 @@ def test_setup_walks_problems_and_runs_only_confirmed(monkeypatch, capsys):
     assert cli.main(['--no-color', 'setup']) == cli.EXIT_WARN
     out = capsys.readouterr().out
     assert '1/1' in out and 'Befehl: c' in out and ran == []
+
+
+def test_bridge_pairings_are_read_from_sqlite_store(tmp_path):
+    from dispread.bridge.pairing import PairingStore
+
+    bridge_dir = tmp_path / 'bridge'
+    bridge_dir.mkdir()
+    (bridge_dir / 'identity.json').write_text('{}')
+    store = PairingStore(bridge_dir / 'pairing')
+    instance = Instance(kind='dev', unit='u', scope='user', bridge_directory=str(bridge_dir))
+    service_ok = probes.Fact('dienst', 'Dienst', probes.OK, 'läuft')
+    assert probes.fact_bridge(instance, {'connected': False}, service_ok).value == 'nicht gekoppelt'
+    offer = store.create_offer('network')
+    store.redeem_offer(offer, 'labor-pc', 'network')
+    fact = probes.fact_bridge(instance, {'connected': False}, service_ok)
+    assert fact.value == 'gekoppelt' and ('Kopplungen', 'Netzwerk 1') in fact.detail
