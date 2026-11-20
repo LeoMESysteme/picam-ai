@@ -2847,3 +2847,117 @@ test('Bestätigen: angepasste Toleranz mit von Hand eingegebener Referenz nennt 
   await cellShot(page, 'bestaetigen-toleranz-eingabe.png');
   expect(errors).toEqual([]);
 });
+
+test('Bestätigen: von Hand eingegebener Wert, letzte Stelle schwankte (±1) – Hinweis mit beiden Werten', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const scene = JSON.parse(readFileSync(`${__dirname}/fixtures/live/scene-setup_ready_warnung.json`, 'utf-8'));
+  const reason = 'Letzte Stelle schwankte (±1) – als Schwanken gewertet (Standbild 2: eingegeben 0.4679, gelesen 0.4680).';
+  scene.setup.overall = 'OK';
+  scene.setup.checks.raster = 'OK';
+  scene.setup.check_reasons = { gegenlesen: reason };
+  scene.setup.reference_kind = 'eingabe';
+  scene.setup.gegenlesen = { status: 'OK', metrics: { notes: [{ code: 'letzte_stelle_schwankt', frame: 1, richtung: '+1',
+    reference: '+ 0.4679 ', read: '+ 0.4680 ' }] } };
+  scene.setup_reference = NO_ADAPTER;
+  await hook(page, '/__test__/state', scene);
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  const line = inspector.locator('[data-part="last-place"]');
+  await expect(line).toBeVisible();
+  await expect(line).toHaveText(reason);
+  await inspector.getByRole('tab', { name: 'Prüfungen' }).click();
+  await expect(inspector.locator('[data-check="gegenlesen"]')).toContainText(reason);
+  // Ohne Beleg keine Zeile.
+  scene.setup.gegenlesen = { status: 'OK', metrics: {} };
+  delete scene.setup.check_reasons;
+  await hook(page, '/__test__/state', scene);
+  await inspector.getByRole('tab', { name: 'Schritt' }).click();
+  await expect(line).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('Ohne RS232: Wert-Dialog ist verschiebbar, bleibt im Fenster und dunkelt das Kamerabild nicht ab', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/__test__/state', { setup_reference: NO_ADAPTER });
+  const title = page.getByRole('banner');
+  const start = title.getByRole('button', { name: 'Einrichtung starten', exact: true });
+  await start.click();
+  const dialog = page.getByRole('dialog', { name: 'Aktuellen Wert der Anzeige eingeben' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Springt nur die letzte Ziffer um eins, reicht einer der beiden Werte.');
+  const cell1 = dialog.getByRole('textbox', { name: /^Zelle 1 von 7/ });
+  await expect(cell1).toBeFocused();
+  // Kein abdunkelnder Hintergrund ueber der Bildansicht.
+  const backdrop = page.locator('.modalbg.celltextbg');
+  expect(await backdrop.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  expect(await backdrop.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
+
+  // Ziehen an der Titelleiste verschiebt den Dialog.
+  const before = (await dialog.boundingBox())!;
+  const handle = dialog.locator('[data-part="handle"]');
+  const hb = (await handle.boundingBox())!;
+  await page.mouse.move(hb.x + 40, hb.y + hb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + 40 - 300, hb.y + hb.height / 2 + 120, { steps: 6 });
+  await page.mouse.up();
+  const moved = (await dialog.boundingBox())!;
+  expect(Math.round(moved.x)).toBe(Math.round(before.x - 300));
+  expect(Math.round(moved.y)).toBe(Math.round(before.y + 120));
+
+  // Weit hinaus ziehen: der Dialog bleibt ganz im Fenster.
+  const hb2 = (await handle.boundingBox())!;
+  await page.mouse.move(hb2.x + 40, hb2.y + hb2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(-500, 2000, { steps: 6 });
+  await page.mouse.up();
+  const clamped = (await dialog.boundingBox())!;
+  expect(clamped.x).toBeGreaterThanOrEqual(0);
+  expect(clamped.y + clamped.height).toBeLessThanOrEqual(900.5);
+  expect(Math.round(clamped.x)).toBe(0);
+
+  // Bildansicht sichtbar und nicht von einem Hintergrund verdeckt: ihre Mitte trifft die Seite, nicht den Dialoghintergrund.
+  const viewer = (await page.getByRole('region', { name: 'Bildansicht' }).boundingBox())!;
+  const centre = [viewer.x + viewer.width / 2, viewer.y + viewer.height / 2];
+  expect(centre[0]).toBeGreaterThan(clamped.x + clamped.width);
+  // (Die Seite ist waehrend des Dialogs inert und damit selbst nicht trefferfaehig; es zaehlt, dass nichts vom Dialog darueber liegt.)
+  const hit = await page.evaluate(([x, y]) => document.elementsFromPoint(x, y).some((el) => el.closest('.modalbg')), centre);
+  expect(hit).toBe(false);
+  await expect(page.getByRole('region', { name: 'Bildansicht' })).toBeVisible();
+
+  // Tastatur: Alt+Pfeil verschiebt, Knopf dockt an; Fokus und Eingabe gehen weiter.
+  await cell1.focus();
+  const k0 = (await dialog.boundingBox())!;
+  await page.keyboard.press('Alt+ArrowRight');
+  await page.keyboard.press('Alt+ArrowUp');
+  const k1 = (await dialog.boundingBox())!;
+  expect(Math.round(k1.x - k0.x)).toBe(24);
+  expect(Math.round(k1.y - k0.y)).toBe(-24);
+  await expect(cell1).toBeFocused();
+  const move = dialog.getByRole('button', { name: /^Dialog verschieben/ });
+  await move.click(); // links
+  await move.click(); // rechts
+  const docked = (await dialog.boundingBox())!;
+  expect(Math.round(docked.x + docked.width)).toBe(1440 - 16);
+
+  // Lage gilt fuer die Sitzung: Abbrechen und wieder oeffnen -> gleiche Stelle.
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(start).toBeFocused();
+  await start.click();
+  await expect(dialog).toBeVisible();
+  const reopened = (await dialog.boundingBox())!;
+  expect(Math.round(reopened.x)).toBe(Math.round(docked.x));
+  expect(Math.round(reopened.y)).toBe(Math.round(docked.y));
+  await expect(cell1).toBeFocused();
+
+  // Enter sendet weiterhin.
+  await page.keyboard.type(' 0,4678');
+  const request = page.waitForRequest('**/live/setup');
+  await page.keyboard.press('Enter');
+  expect((await request).postDataJSON()).toEqual({ cell_text: '+ 0.4678 ' });
+  await expect(dialog).toBeHidden();
+  expect(errors).toEqual([]);
+});

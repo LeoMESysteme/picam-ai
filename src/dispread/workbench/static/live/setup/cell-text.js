@@ -4,7 +4,10 @@
 // den Zellen 1–7 genau 6 Ziffern und einen Punkt, Zelle 8 leer, dann mV/V.
 // normalizeCellText spiegelt dispread.gsv2as_cell_text.normalize_cell_text;
 // der Server prueft trotzdem selbst (Wahrheitsregel: Entscheidungen im Server).
-// Werkbank-Dialogstil (.modalbg/.modal), Fokusfalle, Esc bricht ab.
+// Werkbank-Dialogstil (.modal), Fokusfalle, Esc bricht ab. Ohne Abdunkeln
+// und verschiebbar (Titelleiste ziehen, Alt+Pfeiltasten oder Knopf
+// "Verschieben"), damit das Kamerabild mit der Anzeige sichtbar bleibt; die
+// letzte Lage merkt sich sessionStorage (ohne Speicher: Mitte).
 
 export const UNIT = 'mV/V';
 export const DISPLAY_DIGITS = 6;
@@ -13,6 +16,44 @@ export const MIN_COMPARABLE_CELLS = 5;
 const ALLOWED = '0123456789.? ';
 
 const fail = (error) => ({ok: false, error});
+
+// Lage des Dialogs: im Fenster halten, Andockstellen fuer die Tastatur.
+export const POSITION_KEY = 'dispread.live.celltext.position';
+export const MOVE_STEP = 24;
+export const DOCKS = ['links', 'rechts', 'unten', 'mitte'];
+const DOCK_MARGIN = 16;
+
+export function clampPosition({left, top}, {width, height}, {vw, vh}) {
+  const maxLeft = Math.max(0, vw - width);
+  const maxTop = Math.max(0, vh - height);
+  return {left: Math.round(Math.min(Math.max(0, left), maxLeft)), top: Math.round(Math.min(Math.max(0, top), maxTop))};
+}
+
+export function dockPosition(dock, size, view) {
+  const centreLeft = (view.vw - size.width) / 2;
+  const centreTop = (view.vh - size.height) / 2;
+  const at = {links: {left: DOCK_MARGIN, top: centreTop}, rechts: {left: view.vw - size.width - DOCK_MARGIN, top: centreTop},
+    unten: {left: centreLeft, top: view.vh - size.height - DOCK_MARGIN}, mitte: {left: centreLeft, top: centreTop}}[dock];
+  return clampPosition(at ?? {left: centreLeft, top: centreTop}, size, view);
+}
+
+function sessionStore() {
+  try { return globalThis.sessionStorage ?? null; } catch { return null; }
+}
+
+export function loadPosition(store = sessionStore()) {
+  try {
+    const value = JSON.parse(store?.getItem(POSITION_KEY) ?? 'null');
+    return value && Number.isFinite(value.left) && Number.isFinite(value.top) ? {left: value.left, top: value.top} : null;
+  } catch { return null; }
+}
+
+export function savePosition(position, store = sessionStore()) {
+  try {
+    if (position) store?.setItem(POSITION_KEY, JSON.stringify({left: position.left, top: position.top}));
+    else store?.removeItem(POSITION_KEY);
+  } catch { /* ohne Speicher: naechstes Oeffnen in der Mitte */ }
+}
 
 // Leading-zero-Regel des GSV-2AS (leading_zeros.py): fuehrende Nullen leer,
 // ausser der direkt vor dem Punkt; mehr als zwei sind an der Anzeige nicht gemessen.
@@ -93,15 +134,21 @@ export function openCellTextDialog({reason = null, initial = null, serialPresent
   doc = globalThis.document} = {}) {
   return new Promise((resolve) => {
     const back = doc.createElement('div');
-    back.className = 'modalbg';
+    // Kein Abdunkeln: das Kamerabild mit der Anzeige muss beim Ablesen sichtbar bleiben.
+    back.className = 'modalbg celltextbg';
     const lead = serialPresent === false
       ? `Kein RS232-Anschluss zum GSV-2AS gefunden (${port}). Die Einrichtung vergleicht den Leser deshalb mit dem Wert, den Sie hier eintragen.`
       : 'Die Einrichtung vergleicht den Leser mit dem Wert, den Sie hier eintragen, statt ihn über RS232 vom GSV-2AS zu lesen.';
     back.innerHTML = '<div class="modal celltext" role="dialog" aria-modal="true" aria-labelledby="ct-t" aria-describedby="ct-lead">' +
-      '<div class="mt" id="ct-t">Aktuellen Wert der Anzeige eingeben</div><div class="mbody">' +
+      '<div class="mt" data-part="handle" title="Zum Verschieben ziehen (oder Alt+Pfeiltasten)">' +
+      '<span id="ct-t">Aktuellen Wert der Anzeige eingeben</span>' +
+      '<button type="button" class="ghost mv" data-part="move" aria-label="Dialog verschieben" ' +
+      'title="Dialog verschieben: links, rechts, unten, Mitte (auch Titelleiste ziehen oder Alt+Pfeiltasten)">Verschieben</button>' +
+      '</div><div class="mbody">' +
       `<p id="ct-lead">${esc(lead)}</p>` +
       (reason && serialPresent !== false ? `<p class="sub" data-part="reason">${esc(reason)}</p>` : '') +
-      '<p class="sub">Nur eintragen, wenn die Anzeige ruhig steht. Eine Ziffer, die schwankt, mit ? markieren.</p>' +
+      '<p class="sub">Nur eintragen, wenn die Anzeige ruhig steht. Eine Ziffer, die schwankt, mit ? markieren. ' +
+      'Springt nur die letzte Ziffer um eins, reicht einer der beiden Werte.</p>' +
       '<div class="lcdin" role="group" aria-labelledby="ct-cells-l" aria-describedby="ct-keys">' +
       '<span class="f" id="ct-cells-l">Zellen der Anzeige</span>' +
       '<div class="lcdrow">' +
@@ -235,11 +282,62 @@ export function openCellTextDialog({reason = null, initial = null, serialPresent
     const siblings = [...doc.body.children].filter((el) => el !== back && !el.hasAttribute('inert'));
     doc.body.append(back);
     for (const el of siblings) el.setAttribute('inert', '');
+
+    // Verschieben: Zeiger (Maus/Touch) an der Titelleiste, Alt+Pfeiltasten, Knopf.
+    const modal = back.querySelector('.modal');
+    const handle = part('handle');
+    const view = () => ({vw: doc.documentElement.clientWidth || globalThis.innerWidth || 0,
+      vh: doc.documentElement.clientHeight || globalThis.innerHeight || 0});
+    const size = () => { const r = modal.getBoundingClientRect(); return {width: r.width, height: r.height}; };
+    let position = null;
+    let dock = 'mitte';
+    const place = (next, {remember = true} = {}) => {
+      position = clampPosition(next, size(), view());
+      modal.style.position = 'fixed';
+      modal.style.margin = '0';
+      modal.style.left = `${position.left}px`;
+      modal.style.top = `${position.top}px`;
+      modal.dataset.placed = 'true';
+      if (remember) savePosition(position);
+    };
+    const current = () => { const r = modal.getBoundingClientRect(); return {left: r.left, top: r.top}; };
+    let drag = null;
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || event.target.closest('button')) return;
+      event.preventDefault();
+      const at = current();
+      drag = {id: event.pointerId, dx: event.clientX - at.left, dy: event.clientY - at.top};
+      try { handle.setPointerCapture(event.pointerId); } catch { /* Zeiger schon weg */ }
+      handle.classList.add('dragging');
+    });
+    handle.addEventListener('pointermove', (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      place({left: event.clientX - drag.dx, top: event.clientY - drag.dy}, {remember: false});
+    });
+    const endDrag = (event) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      drag = null;
+      handle.classList.remove('dragging');
+      if (position) savePosition(position);
+    };
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+    part('move').addEventListener('click', () => {
+      dock = DOCKS[(DOCKS.indexOf(dock) + 1) % DOCKS.length];
+      place(dockPosition(dock, size(), view()));
+      part('move').setAttribute('aria-label', `Dialog verschieben (jetzt ${dock})`);
+    });
+    const onResize = () => { if (position) place(position, {remember: false}); };
+    globalThis.addEventListener?.('resize', onResize);
+    const stored = loadPosition();
+    if (stored) place(stored, {remember: false});
+
     let done = false;
     function finish(value) {
       if (done) return;
       done = true;
       doc.removeEventListener('keydown', onKey, true);
+      globalThis.removeEventListener?.('resize', onResize);
       back.remove();
       for (const el of siblings) el.removeAttribute('inert');
       if (before && before.isConnected && typeof before.focus === 'function') before.focus();
@@ -247,6 +345,14 @@ export function openCellTextDialog({reason = null, initial = null, serialPresent
     }
     function onKey(event) {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(null); return; }
+      const arrow = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]}[event.key];
+      if (event.altKey && arrow && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        const at = current();
+        place({left: at.left + arrow[0] * MOVE_STEP, top: at.top + arrow[1] * MOVE_STEP});
+        return;
+      }
       if (event.key !== 'Tab') return;
       const focusables = [...back.querySelectorAll(FOCUSABLE)];
       const index = focusables.indexOf(doc.activeElement);

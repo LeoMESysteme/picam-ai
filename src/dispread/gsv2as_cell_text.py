@@ -138,3 +138,41 @@ def validate_offline_cell_text(text: str) -> str:
     if block.count(".") != 1:
         raise ValueError("offline numeric block must contain one decimal point")
     return text
+
+
+_STEP_BLOCK = re.compile(r" *[0-9]+\.[0-9]+", re.ASCII)
+
+
+def _last_place_units(text: str) -> tuple[int, int] | None:
+    """(Punktzelle, Wert in Einheiten der letzten Stelle) eines vollstaendigen Zellentexts.
+
+    Nur ein Text, den die Anzeige so zeigen kann: '+', 7 Zellen mit genau
+    6 Ziffern (fuehrende Leerzellen zaehlen als unterdrueckte Nullen), ein
+    Punkt, Zelle 8 leer, keine sichtbare fuehrende Null vor einer weiteren
+    Ziffer vor dem Punkt. '?' oder sonst Unlesbares ergibt None.
+    """
+    if not isinstance(text, str) or len(text) != 9 or text[0] != "+" or text[8] != " ":
+        return None
+    block = text[1:8]
+    if _STEP_BLOCK.fullmatch(block) is None:
+        return None
+    integer = block.lstrip(" ").split(".")[0]
+    if len(integer) > 1 and integer[0] == "0":
+        return None
+    return block.index("."), int(block.replace(" ", "0").replace(".", ""))
+
+
+def last_place_step(reference: str, read: str) -> int | None:
+    """+1 bzw. -1, wenn `read` genau eine Einheit der letzten Stelle ueber bzw.
+    unter `reference` liegt, sonst None.
+
+    Beide Texte muessen vollstaendige, eindeutige Zellentexte sein (kein '?')
+    und den Punkt in derselben Zelle haben. Uebertraege zaehlen mit
+    (' 0.4679' -> ' 0.4680', ' 9.9999' -> '10.0000'); wandert der Punkt
+    (' 9.9999' -> '100.000'), ist es kein Schritt der letzten Stelle.
+    """
+    left, right = _last_place_units(reference), _last_place_units(read)
+    if left is None or right is None or left[0] != right[0]:
+        return None
+    step = right[1] - left[1]
+    return step if step in (1, -1) else None

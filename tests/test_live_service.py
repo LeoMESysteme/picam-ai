@@ -1349,7 +1349,7 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
         "confirmed_by": "Tester", "confirmed_at_utc": profile["confirmed_at_utc"],
         "unit": "mV/V", "format_id": "gsv2as_v1", "format_checked": True,
         "warning_acknowledged": acknowledged, "setup_overall": overall, "run_block": None, "run_hint": None,
-        "reader_tolerance": None, "reference_kind": "seriell",
+        "reader_tolerance": None, "reference_kind": "seriell", "reference_notes": [],
     }
     assert datetime.fromisoformat(confirmation["confirmed_at_utc"]).utcoffset().total_seconds() == 0
 
@@ -3822,3 +3822,46 @@ def test_confirm_tolerance_with_manual_reference_needs_unchanged_display(tmp_pat
     assert status["reader_tolerance"]["reference_kind"] == "eingabe"
     assert status["reader_tolerance"]["anzeige_unveraendert"]["unveraendert"] is True
     assert "von Hand eingegebenen Wert" in status["reader_tolerance"]["hinweis"]
+
+
+@pytest.mark.parametrize("use_tolerance", [False, True])
+def test_confirm_records_last_digit_flicker_evidence(tmp_path, proposal, use_tolerance):
+    """Eingegebener Wert, nur die letzte Stelle schwankte um 1: Hinweis im Status, Belege in confirmation.json."""
+    import json
+
+    standard = {"code": "letzte_stelle_schwankt", "frame": 1, "richtung": "+1",
+                "reference": "+0.60972 ", "read": "+0.60973 "}
+    retest = {"code": "letzte_stelle_schwankt", "frame": 0, "richtung": "-1",
+              "reference": "+0.60972 ", "read": "+0.60971 "}
+    metrics = {"notes": [standard], "hinweis": "Letzte Stelle schwankte (±1) – als Schwanken gewertet (...)."}
+    if use_tolerance:
+        metrics["tolerance"] = {"possible": True, "factor": 1.44, "d_max": 1.92, "max_d_best": 2.2,
+                                "reference_kind": "eingabe", "notes": [retest, standard],
+                                "anzeige_unveraendert": {"unveraendert": True, "letzte_stelle_schwankt": True,
+                                                         "standbilder": 2, "zellen": [1, 2, 3, 4, 5, 6, 7],
+                                                         "beste_vermutungen": ["0.60971", "0.60972"]}}
+    proposal["setup_checks"].update(overall="WARNUNG" if use_tolerance else "OK")
+    proposal["setup_checks"]["checks"]["gegenlesen"] = {
+        "status": "WARNUNG" if use_tolerance else "OK", "metrics": metrics,
+        **({} if use_tolerance else {"reason": "Letzte Stelle schwankte (±1) – als Schwanken gewertet"})}
+
+    def runner(*, session_dir, **kwargs):
+        (session_dir / "setup").mkdir(parents=True, exist_ok=True)
+        return proposal
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner, reference_present=lambda: False)
+    service.start_setup(cell_text="+0.60972")
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    setup = service.status()["setup"]
+    assert setup["gegenlesen"]["metrics"]["notes"] == [standard]
+    if not use_tolerance:
+        assert setup["check_reasons"]["gegenlesen"].startswith("Letzte Stelle schwankte")
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True,
+                    acknowledge_warning=True, use_tolerance=use_tolerance)
+    status = service.status()
+    confirmation = json.loads((tmp_path / status["session_id"] / "confirmation.json").read_text())
+    assert confirmation["reference_kind"] == "eingabe"
+    assert confirmation["reference_notes"] == ([standard, retest] if use_tolerance else [standard])
+    if use_tolerance:
+        assert "bis auf die letzte Stelle (±1) unverändert" in confirmation["reader_tolerance"]["hinweis"]
+        assert confirmation["reader_tolerance"]["anzeige_unveraendert"]["letzte_stelle_schwankt"] is True

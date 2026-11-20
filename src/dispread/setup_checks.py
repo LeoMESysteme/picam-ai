@@ -25,6 +25,7 @@ import numpy as np
 
 from dispread.charcells import CharGrid, source_dot_column_px
 from dispread.frame_alignment import estimate_quad_shift
+from dispread.gsv2as_cell_text import last_place_step
 from dispread.lattice_offsets import FULL, HALVES, max_abs_offset, measure_offsets, median_offsets
 from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader
@@ -375,6 +376,66 @@ def _reader_frame_reason(diag: dict, reference: str, frame_index: int) -> tuple[
     return reason, frame_contradictions
 
 
+#: Hinweis, wenn eine von Hand eingegebene Referenz nur in der letzten Stelle um 1 abweicht.
+LAST_PLACE_HINT = 'Letzte Stelle schwankte (±1) – als Schwanken gewertet'
+
+
+def _full_text(cells: list, key: str) -> str | None:
+    """Zellen 0-8 als Text, wenn jede Zelle genau ein Zeichen unter `key` traegt."""
+    if len(cells) < 9:
+        return None
+    chars = [cells[i].get(key) for i in range(9)]
+    if any(not isinstance(ch, str) or len(ch) != 1 for ch in chars):
+        return None
+    return ''.join(chars)
+
+
+def _last_place_note(diag: dict, reference: str, frame_index: int) -> dict | None:
+    """Beleg fuer ein Standbild, das nur in der letzten Stelle um genau 1 von der
+    von Hand eingegebenen Referenz abweicht. Nur bei voll gelesenem Standbild
+    (jede Zelle gelesen, Format und Leerzellen in Ordnung) und Referenz ohne '?'."""
+    if '?' in reference or diag.get('reject_reason') is not None or diag.get('blank_cells_ok') is not True:
+        return None
+    read = _full_text(diag.get('cells', []), 'text')
+    step = None if read is None else last_place_step(reference, read)
+    if step is None:
+        return None
+    return {'code': 'letzte_stelle_schwankt', 'frame': frame_index, 'richtung': f'{step:+d}',
+            'reference': reference, 'read': read}
+
+
+def _frame_verdict(diag: dict, reference: str, frame_index: int,
+                   reference_kind: str) -> tuple[str | None, list[dict], dict | None]:
+    """Wie `_reader_frame_reason`; bei von Hand eingegebener Referenz zaehlt ein
+    Standbild, das nur in der letzten Stelle um genau 1 abweicht, als gelesen
+    (mit Beleg). Die serielle Referenz gilt je Standbild exakt."""
+    reason, contradictions = _reader_frame_reason(diag, reference, frame_index)
+    if contradictions and reference_kind == 'eingabe':
+        note = _last_place_note(diag, reference, frame_index)
+        if note is not None:
+            return None, [], note
+    return reason, contradictions, None
+
+
+def _spread_units(reference: str, texts: Sequence[str]) -> int | None:
+    """Spannweite (Einheiten der letzten Stelle) der Texte um die Referenz; None,
+    wenn ein Text keinen Schritt von hoechstens 1 zur Referenz hat."""
+    steps = []
+    for text in texts:
+        step = 0 if text == reference else last_place_step(reference, text)
+        if step is None:
+            return None
+        steps.append(step)
+    return max(steps) - min(steps)
+
+
+def last_place_hint(notes: list[dict]) -> str:
+    """Kurzer Bedienertext mit beiden Werten je betroffenem Standbild."""
+    details = ', '.join(f"Standbild {n['frame'] + 1}: eingegeben {n['reference'][1:8].strip()}, "
+                        f"gelesen {n['read'][1:8].strip()}" for n in notes)
+    return f'{LAST_PLACE_HINT} ({details}).'
+
+
 def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[float]],
                     template_path: Path, template_sha256: str, *,
                     reference_kind: str = 'eingabe') -> CheckResult:
@@ -388,6 +449,7 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
     contradictions: list[dict] = []
     read_count = 0
     observations = []
+    verdicts = []
     depths = []
     for frame_index, (frame, reference) in enumerate(frames):
         if len(reference) != 9:
@@ -397,19 +459,39 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
         crop = rectify(frame, quad, target_size=TARGET_SIZE).image
         result = reader.read(crop, layout)
         diag = result.diagnostics
-        reason, frame_contradictions = _reader_frame_reason(diag, reference, frame_index)
-        contradictions.extend(frame_contradictions)
-        observations.append((crop, reference, diag, reason))
+        reason, frame_contradictions, note = _frame_verdict(diag, reference, frame_index, reference_kind)
+        verdicts.append([reason, frame_contradictions, note])
+        observations.append([crop, reference, diag, reason])
         depths.append(raw_cell_depths(sample_image(_gray(crop), GRID, range(9))).tolist())
+    notes = [note for _, _, note in verdicts if note is not None]
+    if notes:
+        # Schwanken heisst: die Standbilder liegen hoechstens 1 Einheit der letzten
+        # Stelle auseinander. Groessere Spannweite (z. B. -1 und +1 zur Referenz)
+        # ist kein Schwanken - dann gilt fuer diese Standbilder wieder der Widerspruch.
+        entered = notes[0]['reference']
+        read_texts = [note['read'] if note is not None else entered
+                      for reason, _, note in verdicts if note is not None or reason is None]
+        if any(note['reference'] != entered for note in notes) or _spread_units(entered, read_texts) not in (0, 1):
+            for index, verdict in enumerate(verdicts):
+                if verdict[2] is not None:
+                    verdict[0], verdict[1] = _reader_frame_reason(observations[index][2], observations[index][1], index)
+                    verdict[2] = None
+                    observations[index][3] = verdict[0]
+            notes = []
+    for reason, frame_contradictions, _ in verdicts:
+        contradictions.extend(frame_contradictions)
         if reason is None:
             read_count += 1
         else:
             reasons[reason] = reasons.get(reason, 0) + 1
+    observations = [tuple(observation) for observation in observations]
     count = len(frames)
     status = 'FEHLER' if contradictions else ('OK' if read_count == count else 'WARNUNG')
     metrics = {'frames': count, 'read_count': read_count,
                'read_rate': read_count / count, 'rejection_reasons': reasons,
                'masked_cells': masked_cells, 'contradictions': contradictions}
+    if notes:
+        metrics['notes'] = notes
     lighting = _lighting_finding(depths)
     if lighting is not None:
         metrics['lighting'] = lighting
@@ -426,9 +508,13 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
                     'in Uebereinstimmung mit der Referenz.')
             if reference_kind == 'eingabe':
                 hint += (' Referenz von Hand eingegeben; die Anzeige war waehrend der Standbilder '
-                         'unveraendert.')
+                         + ('bis auf die letzte Stelle (±1) unveraendert.'
+                            if tolerance.get('anzeige_unveraendert', {}).get('letzte_stelle_schwankt')
+                            else 'unveraendert.'))
             metrics['hinweis'] = ' '.join(filter(None, (metrics.get('hinweis'), hint)))
-    return CheckResult(status, metrics)
+    # Belege stehen in metrics['notes'] bzw. tolerance['notes']; die Werkbank zeigt sie
+    # beim Bestaetigen, die Pruefungstabelle zeigt den Grund.
+    return CheckResult(status, metrics, reason=last_place_hint(notes) if notes and status == 'OK' else None)
 
 
 def _lighting_finding(depths: list[list[float]]) -> dict | None:
@@ -463,8 +549,15 @@ def _display_unchanged(observations) -> dict | None:
         if any(i >= len(cells) or not isinstance(cells[i].get('best'), str) for i in cells_compared):
             return None
         reads.append(''.join(cells[i]['best'] for i in cells_compared))
-    return {'unveraendert': len(set(reads)) == 1, 'standbilder': len(reads),
-            'zellen': cells_compared, 'beste_vermutungen': reads}
+    unchanged = {'unveraendert': len(set(reads)) == 1, 'standbilder': len(reads),
+                 'zellen': cells_compared, 'beste_vermutungen': reads}
+    if not unchanged['unveraendert'] and cells_compared == list(range(1, 8)):
+        # Springt nur die letzte Stelle um genau 1 (gleiche Punktzelle, Uebertraege
+        # zaehlen mit), gilt die Anzeige als unveraendert - mit Beleg.
+        texts = ['+' + read + ' ' for read in reads]
+        if _spread_units(texts[0], texts) == 1:
+            unchanged.update(unveraendert=True, letzte_stelle_schwankt=True)
+    return unchanged
 
 
 def _tolerance_proposal(observations, reader, layout, path, sha, reference_kind) -> dict:
@@ -496,13 +589,17 @@ def _tolerance_proposal(observations, reader, layout, path, sha, reference_kind)
     distances = []
     for _, reference, diag, _ in observations:
         cells = diag.get('cells', [])
+        best_text = _full_text(cells, 'best')
+        # Von Hand eingegeben: beste Vermutungen duerfen nur in der letzten Stelle um 1 abweichen.
+        best_step_ok = (reference_kind == 'eingabe' and '?' not in reference and best_text is not None
+                        and last_place_step(reference, best_text) is not None)
         for i, ch in enumerate(reference):
             if ch == '?':
                 continue
             if i >= len(cells) or any(key not in cells[i] for key in ('best', 'd_best', 'd_second')):
                 return reject('zelldiagnose_fehlt')
             cell = cells[i]
-            if cell['best'] != ch:
+            if cell['best'] != ch and not best_step_ok:
                 return reject('beste_vermutung_widerspricht_referenz')
             if not math.isfinite(cell['d_best']) or not math.isfinite(cell['d_second']):
                 return reject('zelldiagnose_ungueltig')
@@ -515,10 +612,16 @@ def _tolerance_proposal(observations, reader, layout, path, sha, reference_kind)
     if factor > 2.0:
         return reject('faktor_ueber_2')
     adaptive = DotMatrixReader.from_file(Path(path), sha, d_max_factor=factor)
+    notes = []
     for index, (crop, reference, _, _) in enumerate(observations):
-        reason, contradictions = _reader_frame_reason(adaptive.read(crop, layout).diagnostics, reference, index)
+        reason, contradictions, note = _frame_verdict(adaptive.read(crop, layout).diagnostics, reference, index,
+                                                      reference_kind)
         if reason is not None or contradictions:
             return reject('gegenprobe_nicht_gelesen')
+        if note is not None:
+            notes.append(note)
+    if notes:
+        tolerance['notes'] = notes
     tolerance.update(possible=True, factor=factor)
     return tolerance
 

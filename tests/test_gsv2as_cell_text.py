@@ -140,3 +140,22 @@ def test_normalize_matches_browser_cases():
     for raw in cases["reject"]:
         with pytest.raises(ValueError):
             normalize_cell_text(raw)
+
+
+@pytest.mark.parametrize("reference,read,step", [
+    ("+ 0.4679 ", "+ 0.4679 ", None),
+    ("+ 0.4679 ", "+ 0.4680 ", 1),
+    ("+ 0.4680 ", "+ 0.4679 ", -1),
+    ("+ 1.0000 ", "+ 0.9999 ", -1),
+    ("+ 9.9999 ", "+10.0000 ", 1),
+    ("+ 9.9999 ", "+100.000 ", None),
+    ("+ 0.4679 ", "+ 0.4681 ", None),
+    ("+ 0.4679 ", "+ 0.4579 ", None),
+    ("+ 0.467? ", "+ 0.4678 ", None),
+    ("+ 0.4679 ", "+00.4680 ", None),
+    ("+ 0.4679 ", "+ 0.4680", None),
+])
+def test_last_place_step(reference, read, step):
+    from dispread.gsv2as_cell_text import last_place_step
+
+    assert last_place_step(reference, read) == step

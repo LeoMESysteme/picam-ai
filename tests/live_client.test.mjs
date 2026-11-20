@@ -805,3 +805,24 @@ test('confirm: Gesamturteil FEHLER sperrt Bestaetigen trotz vollstaendiger Felde
   status.state = 'confirmed';
   assert.equal(confirmModel(status).failed, false);
 });
+
+test('confirm: letzte Stelle schwankte (±1) mit von Hand eingegebenem Wert wird genannt, mit beiden Werten', () => {
+  const status = scene('setup_ready_warnung');
+  status.setup.overall = 'OK';
+  status.setup.reference_kind = 'eingabe';
+  const note = {code: 'letzte_stelle_schwankt', frame: 1, richtung: '+1', reference: '+ 0.4679 ', read: '+ 0.4680 '};
+  status.setup.gegenlesen = {status: 'OK', metrics: {notes: [note]}};
+  assert.equal(confirmModel(status).lastPlace,
+    'Letzte Stelle schwankte (±1) – als Schwanken gewertet (Standbild 2: eingegeben 0.4679, gelesen 0.4680).');
+  // Mit angepasster Toleranz: Belege der Gegenprobe dazu, doppelte nur einmal; Herkunftszeile nennt das Schwanken.
+  status.setup.gegenlesen = {status: 'WARNUNG', metrics: {notes: [note], tolerance: {possible: true, factor: 1.44,
+    reference_kind: 'eingabe', notes: [{...note, frame: 0, read: '+ 0.4678 ', richtung: '-1'}, note],
+    anzeige_unveraendert: {unveraendert: true, letzte_stelle_schwankt: true}}}};
+  const model = confirmModel(status);
+  assert.equal(model.lastPlace, 'Letzte Stelle schwankte (±1) – als Schwanken gewertet (Standbild 2: eingegeben 0.4679, ' +
+    'gelesen 0.4680; Standbild 1: eingegeben 0.4679, gelesen 0.4678).');
+  assert.equal(model.tolerance.reference,
+    'Referenz: von Hand eingegeben – Anzeige war während der Standbilder bis auf die letzte Stelle (±1) unverändert');
+  status.setup.gegenlesen = {status: 'OK', metrics: {}};
+  assert.equal(confirmModel(status).lastPlace, null);
+});

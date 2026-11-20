@@ -5,6 +5,22 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-20 (spät): **Einrichtung ohne RS232: letzte Ziffer darf um eins schwanken,
+  Eingabefenster verschiebbar.** Problem: Sprang der GSV-2AS bei Hand-Eingabe in der
+  letzten Stelle zwischen zwei Werten, scheiterte die Einrichtung
+  (`zelle_widerspricht_referenz`); das Eingabefenster verdeckte das Kamerabild.
+  Geändert: Nur bei `reference_kind == "eingabe"` gilt ein Standbild auch dann als
+  gegengelesen, wenn alle Zellen lesbar sind, der Punkt an derselben Stelle steht und
+  der Zahlenwert genau ±1 in der letzten Stelle abweicht (Überträge wie 0.4679↔0.4680
+  eingeschlossen); Standbilder untereinander höchstens ±1. Vermerk
+  `letzte_stelle_schwankt` in `proposal.json`, `confirmation.json`
+  (`reference_notes`), Prüfungen-Tab und Bestätigen-Dialog. RS232-Referenz bleibt
+  exakt, `?` maskiert wie bisher. Eingabefenster ohne Abdunkeln, an der Titelleiste
+  ziehbar, Alt+Pfeile oder „Verschieben“ (links/rechts/unten/Mitte), Position je
+  Sitzung. Grenze: Die Rasterprüfung (2j) nutzt weiter den eingegebenen Wert; ein
+  Übertrag über mehrere Stellen kann dort noch scheitern. Tests: pytest 732, node 316,
+  Playwright 73 – alle grün.
+
 * 2026-11-20 (Doku): **SerialLoom als Alternative zu com0com.** Problem: Auf einem
   Windows-11-Rechner (Build 26200, Secure Boot) blockierte Windows die signierte
   com0com-Version 3.0.0.0 (Geräte-Manager-Fehler 52, Code-Integrity-Ereignis 3004).

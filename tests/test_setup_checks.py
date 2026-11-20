@@ -438,9 +438,12 @@ def test_reader_diagnostic_compares_only_unmasked_cells(
         'cells': [{'text': None if ch == '?' else ch,
                    'reason': 'zelle_unbekannt' if ch == '?' else None} for ch in read_text],
     }
-    reader = SimpleNamespace(read=lambda *_: SimpleNamespace(diagnostics=diagnostics))
+    reader = SimpleNamespace(read=lambda *_: SimpleNamespace(diagnostics=diagnostics),
+                             _t=SimpleNamespace(d_max=1.92, margin_min=.93))
     monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', lambda *_: reader)
-    result = setup_checks.diagnose_reader([(display(), reference)], QUAD, tmp_path / 't.json', 'a' * 64)
+    # Serielle Referenz: exakt je Standbild, auch die letzte Stelle (keine Schwankungsnachsicht).
+    result = setup_checks.diagnose_reader([(display(), reference)], QUAD, tmp_path / 't.json', 'a' * 64,
+                                         reference_kind='seriell')
     assert result.status == expected
     assert result.metrics['read_count'] == read_count
     assert result.metrics['frames'] == 1
@@ -758,9 +761,15 @@ def test_tolerance_requires_serial_correct_candidates_and_verified_reread(
         assert 'anzeige_unveraendert' not in tolerance
 
 
-@pytest.mark.parametrize('kind,possible,reason', [('eingabe', False, 'anzeige_veraendert'),
-                                                   ('seriell', False, 'beste_vermutung_widerspricht_referenz')])
-def test_tolerance_with_manual_value_needs_unchanged_display(monkeypatch, tmp_path, kind, possible, reason):
+@pytest.mark.parametrize('kind,changed,possible,reason', [
+    # Zweites Standbild zwei Einheiten der letzten Stelle daneben: echte Aenderung.
+    ('eingabe', '4', False, 'anzeige_veraendert'),
+    # Nur die letzte Stelle springt um 1: gilt als Schwanken, Toleranz moeglich (mit Beleg).
+    ('eingabe', '3', True, None),
+    # Serielle Referenz bleibt je Standbild exakt.
+    ('seriell', '3', False, 'beste_vermutung_widerspricht_referenz'),
+])
+def test_tolerance_with_manual_value_needs_unchanged_display(monkeypatch, tmp_path, kind, changed, possible, reason):
     from types import SimpleNamespace
 
     from dispread import setup_checks
@@ -772,12 +781,13 @@ def test_tolerance_with_manual_value_needs_unchanged_display(monkeypatch, tmp_pa
             reads['count'] += 1
             cells = [{'text': ch, 'best': ch, 'd_best': .5, 'd_second': 2, 'reason': None}
                      for ch in '+0.60972 ']
-            # Zweites Standbild: Zelle 7 schwankt auf 3, ungelesen (kein Widerspruch, nur WARNUNG).
-            changed = reads['count'] % 2 == 0
-            cells[7].update(text=None, best='3' if changed else '2', d_best=2.2, d_second=3.5,
-                            reason='zelle_unbekannt')
+            # Zweites Standbild: Zelle 7 schwankt, ungelesen (kein Widerspruch, nur WARNUNG).
+            best = changed if reads['count'] % 2 == 0 else '2'
+            accepted = d_max_factor != 1
+            cells[7].update(text=best if accepted else None, best=best, d_best=2.2, d_second=3.5,
+                            reason=None if accepted else 'zelle_unbekannt')
             return SimpleNamespace(diagnostics={'cells': cells, 'blank_cells_ok': True,
-                                                'reject_reason': 'zelle_unbekannt'})
+                                                'reject_reason': None if accepted else 'zelle_unbekannt'})
         return SimpleNamespace(read=read, _t=SimpleNamespace(d_max=1.92, margin_min=.93))
 
     monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', factory)
@@ -787,8 +797,19 @@ def test_tolerance_with_manual_value_needs_unchanged_display(monkeypatch, tmp_pa
     tolerance = result.metrics['tolerance']
     assert (tolerance['possible'], tolerance['reason']) == (possible, reason)
     if kind == 'eingabe':
-        assert tolerance['anzeige_unveraendert']['unveraendert'] is False
-        assert tolerance['anzeige_unveraendert']['beste_vermutungen'] == ['0.60972', '0.60973']
+        unchanged = tolerance['anzeige_unveraendert']
+        assert unchanged['beste_vermutungen'] == ['0.60972', f'0.6097{changed}']
+        assert unchanged['unveraendert'] is possible
+        assert unchanged.get('letzte_stelle_schwankt', False) is possible
+    if possible:
+        assert tolerance['notes'] == [{'code': 'letzte_stelle_schwankt', 'frame': 1, 'richtung': '+1',
+                                       'reference': '+0.60972 ', 'read': '+0.60973 '}]
+        assert 'bis auf die letzte Stelle (±1) unveraendert' in result.metrics['hinweis']
+        assert setup_checks.last_place_hint(tolerance['notes']) == (
+            'Letzte Stelle schwankte (±1) – als Schwanken gewertet (Standbild 2: eingegeben 0.60972, '
+            'gelesen 0.60973).')
+    else:
+        assert 'notes' not in tolerance
 
 
 def test_tolerance_with_manual_value_without_cell_reads_stays_refused(monkeypatch, tmp_path):
@@ -807,3 +828,65 @@ def test_tolerance_with_manual_value_without_cell_reads_stays_refused(monkeypatc
                                          reference_kind='eingabe')
     tolerance = result.metrics['tolerance']
     assert (tolerance['possible'], tolerance['reason']) == (False, 'standbild_lesedaten_fehlen')
+
+
+def _scripted_reader(monkeypatch, read_texts):
+    """Leser, der je Standbild den vorgegebenen Zellentext liefert ('?' = Zelle ungelesen)."""
+    from types import SimpleNamespace
+
+    from dispread import setup_checks
+
+    texts = iter(read_texts)
+
+    def read(*_):
+        text = next(texts)
+        cells = [{'text': None if ch == '?' else ch, 'best': ch, 'd_best': .5, 'd_second': 2,
+                  'reason': 'zelle_unbekannt' if ch == '?' else None} for ch in text]
+        return SimpleNamespace(diagnostics={'cells': cells, 'blank_cells_ok': True,
+                                            'reject_reason': 'zelle_unbekannt' if '?' in text else None})
+    reader = SimpleNamespace(read=read, _t=SimpleNamespace(d_max=1.92, margin_min=.93))
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', lambda *_, **__: reader)
+    return setup_checks
+
+
+@pytest.mark.parametrize('reference,reads,status,directions', [
+    ('+ 0.4679 ', ['+ 0.4679 '], 'OK', []),
+    ('+ 0.4679 ', ['+ 0.4680 '], 'OK', ['+1']),             # letzte Stelle +1 mit Uebertrag
+    ('+ 0.4679 ', ['+ 0.4678 '], 'OK', ['-1']),
+    ('+ 1.0000 ', ['+ 0.9999 '], 'OK', ['-1']),             # Uebertrag ueber alle Nachkommastellen
+    ('+ 9.9999 ', ['+10.0000 '], 'OK', ['+1']),             # Leerzelle wird Ziffer, Punkt bleibt in Zelle 3
+    ('+ 9.9999 ', ['+100.000 '], 'FEHLER', []),             # Punkt wandert: kein Schritt der letzten Stelle
+    ('+ 0.4679 ', ['+ 0.4681 '], 'FEHLER', []),             # zwei Einheiten
+    ('+ 0.4679 ', ['+ 0.4579 '], 'FEHLER', []),             # andere als die letzte Stelle
+    ('+ 0.4679 ', ['+ 0.468? '], 'FEHLER', []),             # ungelesene Zelle: keine Nachsicht
+    ('+ 0.4679 ', ['+ 0.4679 ', '+ 0.4680 '], 'OK', ['+1']),
+    ('+ 0.4679 ', ['+ 0.4678 ', '+ 0.4680 '], 'FEHLER', []),  # Spannweite 2 ist kein Schwanken
+    ('+ 0.467? ', ['+ 0.4678 '], 'OK', []),                 # '?' maskiert wie bisher
+    ('+ 0.467? ', ['+ 0.4680 '], 'FEHLER', []),             # mit '?' keine Zahlennachsicht
+])
+def test_manual_reference_tolerates_last_digit_flicker(monkeypatch, tmp_path, reference, reads, status, directions):
+    setup_checks = _scripted_reader(monkeypatch, reads)
+    result = setup_checks.diagnose_reader([(display(), reference)] * len(reads), QUAD, tmp_path / 't', 'sha',
+                                         reference_kind='eingabe')
+    assert result.status == status
+    notes = result.metrics.get('notes', [])
+    assert [note['richtung'] for note in notes] == directions
+    if directions:
+        assert result.metrics['contradictions'] == []
+        assert result.reason.startswith(setup_checks.LAST_PLACE_HINT + ' (Standbild')
+        assert all(note['code'] == 'letzte_stelle_schwankt' and note['reference'] == reference for note in notes)
+        assert notes[-1]['read'] == reads[notes[-1]['frame']]
+        assert 'hinweis' not in result.metrics
+        assert json.loads(json.dumps(result.to_dict()))['metrics']['notes'] == notes
+    else:
+        assert result.reason is None
+    if status == 'FEHLER':
+        assert result.metrics['rejection_reasons'].get('zelle_widerspricht_referenz')
+
+
+def test_serial_reference_has_no_last_digit_leniency(monkeypatch, tmp_path):
+    setup_checks = _scripted_reader(monkeypatch, ['+ 0.4680 '])
+    result = setup_checks.diagnose_reader([(display(), '+ 0.4679 ')], QUAD, tmp_path / 't', 'sha',
+                                         reference_kind='seriell')
+    assert result.status == 'FEHLER'
+    assert 'notes' not in result.metrics

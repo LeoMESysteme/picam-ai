@@ -10,6 +10,22 @@ export const FAILED_CONFIRM_REASON = 'Bestätigen nicht möglich: Prüfung FEHLE
 // Angepasste Toleranz mit von Hand eingegebenem Wert: der Server erlaubt sie nur,
 // wenn alle Standbilder in den vergleichbaren Zellen gleich gelesen wurden.
 export const MANUAL_REFERENCE_NOTE = 'Referenz: von Hand eingegeben – Anzeige war während der Standbilder unverändert';
+export const MANUAL_REFERENCE_FLICKER_NOTE = 'Referenz: von Hand eingegeben – Anzeige war während der Standbilder bis auf die letzte Stelle (±1) unverändert';
+// Von Hand eingegebener Wert, nur die letzte Stelle sprang um 1 (setup_checks.LAST_PLACE_HINT).
+export const LAST_PLACE_NOTE = 'Letzte Stelle schwankte (±1) – als Schwanken gewertet';
+
+const cellValue = (text) => String(text ?? '').slice(1, 8).trim();
+
+// Belege des Gegenlesens (metrics.notes, mit angepasster Toleranz auch die der Gegenprobe) als ein Satz.
+export function lastPlaceText(metrics) {
+  const seen = new Set();
+  const notes = [...(metrics?.notes || []), ...(metrics?.tolerance?.possible ? metrics.tolerance.notes || [] : [])]
+    .filter((note) => note?.code === 'letzte_stelle_schwankt')
+    .filter((note) => { const key = `${note.frame}\u0000${note.read}`; if (seen.has(key)) return false; seen.add(key); return true; });
+  if (!notes.length) return null;
+  const details = notes.map((note) => `Standbild ${Number(note.frame) + 1}: eingegeben ${cellValue(note.reference)}, gelesen ${cellValue(note.read)}`);
+  return `${LAST_PLACE_NOTE} (${details.join('; ')}).`;
+}
 
 export function confirmModel(status) {
   const setup = status?.setup || {};
@@ -31,7 +47,8 @@ export function confirmModel(status) {
           (tolerance.reference_kind === 'eingabe' ? 'Geprüft nur in dieser Aufstellung gegen den von Hand eingegebenen Wert.'
             : 'Geprüft nur in dieser Aufstellung gegen den Referenzwert.'),
         reference: tolerance.reference_kind === 'eingabe' && tolerance.anzeige_unveraendert?.unveraendert === true
-          ? MANUAL_REFERENCE_NOTE : null}
+          ? (tolerance.anzeige_unveraendert.letzte_stelle_schwankt === true ? MANUAL_REFERENCE_FLICKER_NOTE : MANUAL_REFERENCE_NOTE)
+          : null}
       : null,
     block: status?.run_block && visible
       ? (tolerance?.possible
@@ -41,6 +58,7 @@ export function confirmModel(status) {
     runHint: visible && !status?.run_block ? status?.run_hint || null : null,
     runBlock: visible ? status?.run_block || null : null,
     hint: visible && metrics.hinweis ? `Hinweis: ${metrics.hinweis}` : null,
+    lastPlace: visible ? lastPlaceText(metrics) : null,
   };
 }
 
@@ -63,6 +81,7 @@ const TEMPLATE = `
   <div class="runblock" data-part="runblock" hidden><strong>Lauf gesperrt — Leser konnte die Einrichtungsbilder nicht lesen</strong><p data-part="runblock-reason"></p></div>
   <p class="note warn-t" role="status" data-part="run-hint" hidden></p>
   <p class="mut" data-part="hint" hidden></p>
+  <p class="note ref" role="status" data-part="last-place" hidden></p>
   <label class="f" for="confirm-name">Name</label>
   <input type="text" id="confirm-name" data-field="name" placeholder="Vor- und Nachname" autocomplete="off" spellcheck="false">
   <label class="ck"><input type="checkbox" data-field="format"><span>Einheit mV/V und Format geprüft</span></label>
@@ -114,6 +133,7 @@ export function mountConfirm(host, client, {locked = () => false, onChange = () 
     q('[data-part="runblock-reason"]').textContent = model.runBlock || '';
     set('run-hint', model.runHint);
     set('hint', model.hint);
+    set('last-place', model.lastPlace);
     q('[data-part="ack"]').hidden = !model.needAck;
     q('[data-part="ack-why"]').textContent = model.ackReason ? ` (${model.ackReason})` : '';
     q('[data-part="tolerance"]').hidden = !model.tolerance;

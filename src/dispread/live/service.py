@@ -103,6 +103,20 @@ def run_hint_reason(proposal: dict | None) -> str | None:
     )
 
 
+def reference_notes(proposal: dict | None, *, use_tolerance: bool = False) -> list[dict]:
+    """Belege des Gegenlesens fuer confirmation.json: Standbilder, deren Lesung
+    nur in der letzten Stelle um 1 vom eingegebenen Wert abwich (Liste, sonst leer).
+    Mit angepasster Toleranz kommen die Belege der Gegenprobe hinzu."""
+    metrics = ((proposal or {}).get("setup_checks", {}).get("checks", {})
+               .get("gegenlesen", {}).get("metrics", {}))
+    notes = [deepcopy(note) for note in metrics.get("notes", [])]
+    if use_tolerance:
+        seen = {(note.get("frame"), note.get("read")) for note in notes}
+        notes += [deepcopy(note) for note in metrics.get("tolerance", {}).get("notes", [])
+                  if (note.get("frame"), note.get("read")) not in seen]
+    return notes
+
+
 def run_block_reason(proposal: dict | None) -> str | None:
     """Gegenlesen OK oder angepasste Toleranz moeglich erlaubt einen normalen Lauf."""
     check = (proposal or {}).get("setup_checks", {}).get("checks", {}).get("gegenlesen")
@@ -349,9 +363,9 @@ class LiveService:
                     setup["check_reasons"] = check_reasons
                 gegenlesen = checks.get("checks", {}).get("gegenlesen", {})
                 metrics = gegenlesen.get("metrics", {})
-                if metrics.get("hinweis") or "tolerance" in metrics:
+                if metrics.get("hinweis") or "tolerance" in metrics or metrics.get("notes"):
                     setup["gegenlesen"] = {"status": gegenlesen.get("status"), "metrics": {
-                        key: metrics[key] for key in ("hinweis", "tolerance") if key in metrics}}
+                        key: metrics[key] for key in ("hinweis", "tolerance", "notes") if key in metrics}}
             if self._setup_started_at is not None:
                 setup = setup or {}
                 setup["focus"] = deepcopy(self._setup_focus)
@@ -1059,8 +1073,10 @@ class LiveService:
                     "reference_kind": kind,
                     "hinweis": (f"Angepasste Lesetoleranz ×{tolerance['factor']}: liest diese Aufstellung, "
                                 "erhöht aber das Risiko von Fehllesungen gegenüber der Standardtoleranz. "
-                                + ("Geprüft nur in dieser Aufstellung gegen den von Hand eingegebenen Wert; "
-                                   "die Anzeige war während der Standbilder unverändert."
+                                + (("Geprüft nur in dieser Aufstellung gegen den von Hand eingegebenen Wert; "
+                                    "die Anzeige war während der Standbilder "
+                                    + ("bis auf die letzte Stelle (±1) unverändert."
+                                       if unchanged.get("letzte_stelle_schwankt") else "unverändert."))
                                    if kind == "eingabe" else
                                    "Geprüft nur in dieser Aufstellung gegen den Referenzwert.")),
                 }
@@ -1088,6 +1104,8 @@ class LiveService:
                 "run_hint": None if reader_tolerance else run_hint_reason(proposal),
                 "reader_tolerance": reader_tolerance,
                 "reference_kind": self._setup_reference_kind,
+                # Belege: von Hand eingegebener Wert, nur die letzte Stelle schwankte um 1.
+                "reference_notes": reference_notes(proposal, use_tolerance=reader_tolerance is not None),
             }
             (session_dir / "confirmation.json").write_text(
                 json.dumps(confirmation, indent=2, ensure_ascii=False), encoding="utf-8",
