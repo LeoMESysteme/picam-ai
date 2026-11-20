@@ -530,3 +530,54 @@ input[type=search]::placeholder{color:#8a847b}
 .popover [data-part="checklist"] ul{margin:4px 0 0;padding-left:18px}
 .popover [data-part="out-format"] .f{margin:10px 0 4px}
 .popover [data-part="out-rate-hz"]{width:5em}
+
+/* Wert der Anzeige von Hand (Einrichtung ohne RS232): Zellen wie das LCD,
+   Zelle 0 '+' fest, Zellen 1–7 bearbeitbar, Einheit fest. Blau = Fokus,
+   rot nur bei ungueltiger Eingabe; keine Statusfarbe fuer gueltige Zellen. */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.modal.celltext{width:500px;max-height:calc(100vh - 32px);display:flex;flex-direction:column}
+.modal.celltext .mbody{overflow:auto;padding:14px 16px 4px}
+.modal.celltext .mbody p.sub{margin:-4px 0 10px}
+.modal.celltext label.f,.modal.celltext span.f{display:block;font-size:12px;color:var(--tx2);margin:12px 0 5px}
+.modal.celltext .note{margin:5px 0 0;font-size:11.5px;color:var(--tx3);line-height:1.45}
+.modal.celltext .note.err-t{color:var(--err);min-height:0}
+.modal.celltext .note.err-t:empty{display:none}
+.lcdin{margin:4px 0 0}
+.lcdin span.f{margin-top:4px}
+.lcdrow{display:grid;grid-template-columns:repeat(8,minmax(0,40px)) auto;gap:4px;align-items:end}
+.lcdc{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:text}
+.lcdc input,.lcdc>span{width:100%;height:46px;padding:0;text-align:center;font:600 22px/1 var(--mono);font-variant-numeric:tabular-nums;
+  color:var(--tx);background:#141311;border:1px solid var(--line);border-radius:2px;caret-color:transparent}
+.lcdc input:focus{outline:none;border-color:var(--sel-hi);border-bottom-width:2px;background:var(--sel-bg)}
+.lcdc>span{display:flex;align-items:center;justify-content:center;color:var(--tx3);background:transparent;border-style:dashed;border-color:var(--line2)}
+.lcdc i{font:10.5px var(--mono);font-style:normal;color:var(--tx3)}
+.lcdc[data-state=unset] input{border-style:dashed;border-color:#4a4740}
+/* Leerzelle: gesetzt, aber leer wie am LCD; kleines Zeichen, damit sie von "noch leer" unterscheidbar bleibt. */
+.lcdc[data-state=blank]::after{content:"␣";position:absolute;top:26px;left:0;right:0;text-align:center;font:13px var(--mono);color:var(--tx3);pointer-events:none}
+.lcdc[data-state=char] input{border-color:#56524a}
+.lcdunit{padding:0 0 18px 6px;font:500 15px var(--mono);color:var(--tx2);white-space:nowrap}
+.lcdprev{margin:12px 0 2px;padding:10px 12px 10px;background:#1b1a17;border:1px solid var(--line2)}
+.lcdprev span.f{margin:0 0 6px}
+.lcdrow.pv{grid-template-columns:repeat(9,minmax(0,22px)) auto;gap:2px;align-items:center}
+.lcdp{height:28px;display:flex;align-items:center;justify-content:center;font:600 16px var(--mono);color:#d8e6c8;background:#25301f;border-radius:1px}
+.lcdp.b{background:#1f281a}
+.lcdp.q{color:var(--warn)}
+.lcdrow.pv .lcdunit{padding:0 0 0 6px;font-size:14px;color:#d8e6c8}
+.lcdrow.pv.bad .lcdp{background:#2a2420;color:var(--tx3)}
+.lcdrow.pv.bad .lcdunit{color:var(--tx3)}
+.lcdprev .msg{margin:8px 0 0;font-size:12px;line-height:1.45}
+.modal.celltext .mf{flex:none}
+@media (max-width:540px){
+  .modal.celltext .mbody{padding:12px 12px 4px}
+  .lcdrow{gap:3px}
+  .lcdc input,.lcdc>span{height:40px;font-size:18px}
+  .lcdunit{font-size:13px;padding-left:3px}
+  .lcdrow.pv{grid-template-columns:repeat(9,minmax(0,1fr)) auto}
+}
+/* Einrichten ▾: Referenzwert (RS232 gefunden oder nicht) und "Wert von Hand eingeben" */
+.popover.setpop .pst{display:flex;gap:8px;align-items:flex-start;margin:0 0 6px;color:var(--tx);line-height:1.45}
+.popover.setpop .pst .sq{margin-top:4px}
+.popover .note.ckn{margin:-6px 0 8px 23px}
+.popover input[type=text]:disabled{color:#78726a;background:#1b1a17;cursor:not-allowed}
+/* Bestaetigen: Herkunft des Referenzwerts bei angepasster Toleranz */
+.form .note.ref{margin:6px 0 0;padding:4px 8px;border-left:2px solid var(--sel-line);color:var(--tx);font-size:12px;line-height:1.45}

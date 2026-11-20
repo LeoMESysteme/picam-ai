@@ -4,6 +4,7 @@ import pytest
 
 from dispread.gsv2as_cell_text import (
     cell_text_from_telegram,
+    normalize_cell_text,
     validate_offline_cell_text,
 )
 
@@ -67,3 +68,75 @@ def test_offline_text_rejects_invalid_length_or_characters(text):
 @pytest.mark.parametrize("text", ["+12.3456", "+0.4678?", "+0.4678? "])
 def test_offline_text_pads_eight_cells(text):
     assert validate_offline_cell_text(text) == text.ljust(9)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # Getippter Wert: Komma, Einheit und Plus optional, links auf 6 Ziffern aufgefuellt,
+        # fuehrende Nullen leer ausser direkt vor dem Punkt.
+        ("0,4678", "+ 0.4678 "),
+        ("0.4678", "+ 0.4678 "),
+        ("+0.4678 mV/V", "+ 0.4678 "),
+        ("1.2193 mv/v", "+ 1.2193 "),
+        ("988,5", "+  988.5 "),
+        ("5487,00", "+5487.00 "),
+        ("00.4678", "+ 0.4678 "),
+        ("+0.60972", "+0.60972 "),
+        # Abgelesene Zellen mit Leerzellen bleiben genau so.
+        (" 1,2193", "+ 1.2193 "),
+        ("+ 1.2193 ", "+ 1.2193 "),
+        ("+  988.5 ", "+  988.5 "),
+        ("+ 0,4678 mV/V", "+ 0.4678 "),
+        # '?' markiert schwankende Ziffern und zaehlt als Ziffer.
+        ("+0.4678?", "+0.4678? "),
+        ("+?2.45?7 ", "+?2.45?7 "),
+        ("1?.2345", "+1?.2345 "),
+    ],
+)
+def test_normalize_accepts_values_and_cells_by_display_rules(raw, expected):
+    assert normalize_cell_text(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        ("-0.4678", "Minuszeichen"),
+        ("0.4.678", "mehr als ein Dezimalpunkt"),
+        ("04678", "genau ein Dezimalpunkt"),
+        ("1 2.345", "Leerzelle zwischen den Ziffern"),
+        ("12.34567", "7 Ziffern"),
+        ("+12.3456?", "7 Ziffern"),
+        ("0,4678 V", "unzulaessiges Zeichen 'V'"),
+        ("abc", "unzulaessiges Zeichen 'a'"),
+        ("", "kein Wert"),
+        ("  0,4678", "8 Zellen nach dem Plus"),
+        ("+ 00.467", "fuehrende Null in Zelle 2"),
+        ("98.5", "drei oder mehr fuehrende Nullen"),
+        ("?.123", "mehrdeutig"),
+        (".5", "vor dem Punkt"),
+        ("+0.4??? ", "nur 4 vergleichbare Zellen"),
+        ("0,4678 mV/V mV/V", "unzulaessiges Zeichen"),
+    ],
+)
+def test_normalize_rejects_anything_that_needs_a_guess(raw, message):
+    with pytest.raises(ValueError, match=message):
+        normalize_cell_text(raw)
+
+
+def test_normalize_rejects_non_text():
+    with pytest.raises(ValueError, match="Text"):
+        normalize_cell_text(0.4678)
+
+
+def test_normalize_matches_browser_cases():
+    """Dieselben Faelle prueft tests/live_cell_text.test.mjs gegen setup/cell-text.js."""
+    import json
+    from pathlib import Path
+
+    cases = json.loads((Path(__file__).parent / "fixtures" / "cell_text_cases.json").read_text(encoding="utf-8"))
+    for raw, expected in cases["accept"]:
+        assert normalize_cell_text(raw) == expected
+    for raw in cases["reject"]:
+        with pytest.raises(ValueError):
+            normalize_cell_text(raw)

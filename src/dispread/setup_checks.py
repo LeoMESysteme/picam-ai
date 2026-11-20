@@ -424,6 +424,9 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
         if tolerance['possible']:
             hint = (f"Mit angepasster Toleranz x{tolerance['factor']} liest der Leser alle Standbilder "
                     'in Uebereinstimmung mit der Referenz.')
+            if reference_kind == 'eingabe':
+                hint += (' Referenz von Hand eingegeben; die Anzeige war waehrend der Standbilder '
+                         'unveraendert.')
             metrics['hinweis'] = ' '.join(filter(None, (metrics.get('hinweis'), hint)))
     return CheckResult(status, metrics)
 
@@ -447,6 +450,23 @@ def _lighting_finding(depths: list[list[float]]) -> dict | None:
     return worst
 
 
+def _display_unchanged(observations) -> dict | None:
+    """Beste Vermutung je vergleichbarer Zelle 1-7 ueber alle Standbilder; None ohne Lesedaten."""
+    references = {reference for _, reference, _, _ in observations}
+    if len(references) != 1 or len(observations) < 2:
+        return None
+    reference = references.pop()
+    cells_compared = [i for i in range(1, 8) if reference[i] != '?']
+    reads = []
+    for _, _, diag, _ in observations:
+        cells = diag.get('cells', [])
+        if any(i >= len(cells) or not isinstance(cells[i].get('best'), str) for i in cells_compared):
+            return None
+        reads.append(''.join(cells[i]['best'] for i in cells_compared))
+    return {'unveraendert': len(set(reads)) == 1, 'standbilder': len(reads),
+            'zellen': cells_compared, 'beste_vermutungen': reads}
+
+
 def _tolerance_proposal(observations, reader, layout, path, sha, reference_kind) -> dict:
     tolerance = {'possible': False, 'factor': None, 'max_d_best': None, 'd_max': None, 'reason': None}
 
@@ -454,10 +474,23 @@ def _tolerance_proposal(observations, reader, layout, path, sha, reference_kind)
         tolerance['reason'] = reason
         return tolerance
 
-    if reference_kind != 'seriell':
-        return reject('nur_mit_seriellem_referenzwert')
+    tolerance['reference_kind'] = reference_kind
+    if reference_kind not in ('seriell', 'eingabe'):
+        return reject('referenzart_unbekannt')
     if any(reason not in (None, 'zelle_unbekannt') for _, _, _, reason in observations):
         return reject('keine_reine_zellablehnung')
+    if reference_kind == 'eingabe':
+        # Von Hand eingegebener Wert gilt fuer alle Standbilder. Er belegt eine
+        # Toleranz nur, wenn die Anzeige dabei nachweislich gleich blieb: die
+        # besten Vermutungen des Lesers sind in jeder vergleichbaren Zelle
+        # aller Standbilder identisch (die Gegenprobe unten prueft sie danach
+        # noch gegen den Wert).
+        unchanged = _display_unchanged(observations)
+        if unchanged is None:
+            return reject('standbild_lesedaten_fehlen')
+        tolerance['anzeige_unveraendert'] = unchanged
+        if not unchanged['unveraendert']:
+            return reject('anzeige_veraendert')
     t = reader._t
     tolerance['d_max'] = t.d_max
     distances = []

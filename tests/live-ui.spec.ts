@@ -1,4 +1,4 @@
-import { accessSync, constants } from 'node:fs';
+import { accessSync, constants, readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
@@ -1007,9 +1007,9 @@ test('Dialog hält den Fokus, Esc wählt die Esc-Aktion, Fokus kehrt zurück', a
   // Esc und Tab wirken danach wieder auf der Seite.
   await opener.focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Zellentext angeben' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Referenzwert der Einrichtung' })).toBeFocused();
   await page.keyboard.press('Enter');
-  const cellPop = page.getByRole('dialog', { name: 'Zellentext' });
+  const cellPop = page.getByRole('dialog', { name: 'Referenzwert der Einrichtung' });
   await expect(cellPop).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(cellPop).toBeHidden();
@@ -2637,5 +2637,213 @@ test('OQ-71: Während der Einrichtung Abbrechen, danach sofort neu einrichten; i
   await expect(locked).toHaveAttribute('title', /Nicht während eines Laufs/);
   await fits(page, 'Titelleiste im Lauf');
   await shot(page, SHOTS + 'oq71-lauf.png');
+  expect(errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Einrichtung ohne RS232 (Betrieb): Wert der Anzeige von Hand
+// ---------------------------------------------------------------------------
+const NO_ADAPTER = { serial_present: false, port: '/dev/ttyUSB0' };
+// Belegbilder optional nach LIVE_UI_SHOTS, sonst in den Testausgabeordner.
+async function cellShot(page: Page, name: string) {
+  const dir = process.env.LIVE_UI_SHOTS;
+  await page.screenshot({ path: dir ? `${dir.replace(/\/$/, '')}/${name}` : test.info().outputPath(name) });
+}
+
+test('Ohne RS232: Einrichten fragt erst den Anzeigewert ab (Zellen, Tastatur, freies Feld, Vorschau)', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/__test__/state', { setup_reference: NO_ADAPTER });
+  const title = page.getByRole('banner');
+  const left = page.getByRole('complementary', { name: 'Ablauf' });
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  await expect(left.locator('.lead')).toContainText('Ohne RS232-Anschluss fragt sie zuerst den aktuellen Wert der Anzeige ab.');
+  await expect(inspector).toContainText('von Hand (kein RS232)');
+  const start = title.getByRole('button', { name: 'Einrichtung starten', exact: true });
+  await expect(start).toHaveAttribute('title', /Kein RS232-Anschluss/);
+  const posted: unknown[] = [];
+  page.on('request', (r) => { if (r.url().endsWith('/live/setup') && r.method() === 'POST') posted.push(r.postDataJSON()); });
+
+  // Esc bricht ab, nichts geht an den Server.
+  await start.click();
+  const dialog = page.getByRole('dialog', { name: 'Aktuellen Wert der Anzeige eingeben' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Kein RS232-Anschluss zum GSV-2AS gefunden (/dev/ttyUSB0)');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(start).toBeFocused();
+  expect(posted).toEqual([]);
+
+  await start.click();
+  const cells = dialog.getByRole('group', { name: 'Zellen der Anzeige' });
+  const cell = (n: number) => cells.getByRole('textbox', { name: new RegExp(`^Zelle ${n} von 7`) });
+  const submit = dialog.getByRole('button', { name: 'Einrichtung starten' });
+  const check = dialog.locator('[data-part="check"]');
+  const preview = dialog.locator('[data-part="preview-text"]');
+  await expect(cell(1)).toBeFocused();
+  await expect(submit).toBeDisabled();
+  // Leertaste = Leerzelle, Komma = Punkt, jede Taste springt weiter.
+  await page.keyboard.type(' 0,4678');
+  await expect(cell(7)).toBeFocused();
+  await expect(cell(1)).toHaveAccessibleName('Zelle 1 von 7: Leerzelle');
+  await expect(cell(3)).toHaveAccessibleName('Zelle 3 von 7: Punkt');
+  await expect(preview).toHaveText('+ 0.4678 mV/V');
+  await expect(check).toContainText('Gültig – mit der Anzeige vergleichen');
+  await expect(check).toContainText('Zellen: +, Leerzelle, 0, Punkt, 4, 6, 7, 8.');
+  await expect(submit).toBeEnabled();
+  // Zweiter Punkt: inline abgelehnt, Senden gesperrt; Rücktaste geht zurück.
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
+  await expect(cell(6)).toBeFocused();
+  await page.keyboard.type('.');
+  await expect(check).toContainText('Mehr als ein Dezimalpunkt');
+  await expect(check).toHaveClass(/err-t/);
+  await expect(submit).toBeDisabled();
+  // ? markiert eine schwankende Ziffer.
+  await cell(6).click();
+  await page.keyboard.type('7?');
+  await expect(preview).toHaveText('+ 0.467? mV/V');
+  await expect(submit).toBeEnabled();
+  await cellShot(page, 'zellentext-dialog-1440.png');
+
+  // Freies Feld füllt die Zellen nach den Anzeigeregeln; ungültige Eingabe ändert nichts.
+  const free = dialog.getByLabel('oder Wert eintippen');
+  await free.fill('-0,5');
+  await expect(dialog.locator('[data-part="free-msg"]')).toContainText('Minuszeichen');
+  await expect(preview).toHaveText('+ 0.467? mV/V');
+  await free.fill('+1,2193 mV/V');
+  await expect(dialog.locator('[data-part="free-msg"]')).toHaveText('');
+  await expect(cell(1)).toHaveAccessibleName('Zelle 1 von 7: Leerzelle');
+  await expect(cell(2)).toHaveValue('1');
+  await expect(preview).toHaveText('+ 1.2193 mV/V');
+  await free.fill('988,5');
+  await expect(preview).toHaveText('+  988.5 mV/V');
+  await free.fill('0,4678');
+  await expect(preview).toHaveText('+ 0.4678 mV/V');
+
+  // Schmales Fenster: Dialog passt, nichts wird abgeschnitten.
+  await page.setViewportSize({ width: 360, height: 740 });
+  const box = (await dialog.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(360);
+  for (const n of [1, 7]) {
+    const c = (await cell(n).boundingBox())!;
+    expect(c.x).toBeGreaterThanOrEqual(box.x);
+    expect(c.x + c.width).toBeLessThanOrEqual(box.x + box.width);
+  }
+  await cellShot(page, 'zellentext-dialog-360.png');
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  const request = page.waitForRequest('**/live/setup');
+  await free.press('Enter');
+  expect((await request).postDataJSON()).toEqual({ cell_text: '+ 0.4678 ' });
+  await expect(dialog).toBeHidden();
+  await expect(left.locator('[data-step="fokus"]')).toHaveAttribute('data-state', 'running');
+  expect(posted).toEqual([{ cell_text: '+ 0.4678 ' }]);
+  expect(errors).toEqual([]);
+});
+
+test('409 needs_cell_text: Server meldet fehlenden Adapter, Seite fragt den Wert und sendet erneut', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/__test__/state', {});
+  const bodies: unknown[] = [];
+  await page.route('**/live/setup', async (route) => {
+    bodies.push(route.request().postDataJSON());
+    if (bodies.length === 1) {
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({
+        error: 'Kein RS232-Anschluss zum GSV-2AS gefunden (/dev/ttyUSB0 fehlt). Aktuellen Wert der Anzeige eingeben, dann startet die Einrichtung.',
+        needs_cell_text: true, port: '/dev/ttyUSB0' }) });
+    } else await route.continue();
+  });
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Aktuellen Wert der Anzeige eingeben' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Kein RS232-Anschluss zum GSV-2AS gefunden');
+  // Kein stehender Fehlerhinweis: die Seite behandelt die Antwort selbst.
+  await expect(page.locator('.toast')).toHaveCount(0);
+  await dialog.getByLabel('oder Wert eintippen').fill('0,4678');
+  await dialog.getByRole('button', { name: 'Einrichtung starten' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('complementary', { name: 'Ablauf' }).locator('[data-step="fokus"]'))
+    .toHaveAttribute('data-state', 'running');
+  expect(bodies).toEqual([{ cell_text: null }, { cell_text: '+ 0.4678 ' }]);
+  expect(errors.filter((e) => !e.includes('409'))).toEqual([]);
+});
+
+test('Mit RS232: Wert von Hand über den Pfeil, ohne Pfeil serieller Weg', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/__test__/state', {});
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Referenzwert der Einrichtung' }).click();
+  const pop = page.getByRole('dialog', { name: 'Referenzwert der Einrichtung' });
+  await expect(pop).toContainText('RS232-Anschluss zum GSV-2AS gefunden (/dev/ttyUSB0)');
+  await pop.getByRole('button', { name: 'Wert von Hand eingeben …' }).click();
+  await expect(pop).toBeHidden();
+  const dialog = page.getByRole('dialog', { name: 'Aktuellen Wert der Anzeige eingeben' });
+  await expect(dialog).toContainText('statt ihn über RS232 vom GSV-2AS zu lesen');
+  await page.keyboard.type('5487,00');
+  await expect(dialog.locator('[data-part="preview-text"]')).toHaveText('+5487.00 mV/V');
+  const request = page.waitForRequest('**/live/setup');
+  await page.keyboard.press('Enter');
+  expect((await request).postDataJSON()).toEqual({ cell_text: '+5487.00 ' });
+  // Ohne Pfeil bleibt es beim seriellen Weg.
+  await hook(page, '/__test__/state', {});
+  const serial = page.waitForRequest('**/live/setup');
+  await title.getByRole('button', { name: 'Einrichtung starten', exact: true }).click();
+  expect((await serial).postDataJSON()).toEqual({ cell_text: null });
+  expect(errors).toEqual([]);
+});
+
+test('Ohne RS232: Laufoptionen ohne Referenz-Vorgabe, Werteplan gesperrt', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await hook(page, '/__test__/state', { state: 'confirmed', profile: { confirmed_by: 'L. Hentschke' },
+    setup: { proposal_revision: 'rev-1', reference_kind: 'eingabe' }, setup_reference: NO_ADAPTER });
+  const title = page.getByRole('banner');
+  await title.getByRole('button', { name: 'Laufoptionen' }).click();
+  const pop = page.getByRole('dialog', { name: 'Laufoptionen' });
+  const reference = pop.getByRole('checkbox', { name: 'Referenz vom GSV-2AS mitschreiben' });
+  await expect(reference).not.toBeChecked();
+  await expect(reference).toBeEnabled();
+  await expect(pop).toContainText('kein RS232-Anschluss gefunden');
+  const plan = pop.getByLabel(/^Werteplan/);
+  await expect(plan).toBeDisabled();
+  await expect(pop).toContainText('Werteplan braucht den RS232-Anschluss zum GSV-2AS');
+  // Die Wahl des Bedieners bleibt über die Statusabrufe stehen.
+  await reference.check();
+  await page.waitForTimeout(1200);
+  await expect(reference).toBeChecked();
+  await reference.uncheck();
+  const run = page.waitForRequest('**/live/run/start');
+  await pop.getByRole('button', { name: 'Lauf starten', exact: true }).click();
+  expect((await run).postDataJSON()).toMatchObject({ reference: false, norm_schedule: null });
+  expect(errors).toEqual([]);
+});
+
+test('Bestätigen: angepasste Toleranz mit von Hand eingegebener Referenz nennt die Herkunft', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const scene = JSON.parse(readFileSync(`${__dirname}/fixtures/live/scene-setup_ready_warnung.json`, 'utf-8'));
+  scene.setup.reference_kind = 'eingabe';
+  scene.setup.gegenlesen = { status: 'WARNUNG', metrics: { tolerance: { possible: true, factor: 1.44, d_max: 1.92,
+    max_d_best: 2.2, reason: null, reference_kind: 'eingabe', anzeige_unveraendert: { unveraendert: true, standbilder: 2,
+      zellen: [1, 2, 3, 4, 5, 6, 7], beste_vermutungen: ['0.60972', '0.60972'] } } } };
+  scene.setup_reference = NO_ADAPTER;
+  await hook(page, '/__test__/state', scene);
+  const inspector = page.getByRole('complementary', { name: 'Inspektor' });
+  const group = inspector.getByRole('group', { name: 'Lesetoleranz' });
+  await expect(group.getByRole('radio', { name: 'Angepasste Toleranz ×1.44' })).toBeVisible();
+  await expect(group).toContainText('Referenz: von Hand eingegeben – Anzeige war während der Standbilder unverändert');
+  await expect(group).toContainText('gegen den von Hand eingegebenen Wert');
+  await expect(inspector).toContainText('von Hand eingegeben');
+  await cellShot(page, 'bestaetigen-toleranz-eingabe.png');
   expect(errors).toEqual([]);
 });

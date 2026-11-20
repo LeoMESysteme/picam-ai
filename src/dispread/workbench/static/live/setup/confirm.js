@@ -7,6 +7,9 @@
 
 // Gesamturteil FEHLER: Bestaetigen ist gesperrt, der Weg ist Neu einrichten (OQ-71).
 export const FAILED_CONFIRM_REASON = 'Bestätigen nicht möglich: Prüfung FEHLER – neu einrichten';
+// Angepasste Toleranz mit von Hand eingegebenem Wert: der Server erlaubt sie nur,
+// wenn alle Standbilder in den vergleichbaren Zellen gleich gelesen wurden.
+export const MANUAL_REFERENCE_NOTE = 'Referenz: von Hand eingegeben – Anzeige war während der Standbilder unverändert';
 
 export function confirmModel(status) {
   const setup = status?.setup || {};
@@ -24,7 +27,11 @@ export function confirmModel(status) {
     ackReason: warnReasons.length ? warnReasons.join(', ') : null,
     tolerance: tolerance?.possible
       ? {factor: tolerance.factor,
-        note: tolerance.hinweis || `Angepasste Lesetoleranz ×${tolerance.factor}: liest diese Aufstellung, erhöht aber das Risiko von Fehllesungen gegenüber der Standardtoleranz. Geprüft nur in dieser Aufstellung gegen den Referenzwert.`}
+        note: tolerance.hinweis || `Angepasste Lesetoleranz ×${tolerance.factor}: liest diese Aufstellung, erhöht aber das Risiko von Fehllesungen gegenüber der Standardtoleranz. ` +
+          (tolerance.reference_kind === 'eingabe' ? 'Geprüft nur in dieser Aufstellung gegen den von Hand eingegebenen Wert.'
+            : 'Geprüft nur in dieser Aufstellung gegen den Referenzwert.'),
+        reference: tolerance.reference_kind === 'eingabe' && tolerance.anzeige_unveraendert?.unveraendert === true
+          ? MANUAL_REFERENCE_NOTE : null}
       : null,
     block: status?.run_block && visible
       ? (tolerance?.possible
@@ -65,7 +72,8 @@ const TEMPLATE = `
       <label><input type="radio" name="confirm-tolerance" data-field="tolerance-standard" checked><span>Standardtoleranz</span></label>
       <label><input type="radio" name="confirm-tolerance" data-field="tolerance"><span data-part="tolerance-label"></span></label>
     </div>
-    <p class="note" data-part="tolerance-text"></p></fieldset>
+    <p class="note" data-part="tolerance-text"></p>
+    <p class="note ref" data-part="tolerance-ref" hidden></p></fieldset>
   <div class="fa"><button type="button" class="primary" data-part="submit">Bestätigen</button></div>
   <div class="fh" data-part="state" aria-live="polite"></div>
   <div class="fh err-t" data-part="error" role="alert" hidden></div>`;
@@ -111,6 +119,7 @@ export function mountConfirm(host, client, {locked = () => false, onChange = () 
     q('[data-part="tolerance"]').hidden = !model.tolerance;
     q('[data-part="tolerance-label"]').textContent = model.tolerance ? `Angepasste Toleranz ×${model.tolerance.factor}` : '';
     q('[data-part="tolerance-text"]').textContent = model.tolerance ? model.tolerance.note : '';
+    set('tolerance-ref', model.tolerance?.reference);
     const submit = q('[data-part="submit"]');
     submit.disabled = !ready();
     const f = fields();

@@ -347,7 +347,8 @@
       }
     ],
     "auswahl": "automatisch",
-    "centre_results": []
+    "centre_results": [],
+    "reference_kind": "seriell"
   },
   "run": {
     "started_at_utc": "2026-11-04T12:00:00+00:00",
@@ -509,6 +510,10 @@
   },
   "step": null,
   "simulate": false,
+  "setup_reference": {
+    "serial_present": true,
+    "port": "/dev/ttyUSB0"
+  },
   "profile": null,
   "run_block": null,
   "run_hint": null,

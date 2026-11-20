@@ -40,7 +40,8 @@ def add_live_routes(app: web.Application, service, csrf_of: Callable[[web.Reques
         try:
             await asyncio.to_thread(fn, **kwargs)
         except LiveError as exc:
-            return web.json_response({"error": str(exc)}, status=409)
+            # CellTextRequired traegt needs_cell_text: die Seite fragt dann den Anzeigewert ab.
+            return web.json_response({"error": str(exc), **getattr(exc, "payload", {})}, status=409)
         return web.json_response({"ok": True})
 
     async def setup(request):

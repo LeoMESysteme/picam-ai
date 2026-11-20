@@ -698,7 +698,10 @@ def test_raw_cell_depths_uses_second_darkest_zero_shift():
 
 @pytest.mark.parametrize('kind,best,gap,distance,blank,possible,reason', [
     ('seriell', '2', 1.3, 2.2, True, True, None),
-    ('eingabe', '2', 1.3, 2.2, True, False, 'nur_mit_seriellem_referenzwert'),
+    # Von Hand eingegebener Wert: erlaubt, weil beide Standbilder in jeder vergleichbaren Zelle gleich lesen.
+    ('eingabe', '2', 1.3, 2.2, True, True, None),
+    ('eingabe', '3', 1.3, 2.2, True, False, 'beste_vermutung_widerspricht_referenz'),
+    ('unbekannt', '2', 1.3, 2.2, True, False, 'referenzart_unbekannt'),
     ('seriell', '3', 1.3, 2.2, True, False, 'beste_vermutung_widerspricht_referenz'),
     ('seriell', '2', .5, 2.2, True, False, 'abstand_zur_zweitbesten_zu_klein'),
     ('seriell', '2', 1.3, 3.2, True, False, 'faktor_ueber_2'),
@@ -743,3 +746,64 @@ def test_tolerance_requires_serial_correct_candidates_and_verified_reread(
         assert tolerance['max_d_best'] == 2.2
         assert factors == [1, 1.44]
         assert 'Toleranz x1.44' in result.metrics['hinweis']
+    assert tolerance['reference_kind'] == kind
+    if kind == 'eingabe':
+        # Beleg: Zellen 1-7 ohne die maskierte Zelle 6, je Standbild dieselbe beste Vermutung.
+        assert tolerance['anzeige_unveraendert'] == {
+            'unveraendert': True, 'standbilder': 2, 'zellen': [1, 2, 3, 4, 5, 7],
+            'beste_vermutungen': [f'0.609{best}', f'0.609{best}']}
+        if possible:
+            assert 'Referenz von Hand eingegeben' in result.metrics['hinweis']
+    else:
+        assert 'anzeige_unveraendert' not in tolerance
+
+
+@pytest.mark.parametrize('kind,possible,reason', [('eingabe', False, 'anzeige_veraendert'),
+                                                   ('seriell', False, 'beste_vermutung_widerspricht_referenz')])
+def test_tolerance_with_manual_value_needs_unchanged_display(monkeypatch, tmp_path, kind, possible, reason):
+    from types import SimpleNamespace
+
+    from dispread import setup_checks
+
+    reads = {'count': 0}
+
+    def factory(*args, d_max_factor=1.0):
+        def read(*_):
+            reads['count'] += 1
+            cells = [{'text': ch, 'best': ch, 'd_best': .5, 'd_second': 2, 'reason': None}
+                     for ch in '+0.60972 ']
+            # Zweites Standbild: Zelle 7 schwankt auf 3, ungelesen (kein Widerspruch, nur WARNUNG).
+            changed = reads['count'] % 2 == 0
+            cells[7].update(text=None, best='3' if changed else '2', d_best=2.2, d_second=3.5,
+                            reason='zelle_unbekannt')
+            return SimpleNamespace(diagnostics={'cells': cells, 'blank_cells_ok': True,
+                                                'reject_reason': 'zelle_unbekannt'})
+        return SimpleNamespace(read=read, _t=SimpleNamespace(d_max=1.92, margin_min=.93))
+
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', factory)
+    result = setup_checks.diagnose_reader([(display(), '+0.60972 ')] * 2, QUAD, tmp_path / 't', 'sha',
+                                         reference_kind=kind)
+    assert result.status == 'WARNUNG'
+    tolerance = result.metrics['tolerance']
+    assert (tolerance['possible'], tolerance['reason']) == (possible, reason)
+    if kind == 'eingabe':
+        assert tolerance['anzeige_unveraendert']['unveraendert'] is False
+        assert tolerance['anzeige_unveraendert']['beste_vermutungen'] == ['0.60972', '0.60973']
+
+
+def test_tolerance_with_manual_value_without_cell_reads_stays_refused(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from dispread import setup_checks
+
+    def factory(*args, d_max_factor=1.0):
+        diag = {'cells': [{'text': None, 'reason': 'zelle_unbekannt'} for _ in range(9)], 'blank_cells_ok': True,
+                'reject_reason': 'zelle_unbekannt'}
+        return SimpleNamespace(read=lambda *_: SimpleNamespace(diagnostics=diag),
+                               _t=SimpleNamespace(d_max=1.92, margin_min=.93))
+
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', factory)
+    result = setup_checks.diagnose_reader([(display(), '+0.60972 ')] * 2, QUAD, tmp_path / 't', 'sha',
+                                         reference_kind='eingabe')
+    tolerance = result.metrics['tolerance']
+    assert (tolerance['possible'], tolerance['reason']) == (False, 'standbild_lesedaten_fehlen')

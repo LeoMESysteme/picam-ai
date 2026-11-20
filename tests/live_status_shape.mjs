@@ -144,6 +144,7 @@ function referenceEval(v, p) {
 const root = fields({
   state: choice('idle', 'setup_running', 'setup_failed', 'setup_ready', 'confirmed', 'running', 'stopped', 'error'),
   step: nullable(string), error: nullable(string), simulate: boolean,
+  setup_reference: fields({ serial_present: boolean, port: string }),
   camera: fields({ running: boolean, stalled: boolean, error: nullable(string), frames: integer,
                    gaps: integer, source: object, last_start: nullable(object) }),
   storage: fields({ free_bytes: nullable(nonnegative), reserve_bytes: nonnegative,

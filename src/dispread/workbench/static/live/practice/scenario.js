@@ -381,6 +381,9 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       storage: base?.storage ? copy(base.storage) : {free_bytes: 18_400_000_000, reserve_bytes: 2_000_000_000, level: 'ok', message: '18.40 GB frei'},
       system: Number.isFinite(base?.system?.cpu_window_s) ? copy(base.system) : {...SYSTEM},
       release_notice: typeof base?.release_notice === 'string' ? base.release_notice : '',
+      // Wie an der Werkbank: ohne RS232-Adapter fragt Einrichten den Anzeigewert ab (nur gezeigt, nie gesendet).
+      setup_reference: typeof base?.setup_reference?.serial_present === 'boolean' ? copy(base.setup_reference)
+        : {serial_present: true, port: '/dev/ttyUSB0'},
       session_id: sessionId,
       setup: phase === 'idle' ? null : setupBlock(),
       profile: profile ? {...profile} : null,

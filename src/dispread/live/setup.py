@@ -89,6 +89,11 @@ FOCUS_DIAGNOSTIC_MARGIN_FRACTION = 0.25
 SERIAL_PORT = "/dev/ttyUSB0"
 SERIAL_BAUDRATE = 38400
 
+
+def reference_adapter_present(port: str = SERIAL_PORT) -> bool:
+    """RS232-Referenzadapter des GSV-2AS angesteckt? Nur der Geraetepfad, ohne Oeffnen."""
+    return Path(port).exists()
+
 HintBox = tuple[float, float, float, float]
 CellTextSource = Callable[[Callable[[], np.ndarray]], tuple[np.ndarray, str]]
 
@@ -923,8 +928,8 @@ def assist_measure(
         if first_offset.status != "FEHLER" and second_offset.status == "FEHLER":
             raise SetupError(
                 "Anzeige hat sich zwischen den Standbildern geaendert (2j: erstes Standbild passt zum Zellentext, "
-                "zweites nicht). Zellentext-Feld leer lassen - der Wert wird dann vom GSV-2AS gelesen - "
-                "oder schwankende Ziffern mit ? markieren, z. B. +0.4678?"
+                "zweites nicht). Neu einrichten, wenn die Anzeige ruhig steht, und schwankende Ziffern mit ? "
+                "markieren, z. B. +0.4678? - mit RS232-Anschluss liest die Werkbank den Wert selbst vom GSV-2AS"
             )
         raise SetupError("Rasterversatz 2j meldet FEHLER; kein Vorschlag")
     final_checks = check_setup(

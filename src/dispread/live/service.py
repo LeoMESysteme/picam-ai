@@ -26,7 +26,7 @@ from dispread.charcells import CharGrid
 from dispread.focus_sweep import DEFAULT_FOCUS_START
 from dispread.frames import FrameSource
 from dispread.frames.uvc_source import UvcError, UvcSource
-from dispread.gsv2as_cell_text import validate_offline_cell_text
+from dispread.gsv2as_cell_text import normalize_cell_text
 from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
 from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
@@ -66,6 +66,22 @@ class LiveInputError(LiveError):
     """Ungueltige Anfrage; HTTP 400 statt eines Zustandskonflikts."""
 
 
+class CellTextRequired(LiveError):
+    """Einrichtung ohne Zellentext, aber kein RS232-Referenzadapter: erst den Wert erfragen."""
+
+    def __init__(self, port: str) -> None:
+        super().__init__(
+            f"Kein RS232-Anschluss zum GSV-2AS gefunden ({port} fehlt). Aktuellen Wert der Anzeige "
+            "eingeben, dann startet die Einrichtung."
+        )
+        self.port = port
+
+    @property
+    def payload(self) -> dict:
+        """Maschinenlesbarer Zusatz der HTTP-Antwort (409)."""
+        return {"needs_cell_text": True, "port": self.port}
+
+
 def _tolerance_possible(metrics: dict) -> bool:
     return (metrics.get("tolerance") or {}).get("possible") is True and not metrics.get("contradictions")
 
@@ -102,7 +118,7 @@ def run_block_reason(proposal: dict | None) -> str | None:
     if metrics.get("rejection_reasons", {}).get("zelle_widerspricht_referenz") and metrics.get("contradictions"):
         first = metrics["contradictions"][0]
         return (
-            "Lauf gesperrt: Der Leser widerspricht bei der Einrichtung dem Referenzwert des GSV-2AS "
+            "Lauf gesperrt: Der Leser widerspricht bei der Einrichtung dem Referenzwert "
             f"(Zelle {first['cell']}: gelesen '{first['read']}', Referenz '{first['reference']}'). Neu einrichten.{hint}"
         )
     reasons = ", ".join(f"{name} x{count}" for name, count in metrics.get("rejection_reasons", {}).items()) or "-"
@@ -183,6 +199,7 @@ class LiveService:
         disk_usage: Callable[[Path], Any] | None = None,
         cpu_reader: Callable[[], str] | None = None,
         bridge_hub=None,
+        reference_present: Callable[[], bool] | None = None,
     ) -> None:
         self._owner = owner
         self._bridge_hub = bridge_hub
@@ -197,6 +214,8 @@ class LiveService:
         self._simulate = simulate
         self._source_for = source_for or (lambda settings: UvcSource(settings))
         self._serial_opener = serial_opener or self._open_serial
+        # Nur Geraetepfad pruefen, nie oeffnen (der Statusabruf kommt alle 500 ms).
+        self._reference_present = reference_present or (lambda: live_setup.reference_adapter_present())
         self._setup_runner = setup_runner or self._run_setup
         self._wall = wall or (lambda: datetime.now(UTC))
         self._monotonic = monotonic or time.monotonic
@@ -241,6 +260,8 @@ class LiveService:
         self._reference_eval: dict | None = None
         self._setup_cancel = threading.Event()
         self._setup_thread: threading.Thread | None = None
+        # "seriell" (GSV-2AS ueber RS232) oder "eingabe" (Wert von Hand) der laufenden/letzten Einrichtung.
+        self._setup_reference_kind: str | None = None
         self._preview = PreviewEncoder(lambda: self._owner.latest(), self._preview_hud,
                                        governor=RateGovernor(self._monotonic))
 
@@ -296,7 +317,16 @@ class LiveService:
             raise LiveError(f"Zu wenig Speicherplatz: {storage['free_bytes'] / 1e9:.2f} GB frei, "
                             f"{needed / 1e9:.2f} GB benoetigt. Alte Laufdaten pruefen und aufraeumen.")
 
+    def setup_reference_status(self) -> dict:
+        """Ob die Einrichtung den Wert seriell vom GSV-2AS lesen kann (nur Pfadpruefung)."""
+        try:
+            present = bool(self._reference_present())
+        except OSError:
+            present = False
+        return {"serial_present": present, "port": live_setup.SERIAL_PORT}
+
     def status(self, *, full: bool = False) -> dict:
+        setup_reference = self.setup_reference_status()
         with self._lock:
             setup = None
             if self._proposal is not None:
@@ -340,6 +370,7 @@ class LiveService:
                 )
             if setup is not None:
                 setup["grid"] = deepcopy(self._setup_grid)
+                setup["reference_kind"] = self._setup_reference_kind
             run = None
             if self._session is not None:
                 latest = self._session.latest
@@ -396,6 +427,7 @@ class LiveService:
                 "step": self._step,
                 "error": self._error,
                 "simulate": self._simulate,
+                "setup_reference": setup_reference,
                 "camera": self._owner.status(),
                 "release_notice": RELEASE_NOTICE,
                 "session_id": None if self._session_dir is None else self._session_dir.name,
@@ -571,11 +603,14 @@ class LiveService:
                     f"Kamera laeuft nicht: {camera_status.get('error')} — 'Kamera neu verbinden'"
                 )
             text = None
-            if cell_text is not None and cell_text != "":
+            if cell_text is not None and not (isinstance(cell_text, str) and not cell_text.strip()):
                 try:
-                    text = validate_offline_cell_text(cell_text)
+                    text = normalize_cell_text(cell_text)
                 except ValueError as exc:
                     raise LiveError(f"Zellentext: {exc}") from exc
+            elif not self.setup_reference_status()["serial_present"]:
+                # Frueh fragen statt nach Minuten Fokus/Kamera/Belichtung am Port zu scheitern.
+                raise CellTextRequired(live_setup.SERIAL_PORT)
             stem = "live-" + self._wall().strftime("%Y%m%dT%H%M%SZ")
             session_dir = self._data_dir / stem
             # Nie in einen vorhandenen Setup-Ordner schreiben: Belege verworfener
@@ -595,6 +630,7 @@ class LiveService:
                 self._reset_setup_live()
                 self._setup_cancel.clear()
                 self._session_dir, self._proposal = session_dir, None
+                self._setup_reference_kind = "seriell" if text is None else "eingabe"
                 self._setup_grid = None
                 self._stability_frames = ()
                 self._run_block = self._run_hint = self._test_run = self._reader_tolerance = None
@@ -894,7 +930,8 @@ class LiveService:
                     port = self._serial_opener()
                 except Exception as exc:  # noqa: BLE001
                     raise live_setup.SetupError(
-                        f"kein GSV-2AS an {live_setup.SERIAL_PORT} ({exc}) - Zellentext eingeben"
+                        f"kein GSV-2AS an {live_setup.SERIAL_PORT} ({exc}) - neu einrichten und den "
+                        "Wert der Anzeige von Hand eingeben (Einrichtung starten, Pfeil: Wert von Hand eingeben)"
                     ) from exc
                 def text_source(capture):
                     return live_setup.capture_with_text(
@@ -1009,14 +1046,26 @@ class LiveService:
                     "metrics", {}).get("tolerance", {})
                 if tolerance.get("possible") is not True:
                     raise LiveError("Angepasste Toleranz fuer diesen Vorschlag nicht moeglich")
+                kind = tolerance.get("reference_kind", "seriell")
+                unchanged = tolerance.get("anzeige_unveraendert")
+                if kind == "eingabe" and not (isinstance(unchanged, dict) and unchanged.get("unveraendert") is True):
+                    # Von Hand eingegebener Wert belegt die Toleranz nur bei unveraenderter Anzeige.
+                    raise LiveError("Angepasste Toleranz nicht moeglich: von Hand eingegebener Wert ohne Beleg, "
+                                    "dass die Anzeige waehrend der Standbilder unveraendert war")
                 reader_tolerance = {
                     "factor": tolerance["factor"], "d_max_templates": tolerance["d_max"],
                     "d_max_run": tolerance["d_max"] * tolerance["factor"],
                     "max_d_best": tolerance["max_d_best"],
+                    "reference_kind": kind,
                     "hinweis": (f"Angepasste Lesetoleranz ×{tolerance['factor']}: liest diese Aufstellung, "
                                 "erhöht aber das Risiko von Fehllesungen gegenüber der Standardtoleranz. "
-                                "Geprüft nur in dieser Aufstellung gegen den Referenzwert."),
+                                + ("Geprüft nur in dieser Aufstellung gegen den von Hand eingegebenen Wert; "
+                                   "die Anzeige war während der Standbilder unverändert."
+                                   if kind == "eingabe" else
+                                   "Geprüft nur in dieser Aufstellung gegen den Referenzwert.")),
                 }
+                if kind == "eingabe":
+                    reader_tolerance["anzeige_unveraendert"] = deepcopy(unchanged)
             try:
                 profile: SessionProfile = live_setup.confirm_proposal(
                     proposal, confirmed_by=confirmed_by, resolution_threshold_px=RESOLUTION_ERROR_PX,
@@ -1038,6 +1087,7 @@ class LiveService:
                 "run_block": None if reader_tolerance else run_block_reason(proposal),
                 "run_hint": None if reader_tolerance else run_hint_reason(proposal),
                 "reader_tolerance": reader_tolerance,
+                "reference_kind": self._setup_reference_kind,
             }
             (session_dir / "confirmation.json").write_text(
                 json.dumps(confirmation, indent=2, ensure_ascii=False), encoding="utf-8",
@@ -1077,6 +1127,9 @@ class LiveService:
             schedule = parse_norm_schedule(norm_schedule)
             if schedule is not None and not reference:
                 raise ValueError("Werteplan braucht Referenzaufzeichnung")
+            if schedule is not None and not self.setup_reference_status()["serial_present"]:
+                raise ValueError(f"Werteplan braucht den RS232-Anschluss zum GSV-2AS "
+                                 f"({live_setup.SERIAL_PORT} nicht gefunden)")
             output = normalize_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
             if test_override and output['transport'] != 'off':
                 raise ValueError('Testlauf erlaubt keine externe Ausgabe')

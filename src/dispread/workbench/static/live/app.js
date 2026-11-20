@@ -10,7 +10,8 @@ import {openPreview} from './mjpeg.js';
 import {mountViewer} from './viewer/view.js';
 import {enableRegionEditing, mountRegionPanel} from './viewer/regions-edit.js';
 import {cameraView, statusView, stepRows} from './model.js';
-import {dec, esc, mountShell, renderStatusbar, renderTitle, setPracticeBand} from './shell.js';
+import {dec, esc, mountShell, renderStatusbar, renderTitle, setPracticeBand, setupReferenceView} from './shell.js';
+import {openCellTextDialog} from './setup/cell-text.js';
 import {renderSteps} from './setup/steps.js';
 import {focusChartModel, renderFocusChart, FOCUS_VERIFY_RATIO} from './setup/focus-chart.js';
 import {exposureHTML} from './setup/exposure.js';
@@ -53,8 +54,10 @@ function leadHTML(status, conn) {
   if (status.state === 'setup_running' && !conn?.offline) return '';
   let detail = view.detail;
   if (status.state === 'idle' && !conn?.offline && !status.error) {
+    const manual = setupReferenceView(status.setup_reference)?.present === false
+      ? ' Ohne RS232-Anschluss fragt sie zuerst den aktuellen Wert der Anzeige ab.' : '';
     detail = status.camera?.running && !status.camera?.stalled
-      ? 'Kamera liefert Bilder. Anzeige vollständig ins Bild bringen, dann <b>Einrichtung starten</b>. Dauer etwa eine Minute.'
+      ? `Kamera liefert Bilder. Anzeige vollständig ins Bild bringen, dann <b>Einrichtung starten</b>. Dauer etwa eine Minute.${manual}`
       : esc(cameraView(status.camera || {}));
     return `<div class="lead"><h2>${esc(view.headline)}</h2><p>${detail}</p></div>`;
   }
@@ -102,11 +105,14 @@ function intro(status) {
     Array.isArray(source.size) ? `${source.size[0]}×${source.size[1]}` : null].filter(Boolean).join(' · ') || '–';
   const storage = status.storage?.free_bytes == null ? (status.storage?.message || '–')
     : `${dec(status.storage.free_bytes / 1e9, 2)} GB frei`;
+  const reference = setupReferenceView(status.setup_reference);
   return '<div class="ins"><h3>Einrichtung</h3><p>Die Einrichtung läuft selbsttätig: Fokus, Kamera, Belichtung, ' +
     'Standbilder und Vorschlag. Danach den Vorschlag prüfen und mit Namen bestätigen.</p>' +
     '<p>Während der Einrichtung Aufbau und Kamera nicht berühren.</p></div>' +
     `<div class="blk"><h4>Voraussetzungen</h4><dl class="kv2"><dt>Kamera</dt><dd>${esc(camera)}</dd>` +
-    `<dt>Speicher</dt><dd>${esc(storage)}</dd></dl></div>`;
+    `<dt>Speicher</dt><dd>${esc(storage)}</dd>` +
+    (reference ? `<dt>Referenzwert</dt><dd class="t" title="${esc(reference.text)}">${esc(reference.short)}</dd>` : '') +
+    '</dl></div>';
 }
 
 // Inspektor folgt dem Ablauf (Mock): Fokus waehrend der Fokussuche,
@@ -134,6 +140,7 @@ function currentTab(status, ui) {
   return manual && manual.auto === auto ? manual.tab : auto;
 }
 
+const REFERENCE_KIND = {seriell: 'RS232 (GSV-2AS)', eingabe: 'von Hand eingegeben'};
 const STILL_PHASE = {mitteln: 'Standbild mitteln', zelltext: 'Zellentext', raster: 'Raster einpassen',
   stabilitaet: 'Ruhe abwarten', zweites_standbild: 'Zweites Standbild', gegenlesen: 'Gegenlesen'};
 
@@ -183,7 +190,9 @@ function stepInfoHTML(status) {
       `${verdict ? ` Gesamturteil <b class="${verdict.cls}">${esc(verdict.word)}</b>${why ? ` (${esc(why)})` : ''}.` : ''}</p>` +
       '<p class="note">Das Abtastbild (overlay_sampling) zeigt das feste Punktraster und hängt nicht von den Rahmenbereichen ab.</p></div>' +
       `<div class="blk"><dl class="kv2"><dt>Raster</dt><dd>${esc(cells)}</dd><dt>Einheit</dt><dd>mV/V</dd>` +
-      `<dt>Rahmenbereiche</dt><dd>${Array.isArray(setup.regions) ? setup.regions.length : '–'}</dd></dl></div>`;
+      `<dt>Rahmenbereiche</dt><dd>${Array.isArray(setup.regions) ? setup.regions.length : '–'}</dd>` +
+      (REFERENCE_KIND[setup.reference_kind] ? `<dt>Referenz</dt><dd class="t">${REFERENCE_KIND[setup.reference_kind]}</dd>` : '') +
+      '</dl></div>';
   }
   if (status.state === 'confirmed') {
     const by = status.profile?.confirmed_by;
@@ -361,19 +370,39 @@ if (typeof document !== 'undefined') {
       regionPanel = mountRegionPanel(host.querySelector('[data-part="regions"]'), regions);
     }};
 
-  const act = async (path, body) => {
+  // quiet(result): abgelehnte Antwort, die der Aufrufer selbst behandelt (kein Hinweis).
+  const act = async (path, body, {quiet = null} = {}) => {
     ui.busy = true;
     render();
     let result;
     try { result = await client.post(path, body); } finally { ui.busy = false; }
     // Abgelehnte Aktion: stehender Hinweis mit dem Servertext (Wahrheitsregel 6).
     if (result.ok) closeToast('aktion');
-    else toast({level: 'err', title: result.error, sticky: true, key: 'aktion'});
+    else if (!quiet?.(result)) toast({level: 'err', title: result.error, sticky: true, key: 'aktion'});
     render();
     return result;
   };
+  // Jede Einrichtung (Titelleiste, Neu einrichten, Dialog "Anzeige bewegt", Uebungslauf)
+  // geht hier durch. Ohne RS232-Adapter oder auf Wunsch fragt der Dialog zuerst den Anzeigewert ab. Meldet der Server trotzdem
+  // needs_cell_text (Adapter gerade abgezogen), wird gefragt und erneut gesendet.
+  // Ein frueher eingegebener Wert wird nie wiederverwendet (er kann veraltet sein).
+  const needsCellText = (result) => Boolean(!result.ok && result.data?.needs_cell_text);
+  const beginSetup = async (send, {manual = false} = {}) => {
+    const reference = status?.setup_reference;
+    let cellText = null;
+    if (manual || reference?.serial_present === false) {
+      cellText = await openCellTextDialog({serialPresent: reference?.serial_present, port: reference?.port});
+      if (cellText === null) return null;
+    }
+    const result = await send({cell_text: cellText}, {quiet: needsCellText});
+    if (!needsCellText(result) || cellText !== null) return result;
+    const asked = await openCellTextDialog({reason: result.error, serialPresent: false, port: result.data.port});
+    if (asked === null) return result;
+    return send({cell_text: asked});
+  };
+  const sendSetup = (body, options) => act('/live/setup', body, options);
   const handlers = {
-    setup: (cellText) => act('/live/setup', {cell_text: cellText || null}),
+    setup: (options = {}) => beginSetup(sendSetup, {manual: Boolean(options?.manual)}),
     // Im Uebungslauf beantwortet das Szenario den Abbruch (client.useSource), nie der Server.
     cancelSetup: () => act('/live/setup/cancel'),
     // Neu einrichten aus Vorschlag und Bestaetigung (OQ-71); eine Bestaetigung wird erst nach Rueckfrage verworfen.
@@ -385,7 +414,7 @@ if (typeof document !== 'undefined') {
           actions: [{label: 'Abbrechen', value: false, escape: true}, {label: 'Verwerfen und neu einrichten', value: true, primary: true, cls: 'danger', icon: 'redo'}]});
         if (!answer) return null;
       }
-      return act('/live/setup', {cell_text: null});
+      return beginSetup(sendSetup);
     },
     confirm: () => confirmUi?.submit(),
     // Optionen und Bestaetigungen im Pop-up (Referenz, Diagnosebilder, Werteplan, Testmodus).
@@ -567,8 +596,8 @@ if (typeof document !== 'undefined') {
 
   // Dialog "Anzeige bewegt" im Uebungslauf: nur an dieses Szenario, nie an den Server.
   const practiceRun = (scenario) => {
-    const only = (path, body) => (client.source() === scenario ? act(path, body) : Promise.resolve({ok: false}));
-    return {stop: () => only('/live/run/stop'), setup: () => only('/live/setup', {cell_text: null})};
+    const only = (path, body, options) => (client.source() === scenario ? act(path, body, options) : Promise.resolve({ok: false}));
+    return {stop: () => only('/live/run/stop'), setup: () => beginSetup((body, options) => only('/live/setup', body, options))};
   };
 
   // Vorschau nur bei sichtbarer Seite: ein Hintergrund-Tab kostet den Pi keine Kodierung.
@@ -609,7 +638,7 @@ if (typeof document !== 'undefined') {
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => drawStrip()).observe(timelineParts.canvas);
 
   // Dialog "Anzeige bewegt": dieselben Bedienschritte wie die Titelleiste.
-  const alertRun = {stop: () => act('/live/run/stop'), setup: () => act('/live/setup', {cell_text: null})};
+  const alertRun = {stop: () => act('/live/run/stop'), setup: () => beginSetup(sendSetup)};
   client.start((next) => {
     status = next;
     if (bridgeUi.isOpen()) bridgeUi.open({running: next.state === 'running', output: next.state === 'running' ? next.output : undefined});

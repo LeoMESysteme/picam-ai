@@ -288,7 +288,8 @@ class FakeLiveService:
                 "storage": {"free_bytes": 4_200_000_000, "reserve_bytes": 2_000_000_000, "level": "warn",
                             "message": "4.20 GB frei"},
                 "system": {"cpu_percent": 37.5, "cpu_window_s": 1.0},
-                "step": None, "simulate": False, "profile": None, "run_block": None, "run_hint": None, "test_run": None,
+                "step": None, "simulate": False, "setup_reference": {"serial_present": True, "port": "/dev/ttyUSB0"},
+                "profile": None, "run_block": None, "run_hint": None, "test_run": None,
                 "diagnostics": {"enabled": False, "reason": "kein Diagnoselauf"},
                 "diagnose_kopie": False, "last_mark": None, "previous_region_hint": None,
                 "last_start_rejection": None,
@@ -300,6 +301,9 @@ class FakeLiveService:
 
     def set_scene(self, name, *, test_run=False):
         state = scene_state(name)
+        if state.get("setup") is not None:
+            # Szenen stammen aus Einrichtungen mit seriellem Referenzwert (GSV-2AS ueber RS232).
+            state["setup"].setdefault("reference_kind", "seriell")
         if test_run:
             if state.get("run") is None:
                 raise ValueError("Testlauf nur in Laufszenen")
@@ -352,15 +356,28 @@ class FakeLiveService:
             return data
 
     def start_setup(self, *, cell_text=None):
-        from dispread.live.service import LiveError
+        from dispread.gsv2as_cell_text import normalize_cell_text
+        from dispread.live.service import CellTextRequired, LiveError
 
         with self._lock:
             state = self._status.get("state")
+            reference = copy.deepcopy(self._status["setup_reference"])
         if state == "running":
             raise LiveError("Lauf zuerst beenden")
         if state == "setup_running":
             raise LiveError("Einrichtung laeuft bereits")
+        # Wie LiveService.start_setup: Eingabe normalisieren, ohne Adapter erst den Wert erfragen.
+        if cell_text is not None and not (isinstance(cell_text, str) and not cell_text.strip()):
+            try:
+                normalize_cell_text(cell_text)
+            except ValueError as exc:
+                raise LiveError(f"Zellentext: {exc}") from exc
+        elif not reference["serial_present"]:
+            raise CellTextRequired(reference["port"])
         self.set_scene("setup_focus")
+        with self._lock:
+            # Der Adapterzustand gehoert zur Werkbank, nicht zur Szene.
+            self._status["setup_reference"] = reference
 
     def cancel_setup(self):
         from dispread.live.service import LiveError
@@ -432,6 +449,10 @@ class FakeLiveService:
     def start_run(self, *, test_override=False, reference=True, norm_schedule=None, diagnostics=False, output=None):
         from dispread.live.service import LiveError
 
+        with self._lock:
+            adapter = self._status["setup_reference"]["serial_present"]
+        if norm_schedule and not adapter:
+            raise LiveError("Werteplan braucht den RS232-Anschluss zum GSV-2AS (/dev/ttyUSB0 nicht gefunden)")
         try:
             config = normalize_output(output, reference_port='/dev/ttyUSB0' if reference else None)
             if test_override and config['transport'] != 'off':

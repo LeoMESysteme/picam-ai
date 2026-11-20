@@ -16,6 +16,8 @@ const TEXT = {
   planPlaceholder: 'optional: Faktor:Sekunden',
   planNote: 'schreibt in den RAM des GSV-2AS (laut Messung 2026-10 EEnow = 0 an diesem Gerät, kein EEPROM-Verschleiss; nicht live geprüft)',
   planNeedsReference: 'Werteplan braucht Referenzaufzeichnung',
+  noAdapter: 'kein RS232-Anschluss gefunden',
+  planNoAdapter: 'Werteplan braucht den RS232-Anschluss zum GSV-2AS – kein RS232-Anschluss gefunden.',
   testTitle: 'TESTLAUF starten?',
   testText: 'Die Lesesperre wird übergangen. Angezeigte Vermutungen und Werte sind nicht freigegeben und dürfen nicht für Messungen verwendet werden. Der Lauf wird als Testlauf gekennzeichnet (TESTLAUF.json).',
   planTitle: 'Werteplan anwenden?',
@@ -69,11 +71,13 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
   pop.el.innerHTML =
     `<div class="runblock" data-part="block" hidden><strong>${esc(TEXT.blockTitle)}</strong><p data-part="block-reason"></p></div>` +
     `<p class="note warn-t" role="status" data-part="hint" hidden></p>` +
-    `<label class="ck"><input type="checkbox" data-part="reference" checked> ${esc(TEXT.reference)}</label>` +
+    `<label class="ck"><input type="checkbox" data-part="reference" checked aria-describedby="run-ref-note"> ${esc(TEXT.reference)}</label>` +
+    `<p class="note warn-t ckn" id="run-ref-note" data-part="reference-note" hidden>${esc(TEXT.noAdapter)}</p>` +
     `<label class="ck"><input type="checkbox" data-part="diagnostics"> ${esc(TEXT.diagnostics)}</label>` +
     `<label class="f" for="norm-schedule">${esc(TEXT.plan)}</label>` +
-    `<input type="text" id="norm-schedule" class="mono" data-part="plan" placeholder="${esc(TEXT.planPlaceholder)}" autocomplete="off" spellcheck="false">` +
+    `<input type="text" id="norm-schedule" class="mono" data-part="plan" placeholder="${esc(TEXT.planPlaceholder)}" autocomplete="off" spellcheck="false" aria-describedby="norm-schedule-off">` +
     `<p class="note">${esc(TEXT.planNote)}</p>` +
+    `<p class="note warn-t" id="norm-schedule-off" data-part="plan-off" hidden>${esc(TEXT.planNoAdapter)}</p>` +
     `<fieldset class="outgrp" data-part="output"><legend>${esc(TEXT.outputGroup)}</legend>` +
     `<div class="seg" role="radiogroup" aria-label="${esc(TEXT.outputGroup)}">${PATHS.map(([key, label]) =>
       `<label><input type="radio" name="output-path" value="${key}" data-part="path-${key}"><span>${esc(label)}</span></label>`).join('')}</div>` +
@@ -109,6 +113,9 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
   const part = (name) => pop.el.querySelector(`[data-part="${name}"]`);
   let status = null;
   let resetKey = null;
+  // Zuletzt gesehener Adapterzustand: die Vorgabe der Referenz folgt nur seinem Wechsel,
+  // eine Wahl des Bedieners bleibt ueber die Statusabrufe stehen.
+  let adapterSeen;
   let busy = false;
   let wasLive = false;
   const showError = (text) => {
@@ -212,6 +219,16 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       part('test').hidden = !next?.run_block;
       if (!next?.run_block) part('override').checked = false;
       part('diagnostics').disabled = next?.state === 'running';
+      // Ohne RS232-Adapter: Referenz standardmaessig aus (waehlbar), Werteplan gesperrt.
+      const adapter = typeof next?.setup_reference?.serial_present === 'boolean' ? next.setup_reference.serial_present : null;
+      if (!live && adapter !== adapterSeen) {
+        if (adapter !== null) part('reference').checked = adapter;
+        adapterSeen = adapter;
+      }
+      part('reference-note').hidden = adapter !== false;
+      part('plan').disabled = adapter === false;
+      part('plan-off').hidden = adapter !== false;
+      if (adapter === false) part('plan').value = '';
       if (next?.state !== 'confirmed') pop.close();
       refresh();
     },
@@ -238,7 +255,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
           {label: 'Abbrechen', value: false, escape: true}, {label: 'Testlauf starten', value: true, primary: true}]}) !== true) return null;
         // Jeder Testlauf braucht einen neuen Haken.
         if (override) part('override').checked = false;
-        const schedule = part('plan').value.trim();
+        const schedule = part('plan').disabled ? '' : part('plan').value.trim();
         if (schedule && !part('reference').checked) {
           showError(TEXT.planNeedsReference);
           pop.open();

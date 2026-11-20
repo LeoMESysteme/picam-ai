@@ -49,6 +49,18 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip)
 
 
+@pytest.fixture(autouse=True)
+def _reference_adapter_present(monkeypatch):
+    """Mock-Tests haengen nie davon ab, ob /dev/ttyUSB0 am Rechner steckt.
+
+    Der RS232-Referenzadapter gilt als vorhanden; Tests fuer den Betrieb ohne
+    Adapter setzen `reference_present` von LiveService oder patchen erneut.
+    """
+    from dispread.live import setup as live_setup
+
+    monkeypatch.setattr(live_setup, "reference_adapter_present", lambda port=live_setup.SERIAL_PORT: True)
+
+
 def _write_clip(directory, *, base="sensor_boottime", frames=2, label="28,80", device_id="geraet-1"):
     directory.mkdir(parents=True, exist_ok=True)
     entries = []

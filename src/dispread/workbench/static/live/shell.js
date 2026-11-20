@@ -67,9 +67,17 @@ const TEMPLATE = `${ICONS}
   <div class="menu cammenu" role="menu" aria-label="Kamera" hidden></div>
 </div>`;
 
-// Feldtext der alten Live-Seite (woertlich).
-const CELL_TEXT_LABEL = 'Zellentext Zellen 0–8 – empfohlen: leer lassen (dann liest die Werkbank den Wert vom GSV-2AS). ' +
-  'Bei Eingabe schwankende Ziffern mit ? markieren, z. B. „+0.4678?“';
+// Referenzwert der Einrichtung: seriell vom GSV-2AS (RS232) oder von Hand
+// (Dialog setup/cell-text.js). status.setup_reference sagt, ob der Adapter steckt.
+export function setupReferenceView(reference) {
+  if (typeof reference?.serial_present !== 'boolean') return null;
+  const port = reference.port || '/dev/ttyUSB0';
+  return reference.serial_present
+    ? {present: true, tone: 'ok', short: `RS232 (${port})`,
+      text: `RS232-Anschluss zum GSV-2AS gefunden (${port}): Die Einrichtung liest den Wert selbst.`}
+    : {present: false, tone: 'stale', short: 'von Hand (kein RS232)',
+      text: `Kein RS232-Anschluss zum GSV-2AS gefunden (${port}): Beim Start wird der aktuelle Wert der Anzeige abgefragt.`};
+}
 
 let shell = null;
 
@@ -130,7 +138,7 @@ function togglePopover(open) {
   if (!pop || !toggle) return;
   pop.hidden = !open;
   toggle.setAttribute('aria-expanded', String(open));
-  if (open) pop.querySelector('input')?.focus();
+  if (open) pop.querySelector('input, button')?.focus();
 }
 
 // Kontextaktionen je Zustand (Spec "Aufbau der Oberflaeche"). Fehlt ein
@@ -141,8 +149,12 @@ function titleActions(status, view, handlers) {
   const actions = [];
   if (view.error) actions.push({kind: 'note', cls: 'err-t', text: view.error, alert: true});
   if (['idle', 'setup_failed', 'stopped'].includes(state)) {
+    const reference = setupReferenceView(status.setup_reference);
     actions.push({kind: 'setup', label: state === 'stopped' ? 'Neu einrichten' : 'Einrichtung starten',
-      icon: state === 'stopped' ? 'redo' : 'run', disabled: busy || !handlers.setup});
+      icon: state === 'stopped' ? 'redo' : 'run', disabled: busy || !handlers.setup, reference,
+      // Popover-Inhalt haengt am Adapter: mit in die Signatur.
+      text: reference ? reference.short : '',
+      title: reference && !reference.present ? 'Kein RS232-Anschluss: fragt zuerst den Wert der Anzeige ab' : ''});
   } else if (state === 'setup_running') {
     // Abbrechen ist die Aktion dieses Zustands (POST /live/setup/cancel); Bestaetigen steht gesperrt daneben.
     actions.push({kind: 'note', text: 'Bestätigen erst nach dem Vorschlag'},
@@ -187,10 +199,13 @@ function actionHTML(action, index) {
     return `<span class="hdr-note ${action.cls || ''}"${action.alert ? ' role="alert"' : ''}>${esc(action.text)}</span>`;
   }
   if (action.kind === 'setup') {
+    const ref = action.reference;
     return `<div class="split"><button type="button" class="primary" data-action="${index}">${icon(action.icon)}${esc(action.label)}</button>` +
-      `<button type="button" class="primary" data-popover-toggle aria-haspopup="dialog" aria-expanded="false" aria-label="Zellentext angeben" title="Zellentext (optional)">${icon('down')}</button></div>` +
-      `<div class="popover" role="dialog" aria-label="Zellentext" hidden><label for="cell-text">${esc(CELL_TEXT_LABEL)}</label>` +
-      `<input type="text" id="cell-text" class="mono" maxlength="9" autocomplete="off" spellcheck="false"></div>`;
+      `<button type="button" class="primary" data-popover-toggle aria-haspopup="dialog" aria-expanded="false" aria-label="Referenzwert der Einrichtung" title="Referenzwert: RS232 oder von Hand">${icon('down')}</button></div>` +
+      '<div class="popover setpop" role="dialog" aria-label="Referenzwert der Einrichtung" hidden>' +
+      (ref ? `<p class="pst"><span class="sq ${ref.tone}"></span><span>${esc(ref.text)}</span></p>` : '') +
+      '<p class="note">Die Einrichtung vergleicht den Leser mit dem Wert der Anzeige. Ohne RS232 oder auf Wunsch wird er von Hand eingegeben; schwankende Ziffern mit ? markieren.</p>' +
+      '<div class="fa"><button type="button" data-manual>Wert von Hand eingeben …</button></div></div>';
   }
   if (action.kind === 'run') {
     return `<div class="split"><button type="button" class="primary" data-action="${index}">${icon(action.icon)}${esc(action.label)}</button>` +
@@ -221,9 +236,8 @@ export function renderTitle(status, view = {}, handlers = {}) {
       const action = actions[Number(button.dataset.action)];
       button.onclick = () => {
         if (action.kind === 'setup') {
-          const value = shell.titleActions.querySelector('#cell-text')?.value ?? '';
           togglePopover(false);
-          shell.handlers.setup?.(value);
+          shell.handlers.setup?.();
         } else {
           shell.handlers[action.name]?.(button);
         }
@@ -238,8 +252,14 @@ export function renderTitle(status, view = {}, handlers = {}) {
       toggle.onclick = () => togglePopover(toggle.getAttribute('aria-expanded') !== 'true');
       shell.titleActions.querySelector('.popover').onkeydown = (event) => {
         if (event.key === 'Escape') { togglePopover(false); toggle.focus(); }
-        if (event.key === 'Enter') shell.titleActions.querySelector('[data-action]')?.click();
       };
+      const manual = shell.titleActions.querySelector('[data-manual]');
+      if (manual) {
+        manual.onclick = () => {
+          togglePopover(false);
+          shell.handlers.setup?.({manual: true});
+        };
+      }
     }
   }
   // Sperren und Hinweise ohne Neuaufbau nachziehen (Fokus und Eingabe bleiben).
@@ -256,6 +276,8 @@ export function renderTitle(status, view = {}, handlers = {}) {
   });
   const toggle = shell.titleActions.querySelector('[data-popover-toggle]');
   if (toggle) toggle.disabled = Boolean(actions.find((a) => a.kind === 'setup')?.disabled);
+  const manual = shell.titleActions.querySelector('[data-manual]');
+  if (manual) manual.disabled = Boolean(actions.find((a) => a.kind === 'setup')?.disabled);
 }
 
 // CPU-Last des Pi aus status.system (live/service.py, /proc/stat ueber cpu_window_s).

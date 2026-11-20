@@ -467,6 +467,28 @@ def test_setup_passes_cell_text_and_errors_become_409():
     _run(check)
 
 
+def test_setup_without_adapter_answers_409_with_needs_cell_text(tmp_path):
+    """Ohne RS232-Referenzadapter fragt die Seite den Anzeigewert ab, bevor etwas laeuft."""
+    from dispread.live.service import CellTextRequired
+
+    async def check(client, service):
+        def refuse(*, cell_text=None):
+            service.calls.append(("setup", cell_text))
+            if cell_text is None:
+                raise CellTextRequired("/dev/ttyUSB0")
+
+        service.start_setup = refuse
+        response = await client.post("/live/setup", json={"cell_text": None})
+        data = await response.json()
+        assert response.status == 409
+        assert data["needs_cell_text"] is True and data["port"] == "/dev/ttyUSB0"
+        assert "Kein RS232-Anschluss" in data["error"]
+        assert (await client.post("/live/setup", json={"cell_text": "0,4678"})).status == 200
+        assert service.calls == [("setup", None), ("setup", "0,4678")]
+
+    _run(check)
+
+
 def test_unknown_overlay_is_404():
     async def check(client, _service):
         assert (await client.get("/live/setup/etc-passwd.png")).status == 404

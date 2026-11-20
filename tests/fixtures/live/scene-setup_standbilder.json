@@ -117,7 +117,8 @@
         "status": "OK",
         "reason": null
       }
-    }
+    },
+    "reference_kind": "seriell"
   },
   "run": null,
   "reader_tolerance": null,
@@ -161,6 +162,10 @@
   },
   "step": null,
   "simulate": false,
+  "setup_reference": {
+    "serial_present": true,
+    "port": "/dev/ttyUSB0"
+  },
   "profile": null,
   "run_block": null,
   "run_hint": null,

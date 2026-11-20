@@ -287,7 +287,7 @@ async def handle_local_op(op, args, controller, live, bridge_hub=None):
             )
         return web.json_response({"ok": True})
     except LiveError as error:
-        return web.json_response({"error": str(error)}, status=409)
+        return web.json_response({"error": str(error), **getattr(error, "payload", {})}, status=409)
     except (ValueError, KeyError, TypeError, OSError) as error:
         return web.json_response({"error": str(error)}, status=400)
 

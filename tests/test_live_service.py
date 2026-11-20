@@ -726,7 +726,7 @@ def test_confirmation_saves_profile_and_warning_acknowledgement(tmp_path, propos
         "step": "vorschlag", "elapsed_s": setup["elapsed_s"],
         "focus": {"method": "climb", "samples": [], "verify": None, "roi": None, "roi_source": None,
                   "end_check": None},
-        "exposure": {"target": 130, "band": [115, 150], "rounds": []},
+        "exposure": {"target": 130, "band": [115, 150], "rounds": []}, "reference_kind": "seriell",
     }
     service.confirm(session_id=service.status()["session_id"], confirmed_by="Leonhard Hentschke", format_checked=True, acknowledge_warning=True)
     status = service.status()
@@ -1349,7 +1349,7 @@ def test_confirmation_persists_operator_checks(tmp_path, proposal, overall, ackn
         "confirmed_by": "Tester", "confirmed_at_utc": profile["confirmed_at_utc"],
         "unit": "mV/V", "format_id": "gsv2as_v1", "format_checked": True,
         "warning_acknowledged": acknowledged, "setup_overall": overall, "run_block": None, "run_hint": None,
-        "reader_tolerance": None,
+        "reader_tolerance": None, "reference_kind": "seriell",
     }
     assert datetime.fromisoformat(confirmation["confirmed_at_utc"]).utcoffset().total_seconds() == 0
 
@@ -1815,7 +1815,7 @@ def test_run_block_reason_explains_reference_contradiction():
         },
     }}}})
     assert reason == ("Lauf gesperrt: Der Leser widerspricht bei der Einrichtung dem Referenzwert "
-                      "des GSV-2AS (Zelle 7: gelesen '3', Referenz '2'). Neu einrichten.")
+                      "(Zelle 7: gelesen '3', Referenz '2'). Neu einrichten.")
 
 
 def test_reader_contradiction_refuses_confirmation(tmp_path, proposal):
@@ -3735,3 +3735,90 @@ def test_run_on_bridge_uart_keeps_listener(tmp_path, monkeypatch):
     except Exception:
         pass                                           # Weg UART: Start darf scheitern, Empfang bleibt
     assert stopped == []
+
+
+def test_setup_without_reference_adapter_asks_for_cell_text_before_any_step(tmp_path):
+    from dispread.live.service import CellTextRequired
+
+    called = []
+    present = [False]
+
+    def runner(**kwargs):
+        called.append(kwargs["cell_text"])
+        return {"setup_checks": {"overall": "OK", "checks": {}}}
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner, reference_present=lambda: present[0])
+    assert service.status()["setup_reference"] == {"serial_present": False, "port": "/dev/ttyUSB0"}
+    for empty in (None, "", "   "):
+        with pytest.raises(CellTextRequired) as exc:
+            service.start_setup(cell_text=empty)
+        assert exc.value.payload == {"needs_cell_text": True, "port": "/dev/ttyUSB0"}
+    assert called == [] and service.status()["state"] == "idle" and service.status()["error"] is None
+    # Bedienereingabe wird nach den Anzeigeregeln normalisiert, dann startet die Einrichtung.
+    service.start_setup(cell_text="0,4678 mV/V")
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    assert called == ["+ 0.4678 "]
+    assert service.status()["setup"]["reference_kind"] == "eingabe"
+    present[0] = True
+    assert service.status()["setup_reference"]["serial_present"] is True
+    service.start_setup()
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    assert called == ["+ 0.4678 ", None]
+    assert service.status()["setup"]["reference_kind"] == "seriell"
+
+
+def test_setup_refuses_cell_text_that_needs_a_guess(tmp_path):
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=lambda **kw: pytest.fail("gestartet"),
+                          reference_present=lambda: False)
+    for text, message in (("-0.4678", "Minuszeichen"), ("0.4.678", "Dezimalpunkt"), ("12.34567", "7 Ziffern")):
+        with pytest.raises(LiveError, match=f"Zellentext: .*{message}"):
+            service.start_setup(cell_text=text)
+    assert service.status()["state"] == "idle"
+
+
+def test_norm_schedule_needs_reference_adapter(tmp_path, proposal):
+    service = ready_service(tmp_path, proposal)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Tester", format_checked=True,
+                    acknowledge_warning=True)
+    service._reference_present = lambda: False
+    with pytest.raises(LiveError, match="Werteplan braucht den RS232-Anschluss"):
+        service.start_run(norm_schedule="1:20")
+    assert service.status()["state"] == "confirmed"
+
+
+@pytest.mark.parametrize("unchanged", [True, False, None])
+def test_confirm_tolerance_with_manual_reference_needs_unchanged_display(tmp_path, proposal, unchanged):
+    import json
+
+    tolerance = {"possible": True, "factor": 1.44, "d_max": 1.92, "max_d_best": 2.2, "reference_kind": "eingabe"}
+    if unchanged is not None:
+        tolerance["anzeige_unveraendert"] = {"unveraendert": unchanged, "standbilder": 2,
+                                             "zellen": [1, 2, 3, 4, 5, 6, 7],
+                                             "beste_vermutungen": ["0.60972", "0.60972"]}
+    proposal["setup_checks"].update(overall="WARNUNG")
+    proposal["setup_checks"]["checks"]["gegenlesen"] = {"status": "WARNUNG",
+                                                       "metrics": {"tolerance": tolerance}}
+
+    def runner(*, session_dir, **kwargs):
+        (session_dir / "setup").mkdir(parents=True, exist_ok=True)
+        return proposal
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner, reference_present=lambda: False)
+    service.start_setup(cell_text="+0.60972")
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    assert service.status()["setup"]["gegenlesen"]["metrics"]["tolerance"]["reference_kind"] == "eingabe"
+    kwargs = dict(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True,
+                  acknowledge_warning=True, use_tolerance=True)
+    if unchanged is not True:
+        with pytest.raises(LiveError, match="von Hand eingegebener Wert"):
+            service.confirm(**kwargs)
+        assert service.status()["state"] == "setup_ready"
+        return
+    service.confirm(**kwargs)
+    status = service.status()
+    confirmation = json.loads((tmp_path / status["session_id"] / "confirmation.json").read_text())
+    assert confirmation["reference_kind"] == "eingabe"
+    assert confirmation["reader_tolerance"] == status["reader_tolerance"]
+    assert status["reader_tolerance"]["reference_kind"] == "eingabe"
+    assert status["reader_tolerance"]["anzeige_unveraendert"]["unveraendert"] is True
+    assert "von Hand eingegebenen Wert" in status["reader_tolerance"]["hinweis"]

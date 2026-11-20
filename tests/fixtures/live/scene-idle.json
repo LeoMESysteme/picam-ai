@@ -44,6 +44,10 @@
   },
   "step": null,
   "simulate": false,
+  "setup_reference": {
+    "serial_present": true,
+    "port": "/dev/ttyUSB0"
+  },
   "profile": null,
   "run_block": null,
   "run_hint": null,

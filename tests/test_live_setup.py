@@ -969,8 +969,8 @@ def test_assist_explains_manual_text_change(monkeypatch, tmp_path, first_status,
     if specific:
         assert str(exc.value) == (
             "Anzeige hat sich zwischen den Standbildern geaendert (2j: erstes Standbild passt zum Zellentext, "
-            "zweites nicht). Zellentext-Feld leer lassen - der Wert wird dann vom GSV-2AS gelesen - "
-            "oder schwankende Ziffern mit ? markieren, z. B. +0.4678?")
+            "zweites nicht). Neu einrichten, wenn die Anzeige ruhig steht, und schwankende Ziffern mit ? "
+            "markieren, z. B. +0.4678? - mit RS232-Anschluss liest die Werkbank den Wert selbst vom GSV-2AS")
     else:
         assert str(exc.value) == "Rasterversatz 2j meldet FEHLER; kein Vorschlag"
     assert observed == [(2, 10), (1, 10), (1, 20)]
@@ -1377,3 +1377,12 @@ def test_run_start_accepts_focus_ratios_inside_band(end_check_sharpness, ratio):
     result, _ = live_setup.check_focus_at_run_start(cam, _run_reference(), target=48, settle_s=0,
                                                    sleep=lambda _s: None)
     assert result['status'] == 'OK'
+
+
+def test_reference_adapter_present_checks_the_device_path_only(monkeypatch, tmp_path):
+    monkeypatch.undo()  # conftest meldet den Adapter sonst immer als vorhanden
+    from dispread.live import setup as live_setup
+
+    assert live_setup.reference_adapter_present(str(tmp_path / "ttyUSB0")) is False
+    (tmp_path / "ttyUSB0").write_bytes(b"")
+    assert live_setup.reference_adapter_present(str(tmp_path / "ttyUSB0")) is True
