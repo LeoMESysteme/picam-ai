@@ -20,12 +20,13 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from rich.console import Group
 from rich.table import Table
 from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.theme import Theme
@@ -37,6 +38,12 @@ from .instance import Instance
 
 MIN_WIDTH, MIN_HEIGHT = 48, 14
 SPLIT_WIDTH = 76
+#: Ab dieser Höhe bekommt der rechte Bereich unten „Letzte Meldungen“,
+#: ab dieser Breite stehen sie als eigene Spalte rechts.
+TALL_HEIGHT = 34
+WIDE_WIDTH = 150
+TAIL_LINES = 400
+SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 REFRESH_S = 5.0
 SETUP_REFRESH_S = 60.0
 LOG_LIMIT = 2000
@@ -106,6 +113,14 @@ def fit(text: str, width: int) -> str:
     return rendered.plain
 
 
+def fade_in(widget, start: float = 0.0, duration: float = 0.14) -> None:
+    """Kurz einblenden; mit TEXTUAL_ANIMATIONS=none sofort sichtbar."""
+    if widget.app.animation_level == 'none':
+        return
+    widget.styles.opacity = start
+    widget.styles.animate('opacity', 1.0, duration=duration, easing='out_cubic')
+
+
 # ----------------------------------------------------------------- Dialoge
 
 @dataclass
@@ -145,6 +160,7 @@ class ConfirmScreen(ModalScreen[bool]):
 
     def on_mount(self) -> None:
         self.query_one('#cancel', Button).focus()
+        fade_in(self.query_one('#dialog'))
 
     def action_cancel(self) -> None:
         self.dismiss(False)
@@ -182,6 +198,7 @@ class AskScreen(ModalScreen[str | None]):
 
     def on_mount(self) -> None:
         self.query_one('#ask-input', Input).focus()
+        fade_in(self.query_one('#dialog'))
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -230,6 +247,9 @@ class HelpScreen(ModalScreen[None]):
             yield Static(Text('picam verwaltet den Dienst. Messläufe und Einrichtung der Anzeige '
                               'laufen in der Werkbank im Browser.', style=MUTED), classes='note')
 
+    def on_mount(self) -> None:
+        fade_in(self.query_one('#dialog'))
+
     def action_close(self) -> None:
         self.dismiss(None)
 
@@ -247,6 +267,36 @@ class Detail(VerticalScroll):
 
 class LogPane(Vertical):
     pass
+
+
+class Cards(Grid):
+    """Kartenraster der Übersicht; ``signature`` verhindert unnötiges Neuzeichnen."""
+
+    def __init__(self, cards: list[Static], columns: int, signature: str):
+        super().__init__(*cards, classes='cards')
+        self.styles.grid_size_columns = columns
+        self.signature = signature
+
+
+CARD_ROWS = 3
+
+
+def fact_card(fact: probes.Fact) -> Static:
+    """Karte: Zeichen, Name, Wert und bis zu drei Detailzeilen, gekürzt statt umbrochen."""
+    title = Text(no_wrap=True, overflow='ellipsis')
+    title.append(f'{symbol(fact.level)} ', style=TONE[fact.level])
+    title.append(fact.label, style='bold')
+    title.append(f'  {fact.value}', style=MUTED if fact.level in (probes.OK, probes.OFF) else TONE[fact.level])
+    table = Table.grid(padding=(0, 2), expand=True)
+    table.add_column(style=MUTED, no_wrap=True)
+    table.add_column(style='#b8c0c8', no_wrap=True, overflow='ellipsis', ratio=1)
+    detail = [(k, v) for k, v in fact.detail if v and k not in ('Unit', 'Zustand', 'Weg')][:CARD_ROWS]
+    for key, value in detail:
+        table.add_row(key, str(value))
+    for _ in range(CARD_ROWS - len(detail)):
+        table.add_row('', '')
+    level = {probes.FAIL: ' card-fail', probes.WARN: ' card-warn'}.get(fact.level, '')
+    return Static(Group(title, table), classes='card' + level)
 
 
 class ConfigPane(VerticalScroll):
@@ -296,9 +346,23 @@ class PicamApp(App[int]):
     #nav > .option-list--option { padding: 0 1; }
     #nav > .option-list--option-disabled { color: $text-muted; text-style: bold; padding: 0 1; }
     #nav > .option-list--separator { color: $background; }
-    #pane { width: 1fr; height: 1fr; padding: 0 2 0 2; border-left: vkey #252c35; }
+    #pane { width: 1fr; height: 1fr; padding: 0 0 0 2; border-left: vkey #252c35; layout: vertical; }
+    #views { width: 1fr; height: 1fr; padding: 0 2 0 0; }
+    #tail { display: none; width: 1fr; height: 40%; min-height: 8; padding: 0 2 0 0; }
+    #tail-head { height: 1; margin: 1 0 0 0; }
+    #tail-log { height: 1fr; background: $background; border: none; scrollbar-size-vertical: 1; padding: 0;
+                overflow-x: hidden; }
+    Screen.tall #tail { display: block; }
+    Screen.wide #pane { layout: horizontal; }
+    Screen.wide #tail { display: block; width: 44%; max-width: 90; height: 1fr; padding: 0 2;
+                        border-left: vkey #1b2129; }
+    Screen.no-tail #tail { display: none; }
     Detail { height: 1fr; scrollbar-size-vertical: 1; }
-    Detail > Static { width: 1fr; }
+    Detail > Static { width: 1fr; max-width: 110; }
+    .cards { height: auto; max-width: 110; grid-gutter: 1 2; grid-rows: auto; }
+    .card { height: auto; padding: 0 1; background: $surface; border-left: wide #2a333d; }
+    .card.card-warn { border-left: wide $warning; }
+    .card.card-fail { border-left: wide $error; }
     .title { margin: 1 0 1 0; }
     .hint { border-left: wide $warning; padding: 0 1; margin: 0 0 1 0; background: #16140f; }
     .hint.fail { border-left: wide $error; background: #191212; }
@@ -328,10 +392,19 @@ class PicamApp(App[int]):
     Screen.too-small #top, Screen.too-small #main, Screen.too-small #status, Screen.too-small #footer {
         display: none; }
     Screen.stacked #nav { width: 1fr; }
-    Screen.stacked #pane { display: none; border-left: none; padding: 0 1; }
+    Screen.stacked #pane { display: none; border-left: none; padding: 0 0 0 1; }
     Screen.stacked.open #nav { display: none; }
     Screen.stacked.open #pane { display: block; }
     ConfirmScreen, HelpScreen, AskScreen { align: center middle; background: rgba(5, 7, 10, 0.72); }
+    Intro { layer: overlay; width: 1fr; height: 1fr; align: center middle; background: $background; }
+    Intro:focus { background-tint: 0%; }
+    #intro-row { width: auto; height: auto; }
+    #intro-lens { margin: 0 4 0 0; }
+    #intro-side { width: auto; height: auto; }
+    #intro-lcd { width: auto; height: auto; margin: 0 0 1 0; }
+    #intro-tag { width: auto; margin: 0 0 1 0; }
+    #intro-checks { width: auto; }
+    #intro-hint { width: 1fr; content-align: center middle; margin: 1 0 0 0; }
     #dialog { width: 72; max-width: 95%; height: auto; padding: 1 2; background: $panel; border: none; }
     #dialog-title { margin: 0 0 1 0; }
     .dialog-line { margin: 0 0 1 0; }
@@ -373,9 +446,18 @@ class PicamApp(App[int]):
 
     selected: reactive[str] = reactive('uebersicht', init=False)
 
+    @property
+    def main_screen(self):
+        """Konsolenbildschirm, auch während ein Dialog darüber liegt."""
+        return self.screen_stack[0] if self.screen_stack else self.screen
+
     def __init__(self, instance: Instance, collect=probes.collect, journal_source=None,
-                 service_runner=None, auto_refresh: bool = True):
+                 service_runner=None, auto_refresh: bool = True, intro: bool = False):
         super().__init__()
+        self._intro_enabled = intro
+        self._changed: dict[str, float] = {}
+        self._spin = 0
+        self._spinner_timer = None
         self.instance = instance
         self._collect = collect
         self._journal_source = journal_source
@@ -399,32 +481,109 @@ class PicamApp(App[int]):
         yield Static(id='top')
         with Horizontal(id='main'):
             yield OptionList(id='nav')
-            with Vertical(id='pane'):
-                yield Detail(id='detail')
-                with LogPane(id='logpane'):
-                    yield Static(id='log-head')
-                    yield RichLog(id='log', max_lines=LOG_LIMIT, wrap=True, markup=False, auto_scroll=True,
+            with Container(id='pane'):
+                with Vertical(id='views'):
+                    yield Detail(id='detail')
+                    with LogPane(id='logpane'):
+                        yield Static(id='log-head')
+                        yield RichLog(id='log', max_lines=LOG_LIMIT, wrap=True, markup=False, auto_scroll=True,
+                                      min_width=20)
+                    yield ConfigPane(id='configpane')
+                with Vertical(id='tail'):
+                    yield Static(id='tail-head')
+                    yield RichLog(id='tail-log', max_lines=TAIL_LINES, wrap=True, markup=False, auto_scroll=True,
                                   min_width=20)
-                yield ConfigPane(id='configpane')
         yield Static(id='status')
         yield Static(id='footer')
         yield Static(f'Terminal zu klein – mindestens {MIN_WIDTH}×{MIN_HEIGHT}.\n'
                      'Alternativ: picam status', id='small')
+        if self._intro_enabled:
+            from .intro import Intro
+
+            yield Intro(self.instance.label, None, ascii_mode(), self.animation_level != 'none', id='intro')
 
     def on_mount(self) -> None:
         self.register_theme(THEME)
         self.theme = 'picam'
         self._build_nav()
-        self.query_one('#logpane').display = False
-        self.query_one('#configpane').display = False
+        self.main_screen.query_one('#logpane').display = False
+        self.main_screen.query_one('#configpane').display = False
         self._apply_size()
         self._render_top()
         self._render_footer()
         self._render_detail()
-        self.query_one('#nav', OptionList).focus()
+        self._render_tail_head()
+        self.main_screen.query_one('#nav', OptionList).focus()
+        if self._intro_enabled:
+            intro = self.main_screen.query_one('#intro')
+            intro.set_lines(self._intro_lines())
+            intro.on_done = self._end_intro
+            intro.focus()
+        self._spinner_timer = self.set_interval(0.1, self._spin_tick, pause=True)
+        self._sync_spinner()
         self.action_refresh()
         if self._auto_refresh:
             self.set_interval(REFRESH_S, self.action_refresh)
+
+    # ------------------------------------------------------------ Startbild
+    def _intro_lines(self) -> list[tuple[str, str, str, str]]:
+        lines = [(symbol(probes.OK), TONE[probes.OK], 'Instanz', self.instance.label)]
+        if self.instance.problem:
+            lines[0] = (symbol(probes.WARN), TONE[probes.WARN], 'Instanz', self.instance.label)
+        if self.snapshot is None:
+            return lines + [('spin', '', 'Dienst', 'prüfe …'), ('spin', '', 'Einrichtung', 'prüfe …')]
+        service = self.snapshot.facts['dienst']
+        lines.append((symbol(service.level), TONE[service.level], 'Dienst', service.value))
+        problems = self._problems()
+        if problems:
+            worst = min((f.level for f in problems), key=probes.LEVEL_ORDER.__getitem__)
+            count = len(problems)
+            lines.append((symbol(worst), TONE[worst], 'Hinweise',
+                          f'{count} Punkt{"e" if count != 1 else ""} brauch{"en" if count != 1 else "t"} '
+                          'Aufmerksamkeit'))
+        else:
+            lines.append((symbol(probes.OK), TONE[probes.OK], 'Einrichtung', 'alles in Ordnung'))
+        return lines
+
+    def _end_intro(self) -> None:
+        intro = self.main_screen.query('#intro')
+        if not intro:
+            return
+        widget = intro.first()
+        nav = self.main_screen.query_one('#nav', OptionList)
+
+        def reveal() -> None:
+            widget.remove()
+            nav.focus()
+            for selector in ('#top', '#main', '#status', '#footer'):
+                fade_in(self.main_screen.query_one(selector), duration=0.3)
+
+        if self.animation_level == 'none':
+            reveal()
+        else:
+            widget.styles.animate('opacity', 0.0, duration=0.22, easing='in_cubic', on_complete=reveal)
+
+    # ------------------------------------------------------------ Bewegung
+    def _sync_spinner(self) -> None:
+        if self._spinner_timer is None:
+            return
+        active = (self._busy is not None or self.snapshot is None) and self.animation_level != 'none'
+        if active:
+            self._spinner_timer.resume()
+        else:
+            self._spinner_timer.pause()
+
+    def _spin_tick(self) -> None:
+        self._spin = (self._spin + 1) % len(SPINNER)
+        if self._busy:
+            self._render_status()
+        if self.snapshot is None:
+            self._render_top()
+
+    def _spinner(self) -> str:
+        if ascii_mode() or self.animation_level == 'none':
+            return '…'
+        return SPINNER[self._spin]
 
     def on_resize(self) -> None:
         self._apply_size()
@@ -435,9 +594,11 @@ class PicamApp(App[int]):
             self._select_nav(selected)
         self._update_nav()
         self._render_footer()
+        if self.selected not in ('protokoll', 'konfiguration'):
+            self.call_after_refresh(self._render_detail)
 
     def _select_nav(self, key: str) -> None:
-        nav = self.query_one('#nav', OptionList)
+        nav = self.main_screen.query_one('#nav', OptionList)
         try:
             nav.highlighted = nav.get_option_index(key)
         except Exception:  # noqa: BLE001 - Option nicht (mehr) vorhanden
@@ -445,14 +606,26 @@ class PicamApp(App[int]):
 
     def _apply_size(self) -> None:
         width, height = self.size
-        screen = self.screen
+        screen = self.main_screen
         screen.set_class(width < MIN_WIDTH or height < MIN_HEIGHT, 'too-small')
         stacked = width < SPLIT_WIDTH
         screen.set_class(stacked, 'stacked')
-        nav = self.query_one('#nav')
+        wide = not stacked and width >= WIDE_WIDTH and height >= 20
+        tall = not stacked and not wide and height >= TALL_HEIGHT
+        screen.set_class(wide, 'wide')
+        screen.set_class(tall, 'tall')
+        screen.set_class(self.selected == 'protokoll', 'no-tail')
+        nav = self.main_screen.query_one('#nav')
         if not stacked:
-            nav.styles.width = 32 if width >= 100 else 29
+            nav.styles.width = 36 if width >= WIDE_WIDTH else 32 if width >= 100 else 29
             screen.remove_class('open')
+        if self._tail_visible():
+            self._start_log()
+
+    def _tail_visible(self) -> bool:
+        screen = self.main_screen
+        return ((screen.has_class('wide') or screen.has_class('tall')) and not screen.has_class('no-tail')
+                and not screen.has_class('too-small'))
 
     # ------------------------------------------------------------ Liste
     def _nav_entries(self):
@@ -471,7 +644,7 @@ class PicamApp(App[int]):
 
     def _nav_width(self) -> int:
         """Nutzbare Zellen einer Zeile (Breite minus Innenabstand links/rechts)."""
-        nav = self.query_one('#nav')
+        nav = self.main_screen.query_one('#nav')
         width = nav.size.width or (30 if self.size.width >= 100 else 28)
         return max(16, width - 3)
 
@@ -514,10 +687,20 @@ class PicamApp(App[int]):
         left.append(symbol(fact.level) + ' ', style=TONE[fact.level])
         left.append(name)
         quiet = fact.level in (probes.OK, probes.OFF)
-        return row(left, Text(fact.value, style=MUTED if quiet else TONE[fact.level]))
+        result = row(left, Text(fact.value, style=MUTED if quiet else TONE[fact.level]))
+        changed = self._changed.get(key)
+        if changed is not None:
+            import time as _time
+
+            age = _time.monotonic() - changed
+            if age < 0.85:
+                result.stylize('on #22363c')
+            elif age < 1.7:
+                result.stylize('on #172328')
+        return result
 
     def _build_nav(self) -> None:
-        nav = self.query_one('#nav', OptionList)
+        nav = self.main_screen.query_one('#nav', OptionList)
         options = []
         first = True
         self._nav_gaps = self.size.height >= 27
@@ -534,7 +717,7 @@ class PicamApp(App[int]):
         nav.highlighted = 0
 
     def _update_nav(self) -> None:
-        nav = self.query_one('#nav', OptionList)
+        nav = self.main_screen.query_one('#nav', OptionList)
         for key, label, _ in self._nav_entries():
             try:
                 nav.replace_option_prompt(key, self._nav_prompt(key, label))
@@ -545,29 +728,32 @@ class PicamApp(App[int]):
     @on(OptionList.OptionHighlighted, '#nav')
     def _highlighted(self, event: OptionList.OptionHighlighted) -> None:
         if event.option.id and not event.option.id.startswith('#'):
-            if not self.screen.has_class('stacked'):
+            if not self.main_screen.has_class('stacked'):
                 self.selected = event.option.id
 
     @on(OptionList.OptionSelected, '#nav')
     def _chosen(self, event: OptionList.OptionSelected) -> None:
         if event.option.id and not event.option.id.startswith('#'):
             self.selected = event.option.id
-            if self.screen.has_class('stacked'):
-                self.screen.add_class('open')
+            if self.main_screen.has_class('stacked'):
+                self.main_screen.add_class('open')
                 self._render_footer()
             if self.selected == 'konfiguration':
                 self._request_config_focus()
 
     def watch_selected(self) -> None:
         self._rendered_detail = None
-        logpane, configpane, detail = (self.query_one('#logpane'), self.query_one('#configpane'),
-                                       self.query_one('#detail'))
+        self._fade_next = True
+        self.main_screen.set_class(self.selected == 'protokoll', 'no-tail')
+        logpane, configpane, detail = (self.main_screen.query_one('#logpane'), self.main_screen.query_one('#configpane'),
+                                       self.main_screen.query_one('#detail'))
         logpane.display = self.selected == 'protokoll'
         configpane.display = self.selected == 'konfiguration'
         detail.display = self.selected not in ('protokoll', 'konfiguration')
         if self.selected == 'protokoll':
             self._start_log()
             self._render_log_head()
+            fade_in(logpane, start=0.35, duration=0.15)
         elif self.selected == 'konfiguration':
             self._render_config()
         else:
@@ -582,7 +768,7 @@ class PicamApp(App[int]):
         top.append('  ')
         snap = self.snapshot
         if snap is None:
-            top.append('prüfe …', style=MUTED)
+            top.append(f'{self._spinner()} prüfe …', style=MUTED)
         else:
             service = snap.facts['dienst']
             top.append(symbol(service.level) + ' ', style=TONE[service.level])
@@ -595,11 +781,11 @@ class PicamApp(App[int]):
                 if top.cell_len + piece.cell_len > room:
                     break
                 top.append_text(piece)
-        self.query_one('#top', Static).update(top)
+        self.main_screen.query_one('#top', Static).update(top)
 
     def _keys(self) -> list[tuple[str, str]]:
-        stacked = self.screen.has_class('stacked')
-        open_ = self.screen.has_class('open')
+        stacked = self.main_screen.has_class('stacked')
+        open_ = self.main_screen.has_class('open')
         keys = []
         if stacked and not open_:
             keys.append(('enter', 'öffnen'))
@@ -633,12 +819,12 @@ class PicamApp(App[int]):
             if text.cell_len + piece.cell_len > width:
                 break
             text.append_text(piece)
-        self.query_one('#footer', Static).update(text)
+        self.main_screen.query_one('#footer', Static).update(text)
 
     def _render_status(self) -> None:
         text = Text()
         if self._busy:
-            text.append('… ' + self._busy, style=ACCENT)
+            text.append(f'{self._spinner()} {self._busy}', style=ACCENT)
         elif self._message:
             level, message = self._message
             text.append(f'{symbol(level)} {message}', style=TONE[level])
@@ -646,7 +832,7 @@ class PicamApp(App[int]):
             blocker = self.snapshot.stop_blocker
             if blocker and self._fact('dienst') and self._fact('dienst').level == probes.OK:
                 text.append(f'Dienstaktionen gesperrt: {blocker}', style=MUTED)
-        self.query_one('#status', Static).update(text)
+        self.main_screen.query_one('#status', Static).update(text)
 
     # ------------------------------------------------------------ Inhalte
     def _problems(self) -> list[probes.Fact]:
@@ -688,9 +874,30 @@ class PicamApp(App[int]):
                     block.append('\n')
                     block.append_text(hint)
                 parts.append(Static(block, classes='hint fail' if fact.level == probes.FAIL else 'hint'))
+        columns = self._card_columns(problems, len(rows))
+        if columns:
+            shown = [snap.facts[k] for k in probes.OVERVIEW if k in snap.facts]
+            signature = repr([(f.key, f.level, f.value, f.detail) for f in shown]) + f'/{columns}'
+            parts.append(Static(Text('BETRIEB', style=f'bold {MUTED}'), classes='section'))
+            parts.append(Cards([fact_card(f) for f in shown], columns, signature))
         parts.append(Static(Text('INSTANZ', style=f'bold {MUTED}'), classes='section'))
         parts.append(Static(kv_table(rows)))
         return parts
+
+    def _card_columns(self, problems: list, instance_rows: int) -> int:
+        """Spalten für die Betriebskarten, 0 wenn sie nicht ganz ins Fenster passen."""
+        views = self.main_screen.query_one('#views').size
+        width = min(110, views.width - 2)
+        if width < 56 or views.height <= 0:
+            return 0
+        columns = min(3, width // 30)
+        used = 3 + 3 + instance_rows  # Titel, Abstände, Instanz
+        for fact in problems:
+            hint = len(fact.hint or '') + len(fact.command or '') + 4
+            used += 2 + -(-hint // max(20, width - 4))
+        cards = len(probes.OVERVIEW)
+        needed = 2 + -(-cards // columns) * (CARD_ROWS + 2)
+        return columns if used + needed <= views.height else 0
 
     def _fact_view(self, fact: probes.Fact) -> list:
         parts: list = [Static(fact_title(fact), classes='title')]
@@ -730,7 +937,7 @@ class PicamApp(App[int]):
         return text if text.plain else None
 
     def _render_detail(self) -> None:
-        detail = self.query_one('#detail', Detail)
+        detail = self.main_screen.query_one('#detail', Detail)
         if self.selected == 'uebersicht':
             parts = self._overview()
         else:
@@ -741,16 +948,21 @@ class PicamApp(App[int]):
                          Static(Text('Wird geprüft …', style=MUTED))]
             else:
                 parts = self._fact_view(fact)
-        signature = repr([p.renderable if hasattr(p, 'renderable') else p for p in parts])
+        signature = repr([getattr(p, 'signature', None) or getattr(p, 'renderable', p) for p in parts])
         if signature == self._rendered_detail:
             return
         self._rendered_detail = signature
         self.call_next(self._swap, detail, parts)
 
+    _fade_next = False
+
     async def _swap(self, container, parts) -> None:
         with self.batch_update():
             await container.remove_children()
             await container.mount_all(parts)
+        if self._fade_next:
+            self._fade_next = False
+            fade_in(container, start=0.35, duration=0.15)
         if container.id == 'configpane' and self.selected == 'konfiguration' and self._focus_config_pending:
             self._focus_config_pending = False
             self._focus_config()
@@ -774,6 +986,15 @@ class PicamApp(App[int]):
     def _apply_snapshot(self, snapshot: probes.Snapshot, with_setup: bool) -> None:
         import time as _time
 
+        if self.snapshot is not None:
+            now = _time.monotonic()
+            for key, fact in snapshot.facts.items():
+                old = self._fact(key)
+                if old is not None and (old.level, old.value) != (fact.level, fact.value):
+                    self._changed[key] = now
+            if any(now - at < 0.1 for at in self._changed.values()):
+                self.set_timer(0.9, self._update_nav)
+                self.set_timer(1.8, self._update_nav)
         if with_setup:
             self._setup_facts = {k: snapshot.facts[k] for k in probes.SETUP if k in snapshot.facts}
             self._setup_at = _time.time()
@@ -784,6 +1005,13 @@ class PicamApp(App[int]):
         self._render_footer()
         if self.selected not in ('protokoll', 'konfiguration'):
             self._render_detail()
+        self._sync_spinner()
+        if self._intro_enabled and self.main_screen.query('#intro'):
+            intro = self.main_screen.query_one('#intro')
+            version = self._fact('version')
+            if version is not None:
+                intro.version = version.value
+            intro.ready(self._intro_lines())
 
     def _show_message(self, level: str, message: str) -> None:
         self._message = (level, message)
@@ -836,6 +1064,7 @@ class PicamApp(App[int]):
         else:
             self._busy = {'start': 'starte Dienst, warte auf HTTPS', 'stop': 'stoppe Dienst',
                           'restart': 'starte Dienst neu, warte auf HTTPS'}[action]
+            self._sync_spinner()
             self._render_status()
             self._service_thread(plan)
 
@@ -853,6 +1082,7 @@ class PicamApp(App[int]):
     def _finish_service(self, result: tuple[bool, str]) -> None:
         ok, message = result
         self._busy = None
+        self._sync_spinner()
         self._show_message(probes.OK if ok else probes.FAIL, message)
         self._setup_at = 0.0
         self.action_refresh()
@@ -963,8 +1193,9 @@ class PicamApp(App[int]):
     def _start_log(self) -> None:
         if self._log_thread is not None and self._log_thread.is_alive():
             return
-        log = self.query_one('#log', RichLog)
+        log = self.main_screen.query_one('#log', RichLog)
         log.clear()
+        self.main_screen.query_one('#tail-log', RichLog).clear()
         self._log_lines.clear()
         self._log_thread = threading.Thread(target=self._log_reader, daemon=True)
         self._log_thread.start()
@@ -1005,10 +1236,19 @@ class PicamApp(App[int]):
         self._log_lines.append(line)
         if len(self._log_lines) > LOG_LIMIT:
             del self._log_lines[: len(self._log_lines) - LOG_LIMIT]
+        self.main_screen.query_one('#tail-log', RichLog).write(self._log_text(line), scroll_end=True)
         if self._errors_only and line.level not in ('fehler', 'warnung'):
             return
-        log = self.query_one('#log', RichLog)
+        log = self.main_screen.query_one('#log', RichLog)
         log.write(self._log_text(line), scroll_end=self._follow)
+
+    def _render_tail_head(self) -> None:
+        head = Text()
+        head.append('LETZTE MELDUNGEN', style=f'bold {MUTED}')
+        head.append('   ')
+        head.append('l', style=f'bold {ACCENT}')
+        head.append(' ganzes Protokoll', style=MUTED)
+        self.main_screen.query_one('#tail-head', Static).update(head)
 
     def _render_log_head(self) -> None:
         head = Text()
@@ -1020,13 +1260,13 @@ class PicamApp(App[int]):
         if self._errors_only:
             state.append('nur Warnungen und Fehler')
         head.append('   ' + ' · '.join(state), style=ACCENT if self._follow else TONE[probes.WARN])
-        self.query_one('#log-head', Static).update(head)
+        self.main_screen.query_one('#log-head', Static).update(head)
 
     def action_toggle_follow(self) -> None:
         if self.selected != 'protokoll':
             return
         self._follow = not self._follow
-        log = self.query_one('#log', RichLog)
+        log = self.main_screen.query_one('#log', RichLog)
         log.auto_scroll = self._follow
         if self._follow:
             log.scroll_end(animate=False)
@@ -1037,7 +1277,7 @@ class PicamApp(App[int]):
         if self.selected != 'protokoll':
             return
         self._errors_only = not self._errors_only
-        log = self.query_one('#log', RichLog)
+        log = self.main_screen.query_one('#log', RichLog)
         log.clear()
         for line in self._log_lines:
             if not self._errors_only or line.level in ('fehler', 'warnung'):
@@ -1051,7 +1291,7 @@ class PicamApp(App[int]):
     def _render_config(self) -> None:
         from . import configedit
 
-        pane = self.query_one('#configpane', ConfigPane)
+        pane = self.main_screen.query_one('#configpane', ConfigPane)
         parts: list = [Static(Text('Konfiguration', style='bold'), classes='title')]
         inst = self.instance
         if inst.config is None:
@@ -1092,13 +1332,13 @@ class PicamApp(App[int]):
         self.call_after_refresh(self._focus_config_if_ready)
 
     def _focus_config_if_ready(self) -> None:
-        if self.query('#cfg-port'):
+        if self.main_screen.query('#cfg-port'):
             self._focus_config_pending = False
             self._focus_config()
 
     def _focus_config(self) -> None:
         try:
-            self.query_one('#cfg-port', Input).focus()
+            self.main_screen.query_one('#cfg-port', Input).focus()
         except Exception:  # noqa: BLE001 - keine Felder (Entwicklungsbetrieb)
             pass
 
@@ -1115,7 +1355,7 @@ class PicamApp(App[int]):
             return
         proposals = []
         for key in configedit.EDITABLE:
-            widget = self.query_one(f'#cfg-{key}')
+            widget = self.main_screen.query_one(f'#cfg-{key}')
             raw = ('true' if widget.value else 'false') if isinstance(widget, Checkbox) else widget.value
             current = getattr(inst, key)
             if key != 'bridge_discovery' and raw.strip() == ('' if current is None else str(current)):
@@ -1173,35 +1413,35 @@ class PicamApp(App[int]):
 
     # ------------------------------------------------------------ Tasten
     def action_show(self, key: str) -> None:
-        nav = self.query_one('#nav', OptionList)
+        nav = self.main_screen.query_one('#nav', OptionList)
         try:
             nav.highlighted = nav.get_option_index(key)
         except Exception:  # noqa: BLE001
             return
         self.selected = key
-        if self.screen.has_class('stacked'):
-            self.screen.add_class('open')
+        if self.main_screen.has_class('stacked'):
+            self.main_screen.add_class('open')
         self._render_footer()
         if key == 'konfiguration':
             self._request_config_focus()
 
     def action_go_back(self) -> None:
-        if self.screen.has_class('stacked') and self.screen.has_class('open'):
-            self.screen.remove_class('open')
-            self.query_one('#nav', OptionList).focus()
+        if self.main_screen.has_class('stacked') and self.main_screen.has_class('open'):
+            self.main_screen.remove_class('open')
+            self.main_screen.query_one('#nav', OptionList).focus()
             self._render_footer()
         elif self.focused is not None and self.focused.id != 'nav':
-            self.query_one('#nav', OptionList).focus()
+            self.main_screen.query_one('#nav', OptionList).focus()
 
     def action_nav_down(self) -> None:
         if isinstance(self.focused, Input):
             return
-        self.query_one('#nav', OptionList).action_cursor_down()
+        self.main_screen.query_one('#nav', OptionList).action_cursor_down()
 
     def action_nav_up(self) -> None:
         if isinstance(self.focused, Input):
             return
-        self.query_one('#nav', OptionList).action_cursor_up()
+        self.main_screen.query_one('#nav', OptionList).action_cursor_up()
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
@@ -1223,8 +1463,13 @@ class PicamApp(App[int]):
         self._stop_log()
 
 
-def run(instance: Instance) -> int:
-    app = PicamApp(instance)
+def intro_wanted(flag: bool = True) -> bool:
+    """Startbild zeigen? ``--no-intro`` oder ``PICAM_INTRO=0`` schalten es ab."""
+    return flag and os.environ.get('PICAM_INTRO', '1').strip().lower() not in ('0', 'nein', 'no', 'off', 'aus')
+
+
+def run(instance: Instance, intro: bool = True) -> int:
+    app = PicamApp(instance, intro=intro_wanted(intro))
     result = app.run()
     return 0 if result is None else int(result)
 

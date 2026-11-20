@@ -5,6 +5,30 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-20 (mittags): **picam-Konsole: Startbild, große Fenster, dezente
+  Bewegung.** Problem: Nach der Sichtprüfung fehlte eine Startseite, und in
+  großen Terminalfenstern blieben große Flächen leer. Geändert:
+  - Startbild (`dispread.admin.intro`): drehendes Objektiv als
+    ASCII-Schattierung und „picam“ als Punktmatrix im HD44780-Zeichensatz,
+    eine Lesezeile läuft darüber; darunter die echten ersten Prüfergebnisse.
+    Endet von selbst nach dem ersten Status (mindestens 2 s, höchstens 6 s),
+    jede Taste überspringt es ohne eine Aktion auszulösen. `--no-intro`,
+    `PICAM_INTRO=0`; `TEXTUAL_ANIMATIONS=none` zeigt es statisch.
+  - Große Fenster: ab 34 Zeilen „Letzte Meldungen“ des Dienstes unter dem
+    Bereich, ab 150 Spalten als Spalte rechts und Betriebskarten (Details
+    zu Dienst, Kamera, Brücke, Zertifikat, Speicher) in der Übersicht, nur
+    wenn sie ganz hineinpassen. Fließtext höchstens 110 Spalten breit.
+  - Bewegung: Überblendung nach dem Startbild, Bereichswechsel und Dialoge
+    kurz eingeblendet, geänderte Werte in der Liste 1,7 s hinterlegt,
+    Drehzeichen bei laufender Prüfung oder Dienstaktion.
+  - Fehler behoben: Kam die Statusprüfung (alle 5 s) an, während ein
+    Dialog offen war (Hilfe, Bestätigung, Update-Pfad), brach die Konsole
+    mit `NoMatches '#nav'` ab, weil sie den Dialog statt ihres eigenen
+    Bildschirms abfragte. Mit dem Stand von heute Nacht nachgestellt;
+    Regressionstest ergänzt.
+  Konsequenz: Tour `docs/quellen/picam-tour-2026-11-20/` um Bilder 16–20
+  und ein GIF ergänzt; 80×24 und schmaler sehen aus wie zuvor.
+
 * 2026-11-20: **Verwaltung `picam` und geführter Installer.** Problem: Für
   Status, Diagnose, Dienst und Protokoll gab es nur verstreute Befehle
   (`werkbank-dienst.sh`, `dispread live status`, `journalctl`), der Codex-

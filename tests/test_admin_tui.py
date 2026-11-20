@@ -217,3 +217,129 @@ def test_dialog_text_with_brackets_renders():
         await pilot.pause(0.2)
         assert isinstance(app.screen, ConfirmScreen)
     drive(check)
+
+
+# ------------------------------------------------------------ Startbild, große Fenster, Bewegung
+
+def log_lines():
+    return [LogLine('21:31:39', 'info', 'Werkbank gestartet'), LogLine('21:40:12', 'warnung', 'Brücke getrennt')]
+
+
+def drive_with(test, *, size=(100, 30), intro=False, journal=None, animations=None, collect=None):
+    async def main():
+        app = PicamApp(dev(), collect=collect or collector(), journal_source=journal, auto_refresh=False,
+                       intro=intro)
+        if animations is not None:
+            app.animation_level = animations
+        async with app.run_test(size=size) as pilot:
+            await pilot.pause(0.2)
+            await test(app, pilot)
+    asyncio.run(main())
+
+
+def test_intro_key_skips_without_triggering_an_action(monkeypatch):
+    from dispread.admin import intro
+    monkeypatch.setattr(intro.Intro, 'MIN_S', 30)
+    monkeypatch.setattr(intro.Intro, 'MAX_S', 30)
+
+    async def check(app, pilot):
+        assert app.query('#intro')
+        await pilot.press('s')
+        await pilot.pause(0.6)
+        assert not app.query('#intro')
+        assert not isinstance(app.screen, ConfirmScreen)  # „s“ hat nur das Startbild beendet
+        assert app.focused is app.query_one('#nav')
+    drive_with(check, intro=True)
+
+
+def test_intro_finishes_by_itself_once_status_is_known(monkeypatch):
+    from dispread.admin import intro
+    monkeypatch.setattr(intro.Intro, 'MIN_S', 0.2)
+    monkeypatch.setattr(intro.Intro, 'HOLD_S', 0.1)
+
+    async def check(app, pilot):
+        widget = app.query_one('#intro')
+        assert any(name == 'Hinweise' and '2 Punkte' in value for _, _, name, value in widget._lines)
+        await pilot.pause(1.0)
+        assert not app.query('#intro')
+    drive_with(check, intro=True)
+
+
+def test_intro_static_without_animations(monkeypatch):
+    from dispread.admin import intro
+    monkeypatch.setattr(intro.Intro, 'STATIC_MIN_S', 0.1)
+
+    async def check(app, pilot):
+        await pilot.pause(0.5)
+        assert not app.query('#intro')
+    drive_with(check, intro=True, animations='none')
+
+
+def test_wide_terminal_shows_messages_column_and_cards():
+    async def check(app, pilot):
+        await pilot.pause(0.3)
+        assert app.screen.has_class('wide') and not app.screen.has_class('tall')
+        assert app.query_one('#tail').display
+        assert app.query_one('#tail-log', RichLog).lines
+        assert app.query('.card')
+        await pilot.press('l')
+        await pilot.pause(0.2)
+        assert app.screen.has_class('no-tail')
+    drive_with(check, size=(180, 50), journal=log_lines)
+
+
+def test_tall_terminal_puts_messages_below_without_cards():
+    async def check(app, pilot):
+        await pilot.pause(0.3)
+        assert app.screen.has_class('tall')
+        assert app.query_one('#tail-log', RichLog).lines
+        assert not app.query('.card')
+    drive_with(check, size=(120, 40), journal=log_lines)
+
+
+def test_standard_terminal_has_no_messages_pane():
+    async def check(app, pilot):
+        assert not app.screen.has_class('tall') and not app.screen.has_class('wide')
+        assert not app.query_one('#tail').display
+    drive_with(check, journal=log_lines)
+
+
+def test_changed_value_is_highlighted_briefly():
+    state = {'value': '2,5 GB frei'}
+
+    def collect(instance, include_setup=True, **_):
+        data = facts()
+        data['speicher'] = F('speicher', 'Speicher', probes.WARN, state['value'])
+        return probes.Snapshot(instance, data, {'state': 'idle', 'diagnose_kopie': False}, time.time())
+
+    async def check(app, pilot):
+        state['value'] = '1,9 GB frei'
+        app.action_refresh()
+        await pilot.pause(0.3)
+        prompt = app._nav_prompt('speicher', None)
+        assert '1,9 GB frei' in prompt.plain
+        assert any('on #' in str(span.style) for span in prompt.spans)
+        assert not any('on #' in str(span.style) for span in app._nav_prompt('kamera', None).spans)
+    drive_with(check, collect=collect)
+
+
+def test_status_arriving_while_dialog_is_open_does_not_crash():
+    """Regression: die Prüfung alle 5 s fragte den Dialog statt der Konsole ab (NoMatches #nav)."""
+    def slow(instance, include_setup=True, **_):
+        time.sleep(0.6)
+        return collector()(instance)
+
+    async def check(app, pilot):
+        await pilot.press('question_mark')
+        await pilot.pause(0.8)  # Spinner und Statusanwendung laufen unter dem Dialog weiter
+        assert app.snapshot is not None
+        await pilot.press('escape')
+    drive_with(check, collect=slow)
+
+
+def test_intro_skipped_in_too_small_terminal():
+    async def check(app, pilot):
+        await pilot.pause(0.3)
+        assert not app.query('#intro')
+        assert app.screen.has_class('too-small')
+    drive_with(check, size=(40, 12), intro=True)

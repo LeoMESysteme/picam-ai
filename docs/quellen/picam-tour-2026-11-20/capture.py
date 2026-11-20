@@ -17,6 +17,7 @@ def facts(state):
      'bruecke': F('bruecke','Brücke',probes.WARN,'nicht gekoppelt',[('Pi-ID','565e3468…'),('Identität','vorhanden'),('Kopplungen','0')],hint='Noch keine Windows-Brücke gekoppelt. In der Werkbank beim Laufstart „Brücke einrichten…“ wählen: Profil laden, Code in die Windows-App eingeben.'),
      'zertifikat': F('zertifikat','Zertifikat',probes.OK,'bis 11/2027',[('Adresse','https://192.168.10.42:8080/live'),('Gültig bis','06.11.2027'),('Namen','192.168.10.42')]),
      'speicher': F('speicher','Speicher',probes.WARN,'2,5 GB frei',[('Frei','2,5 GB'),('Reserve','2,0 GB'),('Laufdaten','/var/lib/picam/live')],hint='Wird knapp. Alte Läufe sichern und löschen (zeigt zuerst, was frei würde).',command='picam aufraeumen'),
+     'netzwerk': F('netzwerk','Netzwerk',probes.OK,'eth0',[('Werkbank-Adresse','192.168.10.42'),('eth0','192.168.10.42')]),
      'vorlage': F('vorlage','Lesevorlage',probes.OK,'geprüft',[('Datei','/opt/picam/current/src/dispread/data/templates-stufe2c-2026-09-30.json'),('SHA-256','stimmt')]),
      'kalibrierung': F('kalibrierung','Kalibrierung',probes.FAIL,'fehlt',[('Datei','/var/lib/picam/calibration/timing-streamcam.json')],hint='Ohne Timing-Kalibrierung startet kein Messlauf. Am Aufbau messen (scripts/timing-calibration.py im Entwicklungs-Checkout) und die Datei hier ablegen.'),
      'uart': F('uart','UART',probes.OK,'aktiv',[('Gerät','/dev/ttyAMA0 vorhanden')]),
@@ -53,10 +54,12 @@ def journal():
             ('21:40:15','info','Brücke verbunden (Netzwerk, LABOR-PC-1)'),('22:05:44','fehler','Live-Einrichtung: Rahmen verdeckt'),('22:06:10','info','Einrichtung bestätigt')]
     return [LogLine(*r) for r in rows]
 
-async def shoot(name, size, state='idle', keys=()):
-    app = PicamApp(INST, collect=collector(state), journal_source=journal, auto_refresh=False)
+async def shoot(name, size, state='idle', keys=(), intro=False):
+    from dispread.admin.intro import Intro
+    Intro.MIN_S = Intro.MAX_S = 99 if intro else 2.0
+    app = PicamApp(INST, collect=collector(state), journal_source=journal, auto_refresh=False, intro=intro)
     async with app.run_test(size=size) as pilot:
-        await pilot.pause(0.3)
+        await pilot.pause(1.9 if intro else 0.3)
         for k in keys:
             await pilot.press(k)
             await pilot.pause(0.15)
@@ -72,15 +75,20 @@ async def main():
         ('04-neustart-bestaetigen-80x24', (80,24), 'idle', ('r',)),
         ('05-lauf-aktiv-gesperrt-80x24', (80,24), 'run', ('down','down')),
         ('06-dienst-ausgefallen-80x24', (80,24), 'down', ()),
-        ('07-kalibrierung-fehlt-80x24', (80,24), 'idle', ('down',)*9),
-        ('08-version-update-80x24', (80,24), 'idle', ('down',)*13),
-        ('09-update-dialog-80x24', (80,24), 'idle', ('down',)*13 + ('u',)),
+        ('07-kalibrierung-fehlt-80x24', (80,24), 'idle', ('down',)*10),
+        ('08-version-update-80x24', (80,24), 'idle', ('down',)*14),
+        ('09-update-dialog-80x24', (80,24), 'idle', ('down',)*14 + ('u',)),
         ('10-protokoll-80x24', (80,24), 'idle', ('l',)),
         ('11-konfiguration-80x24', (80,24), 'idle', ('c',)),
         ('12-hilfe-80x24', (80,24), 'idle', ('question_mark',)),
         ('13-schmal-liste-60x20', (60,20), 'idle', ()),
         ('14-schmal-bereich-60x20', (60,20), 'idle', ('down','down','enter')),
         ('15-zu-klein-40x12', (40,12), 'idle', ()),
+        ('16-start-80x24', (80,24), 'idle', (), True),
+        ('17-start-160x45', (160,45), 'idle', (), True),
+        ('18-hoch-120x40-meldungen-unten', (120,40), 'idle', ('down',)),
+        ('19-breit-180x50-karten-meldungen', (180,50), 'idle', ()),
+        ('20-breit-180x50-kalibrierung', (180,50), 'idle', ('down',)*10),
     ]
     old_cases = [
         ('home-120x40', (120,40), 'idle', ()),
@@ -97,7 +105,8 @@ async def main():
         ('narrow-open-60x20', (60,20), 'idle', ('down','down','down','down','down','down','enter')),
         ('small-40x12', (40,12), 'idle', ()),
     ]
-    for name, size, state, keys in cases:
+    for name, size, state, keys, *intro in cases:
         if which and name not in which: continue
-        await shoot(name, size, state, keys)
-asyncio.run(main())
+        await shoot(name, size, state, keys, intro=bool(intro and intro[0]))
+if __name__ == '__main__':
+    asyncio.run(main())

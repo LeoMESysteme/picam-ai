@@ -335,6 +335,8 @@ def parser() -> argparse.ArgumentParser:
     common.add_argument('--no-color', action='store_true', default=argparse.SUPPRESS,
                         help='ohne Farben (auch NO_COLOR)')
     common.add_argument('--ascii', action='store_true', default=argparse.SUPPRESS, help='nur 7-Bit-Zeichen')
+    common.add_argument('--no-intro', action='store_true', default=argparse.SUPPRESS,
+                        help='Konsole ohne Startbild (auch PICAM_INTRO=0)')
     root = argparse.ArgumentParser(prog='picam', parents=[common],
                                    description='Werkbank verwalten: Status, Diagnose, Dienst, Protokoll, '
                                    'Konfiguration. Ohne Befehl: Verwaltungskonsole.')
@@ -392,7 +394,7 @@ def main(argv=None) -> int:
         if command == 'tui' or (command is None and interactive and not args.ascii):
             from .tui import run
 
-            return run(instance)
+            return run(instance, intro=not getattr(args, 'no_intro', False))
         style = Style(sys.stdout, color=False if args.no_color else None, ascii_only=args.ascii)
         if command in (None, 'status'):
             snapshot = probes.collect(instance, include_setup=False)

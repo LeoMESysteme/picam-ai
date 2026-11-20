@@ -59,6 +59,14 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam url` | Adresse der Werkbank |
 
 `--no-color` (oder `NO_COLOR`) und `--ascii` gelten für alle Befehle.
+Die Konsole beginnt mit einem kurzen Startbild (Objektiv und Punktmatrix,
+darunter die ersten Prüfergebnisse). Es endet von selbst, sobald der
+Status da ist, jede Taste überspringt es. `--no-intro` oder
+`PICAM_INTRO=0` lassen es weg, `TEXTUAL_ANIMATIONS=none` schaltet alle
+Bewegungen ab (Startbild statisch, keine Überblendungen). Ab 34 Zeilen
+zeigt die Konsole unter dem Bereich die letzten Meldungen des Dienstes,
+ab 150 Spalten als eigene Spalte rechts, dann mit Betriebskarten in der
+Übersicht.
 `picam` findet die Instanz selbst: `/etc/picam/config.toml`,
 `~/.config/picam/config.toml` oder `--config PFAD`. Auf dem
 Entwicklungs-Pi ohne Installation verwaltet es den mit
