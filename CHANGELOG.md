@@ -29,6 +29,10 @@ was ist die Konsequenz.
   - Installer-Engine aus der getrennten Vorbereitung vom 17.11. (Codex)
     auf den 1.0-Stand gemergt; `config.load_config` ist der gemeinsame
     Prüfer für `serve --config` und picam.
+  - `picam update --source ARCHIV` bereitet die neue Version neben der
+    laufenden vor (eigene venv, Selbsttest), schaltet `current` atomar um,
+    startet neu und schaltet zurück, wenn `/live` nicht antwortet;
+    `--rollback`, `--activate`, `--check`. Gesperrt während eines Laufs.
   - Werkbank: Hinweis „Interner Testbuild – beim Entwickler anfragen“ in
     der Brückeneinrichtung durch „GSVmulti-Brücke 1.0“ ersetzt.
   Konsequenz: Echt geprüft wurden eine portable Installation per geführtem

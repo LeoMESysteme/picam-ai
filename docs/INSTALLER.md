@@ -53,6 +53,7 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam start` / `stop` / `restart` | Dienst; Stopp während eines Laufs: Exit 3 (nur `--force` überstimmt) |
 | `picam config [get KEY]` | Konfiguration lesen |
 | `picam config set KEY WERT` | `port`, `bridge_name`, `bridge_discovery`; geprüft, wirksam nach `picam restart` |
+| `picam update --source ARCHIV` / `--rollback` | neue Version mit Rückweg, siehe unten |
 | `picam url` | Adresse der Werkbank |
 
 `--no-color` (oder `NO_COLOR`) und `--ascii` gelten für alle Befehle.
@@ -267,7 +268,30 @@ Migration, neue Identität oder Zertifikatserneuerung. Bei einem Fehler vor
 Aktivierung werden nur die von diesem Aufruf angelegten Ziele aufgeräumt.
 Der aktive Versionslink wird zuletzt angelegt.
 
-Ein verwalteter Update-/Rollback-Befehl ist nicht Teil dieses
-Neuinstallers. Dafür fehlt noch die atomare Wartungssperre gegen
-gleichzeitige Messstarts. Die alte Installation bleibt bis zu einer
-gesondert beauftragten Übernahme der Betriebsstand.
+## Update und Rückweg
+
+Ein erneuter Installeraufruf aktualisiert nichts. Updates laufen über
+`picam update` (System- und Benutzerinstallation):
+
+```bash
+picam update --source picam-1.1.0.tar.gz   # vorbereiten, umschalten, neu starten
+picam update --rollback                    # zurück auf die vorige Version
+picam update --check                       # aktive, vorige, installierte Versionen
+picam update --activate 1.1.0              # vorbereitete Version aktivieren
+```
+
+Ablauf: Laufsperre prüfen, neue Version unter `releases/<id>` vorbereiten
+(Dateien, eigene venv, Selbsttest), Laufsperre erneut prüfen, `current`
+atomar umschalten (die bisherige wird `previous`), Dienst neu starten und
+auf `/live` warten. Antwortet die neue Version nicht, schaltet picam auf
+die vorige zurück und startet sie neu. Daten, Konfiguration, Identität und
+Kalibrierung bleiben unverändert; die Konfiguration liest die Lesevorlage
+über `current`. In der Konsole: Bereich Version, `u` bzw. `z`.
+
+Grenze: Die Laufsperre ist eine Prüfung unmittelbar vor Vorbereitung und
+Umschalten, keine atomare Wartungssperre im Dienst. Startet jemand genau
+zwischen Prüfung und Neustart einen Lauf, bricht der Neustart ihn ab. Updates
+deshalb nicht während laufender Messarbeit anstoßen.
+
+Die bestehende Entwicklungsinstallation dieses Pi wird nicht übernommen;
+dort gilt weiter `git pull` und `picam restart`.
