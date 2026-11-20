@@ -1,9 +1,67 @@
 # Installer für einen separaten Linux-Rechner
 
 Der neue Installer installiert ausschließlich in neue Zielverzeichnisse.
-Er übernimmt keine vorhandene Werkbank, startet keinen Dienst und ändert
-weder Bootdateien noch Benutzergruppen oder Tailscale. Ohne `--apply`
-zeigt er einen Plan und schreibt keine Zieldateien.
+Er übernimmt keine vorhandene Werkbank und ändert weder Bootdateien noch
+Benutzergruppen oder Tailscale. Mit Angaben auf der Befehlszeile zeigt er
+ohne `--apply` nur einen Plan und schreibt keine Zieldateien.
+
+## Geführt installieren (empfohlen)
+
+Releasearchiv (`picam-<version>.tar.gz`) auf den neuen Pi kopieren,
+entpacken und im Terminal ohne weitere Angaben starten:
+
+```bash
+tar xzf picam-1.0.0.tar.gz
+cd picam && ./install.sh
+```
+
+Der geführte Modus prüft zuerst System, Archiv und Debian-Pakete und fragt
+dann nur, was er nicht ableiten kann: Installationsart (Systemdienst,
+Benutzerdienst, portabel), Dienstkonto, Adresse für Windows (die erkannten
+Schnittstellen stehen zur Auswahl) und Port. Danach zeigt er den Plan und
+installiert erst nach `j`. Für die Systeminstallation übergibt er die
+festen Antworten an `sudo`. Am Ende verlinkt er den Befehl `picam` und
+fragt gesondert, ob der Dienst jetzt starten und beim Booten automatisch
+starten soll (`systemctl enable --now`); er wartet, bis `/live` antwortet.
+Ohne Terminal (Skript, Pipe) gelten weiter die Pflichtangaben unten.
+
+Liegt das Archiv neben `install.sh` oder im aktuellen Ordner, findet der
+Installer es selbst; sonst fragt er nach Pfad oder HTTPS-Adresse (dann mit
+getrennt erhaltenem SHA-256).
+
+## Verwalten mit `picam`
+
+`picam` ohne Argument öffnet im Terminal die Verwaltungskonsole: links
+die Bereiche (Dienst, Lauf, Kamera, Ausgabe, Brücke, Zertifikat, Speicher,
+dann die Einrichtung mit Lesevorlage, Kalibrierung, UART, Konto, Uhrzeit,
+Version), rechts Befund, Abhilfe und Aktionen. `s` startet/stoppt, `r`
+startet neu, `l` zeigt das Protokoll (`f` mitlaufen, `e` nur Probleme),
+`c` öffnet die Konfiguration, `a` führt den empfohlenen Befehl eines
+Befunds nach Rückfrage aus, `?` zeigt alle Tasten. Jede Aktion zeigt den
+genauen Befehl und startet auf „Abbrechen“. Stoppen und Neustarten sind
+gesperrt, solange ein Lauf, eine Einrichtung oder eine Diagnosekopie aktiv
+ist oder der Laufstatus unbekannt ist. Messläufe und Messwerte bleiben in
+der Werkbank; picam startet keinen Lauf.
+
+Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
+
+| Befehl | Zweck |
+| --- | --- |
+| `picam status [--json]` | Kurzstatus |
+| `picam doctor [--json]` | alle Prüfungen mit Abhilfe; Exit 0 OK, 1 Fehler, 2 Warnung |
+| `picam logs [-n N] [-f]` | Protokoll des Dienstes |
+| `picam start` / `stop` / `restart` | Dienst; Stopp während eines Laufs: Exit 3 (nur `--force` überstimmt) |
+| `picam config [get KEY]` | Konfiguration lesen |
+| `picam config set KEY WERT` | `port`, `bridge_name`, `bridge_discovery`; geprüft, wirksam nach `picam restart` |
+| `picam url` | Adresse der Werkbank |
+
+`--no-color` (oder `NO_COLOR`) und `--ascii` gelten für alle Befehle.
+`picam` findet die Instanz selbst: `/etc/picam/config.toml`,
+`~/.config/picam/config.toml` oder `--config PFAD`. Auf dem
+Entwicklungs-Pi ohne Installation verwaltet es den mit
+`scripts/werkbank-dienst.sh` gestarteten Benutzerdienst und merkt sich
+dessen Startbefehl. Die Adresse ist in der Konsole nur lesbar, weil sie im
+Zertifikat und in den Kopplungen steht.
 
 ## Lieferumfang
 

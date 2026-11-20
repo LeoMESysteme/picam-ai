@@ -11,7 +11,12 @@ Dazu kommt sein Wunsch nach einer aufgeräumten Codebase und einem Setup, das au
 Raspberries reibungslos läuft. Getestet wird später auf einem zweiten Pi. Gestaltung nach dem
 Skill `terminal:tui-design`. **Stand 2026-11-14:** Die begrenzte Stufe P0a ist
 umgesetzt (L1/L2/L7/L8/L10, siehe unten); das weitere Zielbild bleibt Entwurf.
-Offene Entscheidungen stehen in Abschnitt 9.
+Offene Entscheidungen stehen in Abschnitt 9. **Stand 2026-11-20:** Der Name `picam` ist gesetzt (Verwaltung neben
+`dispread`), Konsole und Einzelbefehle sind in `dispread.admin` umgesetzt
+(Abschnitt 6 mit eigenem Design: Bereichsliste statt Kacheln, Protokoll als
+eigener Bereich). Der geführte Installer (Abschnitt 5, ohne UART-/Boot-Änderung)
+steckt in `packaging/picam_installer/guided.py`. Anleitung:
+[INSTALLER.md](../../INSTALLER.md).
 
 ## 1. Bestandsaufnahme (Stand `feat/integration`, 13.11.)
 

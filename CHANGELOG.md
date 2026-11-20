@@ -5,6 +5,37 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-20: **Verwaltung `picam` und geführter Installer.** Problem: Für
+  Status, Diagnose, Dienst und Protokoll gab es nur verstreute Befehle
+  (`werkbank-dienst.sh`, `dispread live status`, `journalctl`), der Codex-
+  Entwurf der Konsole lief nur auf Demodaten und gefiel nicht; der Installer
+  verlangte alle Angaben als Pflichtoptionen. Geändert:
+  - `picam` (neu, `dispread.admin`): Konsole mit Bereichsliste links und
+    Befund/Abhilfe rechts, Protokoll mit Filter, Konfigurationsformular,
+    Bestätigung mit sichtbarem Befehl (Fokus auf „Abbrechen“), schmal als
+    Stapel, Mindestgröße 48×14. Einzelbefehle `status`, `doctor`, `logs`,
+    `start`/`stop`/`restart`, `config`, `url` mit `--json`, `--ascii`,
+    `NO_COLOR` und Exit-Codes 0/1/2/3/64/130. Erkennt installierte Instanzen
+    (`/etc/picam/config.toml`, Benutzer, portabel) und den
+    Entwicklungsdienst (`systemd-run`, Startbefehl wird gemerkt).
+  - Dienstaktionen sind gesperrt, solange Lauf, Einrichtung oder
+    Diagnosekopie aktiv sind oder der Laufstatus unbekannt ist (wie
+    `werkbank-dienst.sh`). picam startet keinen Messlauf und zeigt keine
+    Messwerte.
+  - `./install.sh` ohne Angaben im Terminal: geführter Modus mit
+    System-/Paketprüfung, Auswahl der erkannten Adressen, Plan, Bestätigung,
+    sudo-Übergabe, `picam`-Verknüpfung und Dienststart nur nach eigener
+    Rückfrage. Mit Angaben bleibt der Planungsmodus wie bisher.
+  - Installer-Engine aus der getrennten Vorbereitung vom 17.11. (Codex)
+    auf den 1.0-Stand gemergt; `config.load_config` ist der gemeinsame
+    Prüfer für `serve --config` und picam.
+  - Werkbank: Hinweis „Interner Testbuild – beim Entwickler anfragen“ in
+    der Brückeneinrichtung durch „GSVmulti-Brücke 1.0“ ersetzt.
+  Konsequenz: Echt geprüft wurden eine portable Installation per geführtem
+  Dialog in ein Testverzeichnis und picam gegen den laufenden
+  Entwicklungsdienst (nur lesend) sowie gegen die Testinstanz im
+  Simulationsmodus. Eine Systeminstallation auf einem frischen Pi steht aus.
+
 * 2026-11-18: **Version 1.0: Testfreigabe entfällt, angepasste Toleranz ist eine echte Wahl.**
   Herr Kaulitz hat Werkbank und Ausgabewege am 13.11. abgenommen, Leonhard hat
   die EXE am 18.11. geprüft. Geändert:
