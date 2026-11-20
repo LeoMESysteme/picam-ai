@@ -14,13 +14,18 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 ## Übergabe für Mittwoch (Claude, autonom seit 20.11. abends)
 
-Branch `feat/picam-admin` (gepusht, Arbeitsstand sauber). Releasekandidat liegt
-unter `~/picam-releases/` (`picam-rc-<commit>.tar.gz` + `.sha256`), gebaut mit
-`scripts/build-release.py` aus dem jeweils letzten Commit.
+Branch `feat/picam-admin` (gepusht, Arbeitsstand sauber). **Releasekandidat:**
+`~/picam-releases/picam-rc-51b620f.tar.gz`, SHA-256
+`af7c7fc4c7ada7885e9be3a9cce85a76ca35b640ae3c086c085b267041815a6d` (Code-Stand
+`51b620f`, nicht dirty), gebaut mit `scripts/build-release.py`.
 
-**Prüfstand (20.11. abends):** pytest 4943 bestanden (1 Brückentest wackelt nur
-unter Volllast, einzeln 3× grün), 27 übersprungen, 2 xfailed; Playwright Werkbank
-73/73; Node grün; ruff sauber; strenger Doku-Build ohne Befund. Releasetest im
+**Prüfstand (20./21.11. nachts, Stand `51b620f`):** pytest 4985 bestanden,
+27 übersprungen, 2 xfailed; 1 Fehlschlag nur unter Volllast im Test der alten
+`dispread tui` (`test_tui_oeffnet_nachfuehrzeile_ohne_absturz`, einzeln 3× grün; vorher
+ebenso ein Brückentest). Playwright Werkbank 73/73, Doku 154/154; Node 317; ruff
+sauber; strenger Doku-Build ohne Befund. Unabhängige Code-Prüfung der neuen Teile:
+1 kritischer (Kalibrierung bei SSH-Abbruch ohne Aufräumen), 1 wichtiger und 4
+kleinere Befunde – alle behoben (`51b620f`). Releasetest im
 Scratch: portabel installiert, Test-Werkbank mit `--simulate` gestartet, `picam
 status/doctor`, `kalibrieren --pruefen/--import` (getippte Bestätigung) und Konsole
 im echten Terminal (alle Tabs, Exit 0) geprüft, Deinstallation portabel;
