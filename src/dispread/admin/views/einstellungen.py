@@ -13,8 +13,8 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Checkbox, Input, Static
 
 from .. import probes
-from ..ui import MUTED, TONE, Action, Confirmation, ConfirmScreen, kv_table, section
-from .base import TabView
+from ..ui import MUTED, TONE, Action, Confirmation, ConfirmScreen, Segment, kv_table
+from .base import TabView, actions_segment
 
 #: Änderbare Felder: Beschriftung, Risiko (Stufe, Erklärung).
 FIELDS = {
@@ -37,13 +37,14 @@ class EinstellungenView(TabView):
             'Die Adresse steht im Zertifikat und in den Kopplungen und wird nur bei einer Neuinstallation '
             'gewählt.')
 
+    DEFAULT_CSS = 'EinstellungenView #cfg-fields { height: auto; }'
+
     def compose(self):
         yield Static(Text('Einstellungen', style='bold'), classes='title')
         yield Static(id='cfg-intro', classes='hint info')
-        yield Vertical(id='cfg-fields')
-        yield section('Orte')
-        yield Static(id='cfg-paths')
-        yield Horizontal(id='buttons', classes='buttons')
+        yield Segment(None, Vertical(id='cfg-fields'), id='cfg-values')
+        yield Segment('Orte', Static(id='cfg-paths'))
+        yield actions_segment()
 
     def on_mount(self) -> None:
         self._build_fields()
@@ -58,6 +59,7 @@ class EinstellungenView(TabView):
         box = self.query_one('#cfg-fields', Vertical)
         box.remove_children()
         intro = self.query_one('#cfg-intro', Static)
+        self.query_one('#cfg-values').display = inst.config is not None
         if inst.config is None:
             intro.update(Text('Entwicklungsbetrieb: Die Werte stammen aus dem Startbefehl des Dienstes '
                               '(scripts/werkbank-dienst.sh). Eine installierte Werkbank hat dafür eine '

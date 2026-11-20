@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from rich.table import Table
 from rich.text import Text
-from textual.containers import Horizontal
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, Action, fact_title, hint_block, section, symbol
-from .base import FactView
+from ..ui import ACCENT, MUTED, TONE, Action, Segment, fact_title, hint_block, symbol
+from .base import FactView, actions_segment
 
 GROUP_WHY = (('video', 'Kamera (/dev/video…)'), ('dialout', 'serielle Schnittstelle (/dev/ttyAMA0)'))
 
@@ -25,22 +24,17 @@ class KontoView(FactView):
             'Das Konto braucht die Gruppen video (Kamera) und dialout (UART).')
 
     DEFAULT_CSS = """
-    KontoView #kt-login { margin: 1 0 0 0; padding: 0 1; border-left: wide $primary; background: #11171a;
+    KontoView #kt-login { margin: 1 0 0 0; padding: 0 1; border-left: wide $primary; background: $picam-tint-info;
                           max-width: 110; }
     """
 
     def compose(self):
         yield Static(Text(self.TITLE, style='bold'), classes='title')
         yield Static(id='kt-login')
-        yield section('Gruppen')
-        yield Static(id='kt-groups')
-        yield Static(id='f-konto-hint', classes='hint')
-        yield Static(id='f-linger-title', classes='fact-title')
-        yield Static(id='f-linger-hint', classes='hint')
-        yield Static(id='f-linger-detail')
-        yield section('Passwort ändern')
-        yield Static(id='kt-passwd')
-        yield Horizontal(id='buttons', classes='buttons')
+        yield Segment('Gruppen', Static(id='kt-groups'), Static(id='f-konto-hint', classes='hint'))
+        yield Segment(None, *self.fact_widgets('linger'))
+        yield Segment('Passwort ändern', Static(id='kt-passwd'))
+        yield actions_segment()
 
     def actions(self) -> list[Action]:
         return super().actions() + [Action('p', 'Passwort ändern', lambda: None,

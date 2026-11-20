@@ -14,8 +14,8 @@ from textual.widgets.option_list import Option
 
 from .. import probes
 from ..intro import SHINE_PERIOD, SHINE_S, logo_text
-from ..ui import ACCENT, MUTED, TONE, Action, ascii_mode, status_strip, symbol
-from .base import TabView
+from ..ui import ACCENT, MUTED, SOFT, TONE, Action, Segment, ascii_mode, section_text, status_strip, symbol
+from .base import TabView, actions_segment
 from .lauf import drift, fmt_duration, fmt_int, latest_text
 
 SHINE_EVERY_S = 20.0
@@ -33,10 +33,10 @@ class RunCard(Static):
     can_focus = True
     BINDINGS = [Binding('enter', 'open', show=False)]
     DEFAULT_CSS = '''
-    RunCard { border-left: wide #2a333d; }
-    RunCard.running { border-left: wide #6cb6c4; }
-    RunCard:hover { background: #1b2129; }
-    RunCard:focus { background: #1a2a2f; }
+    RunCard { border-left: wide $picam-line; transition: background 150ms out_cubic; }
+    RunCard.running { border-left: wide $picam-accent; }
+    RunCard:hover { background: $picam-raised; }
+    RunCard:focus { background: $picam-raised; border-left: wide $picam-accent-strong; }
     '''
 
     def on_click(self) -> None:
@@ -65,14 +65,14 @@ class DashboardView(TabView):
                 yield Static(id='dash-logo')
                 yield Static(id='dash-warn', classes='hint')
                 yield RunCard(id='dash-run')
-                yield Horizontal(id='buttons', classes='buttons')
-                with Vertical(id='dash-tail'):
-                    yield Static(id='tail-head')
+                yield actions_segment()
+                with Segment(id='dash-tail'):
+                    yield Static(id='tail-head', classes='section')
                     yield RichLog(id='tail-log', max_lines=TAIL_LINES, wrap=True, markup=False, auto_scroll=True,
                                   min_width=20)
             with Vertical(id='dash-right'):
-                yield Static(Text('BEREICHE', style=f'bold {MUTED}'), classes='section')
-                yield OptionList(id='dash-list')
+                with Segment('Bereiche', id='dash-areas'):
+                    yield OptionList(id='dash-list')
 
     def on_mount(self) -> None:
         bar = self.query_one('#buttons', Horizontal)
@@ -84,8 +84,7 @@ class DashboardView(TabView):
         self._layout()
         if self.app.animation_level != 'none':
             self.set_interval(SHINE_EVERY_S, self._start_shine)
-        head = Text()
-        head.append('LETZTE MELDUNGEN', style=f'bold {MUTED}')
+        head = section_text('Letzte Meldungen', styled=False)
         head.append('   l', style=f'bold {ACCENT}')
         head.append(' ganzes Protokoll', style=MUTED)
         self.query_one('#tail-head', Static).update(head)
@@ -103,7 +102,7 @@ class DashboardView(TabView):
         left = self.query_one('#dash-left')
         right = self.query_one('#dash-right')
         dash = self.query_one('#dash')
-        self._list_width = right_w - 3 if not stacked else max(20, width - 5)
+        self._list_width = right_w - 3 if not stacked else max(20, width - 8)
         right.styles.width = '1fr' if stacked else right_w
         if stacked:
             left.styles.padding = (1, 0, 0, 0)
@@ -310,7 +309,7 @@ class DashboardView(TabView):
         if len(problems) > 1:
             text.append(f'   +{len(problems) - 1} weitere', style=MUTED)
         if worst.hint and getattr(self, '_tall', True):
-            text.append('\n' + worst.hint, style='#c9d1d9')
+            text.append('\n' + worst.hint, style=SOFT)
         warn.update(text)
         warn.display = True
         warn.set_class(worst.level == probes.FAIL, 'fail')

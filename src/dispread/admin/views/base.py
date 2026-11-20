@@ -33,7 +33,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Button, Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, Action, fact_title, hint_block, kv_table
+from ..ui import ACCENT, MUTED, Action, Segment, fact_title, hint_block, kv_table
 
 
 class TabView(VerticalScroll):
@@ -76,6 +76,11 @@ class TabView(VerticalScroll):
                 return
 
 
+def actions_segment(*children) -> Segment:
+    """Abschnitt mit den Knöpfen eines Tabs (ohne Kopf); hebt sich hervor, solange ein Knopf den Fokus hat."""
+    return Segment(None, *children, Horizontal(id='buttons', classes='buttons'), classes='actions')
+
+
 def key_hint(key: str, label: str) -> Text:
     text = Text()
     text.append(key, style=f'bold {ACCENT}')
@@ -91,10 +96,16 @@ class FactView(TabView):
     def compose(self):
         yield Static(Text(self.TITLE, style='bold'), classes='title')
         for key in self.FACTS:
-            yield Static(id=f'f-{key}-title', classes='fact-title')
-            yield Static(id=f'f-{key}-hint', classes='hint')
-            yield Static(id=f'f-{key}-detail')
-        yield Horizontal(id='buttons', classes='buttons')
+            with Segment():
+                yield from self.fact_widgets(key)
+        yield actions_segment()
+
+    @staticmethod
+    def fact_widgets(key: str):
+        """Titel, Abhilfe und Details eines Befunds (Inhalt eines Abschnitts)."""
+        yield Static(id=f'f-{key}-title', classes='fact-title')
+        yield Static(id=f'f-{key}-hint', classes='hint')
+        yield Static(id=f'f-{key}-detail')
 
     def on_mount(self) -> None:
         bar = self.query_one('#buttons', Horizontal)

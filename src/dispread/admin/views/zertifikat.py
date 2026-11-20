@@ -13,7 +13,7 @@ from textual.containers import Horizontal
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import MUTED, Action, Confirmation, ConfirmScreen, fact_title, hint_block, kv_table, section
+from ..ui import MUTED, Action, Confirmation, ConfirmScreen, Segment, fact_title, hint_block, kv_table
 from .base import FactView
 
 DASH = '–'
@@ -43,17 +43,17 @@ class ZertifikatView(FactView):
     SCOPED_CSS = False
     DEFAULT_CSS = """
     ZertifikatView #cert-intro { margin: 1 0 0 0; }
-    ZertifikatView #cert-note { margin: 1 0 0 0; color: $text-muted; max-width: 100; }
+    ZertifikatView #cert-note { margin: 0; color: $picam-text-muted; max-width: 100; }
     """
 
     def compose(self):
         yield Static(Text('Ausweis der Werkbank für HTTPS und die Windows-Brücke.', style=MUTED), id='cert-intro')
-        yield Static(id='cert-state', classes='fact-title')
-        yield Static(id='cert-hint', classes='hint')
-        yield Static(id='cert-rows')
-        yield section('Erneuern und Abschalten')
-        yield Static(id='cert-note')
-        yield Horizontal(id='buttons', classes='buttons')
+        with Segment():
+            yield Static(id='cert-state', classes='fact-title')
+            yield Static(id='cert-hint', classes='hint')
+            yield Static(id='cert-rows')
+        yield Segment('Erneuern und Abschalten', Static(id='cert-note'),
+                      Horizontal(id='buttons', classes='buttons'))
 
     def cert_directory(self) -> Path | None:
         data = self.app.instance.data

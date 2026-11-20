@@ -27,57 +27,206 @@ SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
 SYMBOL = {probes.OK: '✓', probes.WARN: '!', probes.FAIL: '✗', probes.OFF: '○', probes.UNKNOWN: '?'}
 ASCII_SYMBOL = {probes.OK: '+', probes.WARN: '!', probes.FAIL: 'x', probes.OFF: '-', probes.UNKNOWN: '?'}
-#: Palette „ME-Türkis“: eine Leitfarbe (Türkis aus dem ME-Logo), dazu wenige
-#: abgestimmte Statustöne. Hintergründe in drei Stufen (Grund, Fläche, Feld).
-BG = '#121820'
-SURFACE = '#1a222c'
-PANEL = '#222c38'
-LINE = '#2b3644'
-TEXT = '#e3e9f0'
-SOFT = '#a9b4c2'
-#: Semantische Farben (Status: genau ein Zeichen + eine Farbe).
-TONE = {probes.OK: '#7fd1a0', probes.WARN: '#f2c46d', probes.FAIL: '#f2867f', probes.OFF: '#8a96a6',
-        probes.UNKNOWN: '#b7a6f2'}
-MUTED = '#8a96a6'
-ACCENT = '#2ec4b6'
-ACCENT_DEEP = '#0f6e68'
-SECONDARY = '#7aa7f5'
-#: Getönte Flächen für Hinweise (Rand in Statusfarbe, Grund leicht eingefärbt).
-TINT = {probes.OK: '#16261f', probes.WARN: '#2a2416', probes.FAIL: '#2c1a1c', 'info': '#13292b'}
+# ----------------------------------------------------------------- Farben
+#: Jede Farbe der Konsole kommt aus genau einer aktiven ``Palette``. Rollen statt
+#: Farbtöpfe: Flächen in Stufen (Grund < Abschnitt < hervorgehobener Abschnitt),
+#: Bänder für Tab- und Statuszeile, Text in drei Stufen, eine Leitfarbe
+#: (ME-Türkis) für Auswahl, Fokus und Tasten, dazu die Statustöne. Gewählt wird
+#: beim Import über ``PICAM_THEME`` (schiefer | petrol | hell, auch a | b | c).
 
-THEME = Theme(
-    name='picam',
-    primary=ACCENT,
-    secondary=SECONDARY,
-    accent=ACCENT,
-    warning=TONE[probes.WARN],
-    error=TONE[probes.FAIL],
-    success=TONE[probes.OK],
-    foreground=TEXT,
-    background=BG,
-    surface=SURFACE,
-    panel=PANEL,
-    dark=True,
-    variables={
-        'footer-key-foreground': ACCENT,
-        'footer-description-foreground': SOFT,
-        'footer-background': BG,
-        'block-cursor-background': '#17403f',
-        'block-cursor-foreground': '#f2fbfa',
-        'block-cursor-text-style': 'bold',
-        'block-cursor-blurred-background': '#1b2c30',
-        'block-cursor-blurred-text-style': 'none',
-        'scrollbar': LINE,
-        'scrollbar-background': BG,
-        'scrollbar-background-hover': BG,
-        'scrollbar-background-active': BG,
-        'scrollbar-corner-color': BG,
-        'scrollbar-hover': '#3a4757',
-        'scrollbar-active': ACCENT,
-        'input-cursor-background': ACCENT,
-    },
+
+@dataclass(frozen=True)
+class Palette:
+    name: str
+    label: str
+    dark: bool
+    # Flächen, von hinten nach vorn
+    canvas: str          # Grund hinter allem
+    surface: str         # Abschnitte (Karten) eines Tabs
+    raised: str          # Abschnitt mit Fokus, Dialoge
+    band: str            # Tab-, Status- und Tastenleiste
+    line: str            # Trennlinien, leere Balken
+    # Text
+    text: str
+    text_soft: str       # Nebentext, Abschnittsköpfe
+    text_muted: str      # Beschriftungen, Einheiten, Hinweise
+    # Leitfarbe
+    accent: str          # Tasten, Adressen, Balken
+    accent_strong: str   # aktiver Tab, Fokus
+    on_accent: str       # Schrift auf accent_strong
+    accent_deep: str     # Marke, Hauptknopf
+    on_accent_deep: str
+    secondary: str
+    # Status (immer zusammen mit einem Zeichen, nie Farbe allein)
+    ok: str
+    warn: str
+    fail: str
+    off: str
+    unknown: str
+    # Getönte Hinweisflächen
+    tint_ok: str
+    tint_warn: str
+    tint_fail: str
+    tint_info: str
+    # Bedienelemente
+    control: str         # Knopf
+    control_hover: str
+    disabled_fg: str
+    disabled_bg: str
+    field: str           # Eingabefeld
+    field_focus: str
+    select_bg: str       # Listenauswahl
+    select_fg: str
+    select_blur_bg: str
+    backdrop: str        # Schleier hinter Dialogen (mit Alpha)
+    scrollbar: str
+    scrollbar_hover: str
+    # Besondere Darstellungen
+    pin_5v: str
+    pin_3v3: str
+    lcd_off: str
+    lcd_unread: str
+    lcd_read: str
+    lcd_beam: str
+    lcd_beam_off: str
+    logo_dim: str        # Logo noch nicht gezeichnet
+    logo: str            # ME-Türkis
+    logo_bright: str
+    logo_flash: str
+
+    def colors(self) -> dict[str, str]:
+        """Alle Farbrollen als ``{rolle: hex}``."""
+        return {k: v for k, v in self.__dict__.items() if k not in ('name', 'label', 'dark')}
+
+    def variables(self) -> dict[str, str]:
+        """CSS-Variablen ``$picam-<rolle>`` für Textual."""
+        return {'picam-' + k.replace('_', '-'): v for k, v in self.colors().items()}
+
+
+#: A „Schiefer“: mittleres Schiefergrau, weiche Stufen, Türkis als einzige Leitfarbe.
+SCHIEFER = Palette(
+    name='schiefer', label='Schiefer', dark=True,
+    canvas='#2c343e', surface='#333c47', raised='#3c4753', band='#242b33', line='#4b5764',
+    text='#dde3e9', text_soft='#c0c9d2', text_muted='#adb7c2',
+    accent='#45c9be', accent_strong='#62d6cb', on_accent='#0e1b1c', accent_deep='#137a73', on_accent_deep='#f2fbfa',
+    secondary='#8fb2e8',
+    ok='#97d9ae', warn='#eec977', fail='#f69e94', off='#adb7c2', unknown='#c3b6f2',
+    tint_ok='#32463d', tint_warn='#4a4230', tint_fail='#4d3639', tint_info='#2c4b4f',
+    control='#47525f', control_hover='#515d6b', disabled_fg='#939da8', disabled_bg='#39424d',
+    field='#272e37', field_focus='#225050', select_bg='#225a57', select_fg='#f2fbfa', select_blur_bg='#3c4753',
+    backdrop='#161c22b3', scrollbar='#4b5764', scrollbar_hover='#5b6876',
+    pin_5v='#e8b86a', pin_3v3='#93acd0',
+    lcd_off='#38424e', lcd_unread='#6b7683', lcd_read='#6cc6cc', lcd_beam='#b0e9ee', lcd_beam_off='#36575e',
+    logo_dim='#1b4f4c', logo='#00b5af', logo_bright='#77e7db', logo_flash='#ffffff',
 )
 
+#: B „Petrol“: Grund ins ME-Petrol getönt, Nebentöne aus derselben Farbe, warmes
+#: Bernstein als zweite Farbe für Warnungen.
+PETROL = Palette(
+    name='petrol', label='Petrol', dark=True,
+    canvas='#19373a', surface='#1f4145', raised='#274d52', band='#112b2e', line='#386166',
+    text='#e6f0ec', text_soft='#bfd5d0', text_muted='#a3c0bb',
+    accent='#33cdc2', accent_strong='#5cdcd2', on_accent='#06201f', accent_deep='#00756f', on_accent_deep='#f2fbfa',
+    secondary='#f2b45e',
+    ok='#a3deac', warn='#f5b65f', fail='#ff9d8f', off='#a3c0bb', unknown='#cbbcf3',
+    tint_ok='#23493d', tint_warn='#4b4128', tint_fail='#4c3438', tint_info='#1c5458',
+    control='#30595e', control_hover='#3a666b', disabled_fg='#86a5a1', disabled_bg='#244a4e',
+    field='#132f32', field_focus='#11615b', select_bg='#0f6a64', select_fg='#f2fbfa', select_blur_bg='#2b5459',
+    backdrop='#0a1a1cb3', scrollbar='#386166', scrollbar_hover='#4a7378',
+    pin_5v='#f2b45e', pin_3v3='#93b8d8',
+    lcd_off='#2a5054', lcd_unread='#6c8d8a', lcd_read='#5fd0c8', lcd_beam='#b5f0ec', lcd_beam_off='#2f6466',
+    logo_dim='#15504d', logo='#00b5af', logo_bright='#77e7db', logo_flash='#ffffff',
+)
+
+#: C „Hell“: papierheller Grund, weiße Abschnitte, tiefes Türkis; für helle Laborräume.
+HELL = Palette(
+    name='hell', label='Hell', dark=False,
+    canvas='#ecebe6', surface='#fbfaf7', raised='#e3f2ef', band='#dfe2de', line='#c9cfcc',
+    text='#26343a', text_soft='#3e4d54', text_muted='#56636a',
+    accent='#006c66', accent_strong='#00615c', on_accent='#ffffff', accent_deep='#00706a', on_accent_deep='#ffffff',
+    secondary='#3c5f9e',
+    ok='#276a40', warn='#865700', fail='#ad2c24', off='#56636a', unknown='#5d43a8',
+    tint_ok='#e2f0e6', tint_warn='#f7ecd3', tint_fail='#f8e1dd', tint_info='#dcefec',
+    control='#e1e5e3', control_hover='#d3d9d6', disabled_fg='#778186', disabled_bg='#eceeec',
+    field='#e3e6e2', field_focus='#cbe8e3', select_bg='#c9e7e2', select_fg='#0f2a29', select_blur_bg='#e6e9e7',
+    backdrop='#3a4a4a59', scrollbar='#c2c9c6', scrollbar_hover='#a9b3af',
+    pin_5v='#9a5a00', pin_3v3='#3c5f9e',
+    lcd_off='#d9dfdc', lcd_unread='#8a979c', lcd_read='#00807a', lcd_beam='#00b5af', lcd_beam_off='#b8dcd8',
+    logo_dim='#cfe6e3', logo='#00a19b', logo_bright='#007a75', logo_flash='#0b5753',
+)
+
+PALETTES = {p.name: p for p in (SCHIEFER, PETROL, HELL)}
+PALETTE_ALIASES = {'a': 'schiefer', 'b': 'petrol', 'c': 'hell'}
+DEFAULT_PALETTE = 'schiefer'
+
+
+def palette_from_env(value: str | None = None) -> Palette:
+    """Palette aus ``PICAM_THEME`` (Name oder a/b/c); Unbekanntes fällt auf die Vorgabe zurück."""
+    key = (os.environ.get('PICAM_THEME', '') if value is None else value).strip().lower()
+    key = PALETTE_ALIASES.get(key, key)
+    return PALETTES.get(key, PALETTES[DEFAULT_PALETTE])
+
+
+P = palette_from_env()
+
+#: Kurznamen der aktiven Palette (bestehender Code benutzt sie direkt).
+BG = P.canvas
+SURFACE = P.surface
+PANEL = P.raised
+LINE = P.line
+TEXT = P.text
+SOFT = P.text_soft
+MUTED = P.text_muted
+ACCENT = P.accent
+ACCENT_DEEP = P.accent_deep
+SECONDARY = P.secondary
+#: Semantische Farben (Status: genau ein Zeichen + eine Farbe).
+TONE = {probes.OK: P.ok, probes.WARN: P.warn, probes.FAIL: P.fail, probes.OFF: P.off, probes.UNKNOWN: P.unknown}
+#: Getönte Flächen für Hinweise (Rand in Statusfarbe, Grund leicht eingefärbt).
+TINT = {probes.OK: P.tint_ok, probes.WARN: P.tint_warn, probes.FAIL: P.tint_fail, 'info': P.tint_info}
+
+
+def make_theme(p: Palette) -> Theme:
+    return Theme(
+        name='picam',
+        primary=p.accent_strong,
+        secondary=p.secondary,
+        accent=p.accent,
+        warning=p.warn,
+        error=p.fail,
+        success=p.ok,
+        foreground=p.text,
+        background=p.canvas,
+        surface=p.surface,
+        panel=p.raised,
+        dark=p.dark,
+        variables={
+            **p.variables(),
+            'text-muted': p.text_muted,
+            'footer-key-foreground': p.accent,
+            'footer-description-foreground': p.text_soft,
+            'footer-background': p.band,
+            'block-cursor-background': p.select_bg,
+            'block-cursor-foreground': p.select_fg,
+            'block-cursor-text-style': 'bold',
+            'block-cursor-blurred-background': p.select_blur_bg,
+            'block-cursor-blurred-foreground': p.text,
+            'block-cursor-blurred-text-style': 'none',
+            'scrollbar': p.scrollbar,
+            'scrollbar-background': p.canvas,
+            'scrollbar-background-hover': p.canvas,
+            'scrollbar-background-active': p.canvas,
+            'scrollbar-corner-color': p.canvas,
+            'scrollbar-hover': p.scrollbar_hover,
+            'scrollbar-active': p.accent,
+            'input-cursor-background': p.accent_strong,
+            'input-cursor-foreground': p.on_accent,
+            'input-selection-background': p.select_bg,
+        },
+    )
+
+
+THEME = make_theme(P)
 
 
 def ascii_mode() -> bool:
@@ -224,7 +373,7 @@ def fact_card(fact: probes.Fact) -> Static:
     title.append(f'  {fact.value}', style=MUTED if fact.level in (probes.OK, probes.OFF) else TONE[fact.level])
     table = Table.grid(padding=(0, 2), expand=True)
     table.add_column(style=MUTED, no_wrap=True)
-    table.add_column(style='#b8c0c8', no_wrap=True, overflow='ellipsis', ratio=1)
+    table.add_column(style=SOFT, no_wrap=True, overflow='ellipsis', ratio=1)
     detail = [(k, v) for k, v in fact.detail if v and k not in ('Unit', 'Zustand', 'Weg')][:CARD_ROWS]
     for key, value in detail:
         table.add_row(key, str(value))
@@ -324,16 +473,33 @@ class InfoScreen(ModalScreen[str | None]):
         self.dismiss(None if value == 'close' else value)
 
 
-def section_text(title: str) -> Text:
-    """Abschnittskopf: türkiser Balken, Titel in Versalien."""
+def section_text(title: str, styled: bool = True) -> Text:
+    """Abschnittskopf: Balken, Titel in Versalien.
+
+    ``styled=False`` lässt die Farbe dem CSS (``.section``), damit der Kopf des
+    Abschnitts mit dem Fokus in der Leitfarbe erscheinen kann.
+    """
     text = Text()
-    text.append('| ' if ascii_mode() else '▍ ', style=ACCENT)
-    text.append(title.upper(), style=f'bold {SOFT}')
+    text.append('| ' if ascii_mode() else '▍ ', style=ACCENT if styled else '')
+    text.append(title.upper(), style=f'bold {SOFT}' if styled else 'bold')
     return text
 
 
 def section(title: str) -> Static:
-    return Static(section_text(title), classes='section')
+    return Static(section_text(title, styled=False), classes='section')
+
+
+class Segment(Vertical):
+    """Abschnitt eines Tabs: eigene Fläche, optional mit Kopf.
+
+    Enthält er das fokussierte Element, hebt CSS ihn an (``:focus-within``:
+    Fläche ``raised``, Leitfarbe am linken Rand und im Kopf), mit kurzem
+    Übergang; mit ``TEXTUAL_ANIMATIONS=none`` springt die Farbe sofort.
+    """
+
+    def __init__(self, title: str | None = None, *children: Widget, classes: str = '', **kwargs):
+        head = [section(title)] if title else []
+        super().__init__(*head, *children, classes=('seg ' + classes).strip(), **kwargs)
 
 
 def bar(fraction: float, width: int, tone: str = None, ascii_only: bool | None = None) -> Text:

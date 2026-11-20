@@ -16,7 +16,7 @@ from textual.events import Resize
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, ascii_mode, bar, section, sparkline, status_strip, symbol
+from ..ui import ACCENT, MUTED, TONE, Segment, ascii_mode, bar, sparkline, status_strip, symbol
 from .base import TabView
 
 WIDE = 120          # ab dieser Breite zwei Spalten
@@ -123,29 +123,22 @@ class LaufView(TabView):
     LaufView #lauf-cols { height: auto; layout: vertical; }
     LaufView .lauf-col { height: auto; width: 1fr; }
     LaufView.wide #lauf-cols { layout: horizontal; }
-    LaufView.wide #lauf-a { padding: 0 2 0 0; }
-    LaufView.wide #lauf-b { padding: 0 0 0 2; border-left: vkey #1b2129; }
-    LaufView .lauf-col > Static { height: auto; width: 1fr; }
-    LaufView .lauf-col > .section { margin: 1 0 0 0; }
+    LaufView.wide #lauf-a { padding: 0 1 0 0; }
+    LaufView.wide #lauf-b { padding: 0 0 0 1; }
+    LaufView .lauf-col Static { height: auto; width: 1fr; }
     """
 
     def compose(self):
         yield Static(Text('Lauf', style='bold'), classes='title')
         with Vertical(id='lauf-cols'):
             with Vertical(id='lauf-a', classes='lauf-col'):
-                yield section('Zustand')
-                yield Static(id='run-state')
-                yield section('Letzter Wert')
-                yield Static(id='run-latest')
-                yield section('Zählwerte')
-                yield Static(id='run-counts')
+                yield Segment('Zustand', Static(id='run-state'))
+                yield Segment('Letzter Wert', Static(id='run-latest'))
+                yield Segment('Zählwerte', Static(id='run-counts'))
             with Vertical(id='lauf-b', classes='lauf-col'):
-                yield section('Letzte 60 s')
-                yield Static(id='run-strip')
-                yield section('Verarbeitung')
-                yield Static(id='run-proc')
-                yield section('System')
-                yield Static(id='run-system')
+                yield Segment('Letzte 60 s', Static(id='run-strip'))
+                yield Segment('Verarbeitung', Static(id='run-proc'))
+                yield Segment('System', Static(id='run-system'))
 
     def on_mount(self) -> None:
         self.set_interval(1.0, self._tick)

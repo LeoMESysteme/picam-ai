@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from rich.text import Text
-from textual.containers import Horizontal
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, Action, ascii_mode, bar, fit, section, symbol
-from .base import FactView
+from ..ui import ACCENT, MUTED, TONE, Action, Segment, ascii_mode, bar, fit, symbol
+from .base import FactView, actions_segment
 
 
 def gb(value: float | None) -> str:
@@ -50,12 +49,9 @@ class SpeicherView(FactView):
     def compose(self):
         yield Static(Text(self.TITLE, style='bold'), classes='title')
         yield Static(id='sp-warn', classes='hint')
-        yield section('Datenträger')
-        yield Static(id='sp-disk')
-        yield section('Aufteilung')
-        yield Static(id='sp-groups')
-        yield Static(id='sp-note', classes='note')
-        yield Horizontal(id='buttons', classes='buttons')
+        yield Segment('Datenträger', Static(id='sp-disk'))
+        yield Segment('Aufteilung', Static(id='sp-groups'))
+        yield actions_segment(Static(id='sp-note', classes='note'))
 
     def on_resize(self) -> None:
         if self.is_mounted:
@@ -65,7 +61,8 @@ class SpeicherView(FactView):
         return [Action('a', 'Aufräumen …', lambda: self.app.run_cli(['aufraeumen'], 'picam aufraeumen'))]
 
     def _width(self) -> int:
-        return max(40, (self.size.width or 80) - 2)
+        inner = self.query_one('#sp-disk').content_size.width
+        return max(40, inner or (self.size.width or 80) - 5)
 
     def update_view(self) -> None:
         app = self.app

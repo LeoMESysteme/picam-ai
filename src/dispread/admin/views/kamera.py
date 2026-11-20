@@ -8,8 +8,8 @@ from rich.text import Text
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import Action, fact_title, hint_block, kv_table, section
-from .base import FactView
+from ..ui import Action, Segment, fact_title, hint_block, kv_table
+from .base import FactView, actions_segment
 
 DASH = '–'
 START_REASONS = {'serverstart': 'Serverstart', 'restart': 'Neustart', 'connect': 'Verbinden',
@@ -49,12 +49,14 @@ class KameraView(FactView):
             'Lesevorlage sind Voraussetzungen für einen Messlauf.')
 
     def compose(self):
-        parts = list(super().compose())
-        yield Static(id='cam-state', classes='fact-title first')
-        yield Static(id='cam-hint', classes='hint')
-        yield Static(id='cam-specs')
-        yield section('Voraussetzungen für einen Lauf')
-        yield from parts[1:]
+        with Segment():
+            yield Static(id='cam-state', classes='fact-title first')
+            yield Static(id='cam-hint', classes='hint')
+            yield Static(id='cam-specs')
+        with Segment('Voraussetzungen für einen Lauf'):
+            for key in self.FACTS:
+                yield from self.fact_widgets(key)
+        yield actions_segment()
 
     def update_view(self) -> None:
         super().update_view()

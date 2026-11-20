@@ -22,7 +22,7 @@ from rich.text import Text
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
 
-from .ui import Canvas
+from .ui import Canvas, P
 
 #: HD44780-Zeichensatz (ROM A00), 5×7, nur die benötigten Zeichen.
 LCD_FONT = {
@@ -34,10 +34,10 @@ LCD_FONT = {
     ' ': ('.....',) * 7,
 }
 
-LCD_OFF = '#1d252e'
-LCD_UNREAD = '#5b6570'
-LCD_READ = '#6cb6c4'
-LCD_BEAM = '#a9e3ee'
+LCD_OFF = P.lcd_off
+LCD_UNREAD = P.lcd_unread
+LCD_READ = P.lcd_read
+LCD_BEAM = P.lcd_beam
 
 # ---------------------------------------------------------------- ME-Logo
 #: Form aus ~/.config/fastfetch/me-logo.txt (ME-Messsysteme).
@@ -54,12 +54,12 @@ LOGO = (
 LOGO_W = max(map(len, LOGO))
 LOGO_H = len(LOGO)
 CAPTION = 'M E - M e s s y s t e m e'
-#: Stufen 1 dunkles Petrol … 4 Weiß; 2 ist das ME-Türkis (#00b5af).
+#: Stufen 1 noch nicht gezeichnet … 4 Blitz; 2 ist das ME-Türkis (Rampe aus der Palette).
 LOGO_STYLES = {
-    1: Style(color='#0f4744'),
-    2: Style(color='#00b5af'),
-    3: Style(color='#77e7db', bold=True),
-    4: Style(color='#ffffff', bold=True),
+    1: Style(color=P.logo_dim),
+    2: Style(color=P.logo),
+    3: Style(color=P.logo_bright, bold=True),
+    4: Style(color=P.logo_flash, bold=True),
 }
 REVEAL_S = 1.1      # Messstrahl zeichnet das Logo
 SHINE_S = 1.3       # Glanzlauf
@@ -174,7 +174,7 @@ def lcd_text(word: str, progress: float, compact: bool = False, ascii_only: bool
         if grid[0][col] == ' ' and not lit:  # Spalte zwischen zwei Zellen
             return ''
         if abs(col - beam) < 0.75:
-            return LCD_BEAM if lit else '#2c4a52'
+            return LCD_BEAM if lit else P.lcd_beam_off
         if not lit:
             return LCD_OFF
         return LCD_READ if col < beam else LCD_UNREAD
@@ -311,11 +311,11 @@ class Intro(Vertical):
         lcd.styles.width = lcd_columns('picam') * (2 if spaced else 1)
         lcd.styles.height = 7 if spaced else 4
         self._logo_key = self._lcd_key = None
-        tag = Text('Werkbank-Verwaltung', style='#d6dae0')
+        tag = Text('Werkbank-Verwaltung', style=P.text)
         if self.version:
-            tag.append(f'  ·  {self.version}', style='#7d8590')
+            tag.append(f'  ·  {self.version}', style=P.text_muted)
         self.query_one('#intro-tag', Static).update(tag)
-        self.query_one('#intro-hint', Static).update(Text('Taste: weiter', style='#4a525c'))
+        self.query_one('#intro-hint', Static).update(Text('Taste: weiter', style=P.text_muted))
 
     def elapsed(self) -> float:
         return time.monotonic() - self._started
@@ -346,8 +346,8 @@ class Intro(Vertical):
         checks_key = (int(t * 12), tuple(self._lines), self.version)
         if checks_key != self._checks_key:
             if self._checks_key is not None and self._checks_key[2] != self.version:
-                tag = Text('Werkbank-Verwaltung', style='#d6dae0')
-                tag.append(f'  ·  {self.version}', style='#7d8590')
+                tag = Text('Werkbank-Verwaltung', style=P.text)
+                tag.append(f'  ·  {self.version}', style=P.text_muted)
                 self.query_one('#intro-tag', Static).update(tag)
             self._checks_key = checks_key
             self.query_one('#intro-checks', Canvas).show(self._checks_text(t))
@@ -364,11 +364,11 @@ class Intro(Vertical):
             if index:
                 text.append('\n')
             if mark == 'spin':
-                text.append(spin + ' ', '#6cb6c4')
+                text.append(spin + ' ', P.accent)
             else:
                 text.append(mark + ' ', colour)
-            text.append(f'{name:<12}', '#9aa3ad')
-            text.append(value, colour if mark != 'spin' else '#7d8590')
+            text.append(f'{name:<12}', P.text_soft)
+            text.append(value, colour if mark != 'spin' else P.text_muted)
         return text
 
     def finish(self) -> None:

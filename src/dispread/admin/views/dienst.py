@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from rich.text import Text
-from textual.containers import Horizontal
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import MUTED, TONE, Action, fact_title, hint_block, kv_table, section, symbol
-from .base import FactView
+from ..ui import MUTED, TONE, Action, Segment, fact_title, hint_block, kv_table, symbol
+from .base import FactView, actions_segment
 
 DASH = '–'
 
@@ -27,20 +26,20 @@ class DienstView(FactView):
             'Selbsttest um. „Zurück“ schaltet auf die vorige Version zurück.')
     SCOPED_CSS = False
     DEFAULT_CSS = """
-    DienstView .blocked { border-left: wide $warning; padding: 0 1; margin: 1 0 0 0; background: #16140f;
+    DienstView .blocked { border-left: wide $warning; padding: 0 1; margin: 1 0 0 0; background: $picam-tint-warn;
                           max-width: 110; }
     Screen.stacked DienstView .buttons { layout: grid; grid-size: 2; grid-gutter: 0 1; grid-rows: 1; }
     Screen.stacked DienstView .buttons Button { width: 100%; margin: 0; }
     """
 
     def compose(self):
-        yield Static(id='dienst-state', classes='fact-title first')
-        yield Static(id='dienst-hint', classes='hint')
-        yield Static(id='dienst-blocked', classes='blocked')
-        yield Static(id='dienst-rows')
-        yield section('Version')
-        yield Static(id='dienst-version')
-        yield Horizontal(id='buttons', classes='buttons')
+        with Segment():
+            yield Static(id='dienst-state', classes='fact-title first')
+            yield Static(id='dienst-hint', classes='hint')
+            yield Static(id='dienst-blocked', classes='blocked')
+            yield Static(id='dienst-rows')
+        yield Segment('Version', Static(id='dienst-version'))
+        yield actions_segment()
 
     def update_view(self) -> None:
         app = self.app

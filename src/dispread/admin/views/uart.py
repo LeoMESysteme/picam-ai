@@ -7,8 +7,8 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, Action, ascii_mode, fact_title, hint_block, kv_table, symbol
-from .base import FactView
+from ..ui import ACCENT, MUTED, TONE, Action, P, Segment, ascii_mode, fact_title, hint_block, kv_table, symbol
+from .base import FactView, actions_segment
 
 #: Stiftleiste des Pi 5 (Standard-40-Pin), Pin → Beschriftung.
 PIN_NAMES = {
@@ -21,8 +21,8 @@ PIN_NAMES = {
 }
 USED = {6: 'benutzt', 8: 'benutzt (Senden)'}
 UNUSED = {10: 'nicht benutzt'}
-POWER_5V = '#e5b567'
-POWER_3V3 = '#8aa4c8'
+POWER_5V = P.pin_5v
+POWER_3V3 = P.pin_3v3
 
 
 def header_graphic(rows: int) -> Text:
@@ -83,7 +83,7 @@ class UartView(FactView):
             'Daten fließen über /dev/ttyAMA0; /dev/serial0 zeigt auf ttyAMA10, den 3-Pin-Debug-Header.')
 
     DEFAULT_CSS = """
-    UartView #uart-row { height: auto; width: 1fr; margin: 1 0 0 0; }
+    UartView #uart-row { height: auto; width: 1fr; margin: 0; }
     UartView #uart-pins { width: auto; height: auto; }
     UartView #uart-side { width: 1fr; height: auto; padding: 0 0 0 0; }
     UartView #uart-row.side #uart-side { padding: 0 0 0 3; margin: 0; }
@@ -93,7 +93,7 @@ class UartView(FactView):
 
     def compose(self):
         yield Static(Text(self.TITLE, style='bold'), classes='title')
-        with Horizontal(id='uart-row'):
+        with Segment(), Horizontal(id='uart-row'):
             yield Static(id='uart-pins')
             with Vertical(id='uart-side'):
                 yield Static(id='uart-use')
@@ -103,7 +103,7 @@ class UartView(FactView):
                 yield Static(id='f-uart-hint', classes='hint')
                 yield Static(id='f-uart-detail')
                 yield Static(id='uart-port-change', classes='note')
-        yield Horizontal(id='buttons', classes='buttons')
+        yield actions_segment()
 
     def on_resize(self) -> None:
         if self.is_mounted:

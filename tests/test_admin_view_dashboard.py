@@ -2,6 +2,7 @@
 
 import asyncio
 import functools
+import re
 import time
 
 import admin_fakes
@@ -121,8 +122,10 @@ async def test_lauf_content_wide_and_narrow():
             text = all_text(app, ['#run-state', '#run-latest', '#run-counts', '#run-strip', '#run-proc',
                                   '#run-system'])
             for needle in ('2.841', 'Margin (Abstand beste/zweitbeste Vorlage)', 'ms', 'vor', 'CPU', '%',
-                           'Bilder/s', '12:04'):
+                           'Bilder/s'):
                 assert needle in text, needle
+            # 12:04 laut Laufstatus; die Dauer läuft seit der Abfrage weiter (unter Last 1–2 s später)
+            assert re.search(r'Dauer\s+12:0[4-9]', text), text
 
 
 @sync

@@ -10,8 +10,8 @@ from dispread.bridge.baud import UART_BAUD
 from dispread.hardware_ports import DIRECT_UART_BAUD, GSV_UART_PORT
 
 from .. import probes
-from ..ui import MUTED, TONE, Action, ascii_mode, kv_table, symbol
-from .base import FactView
+from ..ui import MUTED, TONE, Action, Segment, ascii_mode, kv_table, symbol
+from .base import FactView, actions_segment
 
 DASH = '–'
 #: (Schlüssel in live.status.output.transport, lange Beschriftung, kurze Beschriftung)
@@ -28,7 +28,7 @@ class PathTab(Static):
         self.index = index
 
     def on_click(self) -> None:
-        self.parent.parent.choose(self.index)
+        self.query_ancestor(AusgabeView).choose(self.index)
 
 
 class AusgabeView(FactView):
@@ -44,10 +44,11 @@ class AusgabeView(FactView):
             'Pi-Pegel nie direkt an RS-232 anschließen: dafür gehört ein Pegelwandler dazwischen.')
     SCOPED_CSS = False
     DEFAULT_CSS = """
-    AusgabeView #paths { height: 1; margin: 1 0 0 0; }
-    AusgabeView .path { width: auto; padding: 0 2 0 0; color: #9aa3ad; }
-    AusgabeView .path.-sel { color: $foreground; text-style: bold underline; }
-    AusgabeView #out-active { margin: 1 0 0 0; }
+    AusgabeView #paths { height: 1; margin: 0; }
+    AusgabeView .path { width: auto; padding: 0 1; margin: 0 1 0 0; color: $picam-text-soft; }
+    AusgabeView .path.-sel { color: $picam-text; background: $picam-raised; text-style: bold underline; }
+    AusgabeView .seg:focus-within .path.-sel { background: $picam-surface; }
+    AusgabeView #out-active { margin: 0; }
     AusgabeView #out-body { margin: 1 0 0 0; }
     Screen.stacked AusgabeView .buttons { layout: grid; grid-size: 2; grid-gutter: 0 1; grid-rows: 1; }
     Screen.stacked AusgabeView .buttons Button { width: 100%; margin: 0; }
@@ -59,10 +60,9 @@ class AusgabeView(FactView):
 
     def compose(self):
         yield Static(Text(self.TITLE, style='bold'), classes='title')
-        yield Static(id='out-active')
-        yield Horizontal(*[PathTab(i) for i in range(len(PATHS))], id='paths')
-        yield Static(id='out-body')
-        yield Horizontal(id='buttons', classes='buttons')
+        yield Segment(None, Static(id='out-active'))
+        yield Segment(None, Horizontal(*[PathTab(i) for i in range(len(PATHS))], id='paths'), Static(id='out-body'))
+        yield actions_segment()
 
     # ------------------------------------------------------------ Zustand
     def active_index(self) -> int | None:

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from rich.table import Table
 from rich.text import Text
-from textual.containers import Horizontal
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, fact_title, hint_block, kv_table, section, symbol
-from .base import FactView
+from ..ui import ACCENT, MUTED, TONE, Segment, fact_title, hint_block, kv_table, symbol
+from .base import FactView, actions_segment
 
 STATE = {'up': (probes.OK, 'up'), 'down': (probes.OFF, 'down')}
 
@@ -30,20 +29,13 @@ class NetzwerkView(FactView):
 
     def compose(self):
         yield Static(Text(self.TITLE, style='bold'), classes='title')
-        yield section('Dieser Pi')
-        yield Static(id='net-host')
-        yield section('Schnittstellen')
-        yield Static(id='net-ifaces')
-        yield section('Tailscale')
-        yield Static(id='net-tailscale')
-        yield section('Adresse der Werkbank')
-        yield Static(id='net-addr')
-        yield Static(id='net-addr-hint', classes='hint')
-        yield section('Uhrzeit')
-        yield Static(id='net-clock')
-        yield Static(id='net-clock-hint', classes='hint')
+        yield Segment('Dieser Pi', Static(id='net-host'))
+        yield Segment('Schnittstellen', Static(id='net-ifaces'))
+        yield Segment('Tailscale', Static(id='net-tailscale'))
+        yield Segment('Adresse der Werkbank', Static(id='net-addr'), Static(id='net-addr-hint', classes='hint'))
+        yield Segment('Uhrzeit', Static(id='net-clock'), Static(id='net-clock-hint', classes='hint'))
         yield Static(id='net-note', classes='note')
-        yield Horizontal(id='buttons', classes='buttons')
+        yield actions_segment()
 
     def on_resize(self) -> None:
         if self.is_mounted:

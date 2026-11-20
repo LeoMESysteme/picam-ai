@@ -36,7 +36,9 @@ from .instance import Instance
 from .ui import (  # noqa: F401  (für Tests und Tabs erneut exportiert)
     ACCENT,
     MUTED,
+    SOFT,
     SPINNER,
+    TEXT,
     THEME,
     TONE,
     AskScreen,
@@ -45,6 +47,7 @@ from .ui import (  # noqa: F401  (für Tests und Tabs erneut exportiert)
     Confirmation,
     ConfirmScreen,
     InfoScreen,
+    P,
     ascii_mode,
     fade_in,
     symbol,
@@ -65,91 +68,108 @@ SERVICE_WORDS = {'start': ('Werkbank starten', 'Starten'), 'stop': ('Werkbank st
 ALERT_FACTS = ('dienst', 'kamera', 'ausgabe', 'lauf')
 
 CSS_PATH_FREE = """
-Screen { background: $background; layers: base overlay; }
-#top { height: 1; background: $surface; }
-#brand { width: auto; padding: 0 1; height: 1; background: #0f6e68; color: #f2fbfa; text-style: bold; }
-#tabs { width: 1fr; height: 1; background: $surface; }
-#tabs Tab { padding: 0 1; height: 1; color: #a9b4c2; text-style: none; }
-#tabs Tab.-active { color: #0b1a1c; text-style: bold; background: $primary; }
-#tabs Tab:hover { color: #e3e9f0; background: #263240; }
-#tabs Tab.-active:hover { color: #0b1a1c; background: #5fd8cc; }
-#tabs .underline--bar { color: $primary; background: $surface; }
+Screen { background: $picam-canvas; layers: base overlay; }
+#top { height: 1; background: $picam-band; }
+#brand { width: auto; padding: 0 1; height: 1; background: $picam-accent-deep; color: $picam-on-accent-deep;
+         text-style: bold; }
+#tabs { width: 1fr; height: 1; background: $picam-band; }
+#tabs Tab { padding: 0 1; height: 1; color: $picam-text-soft; text-style: none; }
+#tabs Tab.-active { color: $picam-on-accent; text-style: bold underline; background: $picam-accent-strong; }
+#tabs Tab:hover { color: $picam-text; background: $picam-control; }
+#tabs Tab.-active:hover { color: $picam-on-accent; background: $picam-accent; }
+#tabs .underline--bar { color: $picam-accent-strong; background: $picam-band; }
 #rule { height: 1; }
 #body { height: 1fr; padding: 0 2; }
 TabView { height: 1fr; scrollbar-size-vertical: 1; }
 TabView > Static { width: 1fr; max-width: 120; }
 .title { margin: 1 0 0 0; }
 .fact-title { margin: 1 0 0 0; }
-.hint { border-left: wide $warning; padding: 0 1; margin: 1 0 0 0; background: #2a2416; max-width: 110; }
-.hint.fail { border-left: wide $error; background: #2c1a1c; }
-.hint.info { border-left: wide $primary; background: #13292b; }
-.section { margin: 1 0 0 0; }
-.note { color: #8a96a6; margin: 1 0 0 0; }
+.hint { border-left: wide $warning; padding: 0 1; margin: 1 0 0 0; background: $picam-tint-warn; max-width: 110; }
+.hint.fail { border-left: wide $error; background: $picam-tint-fail; }
+.hint.info { border-left: wide $picam-accent; background: $picam-tint-info; }
+.section { margin: 1 0 0 0; color: $picam-text-soft; }
+.note { color: $picam-text-muted; margin: 1 0 0 0; }
 .buttons { height: auto; margin: 1 0 1 0; }
 .buttons Button { margin: 0 2 0 0; }
+.seg { height: auto; width: 1fr; max-width: 120; margin: 1 0 0 0; padding: 0 1; background: $picam-surface;
+       border-left: wide $picam-surface; transition: background 150ms out_cubic; }
+.seg:focus-within { background: $picam-raised; border-left: wide $picam-accent-strong; }
+.seg > .section, .seg > .fact-title:first-of-type, .seg > .title { margin: 0; }
+.seg:focus-within > .section { color: $picam-accent-strong; }
+.seg .hint { max-width: 108; }
+.seg > .buttons { margin: 1 0 0 0; }
+.seg.actions { padding: 0 1; }
+.seg.actions > .buttons { margin: 0; }
+.seg.actions > .note { margin: 0 0 1 0; }
 .cards { height: auto; max-width: 110; grid-gutter: 1 2; grid-rows: auto; }
-.card { height: auto; padding: 0 1; background: $surface; border-left: wide #2b3644; }
+.card { height: auto; padding: 0 1; background: $picam-surface; border-left: wide $picam-line; }
 .card.card-warn { border-left: wide $warning; }
 .card.card-fail { border-left: wide $error; }
 #dash { height: auto; }
 #dash-left { width: 1fr; height: auto; padding: 1 2 0 0; }
-#dash-right { width: 42; height: auto; padding: 1 0 0 2; border-left: vkey #2b3644; }
+#dash-right { width: 42; height: auto; padding: 0 0 0 0; }
 #dash-logo { height: auto; }
-#dash-run { height: auto; margin: 1 0 0 0; padding: 0 1; background: $surface; border-left: wide $primary; }
-#dash-list { height: auto; max-height: 20; border: none; background: $background; padding: 0; }
+#dash-run { height: auto; margin: 1 0 0 0; padding: 0 1; background: $picam-surface; }
+#dash-list { height: auto; max-height: 20; border: none; background: transparent; padding: 0; }
 #dash-list:focus { border: none; background-tint: 0%; }
 #dash-list > .option-list--option { padding: 0 1; }
-#dash-tail { display: none; height: auto; }
-#tail-head { height: 1; margin: 1 0 0 0; }
-#tail-log { height: 12; background: $background; border: none; scrollbar-size-vertical: 1; padding: 0;
+#dash-tail { display: none; }
+#tail-head { height: 1; }
+#tail-log { height: 12; background: transparent; border: none; scrollbar-size-vertical: 1; padding: 0;
             overflow-x: hidden; }
 Screen.tall #dash-tail { display: block; }
 Screen.stacked #dash { layout: vertical; }
-Screen.stacked #dash-right { width: 1fr; border-left: none; padding: 0; }
+Screen.stacked #dash-right { width: 1fr; padding: 0; }
 Screen.stacked #dash-logo { display: none; }
 #log-head { height: 1; margin: 1 0 0 0; }
-#log { height: 1fr; background: $background; border: none; scrollbar-size-vertical: 1; padding: 0;
-       overflow-x: hidden; }
+#log { height: 1fr; background: $picam-surface; border: none; border-left: wide $picam-surface;
+       scrollbar-size-vertical: 1; padding: 0 1; overflow-x: hidden; }
+#log:focus { border-left: wide $picam-accent-strong; background-tint: 0%; }
 ProtokollView { overflow-y: hidden; }
+#log, #tail-log { scrollbar-background: $picam-surface; scrollbar-background-hover: $picam-surface;
+                 scrollbar-background-active: $picam-surface; }
+#dash-tail:focus-within #tail-log { scrollbar-background: $picam-raised; }
 .field { height: auto; margin: 1 0 0 0; }
-.field-label { color: #a9b4c2; }
+.seg .field:first-of-type { margin: 0; }
+.field-label { color: $picam-text-soft; }
 .field-risk { margin: 0 0 0 1; }
-.field Input { width: 40; height: 1; margin: 0; padding: 0 1; border: none; background: $panel; }
-.field Input:focus { border: none; background: #17403f; }
-.field Checkbox { margin: 0; height: 1; padding: 0; border: none; background: $background; }
+.field Input { width: 40; height: 1; margin: 0; padding: 0 1; border: none; background: $picam-field;
+               color: $picam-text; }
+.field Input:focus { border: none; background: $picam-field-focus; }
+.field Checkbox { margin: 0; height: 1; padding: 0; border: none; background: transparent; }
 .field Checkbox:focus { border: none; background-tint: 0%; }
-.field Checkbox > .toggle--button { background: #2b3644; color: #2b3644; }
-.field Checkbox.-on > .toggle--button { background: $primary; color: #0b1a1c; }
+.field Checkbox > .toggle--button { background: $picam-field; color: $picam-field; }
+.field Checkbox.-on > .toggle--button { background: $picam-accent-strong; color: $picam-on-accent; }
 .field Checkbox:focus > .toggle--label { text-style: bold underline; background: transparent; }
-#status { height: 1; width: 1fr; padding: 0 1; background: $surface; }
-#footer { height: 1; width: 1fr; padding: 0 1; background: $background; }
-#small { display: none; width: 1fr; height: 1fr; content-align: center middle; color: #8a96a6; }
+#status { height: 1; width: 1fr; padding: 0 1; background: $picam-band; }
+#footer { height: 1; width: 1fr; padding: 0 1; background: $picam-band; }
+#small { display: none; width: 1fr; height: 1fr; content-align: center middle; color: $picam-text-muted; }
 Screen.too-small #small { display: block; }
 Screen.too-small #top, Screen.too-small #body, Screen.too-small #status, Screen.too-small #footer {
     display: none; }
-ConfirmScreen, AskScreen, InfoScreen { align: center middle; background: rgba(6, 9, 13, 0.75); }
-#dialog { width: 76; max-width: 95%; height: auto; padding: 1 2; background: $panel;
-          border: none; border-top: tall $primary; }
+ConfirmScreen, AskScreen, InfoScreen { align: center middle; background: $picam-backdrop; }
+#dialog { width: 76; max-width: 95%; height: auto; padding: 1 2; background: $picam-raised;
+          border: none; border-top: tall $picam-accent-strong; }
 #dialog.fail { border-top: tall $error; }
 #dialog.warn { border-top: tall $warning; }
 #dialog-title { margin: 0 0 1 0; }
 .dialog-line { margin: 0 0 1 0; }
-#dialog-cmd { margin: 0 0 1 0; padding: 0 1; background: $background; color: #a9b4c2; }
+#dialog-cmd { margin: 0 0 1 0; padding: 0 1; background: $picam-field; color: $picam-text-soft; }
 #dialog-blocker { margin: 0 0 1 0; }
-#ask-input { height: 1; border: none; padding: 0 1; margin: 0 0 1 0; background: $background; }
-#ask-input:focus { background: #17403f; }
+#ask-input { height: 1; border: none; padding: 0 1; margin: 0 0 1 0; background: $picam-field; }
+#ask-input:focus { background: $picam-field-focus; }
 #dialog-buttons { height: auto; align-horizontal: right; }
 #dialog-buttons Button { margin: 0 0 0 2; }
-Button { border: none; height: 1; min-width: 12; padding: 0 2; background: #263240; color: $foreground;
+Button { border: none; height: 1; min-width: 12; padding: 0 2; background: $picam-control; color: $picam-text;
          text-style: none; }
-Button:hover { background: #31404f; }
-Button:focus { background: $primary; color: #0b1a1c; text-style: bold; background-tint: 0%; }
-Button.-primary { background: #0f6e68; color: #f2fbfa; }
-Button.-primary:focus { background: $primary; color: #0b1a1c; }
+Button:hover { background: $picam-control-hover; }
+Button:focus { background: $picam-accent-strong; color: $picam-on-accent; text-style: bold; background-tint: 0%; }
+Button.-primary { background: $picam-accent-deep; color: $picam-on-accent-deep; }
+Button.-primary:focus { background: $picam-accent-strong; color: $picam-on-accent; }
 Button.-error { color: $error; }
-Button.-error:focus { background: $error; color: #1a0c0c; }
-Button:disabled { color: #566273; background: #1a222c; }
-Intro { layer: overlay; width: 1fr; height: 1fr; align: center middle; background: $background; }
+Button.-error:focus { background: $error; color: $picam-on-accent; }
+Button:disabled { color: $picam-disabled-fg; background: $picam-disabled-bg; }
+Intro { layer: overlay; width: 1fr; height: 1fr; align: center middle; background: $picam-canvas; }
 Intro:focus { background-tint: 0%; }
 #intro-row { width: 1fr; height: auto; align: center top; }
 #intro-logo { margin: 0 5 0 0; }
@@ -235,6 +255,10 @@ class PicamApp(App[int]):
         self._spinner_timer = None
         self.current = 'dashboard'
 
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        """Palettenvariablen ($picam-…) schon vor dem Umschalten aufs picam-Theme bekannt machen."""
+        return {**super().get_theme_variable_defaults(), **P.variables()}
+
     @property
     def main_screen(self):
         """Konsolenbildschirm, auch während ein Dialog darüber liegt."""
@@ -243,7 +267,7 @@ class PicamApp(App[int]):
     # ------------------------------------------------------------ Aufbau
     def compose(self) -> ComposeResult:
         with Horizontal(id='top'):
-            yield Static(Text('picam', style=f'bold {ACCENT}'), id='brand')
+            yield Static(Text('picam', style='bold'), id='brand')
             yield Tabs(*[Tab(view.TITLE, id=f'tab-{view.TAB_ID}') for view in TABS], id='tabs')
         with ContentSwitcher(id='body', initial='dashboard'):
             for view in TABS:
@@ -403,12 +427,12 @@ class PicamApp(App[int]):
         width = self.size.width - 2
         text = Text()
         pieces = []
-        chip, chip_dim = f'bold {ACCENT} on #1e2a35', '#566273 on #1a222c'
+        chip, chip_dim = f'bold {ACCENT} on {P.raised}', f'{P.disabled_fg} on {P.band}'
         for action in self.view().actions():
             dim = action.blocked is not None
-            pieces.append((action.key, action.label, chip_dim if dim else chip, '#566273' if dim else '#c8d1dc'))
-        pieces += [('Tab', 'Tabs', chip, '#a9b4c2'), ('↑↓', 'Auswahl', chip, '#a9b4c2'),
-                   ('i', 'Info', chip, '#a9b4c2'), ('?', 'Hilfe', chip, '#a9b4c2'), ('q', 'Ende', chip, '#a9b4c2')]
+            pieces.append((action.key, action.label, chip_dim if dim else chip, P.disabled_fg if dim else TEXT))
+        pieces += [(key, label, chip, SOFT) for key, label in
+                   (('Tab', 'Tabs'), ('↑↓', 'Auswahl'), ('i', 'Info'), ('?', 'Hilfe'), ('q', 'Ende'))]
         for key, label, key_style, label_style in pieces:
             piece = Text()
             piece.append(f' {key} ', style=key_style)
