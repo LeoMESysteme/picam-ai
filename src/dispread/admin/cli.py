@@ -261,6 +261,47 @@ def cmd_update(args, instance) -> int:
     return EXIT_OK if ok else EXIT_FAIL
 
 
+def run_hint_command(command: str, instance) -> int:
+    """Empfohlenen Befehl ausführen; picam-Befehle ohne Shell im selben Interpreter."""
+    import shlex
+
+    if command.startswith('picam '):
+        argv = [sys.executable, '-m', 'dispread.admin.cli']
+        if instance.config:
+            argv += ['--config', instance.config]
+        return subprocess.call(argv + shlex.split(command)[1:])
+    return subprocess.call(command, shell=True, cwd=instance.root or None)
+
+
+def cmd_setup(args, instance, style) -> int:
+    snapshot = probes.collect(instance)
+    print(style.text(style.bold(headline(snapshot))))
+    problems = [f for f in snapshot.facts.values() if f.level in (probes.FAIL, probes.WARN)]
+    problems.sort(key=lambda f: probes.LEVEL_ORDER[f.level])
+    if not problems:
+        print(style.text(f'{style.symbol(probes.OK)} Nichts offen.'))
+        return EXIT_OK
+    done = 0
+    for index, fact in enumerate(problems, 1):
+        print()
+        print(style.text(f'{index}/{len(problems)}  {style.symbol(fact.level)} {fact.label}: {fact.value}'))
+        if fact.hint:
+            print(style.text(f'      {fact.hint}'))
+        if not fact.command:
+            print(style.text(style.dim('      Von Hand erledigen.')))
+            continue
+        print(style.text(f'      {style.dim("Befehl:")} {fact.command}'))
+        if not sys.stdin.isatty():
+            continue
+        if confirm('      Ausführen?'):
+            code = run_hint_command(fact.command, instance)
+            print(style.text(f'      {style.symbol(probes.OK if code == 0 else probes.FAIL)} Exit {code}'))
+            done += code == 0
+    print()
+    print(style.text(f'{done} erledigt, {len(problems) - done} offen. Nochmal prüfen: picam doctor'))
+    return EXIT_OK if done == len(problems) else EXIT_WARN
+
+
 def cmd_cleanup(args, instance) -> int:
     request = {'days': args.tage, 'diagnostics_only': args.nur_diagnose, 'execute': False}
     listing = probes.socket_request(instance.socket, 'live.aufraeumen', args=request, timeout=60)
@@ -328,6 +369,7 @@ def parser() -> argparse.ArgumentParser:
     clean.add_argument('--tage', type=int, default=14, help='älter als N Tage (Standard 14)')
     clean.add_argument('--nur-diagnose', action='store_true', help='nur Diagnoseaufnahmen')
     clean.add_argument('--yes', '-y', action='store_true')
+    sub.add_parser('setup', help='offene Einrichtungspunkte nacheinander durchgehen')
     sub.add_parser('url', help='Adresse der Werkbank')
     sub.add_parser('tui', help='Verwaltungskonsole öffnen')
     return root
@@ -382,6 +424,8 @@ def main(argv=None) -> int:
             return cmd_update(args, instance)
         if command == 'aufraeumen':
             return cmd_cleanup(args, instance)
+        if command == 'setup':
+            return cmd_setup(args, instance, style)
     except KeyboardInterrupt:
         return EXIT_ABORT
     except BrokenPipeError:

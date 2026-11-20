@@ -55,6 +55,7 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam config set KEY WERT` | `port`, `bridge_name`, `bridge_discovery`; geprüft, wirksam nach `picam restart` |
 | `picam update --source ARCHIV` / `--rollback` | neue Version mit Rückweg, siehe unten |
 | `picam aufraeumen [--tage N]` | alte Läufe auflisten, nach Rückfrage löschen |
+| `picam setup` | offene Einrichtungspunkte nacheinander, Befehle einzeln nach Rückfrage |
 | `picam url` | Adresse der Werkbank |
 
 `--no-color` (oder `NO_COLOR`) und `--ascii` gelten für alle Befehle.

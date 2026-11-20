@@ -363,8 +363,8 @@ def apply(args, out=None, input_=input, runner=subprocess.run, installer=engine.
         steps.append('Starten: ' + shlex.join(result.get('start_command', [])))
     steps += [f'Im Browser öffnen: {result["url"]} (Anmeldung: {args.user})',
               'Auf Windows dem Zertifikat vertrauen: ' + paths['data'] + '/workbench/tls/cert.pem',
-              'Prüfen, was noch fehlt (Kamera, UART, Kalibrierung): ' + (
-                  'picam' if args.mode != 'portable' else
+              'Offene Einrichtung durchgehen (Kamera, UART, Kalibrierung): ' + (
+                  'picam setup' if args.mode != 'portable' else
                   f'{paths["prefix"]}/current/.venv/bin/picam --config {paths["config"]}')]
     for index, step in enumerate(steps, 1):
         out.line(f'  {index}. {step}')

@@ -870,13 +870,9 @@ class PicamApp(App[int]):
             return
         with self.suspend():
             print(f'\n$ {fact.command}\n')
-            if fact.command.startswith('picam '):
-                argv = [sys.executable, '-m', 'dispread.admin.cli']
-                if self.instance.config:
-                    argv += ['--config', self.instance.config]
-                code = subprocess.call(argv + shlex.split(fact.command)[1:])
-            else:
-                code = subprocess.call(fact.command, shell=True, cwd=self.instance.root or None)
+            from .cli import run_hint_command
+
+            code = run_hint_command(fact.command, self.instance)
             print(f'\nExit {code}. Enter drücken, um zur Konsole zurückzukehren.')
             try:
                 input()

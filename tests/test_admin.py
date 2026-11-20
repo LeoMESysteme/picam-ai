@@ -413,3 +413,14 @@ def test_cleanup_lists_then_deletes_only_after_yes(monkeypatch, capsys):
     assert calls[-1] == {'days': 30, 'diagnostics_only': False, 'execute': True}
     out = capsys.readouterr().out
     assert '1 Lauf, zusammen 20 MB' in out and '20 MB freigegeben' in out
+
+
+def test_setup_walks_problems_and_runs_only_confirmed(monkeypatch, capsys):
+    monkeypatch.setattr(cli, 'discover', lambda *_: DEV)
+    monkeypatch.setattr(probes, 'collect', _collect_with(probes.WARN))
+    ran = []
+    monkeypatch.setattr(cli, 'run_hint_command', lambda command, instance: ran.append(command) or 0)
+    monkeypatch.setattr('sys.stdin', open(os.devnull))
+    assert cli.main(['--no-color', 'setup']) == cli.EXIT_WARN
+    out = capsys.readouterr().out
+    assert '1/1' in out and 'Befehl: c' in out and ran == []
