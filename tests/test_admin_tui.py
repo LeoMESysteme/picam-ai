@@ -191,3 +191,29 @@ def test_q_in_input_is_text_not_quit(tmp_path):
         await pilot.pause(0.1)
         assert app.is_running and app.query_one('#cfg-bridge_name', Input).value == 'aq'
     drive(check, instance=instance)
+
+
+def test_restart_before_first_status_is_blocked():
+    def failing(instance, include_setup=True, **_):
+        raise OSError('noch kein Status')
+
+    async def main():
+        app = PicamApp(dev(), collect=failing, auto_refresh=False, service_runner=lambda c: 0)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause(0.2)
+            assert app.snapshot is None
+            await pilot.press('r')
+            await pilot.pause(0.2)
+            assert isinstance(app.screen, ConfirmScreen)
+            assert app.screen.query_one('#ok', Button).disabled
+    asyncio.run(main())
+
+
+def test_dialog_text_with_brackets_renders():
+    from dispread.admin.tui import Confirmation
+
+    async def check(app, pilot):
+        app.push_screen(ConfirmScreen(Confirmation('Titel', ['Archiv: /home/u/[/x]/a.tar.gz'], ['cmd [x]'], 'OK')))
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, ConfirmScreen)
+    drive(check)

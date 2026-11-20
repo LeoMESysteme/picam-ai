@@ -147,6 +147,9 @@ def cmd_service(args, instance) -> int:
         print('Abgebrochen.', file=sys.stderr)
         return EXIT_ABORT
     ok, message = service.execute(plan, instance, echo=lambda _line: None)
+    if not ok and message.startswith('Gesperrt'):
+        print(f'picam: {message}', file=sys.stderr)
+        return EXIT_BLOCKED
     print(message, file=sys.stderr if not ok else sys.stdout)
     return EXIT_OK if ok else EXIT_FAIL
 
@@ -237,7 +240,7 @@ def cmd_update(args, instance) -> int:
             print('Abgebrochen.', file=sys.stderr)
             return EXIT_ABORT
         if update.needs_root(instance):
-            argv = ['update'] + (['--source', os.path.abspath(args.source) if '://' not in args.source
+            argv = (['--config', instance.config] if instance.config else []) + ['update'] + (['--source', os.path.abspath(args.source) if '://' not in args.source
                                   else args.source] if args.source else []) + (
                 ['--sha256', args.sha256] if args.sha256 else []) + (
                 ['--rollback'] if args.rollback else []) + (['--activate', args.activate] if args.activate else []) + [
@@ -256,6 +259,32 @@ def cmd_update(args, instance) -> int:
     if not ok and ('gesperrt' in message):
         return EXIT_BLOCKED
     return EXIT_OK if ok else EXIT_FAIL
+
+
+def cmd_cleanup(args, instance) -> int:
+    request = {'days': args.tage, 'diagnostics_only': args.nur_diagnose, 'execute': False}
+    listing = probes.socket_request(instance.socket, 'live.aufraeumen', args=request, timeout=60)
+    if listing is None:
+        print('picam: Werkbank nicht erreichbar; Aufräumen läuft über den Dienst (picam start).', file=sys.stderr)
+        return EXIT_FAIL
+    entries = listing.get('entries') or []
+    if not entries:
+        print(f'Nichts älter als {args.tage} Tage.')
+        return EXIT_OK
+    for entry in entries:
+        print(f"  {entry.get('mb', 0):>8.1f} MB  {entry.get('path')}")
+    total = listing.get('total_mb', 0)
+    print(f'{len(entries)} Läufe, zusammen {total:.0f} MB.')
+    if not args.yes and not confirm('Diese Läufe endgültig löschen? (vorher sichern)'):
+        print('Nichts gelöscht.', file=sys.stderr)
+        return EXIT_ABORT
+    result = probes.socket_request(instance.socket, 'live.aufraeumen', args=dict(request, execute=True),
+                                   timeout=300)
+    if result is None or result.get('failed'):
+        print('picam: Löschen unvollständig; Werkbank-Protokoll prüfen (picam logs).', file=sys.stderr)
+        return EXIT_FAIL
+    print(f'{total:.0f} MB freigegeben.')
+    return EXIT_OK
 
 
 def parser() -> argparse.ArgumentParser:
@@ -295,6 +324,10 @@ def parser() -> argparse.ArgumentParser:
     group.add_argument('--check', action='store_true', help='installierte Versionen zeigen')
     upd.add_argument('--sha256', help='SHA-256 des Archivs (Pflicht bei HTTPS)')
     upd.add_argument('--yes', '-y', action='store_true')
+    clean = sub.add_parser('aufraeumen', help='alte Läufe auflisten und nach Rückfrage löschen')
+    clean.add_argument('--tage', type=int, default=14, help='älter als N Tage (Standard 14)')
+    clean.add_argument('--nur-diagnose', action='store_true', help='nur Diagnoseaufnahmen')
+    clean.add_argument('--yes', '-y', action='store_true')
     sub.add_parser('url', help='Adresse der Werkbank')
     sub.add_parser('tui', help='Verwaltungskonsole öffnen')
     return root
@@ -347,6 +380,8 @@ def main(argv=None) -> int:
             return cmd_config(args, instance)
         if command == 'update':
             return cmd_update(args, instance)
+        if command == 'aufraeumen':
+            return cmd_cleanup(args, instance)
     except KeyboardInterrupt:
         return EXIT_ABORT
     except BrokenPipeError:

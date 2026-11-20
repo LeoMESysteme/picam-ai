@@ -53,14 +53,17 @@ def parse_value(key: str, raw: str):
     return text
 
 
+_HEADER = re.compile(r'^\s*\[([A-Za-z0-9_.-]+)\]\s*(#.*)?$')
+
+
 def _section_bounds(lines: list[str], name: str) -> tuple[int, int]:
     start = None
     for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith('[') and stripped.endswith(']'):
+        match = _HEADER.match(line)
+        if match:
             if start is not None:
                 return start, index
-            if stripped == f'[{name}]':
+            if match.group(1) == name:
                 start = index + 1
     if start is None:
         raise ValueError(f'Abschnitt [{name}] fehlt')
@@ -76,7 +79,11 @@ def _replace_key(lines: list[str], key: str, value) -> object:
         if match:
             import tomllib
 
-            old = tomllib.loads(f'v = {match.group(1)}')['v']
+            try:
+                old = tomllib.loads(f'v = {match.group(1)}')['v']
+            except tomllib.TOMLDecodeError as error:
+                raise ValueError(f'{key} ist mehrzeilig oder ungewöhnlich formatiert; '
+                                 'bitte von Hand in einer Zeile schreiben') from error
             lines[index] = f'{key} = {encoded}'
             return old
     insert = end

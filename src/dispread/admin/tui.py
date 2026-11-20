@@ -132,7 +132,7 @@ class ConfirmScreen(ModalScreen[bool]):
         with Vertical(id='dialog'):
             yield Static(Text(self.c.title, style='bold'), id='dialog-title')
             for line in self.c.lines:
-                yield Static(line, classes='dialog-line')
+                yield Static(Text(line), classes='dialog-line')
             if self.c.commands:
                 yield Static(Text('\n'.join('$ ' + c for c in self.c.commands), style=MUTED), id='dialog-cmd')
             if self.c.blocker:
@@ -174,7 +174,7 @@ class AskScreen(ModalScreen[str | None]):
         with Vertical(id='dialog'):
             yield Static(Text(self.title_text, style='bold'), id='dialog-title')
             for line in self.lines:
-                yield Static(line, classes='dialog-line')
+                yield Static(Text(line), classes='dialog-line')
             yield Input(value=self.value, placeholder=self.placeholder, id='ask-input')
             with Horizontal(id='dialog-buttons'):
                 yield Button('Abbrechen', id='cancel')
@@ -830,7 +830,8 @@ class PicamApp(App[int]):
         if needs_terminal:
             with self.suspend():
                 print(f'\n{title} – sudo fragt gegebenenfalls nach dem Passwort.\n')
-                result = service.execute(plan, self.instance, interactive=True, run=self._service_runner)
+                result = service.execute(plan, self.instance, interactive=True, run=self._service_runner,
+                                         recheck=self._recheck)
             self._finish_service(result)
         else:
             self._busy = {'start': 'starte Dienst, warte auf HTTPS', 'stop': 'stoppe Dienst',
@@ -843,8 +844,11 @@ class PicamApp(App[int]):
         from . import service
 
         result = service.execute(plan, self.instance, interactive=False, run=self._service_runner,
-                                 echo=lambda _line: None)
+                                 echo=lambda _line: None, recheck=self._recheck)
         self.call_from_thread(self._finish_service, result)
+
+    def _recheck(self) -> str | None:
+        return self._collect(self.instance, include_setup=False).stop_blocker
 
     def _finish_service(self, result: tuple[bool, str]) -> None:
         ok, message = result
@@ -866,7 +870,13 @@ class PicamApp(App[int]):
             return
         with self.suspend():
             print(f'\n$ {fact.command}\n')
-            code = subprocess.call(fact.command, shell=True, cwd=self.instance.root or None)
+            if fact.command.startswith('picam '):
+                argv = [sys.executable, '-m', 'dispread.admin.cli']
+                if self.instance.config:
+                    argv += ['--config', self.instance.config]
+                code = subprocess.call(argv + shlex.split(fact.command)[1:])
+            else:
+                code = subprocess.call(fact.command, shell=True, cwd=self.instance.root or None)
             print(f'\nExit {code}. Enter drücken, um zur Konsole zurückzukehren.')
             try:
                 input()
@@ -972,18 +982,20 @@ class PicamApp(App[int]):
             return
         try:
             command = service.journal_command(self.instance, 300, follow=True)
-            self._log_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            # stderr in denselben Strom: kein Volllaufen einer zweiten Pipe.
+            self._log_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                                  text=True, bufsize=1)
         except (ValueError, OSError) as error:
             self.call_from_thread(self._add_log, service.LogLine('', 'fehler', f'Protokoll nicht lesbar: {error}'))
             return
         assert self._log_process.stdout is not None
         for raw in self._log_process.stdout:
+            if not raw.lstrip().startswith('{'):
+                if raw.strip():
+                    self.call_from_thread(self._add_log, service.LogLine('', 'fehler', raw.strip()))
+                continue
             for line in service.parse_journal(raw):
                 self.call_from_thread(self._add_log, line)
-        err = self._log_process.stderr.read() if self._log_process.stderr else ''
-        if err.strip():
-            self.call_from_thread(self._add_log, service.LogLine('', 'fehler', err.strip()))
 
     def _log_text(self, line) -> Table:
         style = {'fehler': TONE[probes.FAIL], 'warnung': TONE[probes.WARN], 'debug': MUTED}.get(line.level, '')

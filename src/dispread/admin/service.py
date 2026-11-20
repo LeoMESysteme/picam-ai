@@ -21,6 +21,7 @@ from .instance import DEV_UNIT, Instance
 from .probes import Snapshot, peer_certificate, systemctl
 
 READY_TIMEOUT_S = 60
+COMMAND_TIMEOUT_S = 120  # Stopp darf TimeoutStopSec (30 s) plus Start überdauern
 
 
 @dataclass
@@ -29,6 +30,7 @@ class Plan:
     commands: list[list[str]]
     blocker: str | None = None
     note: str | None = None
+    force: bool = False
 
     def shell(self) -> list[str]:
         import shlex
@@ -60,28 +62,46 @@ def plan(action: str, instance: Instance, snapshot: Snapshot | None = None, forc
     else:
         start = [_privileged(instance, base + ['start', instance.unit])]
     blocker = None
-    if action in ('stop', 'restart') and snapshot is not None and not force:
-        blocker = snapshot.stop_blocker
+    if action in ('stop', 'restart') and not force:
+        # Ohne geprüften Laufstatus kein Stopp (fail closed).
+        blocker = snapshot.stop_blocker if snapshot is not None else 'Laufstatus noch nicht geprüft'
     commands = {'start': start, 'stop': stop, 'restart': stop + start}[action]
     note = None
     if action in ('start', 'restart'):
         note = f'Wartet bis zu {READY_TIMEOUT_S} s, bis {instance.url} antwortet.'
-    return Plan(action, commands, blocker, note)
+    return Plan(action, commands, blocker, note, force)
+
+
+def current_blocker(instance: Instance) -> str | None:
+    from .probes import collect
+
+    return collect(instance, include_setup=False).stop_blocker
 
 
 def execute(plan_: Plan, instance: Instance, interactive: bool = True, wait_ready: bool = True,
-            run=None, echo=print) -> tuple[bool, str]:
-    """Plan ausführen. ``interactive``: Terminal geerbt (sudo kann fragen)."""
+            run=None, echo=print, recheck=None) -> tuple[bool, str]:
+    """Plan ausführen. ``interactive``: Terminal geerbt (sudo kann fragen).
+
+    Vor Stopp/Neustart wird die Laufsperre unmittelbar vor dem ersten Befehl
+    erneut geprüft: zwischen Anzeige und Bestätigung kann ein Lauf begonnen haben.
+    """
     if plan_.blocker:
         return False, f'Gesperrt: {plan_.blocker}'
+    if plan_.action in ('stop', 'restart') and not plan_.force:
+        blocker = (recheck or (lambda: current_blocker(instance)))()
+        if blocker:
+            return False, f'Gesperrt: {blocker}'
     for command in plan_.commands:
         echo('$ ' + ' '.join(command))
-        if run is not None:
-            code = run(command)
-        elif interactive:
-            code = subprocess.call(command)
-        else:
-            code = subprocess.run(command, capture_output=True, text=True, timeout=60).returncode
+        try:
+            if run is not None:
+                code = run(command)
+            elif interactive:
+                code = subprocess.call(command)
+            else:
+                code = subprocess.run(command, capture_output=True, text=True, timeout=COMMAND_TIMEOUT_S).returncode
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return False, f'Befehl nicht abgeschlossen ({error}): {" ".join(command)}'
         if code != 0:
             if instance.kind == 'dev' and 'stop' in command:
                 subprocess.call(systemctl(instance) + ['reset-failed', instance.unit],

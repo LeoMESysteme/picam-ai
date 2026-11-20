@@ -228,7 +228,7 @@ def test_execute_stops_on_first_failure(monkeypatch):
     calls = []
     plan = service.Plan('restart', [['a'], ['b']])
     ok, message = service.execute(plan, Instance(kind='user', unit='u', scope='user'),
-                                  run=lambda c: calls.append(c) or 3, echo=lambda _: None)
+                                  run=lambda c: calls.append(c) or 3, echo=lambda _: None, recheck=lambda: None)
     assert not ok and calls == [['a']] and 'Exit 3' in message
 
 
@@ -350,3 +350,49 @@ def test_config_set_without_terminal_needs_yes(monkeypatch, tmp_path, capsys):
     assert 'port = 8080' in config.read_text()
     assert cli.main(['config', 'set', 'port', '9000', '--yes']) == 0
     assert 'port = 9000' in Path(config).read_text()
+
+
+# ------------------------------------------------------------------ Review 20.11.
+
+def test_stop_without_checked_run_state_is_blocked():
+    assert service.plan('stop', DEV, None).blocker == 'Laufstatus noch nicht geprüft'
+    assert service.plan('restart', dev_with_argv(), None, force=True).blocker is None
+    assert service.plan('start', dev_with_argv(), None).blocker is None
+
+
+def test_execute_rechecks_run_state_right_before_stopping():
+    calls = []
+    plan = service.plan('restart', dev_with_argv(), _snapshot({'state': 'idle', 'diagnose_kopie': False}))
+    ok, message = service.execute(plan, dev_with_argv(), run=lambda c: calls.append(c) or 0, echo=lambda _: None,
+                                  recheck=lambda: 'Lauf aktiv – erst in der Werkbank beenden')
+    assert not ok and 'Lauf aktiv' in message and calls == []
+
+
+def test_execute_reports_timeout_instead_of_crashing():
+    def hang(command):
+        raise service.subprocess.TimeoutExpired(command, 120)
+    plan = service.Plan('start', [['systemctl', 'start', 'x']])
+    ok, message = service.execute(plan, dev_with_argv(), run=hang, echo=lambda _: None)
+    assert not ok and 'nicht abgeschlossen' in message
+
+
+def dev_with_argv():
+    return Instance(kind='dev', unit='dispread-werkbank-bruecke', scope='user', argv=['/py', '-m', 'x'],
+                    workdir='/r', host='127.0.0.1', port=1)
+
+
+def test_config_header_with_comment_and_multiline_array(tmp_path):
+    config = tmp_path / 'config.toml'
+    config.write_text('[workbench] # vom Installer\nport = 8080\n')
+    text, _ = configedit.propose(config, 'port', '8081')
+    assert 'port = 8081' in text
+    config.write_text('[workbench]\nhost = "h"\nport = 8080\nbridge_endpoint = [\n  "https://h:8080/bridge/v2",\n]\n')
+    with pytest.raises(ValueError, match='mehrzeilig'):
+        configedit.propose(config, 'port', '8081')
+
+
+def test_shell_hints_are_quoted(monkeypatch):
+    monkeypatch.setenv('USER', 'a b')
+    fact = probes.fact_linger(Instance(kind='dev', unit='u', scope='user'),
+                              run=lambda c, timeout=5.0: (0, 'no\n', ''))
+    assert fact.command == "sudo loginctl enable-linger 'a b'"

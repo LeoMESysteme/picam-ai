@@ -80,10 +80,20 @@ def _swap_link(link: Path, target: Path) -> None:
     os.replace(temporary, link)
 
 
+def _release_dir(prefix: Path, release_id: str) -> Path:
+    if (not isinstance(release_id, str) or not release_id or release_id != Path(release_id).name
+            or release_id in ('.', '..') or '/' in release_id or '\x00' in release_id):
+        raise ValueError(f'Ungültiger Versionsname: {release_id!r}')
+    target = prefix / 'releases' / release_id
+    if target.is_symlink() or target.resolve().parent != (prefix / 'releases').resolve():
+        raise ValueError(f'Version {release_id} liegt nicht direkt in releases/')
+    return target
+
+
 def activate(prefix, release_id) -> dict:
     """``current`` atomar auf ``release_id`` umschalten, vorige Version als ``previous`` merken."""
     prefix = check_prefix(prefix)
-    target = prefix / 'releases' / release_id
+    target = _release_dir(prefix, release_id)
     if not (target / 'release.json').is_file() or not (target / '.venv/bin/python').exists():
         raise ValueError(f'Version {release_id} ist nicht vollständig vorbereitet')
     old = (prefix / 'current').resolve()
@@ -100,7 +110,7 @@ def remove(prefix, release_id) -> None:
     state = releases(prefix)
     if release_id in (state['current'], state['previous']):
         raise ValueError('Aktive oder vorige Version wird nicht gelöscht')
-    target = prefix / 'releases' / release_id
-    if not target.is_dir() or target.is_symlink():
+    target = _release_dir(prefix, release_id)
+    if not target.is_dir():
         raise ValueError(f'Version {release_id} nicht gefunden')
     shutil.rmtree(target)

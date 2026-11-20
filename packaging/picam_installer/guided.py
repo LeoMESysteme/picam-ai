@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from . import engine
 from .platform import probe_system
@@ -340,11 +341,13 @@ def apply(args, out=None, input_=input, runner=subprocess.run, installer=engine.
         user_flag = ['--user'] if args.mode == 'user' else []
         out.line()
         if yes('Dienst jetzt starten und beim Booten automatisch starten?', default=True, input_=input_):
-            command = ['systemctl', *user_flag, 'daemon-reload']
-            runner(command, check=False, timeout=30)
             command = ['systemctl', *user_flag, 'enable', '--now', 'picam-werkbank.service']
             out.step(shlex.join(command))
-            done = runner(command, check=False, capture_output=True, text=True, timeout=60)
+            try:
+                runner(['systemctl', *user_flag, 'daemon-reload'], check=False, timeout=30)
+                done = runner(command, check=False, capture_output=True, text=True, timeout=90)
+            except (OSError, subprocess.SubprocessError) as error:
+                done = SimpleNamespace(returncode=1, stderr=str(error))
             if done.returncode != 0:
                 out.status('fail', 'Dienst', (done.stderr or '').strip() or f'Exit {done.returncode}')
             elif wait_ready(args.host, args.port):

@@ -15,6 +15,7 @@ import grp
 import hashlib
 import os
 import pwd
+import shlex
 import shutil
 import socket
 import ssl
@@ -117,14 +118,14 @@ def _since(timestamp_text: str) -> str:
 
 # --------------------------------------------------------------------- Quellen
 
-def socket_request(path: str | None, op: str, timeout: float = 3.0):
+def socket_request(path: str | None, op: str, timeout: float = 3.0, args: dict | None = None):
     """Lokale Steuerung der Werkbank; None, wenn nicht erreichbar."""
     if not path or not Path(path).exists():
         return None
     from dispread.workbench.cli import request
 
     async def ask():
-        return await asyncio.wait_for(request(op, socket_path=path), timeout)
+        return await asyncio.wait_for(request(op, args, socket_path=path), timeout)
     try:
         return asyncio.run(ask())
     except (TimeoutError, OSError, ValueError, ImportError, RuntimeError):
@@ -160,7 +161,7 @@ def fact_service(instance: Instance, run=run_command, ping=None) -> Fact:
         detail = [('Art', 'portabel (ohne Dienstmanager)'), ('Steuerung', instance.socket or '–')]
         if answer is not None:
             return Fact('dienst', 'Dienst', OK, 'läuft', detail)
-        start = f'{sys.executable} -m dispread.workbench.cli serve --config {instance.config}'
+        start = shlex.join([sys.executable, '-m', 'dispread.workbench.cli', 'serve', '--config', str(instance.config)])
         return Fact('dienst', 'Dienst', OFF, 'gestoppt', detail, hint='Portabel installiert: von Hand starten.',
                     command=start)
     code, out, err = run(systemctl(instance) + ['show', instance.unit, '-p', 'ActiveState', '-p', 'SubState',
@@ -389,12 +390,13 @@ def fact_storage(instance: Instance, live: dict | None) -> Fact:
         detail.append(('Laufdaten', target))
     if free < reserve:
         return Fact('speicher', 'Speicher', FAIL, f'{_gb(free)} frei', detail,
-                    hint='Unter der Reserve: neue Läufe werden abgelehnt. Alte Läufe sichern und löschen.',
-                    command='dispread live aufraeumen --aelter-als 14')
+                    hint='Unter der Reserve: neue Läufe werden abgelehnt. Alte Läufe sichern und löschen '
+                         '(zeigt zuerst, was frei würde).',
+                    command='picam aufraeumen')
     if free < 2 * reserve:
         return Fact('speicher', 'Speicher', WARN, f'{_gb(free)} frei', detail,
-                    hint='Wird knapp. Alte Läufe sichern und löschen.',
-                    command='dispread live aufraeumen --aelter-als 14')
+                    hint='Wird knapp. Alte Läufe sichern und löschen (zeigt zuerst, was frei würde).',
+                    command='picam aufraeumen')
     return Fact('speicher', 'Speicher', OK, f'{_gb(free)} frei', detail)
 
 
@@ -430,7 +432,7 @@ def fact_calibration(instance: Instance, now=time.time) -> Fact:
         return Fact('kalibrierung', 'Kalibrierung', FAIL, 'fehlt', [('Datei', str(path))],
                     hint=('Ohne Timing-Kalibrierung startet kein Messlauf. Am Aufbau messen '
                           '(scripts/timing-calibration.py im Entwicklungs-Checkout) und die Datei hier ablegen.'),
-                    command=f'{sys.executable} {tool}' if tool.is_file() else None)
+                    command=shlex.join([sys.executable, str(tool)]) if tool.is_file() else None)
     age_days = int((now() - path.stat().st_mtime) // 86400)
     return Fact('kalibrierung', 'Kalibrierung', OK, 'vorhanden',
                 [('Datei', str(path)), ('Stand', datetime.fromtimestamp(path.stat().st_mtime)
@@ -484,7 +486,7 @@ def fact_groups(instance: Instance) -> Fact:
     if missing:
         return Fact('konto', 'Konto', WARN, 'Gruppe fehlt', detail,
                     hint=f"{user} fehlt in {', '.join(missing)} (Kamera/UART). Danach neu anmelden.",
-                    command=f"sudo usermod -aG {','.join(missing)} {user}")
+                    command=shlex.join(['sudo', 'usermod', '-aG', ','.join(missing), user]))
     return Fact('konto', 'Konto', OK, user, detail)
 
 
@@ -528,7 +530,7 @@ def fact_linger(instance: Instance, run=run_command) -> Fact | None:
         return Fact('linger', 'Nach Abmeldung', OK, 'läuft weiter', [('Linger', 'ja')])
     return Fact('linger', 'Nach Abmeldung', WARN, 'stoppt', [('Linger', 'nein')],
                 hint='Benutzerdienst endet beim Abmelden und startet nach dem Booten nicht.',
-                command=f'sudo loginctl enable-linger {user}')
+                command=shlex.join(['sudo', 'loginctl', 'enable-linger', user]))
 
 
 def fact_clock(run=run_command) -> Fact:

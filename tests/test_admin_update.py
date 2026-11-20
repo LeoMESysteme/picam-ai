@@ -149,3 +149,16 @@ def test_cli_system_update_hands_over_to_sudo(prefix, admin, monkeypatch, tmp_pa
     archive = tmp_path / 'picam-1.2.0.tar.gz'
     assert cli.main(['update', '--source', str(archive), '--yes']) == 0
     assert calls[0][0] == 'sudo' and calls[0][-4:] == ['update', '--source', str(archive), '--yes']
+
+
+@pytest.mark.parametrize('name', ['../x', '..', '', 'a/b', '.'])
+def test_activate_rejects_paths_outside_releases(prefix, name):
+    with pytest.raises(ValueError):
+        inst_update.activate(prefix, name)
+
+
+def test_activate_rejects_symlinked_release(prefix, tmp_path):
+    outside = make_release(tmp_path / 'fremd', 'x')
+    (prefix / 'releases/link').symlink_to(outside)
+    with pytest.raises(ValueError, match='nicht direkt'):
+        inst_update.activate(prefix, 'link')
