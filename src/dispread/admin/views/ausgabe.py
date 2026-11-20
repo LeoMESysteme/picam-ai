@@ -151,9 +151,23 @@ class AusgabeView(FactView):
         detail = dict(bridge.detail) if bridge is not None else {}
         out = dict(app.fact('ausgabe').detail) if app.fact('ausgabe') is not None else {}
         state = out.get('Brücke')
-        bridge_badge = badge(probes.OK, state, 'on') if state else fact_badge(bridge)
-        return [('Brücke', bridge_badge), ('Kopplungen', value(detail.get('Kopplungen'))),
-                ('Pi-ID', value(detail.get('Pi-ID')))]
+        connected = state == 'verbunden' or (bridge is not None and bridge.value == 'verbunden')
+        if connected:
+            link = badge(probes.OK, 'verbunden', 'on')
+        elif bridge is None or bridge.level == probes.FAIL:
+            link = fact_badge(bridge)
+        else:
+            # Grün nur bei stehender Verbindung: braucht der Lauf die Brücke, ist „nicht
+            # verbunden“ eine Warnung, sonst nur ein grauer Ruhezustand.
+            live = self._live() or {}
+            needed = live.get('state') == 'running' and (live.get('output') or {}).get('transport') in ('uart', 'tcp')
+            link = badge(probes.WARN if needed else probes.OFF, 'nicht verbunden', 'off')
+        rows = [('Verbindung', link)]
+        if bridge is not None and bridge.level != probes.FAIL:
+            paired = bridge.value in ('verbunden', 'gekoppelt')
+            rows.append(('Kopplung', badge(probes.OK if paired else bridge.level,
+                                           'gekoppelt' if paired else str(bridge.value), 'on' if paired else None)))
+        return rows + [('Kopplungen', value(detail.get('Kopplungen'))), ('Pi-ID', value(detail.get('Pi-ID')))]
 
     def _path_rows(self, chosen: int, active: int | None, with_state: bool = True) -> list:
         app = self.app

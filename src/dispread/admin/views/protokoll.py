@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from rich.text import Text
-from textual.widgets import RichLog, Static
+from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, Action
+from ..ui import ACCENT, MUTED, TONE, Action, ReflowLog
 from .base import TabView
 
 LOG_LIMIT = 2000
@@ -25,9 +25,10 @@ class ProtokollView(TabView):
 
     def compose(self):
         yield Static(id='log-head')
-        yield RichLog(id='log', max_lines=LOG_LIMIT, wrap=True, markup=False, auto_scroll=True, min_width=20)
+        yield ReflowLog(id='log', max_lines=LOG_LIMIT, wrap=True, markup=False, auto_scroll=True, min_width=20)
 
     def update_view(self) -> None:
+        self.query_one('#log', ReflowLog).sync()
         head = Text()
         head.append('Protokoll', style='bold')
         head.append(f'   {self.app.instance.unit or "–"}', style=MUTED)
@@ -46,14 +47,14 @@ class ProtokollView(TabView):
 
     def add_log(self, line, row) -> None:
         if self.shows(line):
-            self.query_one('#log', RichLog).write(row, scroll_end=self.follow)
+            self.query_one('#log', ReflowLog).add(row, scroll_end=self.follow)
 
     def clear_log(self) -> None:
-        self.query_one('#log', RichLog).clear()
+        self.query_one('#log', ReflowLog).reset()
 
     def toggle_follow(self) -> None:
         self.follow = not self.follow
-        log = self.query_one('#log', RichLog)
+        log = self.query_one('#log', ReflowLog)
         log.auto_scroll = self.follow
         if self.follow:
             log.scroll_end(animate=False)
@@ -62,11 +63,8 @@ class ProtokollView(TabView):
 
     def toggle_errors(self) -> None:
         self.errors_only = not self.errors_only
-        log = self.query_one('#log', RichLog)
-        log.clear()
-        for line in self.app.log_lines:
-            if self.shows(line):
-                log.write(self.app.log_row(line), scroll_end=False)
+        log = self.query_one('#log', ReflowLog)
+        log.replace([self.app.log_row(line) for line in self.app.log_lines if self.shows(line)])
         if self.follow:
             log.scroll_end(animate=False)
         self.update_view()

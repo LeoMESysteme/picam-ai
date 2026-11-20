@@ -394,3 +394,31 @@ def test_intro_skipped_in_too_small_terminal():
         assert not app.query('#intro')
         assert app.screen.has_class('too-small')
     drive(check, size=(40, 12), intro=True)
+
+
+def test_log_lines_arriving_while_tab_hidden_use_full_width():
+    """Regression: RichLog brach bei verborgenem Tab auf 20 Zeichen um (Meldungen schmal am Rand)."""
+    async def check(app, pilot):
+        await pilot.press('l')
+        await pilot.pause(0.2)
+        await pilot.press('1')
+        await pilot.pause(0.2)
+        app._add_logs([LogLine('23:00:01', 'info', 'Kurze Meldung bei verborgenem Tab')])
+        await pilot.pause(0.2)
+        await pilot.press('l')
+        await pilot.pause(0.4)
+        texts = [str(strip.text).rstrip() for strip in app.query_one('#log').lines]
+        assert '23:00:01    Kurze Meldung bei verborgenem Tab' in texts
+    drive(check)
+
+
+def test_bridge_not_connected_is_never_green():
+    from dispread.admin.ui import TONE
+
+    async def check(app, pilot):
+        await pilot.press('5')
+        await pilot.pause(0.3)
+        link = dict((row[0], row[1]) for row in app.view()._bridge_rows())['Verbindung']
+        assert 'nicht verbunden' in link.plain
+        assert TONE[probes.OK] not in str(link.spans[0].style)
+    drive(check, state='idle')

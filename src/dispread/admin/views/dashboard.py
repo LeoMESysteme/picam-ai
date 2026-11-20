@@ -18,12 +18,12 @@ from textual import on
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Resize
-from textual.widgets import OptionList, RichLog, Static
+from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
 from .. import probes
 from ..intro import SHINE_PERIOD, SHINE_S, logo_text
-from ..ui import MUTED, Action, P, status_strip
+from ..ui import MUTED, Action, P, ReflowLog, status_strip
 from ..widgets import (
     ActionBar,
     TabBody,
@@ -118,7 +118,7 @@ class DashboardView(TabView):
                     yield RunCard(id='dash-run', classes='plain' if self.mode == 'b' else '')
                     with Vertical(id='dash-tail'):
                         yield Static(id='tail-head')
-                        yield RichLog(id='tail-log', max_lines=TAIL_LINES, wrap=True, markup=False,
+                        yield ReflowLog(id='tail-log', max_lines=TAIL_LINES, wrap=True, markup=False,
                                       auto_scroll=True, min_width=20)
                 with Vertical(id='dash-right'):
                     with Vertical(id='dash-areas', classes='plain' if self.mode == 'b' else ''):
@@ -193,6 +193,8 @@ class DashboardView(TabView):
 
     # ------------------------------------------------------------ Inhalte
     def update_view(self) -> None:
+        for log in self.query('#tail-log'):
+            log.sync()
         self._layout()
         if self.mode == 'b':
             self._render_tiles()
@@ -444,7 +446,7 @@ class DashboardView(TabView):
         return actions
 
     def add_log(self, row) -> None:
-        self.query_one('#tail-log', RichLog).write(row, scroll_end=True)
+        self.query_one('#tail-log', ReflowLog).add(row, scroll_end=True)
 
     def clear_log(self) -> None:
-        self.query_one('#tail-log', RichLog).clear()
+        self.query_one('#tail-log', ReflowLog).reset()

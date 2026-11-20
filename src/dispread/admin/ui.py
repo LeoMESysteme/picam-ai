@@ -19,7 +19,7 @@ from textual.containers import Grid, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.theme import Theme
 from textual.widget import Widget
-from textual.widgets import Button, Input, Static
+from textual.widgets import Button, Input, RichLog, Static
 
 from . import probes
 
@@ -615,3 +615,73 @@ def _canvas_console():
 
 
 _CANVAS_CONSOLE = _canvas_console()
+
+
+class ReflowLog(RichLog):
+    """Protokollfeld, das seine Einträge bei jeder Breitenänderung neu umbricht.
+
+    ``RichLog`` bricht eine Zeile beim Schreiben auf die aktuelle Breite um. Ist
+    der Tab gerade verborgen (Breite 0), nimmt es die Mindestbreite von 20 Zeichen
+    – die Meldungen standen dann schmal am linken Rand und brauchten mehrere
+    Zeilen. Hier merkt sich das Feld die Einträge, schreibt nur bei bekannter Breite
+    und baut beim Sichtbarwerden oder Größenwechsel alles neu auf.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._entries: list = []
+        self._laid_out_width = 0
+        self._dirty = False
+
+    def add(self, renderable, scroll_end: bool | None = None) -> None:
+        self._entries.append(renderable)
+        if self.max_lines and len(self._entries) > self.max_lines:
+            del self._entries[: len(self._entries) - self.max_lines]
+        if self._laid_out_width and self._visible_now():
+            self.write(renderable, scroll_end=scroll_end)
+        else:
+            self._dirty = True  # verborgen: erst beim Sichtbarwerden in voller Breite schreiben
+
+    def _visible_now(self) -> bool:
+        node = self
+        while node is not None and hasattr(node, 'display'):
+            if not node.display:
+                return False
+            node = node.parent
+        return self.scrollable_content_region.width > 0
+
+    def on_show(self) -> None:
+        self.sync()
+
+    def sync(self) -> None:
+        """Nach dem Sichtbarwerden aufrufen (Tabwechsel): verpasste Einträge in voller Breite zeichnen."""
+        def check() -> None:
+            width = self.scrollable_content_region.width
+            if width > 0 and (self._dirty or width != self._laid_out_width):
+                self._laid_out_width = width
+                self._rebuild()
+        self.call_after_refresh(check)
+
+    def replace(self, renderables: list) -> None:
+        self._entries = list(renderables)[-(self.max_lines or len(renderables)):] if renderables else []
+        self._rebuild()
+
+    def reset(self) -> None:
+        self._entries.clear()
+        self.clear()
+
+    def on_resize(self, event) -> None:
+        width = self.scrollable_content_region.width
+        if width > 0 and width != self._laid_out_width:
+            self._laid_out_width = width
+            self.call_after_refresh(self._rebuild)
+
+    def _rebuild(self) -> None:
+        self._dirty = False
+        self.clear()
+        if not self._laid_out_width:
+            return
+        for entry in self._entries:
+            self.write(entry, scroll_end=False)
+        if self.auto_scroll:
+            self.scroll_end(animate=False)
