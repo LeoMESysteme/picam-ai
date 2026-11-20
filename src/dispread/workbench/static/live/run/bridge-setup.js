@@ -10,7 +10,7 @@ export const HUB_DOWN = 'Brückendienst auf dem Pi nicht aktiv';
 export const NOT_IN_RUN = 'Im Lauf nicht änderbar.';
 export const TEXT = {
   appNote: 'Die Windows-App wird auf dem GSVmulti-PC installiert.',
-  appStatus: 'Interner Testbuild – beim Entwickler anfragen.',
+  appStatus: 'GSVmulti-Brücke 1.0 – Installationsdatei aus dem Release.',
   profileHint: 'In der Windows-App muss derselbe Fingerabdruck erscheinen.',
   codeHint: 'Code nur in die Windows-App eingeben. Einmal gültig, 5 Minuten.',
   expired: 'Abgelaufen – neuen Code erzeugen',

@@ -2241,7 +2241,7 @@ test('Brücke einrichten (Netzwerk): Profil, Kopplungscode mit Ablauf, nichts bl
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   const dialog = await openBridge(page, 'Netzwerk über Brücke');
-  await expect(dialog).toContainText('Interner Testbuild – beim Entwickler anfragen');
+  await expect(dialog).toContainText('GSVmulti-Brücke 1.0 – Installationsdatei aus dem Release');
   await expect(dialog.locator('[data-step="uart"]')).toBeHidden();
   const shots = '/home/me-systeme/picam-ai/.superpowers/sdd/2026-11-06-bruecke-ui/shots';
   await shot(page, `${shots}/bw1-1-ohne-code.png`);

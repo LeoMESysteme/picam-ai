@@ -116,6 +116,25 @@ def _explicit_options(argv):
     return explicit
 
 
+def load_config(path):
+    """Validated ``(workbench, live)`` values of a serve TOML file (absolute paths)."""
+    source = Path(path).resolve()
+    with source.open('rb') as stream:
+        config = tomllib.load(stream)
+    if unknown := config.keys() - {'workbench', 'live'}:
+        raise ValueError(f'unbekannte Abschnitte: {", ".join(sorted(unknown))}')
+    for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration'})):
+        values = config.get(section, {})
+        if not isinstance(values, dict):
+            raise ValueError(f'{section}: TOML-Tabelle erforderlich')
+        if unknown := values.keys() - allowed:
+            raise ValueError(f'{section}: unbekannte Schluessel: {", ".join(sorted(unknown))}')
+    workbench = _workbench(config.get('workbench', {}), source.parent)
+    live = {name: _path(value, f'live.{name}', source.parent, 'file')
+            for name, value in config.get('live', {}).items()}
+    return workbench, live, 'live' in config
+
+
 def apply_config(args, argv=None):
     """Apply a serve TOML file, preserving options explicitly passed on the CLI."""
     if getattr(args, 'command', None) != 'serve' or getattr(args, 'config', None) is None:
@@ -123,20 +142,8 @@ def apply_config(args, argv=None):
     source = Path(args.config)
     try:
         source = source.resolve()
-        with source.open('rb') as stream:
-            config = tomllib.load(stream)
-        if unknown := config.keys() - {'workbench', 'live'}:
-            raise ValueError(f'unbekannte Abschnitte: {", ".join(sorted(unknown))}')
-        for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration'})):
-            values = config.get(section, {})
-            if not isinstance(values, dict):
-                raise ValueError(f'{section}: TOML-Tabelle erforderlich')
-            if unknown := values.keys() - allowed:
-                raise ValueError(f'{section}: unbekannte Schluessel: {", ".join(sorted(unknown))}')
-        values = _workbench(config.get('workbench', {}), source.parent)
-        live = {name: _path(value, f'live.{name}', source.parent, 'file')
-                for name, value in config.get('live', {}).items()}
-        if 'live' in config:
+        values, live, has_live = load_config(source)
+        if has_live:
             from dispread.live.session import LiveConfig
 
             values['live_config'] = LiveConfig(**live)
@@ -147,3 +154,4 @@ def apply_config(args, argv=None):
         if name not in explicit:
             setattr(args, name, value)
     return args
+

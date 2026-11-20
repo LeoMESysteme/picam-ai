@@ -21,6 +21,7 @@ dev = ["pytest>=8", "pytest-xdist>=3.8", "ruff>=0.6"]
 
 [project.scripts]
 dispread = "dispread.workbench.cli:main"
+picam = "dispread.admin.cli:main"
 
 # Workbench-Pakete werden durch scripts/install-workbench.sh als Debian-Pakete
 # installiert; keine pip-Abhaengigkeiten fuer die Kamera-/CV-Systembibliotheken.
