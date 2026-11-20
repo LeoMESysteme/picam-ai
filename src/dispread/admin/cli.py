@@ -274,7 +274,7 @@ def cmd_cleanup(args, instance) -> int:
     for entry in entries:
         print(f"  {entry.get('mb', 0):>8.1f} MB  {entry.get('path')}")
     total = listing.get('total_mb', 0)
-    print(f'{len(entries)} Läufe, zusammen {total:.0f} MB.')
+    print(f'{len(entries)} {"Lauf" if len(entries) == 1 else "Läufe"}, zusammen {total:.0f} MB.')
     if not args.yes and not confirm('Diese Läufe endgültig löschen? (vorher sichern)'):
         print('Nichts gelöscht.', file=sys.stderr)
         return EXIT_ABORT

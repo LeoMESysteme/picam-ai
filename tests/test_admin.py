@@ -396,3 +396,20 @@ def test_shell_hints_are_quoted(monkeypatch):
     fact = probes.fact_linger(Instance(kind='dev', unit='u', scope='user'),
                               run=lambda c, timeout=5.0: (0, 'no\n', ''))
     assert fact.command == "sudo loginctl enable-linger 'a b'"
+
+
+def test_cleanup_lists_then_deletes_only_after_yes(monkeypatch, capsys):
+    calls = []
+
+    def socket_request(path, op, timeout=3.0, args=None):
+        calls.append(args)
+        return {'entries': [{'path': '/v/live/a/run-01', 'mb': 20.5}], 'total_mb': 20.5, 'failed': False}
+    monkeypatch.setattr(cli, 'discover', lambda *_: DEV)
+    monkeypatch.setattr(probes, 'socket_request', socket_request)
+    monkeypatch.setattr('sys.stdin', open(os.devnull))
+    assert cli.main(['aufraeumen']) == cli.EXIT_ABORT
+    assert [c['execute'] for c in calls] == [False]
+    assert cli.main(['aufraeumen', '--tage', '30', '--yes']) == 0
+    assert calls[-1] == {'days': 30, 'diagnostics_only': False, 'execute': True}
+    out = capsys.readouterr().out
+    assert '1 Lauf, zusammen 20 MB' in out and '20 MB freigegeben' in out
