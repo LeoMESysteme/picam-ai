@@ -28,3 +28,6 @@ Gestaltung nach dem `tui-design`-Skill: eine Trennlinie zwischen Liste und
 Bereich, kein Außenrahmen; je Zustand ein Zeichen plus eine Farbe; Werte
 in der Liste nur farbig, wenn sie Handlungsbedarf zeigen; Hinweise als
 schmaler Balken links. Keine Messwerte, keine laufenden Zähler.
+
+Neu erzeugen: `PYTHONPATH=src ./.venv/bin/python docs/quellen/picam-tour-2026-11-20/capture.py AUSGABEORDNER [FALL …]`
+schreibt SVGs; PNGs daraus mit CairoSVG (eigene venv, nicht in der Projekt-venv).

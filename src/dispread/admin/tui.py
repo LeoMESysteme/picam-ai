@@ -279,7 +279,7 @@ def hint_block(fact: probes.Fact) -> Text | None:
     if fact.command:
         if fact.hint:
             text.append('\n')
-        text.append('→ ', style=MUTED)
+        text.append('-> ' if ascii_mode() else '→ ', style=MUTED)
         text.append(fact.command, style=ACCENT)
     return text
 
