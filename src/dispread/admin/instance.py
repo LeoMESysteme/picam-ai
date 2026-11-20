@@ -119,7 +119,11 @@ def _from_config(path: Path, kind: str) -> Instance:
             setattr(instance, name, workbench[name])
     instance.templates = str(live['templates']) if 'templates' in live else None
     instance.calibration = str(live['calibration']) if 'calibration' in live else None
-    instance.root = str(code_root())
+    root = code_root()
+    current = root.parent.parent / 'current'
+    if root.parent.name == 'releases' and current.is_symlink():
+        root = current.resolve()  # nach einem Update zählt die aktive Version
+    instance.root = str(root)
     return instance
 
 

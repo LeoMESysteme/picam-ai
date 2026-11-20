@@ -212,6 +212,52 @@ def cmd_config(args, instance) -> int:
     return EXIT_OK
 
 
+def cmd_update(args, instance) -> int:
+    from . import update
+
+    try:
+        update.prefix_of(instance)
+        if args.check:
+            state = update.versions(instance)
+            print(f"aktiv:      {state['current']}")
+            print(f"vorige:     {state['previous'] or '–'}")
+            print(f"installiert: {', '.join(state['installed'])}")
+            return EXIT_OK
+        target = None
+        if args.rollback:
+            target = update.versions(instance)['previous']
+            if not target:
+                print('picam: keine vorige Version vorhanden', file=sys.stderr)
+                return EXIT_FAIL
+        elif args.activate:
+            target = args.activate
+        question = (f'Auf Version {target} umschalten und den Dienst neu starten?' if target else
+                    f'Version aus {args.source} installieren, umschalten und den Dienst neu starten?')
+        if not args.yes and not confirm(question):
+            print('Abgebrochen.', file=sys.stderr)
+            return EXIT_ABORT
+        if update.needs_root(instance):
+            argv = ['update'] + (['--source', os.path.abspath(args.source) if '://' not in args.source
+                                  else args.source] if args.source else []) + (
+                ['--sha256', args.sha256] if args.sha256 else []) + (
+                ['--rollback'] if args.rollback else []) + (['--activate', args.activate] if args.activate else []) + [
+                '--yes']
+            print('Für die Systeminstallation fragt sudo nach dem Passwort.', file=sys.stderr)
+            return subprocess.call(update.sudo_command(argv))
+        echo = lambda text: print(text, file=sys.stderr)  # noqa: E731
+        if target:
+            ok, message = update.switch(instance, target, echo=echo)
+        else:
+            ok, message = update.install_update(instance, args.source, args.sha256, echo=echo)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        print(f'picam: {error}', file=sys.stderr)
+        return EXIT_FAIL
+    print(message, file=sys.stdout if ok else sys.stderr)
+    if not ok and ('gesperrt' in message):
+        return EXIT_BLOCKED
+    return EXIT_OK if ok else EXIT_FAIL
+
+
 def parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument('--config', default=argparse.SUPPRESS,
@@ -241,6 +287,14 @@ def parser() -> argparse.ArgumentParser:
     config.add_argument('key', nargs='?')
     config.add_argument('value', nargs='?')
     config.add_argument('--yes', '-y', action='store_true')
+    upd = sub.add_parser('update', help='neue Version installieren, umschalten, neu starten (mit Rückweg)')
+    group = upd.add_mutually_exclusive_group(required=True)
+    group.add_argument('--source', help='Releasearchiv oder HTTPS-Adresse')
+    group.add_argument('--rollback', action='store_true', help='zurück auf die vorige Version')
+    group.add_argument('--activate', metavar='VERSION', help='vorbereitete Version aktivieren')
+    group.add_argument('--check', action='store_true', help='installierte Versionen zeigen')
+    upd.add_argument('--sha256', help='SHA-256 des Archivs (Pflicht bei HTTPS)')
+    upd.add_argument('--yes', '-y', action='store_true')
     sub.add_parser('url', help='Adresse der Werkbank')
     sub.add_parser('tui', help='Verwaltungskonsole öffnen')
     return root
@@ -291,6 +345,8 @@ def main(argv=None) -> int:
             return cmd_service(args, instance)
         if command == 'config':
             return cmd_config(args, instance)
+        if command == 'update':
+            return cmd_update(args, instance)
     except KeyboardInterrupt:
         return EXIT_ABORT
     except BrokenPipeError:

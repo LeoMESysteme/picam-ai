@@ -21,7 +21,7 @@ REQUIRED_FILES = (
     "packaging/apt-packages.txt",
     "scripts/install.py",
     "install.sh",
-    *(f"packaging/picam_installer/{name}.py" for name in ("__init__", "platform", "archive", "engine", "__main__")),
+    *(f"packaging/picam_installer/{name}.py" for name in ("__init__", "platform", "archive", "engine", "guided", "update", "__main__")),
     "src/dispread/__init__.py",
     "src/dispread/live/__init__.py",
 )

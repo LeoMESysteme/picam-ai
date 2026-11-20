@@ -498,7 +498,11 @@ def fact_version(instance: Instance, run=run_command) -> Fact:
             manifest = json.loads((root / 'release.json').read_text())
             detail = [('Release', str(manifest.get('release_id', '?'))),
                       ('Commit', str(manifest.get('commit', '?'))[:10]), ('Ort', str(root))]
-            return Fact('version', 'Version', OK, str(manifest.get('release_id', '?')), detail)
+            previous = root.parent.parent / 'previous'
+            if previous.is_symlink() and previous.resolve().is_dir():
+                detail.append(('Vorige', previous.resolve().name))
+            return Fact('version', 'Version', OK, str(manifest.get('release_id', '?')), detail,
+                        hint='Update: picam update --source picam-<version>.tar.gz · Rückweg: picam update --rollback')
         except (OSError, ValueError):
             pass
     if root is not None and (root / '.git').exists():

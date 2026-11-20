@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 
 from rich.table import Table
 from rich.text import Text
@@ -160,6 +161,42 @@ class ConfirmScreen(ModalScreen[bool]):
         self.dismiss(True)
 
 
+class AskScreen(ModalScreen[str | None]):
+    """Eine Eingabe mit Erklärung; Enter übernimmt, Esc bricht ab."""
+
+    BINDINGS = [Binding('escape', 'cancel', 'Abbrechen', show=False)]
+
+    def __init__(self, title: str, lines: list[str], value: str = '', placeholder: str = ''):
+        super().__init__()
+        self.title_text, self.lines, self.value, self.placeholder = title, lines, value, placeholder
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id='dialog'):
+            yield Static(Text(self.title_text, style='bold'), id='dialog-title')
+            for line in self.lines:
+                yield Static(line, classes='dialog-line')
+            yield Input(value=self.value, placeholder=self.placeholder, id='ask-input')
+            with Horizontal(id='dialog-buttons'):
+                yield Button('Abbrechen', id='cancel')
+                yield Button('Weiter', id='ok', variant='primary')
+
+    def on_mount(self) -> None:
+        self.query_one('#ask-input', Input).focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Input.Submitted)
+    @on(Button.Pressed, '#ok')
+    def _ok(self) -> None:
+        value = self.query_one('#ask-input', Input).value.strip()
+        self.dismiss(value or None)
+
+    @on(Button.Pressed, '#cancel')
+    def _cancel(self) -> None:
+        self.dismiss(None)
+
+
 class HelpScreen(ModalScreen[None]):
     BINDINGS = [Binding('escape,q,question_mark,f1', 'close', show=False)]
 
@@ -172,6 +209,8 @@ class HelpScreen(ModalScreen[None]):
         ('l', 'Protokoll'),
         ('c', 'Konfiguration'),
         ('a', 'empfohlenen Befehl ausführen (mit Rückfrage)'),
+        ('u', 'Version: Update aus Releasearchiv'),
+        ('z', 'Version: zurück auf die vorige Version'),
         ('g', 'jetzt neu prüfen'),
         ('f', 'Protokoll: mitlaufen an/aus'),
         ('e', 'Protokoll: nur Warnungen und Fehler'),
@@ -298,6 +337,8 @@ class PicamApp(App[int]):
     .dialog-line { margin: 0 0 1 0; }
     #dialog-cmd { margin: 0 0 1 0; padding: 0 1; background: $background; }
     #dialog-blocker { margin: 0 0 1 0; }
+    #ask-input { height: 1; border: none; padding: 0 1; margin: 0 0 1 0; background: $background; }
+    #ask-input:focus { background: #1a2a2f; }
     #dialog-buttons { height: auto; align-horizontal: right; }
     #dialog-buttons Button { margin: 0 0 0 2; }
     Button { border: none; height: 1; min-width: 14; padding: 0 2; background: #252c35; color: $foreground;
@@ -319,6 +360,8 @@ class PicamApp(App[int]):
         Binding('l', 'show("protokoll")', 'Protokoll'),
         Binding('c', 'show("konfiguration")', 'Konfig.'),
         Binding('a', 'run_fix', 'Ausführen', show=False),
+        Binding('u', 'update', 'Update', show=False),
+        Binding('z', 'rollback', 'Rückweg', show=False),
         Binding('g', 'refresh', 'Prüfen', show=False),
         Binding('o', 'open_url', 'Adresse', show=False),
         Binding('f', 'toggle_follow', 'Mitlaufen', show=False),
@@ -574,6 +617,8 @@ class PicamApp(App[int]):
             fact = self._fact(self.selected)
             if fact is not None and fact.command and fact.level in (probes.WARN, probes.FAIL):
                 keys.append(('a', 'Befehl ausführen'))
+            if self.selected == 'version' and self._installed():
+                keys.append(('u', 'Update'))
             keys += [('l', 'Protokoll'), ('c', 'Konfig.')]
         keys += [('?', 'Hilfe'), ('q', 'Ende')]
         return keys
@@ -671,6 +716,12 @@ class PicamApp(App[int]):
             text.append(' neu starten   ')
             text.append('l', style=f'bold {ACCENT}')
             text.append(' Protokoll')
+        elif fact.key == 'version' and self._installed():
+            text.append('u', style=f'bold {ACCENT}')
+            text.append(' Update aus Archiv   ')
+            if any(k == 'Vorige' for k, _ in fact.detail):
+                text.append('z', style=f'bold {ACCENT}')
+                text.append(' zurück auf vorige Version')
         elif fact.command and fact.level in (probes.WARN, probes.FAIL):
             text.append('a', style=f'bold {ACCENT}')
             text.append(' Befehl ausführen (mit Rückfrage)')
@@ -824,6 +875,82 @@ class PicamApp(App[int]):
         self._show_message(probes.OK if code == 0 else probes.FAIL,
                            f'{fact.command} → Exit {code}')
         self._setup_at = 0.0
+        self.action_refresh()
+
+    # ------------------------------------------------------------ Update
+    def _installed(self) -> bool:
+        root = self.instance.root or ''
+        return self.instance.kind in ('system', 'user') and Path(root).parent.name == 'releases'
+
+    def _newest_archive(self) -> str:
+        candidates = []
+        for base in (Path.home(), Path.home() / 'Downloads', Path.cwd()):
+            try:
+                candidates += [p for p in base.glob('picam*.tar.gz') if p.is_file()]
+            except OSError:
+                continue
+        return str(max(candidates, key=lambda p: p.stat().st_mtime)) if candidates else ''
+
+    def _run_cli(self, argv: list[str], title: str) -> int:
+        command = [sys.executable, '-m', 'dispread.admin.cli', *argv]
+        if self.instance.config:
+            command[3:3] = ['--config', self.instance.config]
+        with self.suspend():
+            print(f'\n{title}\n')
+            code = subprocess.call(command)
+            print(f'\nExit {code}. Enter drücken, um zur Konsole zurückzukehren.')
+            try:
+                input()
+            except EOFError:
+                pass
+        return code
+
+    @work(exclusive=True, group='update')
+    async def action_update(self) -> None:
+        if self.selected != 'version' or not self._installed():
+            return
+        if self.snapshot is not None and self.snapshot.stop_blocker:
+            self._show_message(probes.WARN, f'Update gesperrt: {self.snapshot.stop_blocker}')
+            return
+        source = await self.push_screen_wait(AskScreen(
+            'Update installieren',
+            ['Neue Version wird neben der laufenden vorbereitet und geprüft, dann umgeschaltet und der '
+             'Dienst neu gestartet. Antwortet sie nicht, schaltet picam auf die jetzige zurück.',
+             'Pfad oder HTTPS-Adresse des Releasearchivs:'],
+            value=self._newest_archive(), placeholder='/home/…/picam-1.1.0.tar.gz'))
+        if not source:
+            return
+        ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
+            'Update installieren', [f'Archiv: {source}', 'Dienst wird neu gestartet.'],
+            [f'picam update --source {shlex.quote(source)}'], 'Installieren')))
+        if not ok:
+            return
+        code = self._run_cli(['update', '--source', source, '--yes'], 'picam update')
+        self._after_update(code)
+
+    @work(exclusive=True, group='update')
+    async def action_rollback(self) -> None:
+        fact = self._fact('version')
+        if self.selected != 'version' or not self._installed() or fact is None:
+            return
+        previous = dict(fact.detail).get('Vorige')
+        if not previous:
+            self._show_message(probes.OFF, 'Keine vorige Version vorhanden.')
+            return
+        ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
+            f'Zurück auf {previous}', ['Schaltet auf die vorige Version um und startet den Dienst neu.'],
+            ['picam update --rollback'], 'Zurückschalten', blocker=self.snapshot.stop_blocker
+            if self.snapshot else None)))
+        if ok:
+            self._after_update(self._run_cli(['update', '--rollback', '--yes'], 'picam update --rollback'))
+
+    def _after_update(self, code: int) -> None:
+        from .instance import discover
+
+        self.instance = discover(self.instance.config)
+        self._setup_at = 0.0
+        self._show_message(probes.OK if code == 0 else probes.FAIL,
+                           'Update abgeschlossen.' if code == 0 else f'Update nicht abgeschlossen (Exit {code}).')
         self.action_refresh()
 
     # ------------------------------------------------------------ Protokoll

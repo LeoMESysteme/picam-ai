@@ -146,7 +146,8 @@ def config_text(args, paths, release):
                         bridge_endpoint=[f'https://{host}:{args.port}/bridge/v2'])
     lines = ['# picam installer; absolute paths; no existing configuration imported.', '[workbench]']
     lines.extend(key + ' = ' + json.dumps(value, ensure_ascii=False) for key, value in settings.items())
-    lines.extend(['', '[live]', 'templates = ' + json.dumps(str(release / TEMPLATE)),
+    # Ueber current: nach einem Update liest der Dienst die Vorlage der aktiven Version.
+    lines.extend(['', '[live]', 'templates = ' + json.dumps(str(release.parent.parent / 'current' / TEMPLATE)),
                   'calibration = ' + json.dumps(str(data / 'calibration/timing-streamcam.json')), ''])
     return '\n'.join(lines)
 
@@ -230,6 +231,33 @@ def hardware_id_available():
         return False
 
 
+def prepare_release(bundle, release, info, runner, step=lambda _text: None):
+    """Neues Releaseverzeichnis: Dateien, eigene venv, Paket, Selbsttest. Gibt die venv zurueck."""
+    release.mkdir(parents=True, mode=0o755)
+    step(f'Release {bundle.release_id} entpacken')
+    for name, content in bundle.files.items():
+        destination = release / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open('xb') as stream:
+            stream.write(content)
+        destination.chmod(0o755 if name.endswith('.sh') else 0o644)
+    (release / 'release.json').write_text(json.dumps(bundle.manifest, indent=2) + '\n')
+    venv = release / '.venv'
+    step('Python-Umgebung anlegen und Paket installieren')
+    checked([info.python, '-m', 'venv', '--system-site-packages', venv], runner)
+    checked([venv / 'bin/python', '-m', 'pip', '--disable-pip-version-check', 'install', '--no-index',
+             '--no-deps', '--no-build-isolation', str(release)], runner)
+    code = ('import importlib; ' + '; '.join('importlib.import_module(' + repr(m) + ')' for m in MODULES)
+            + '; from dispread.workbench.cli import parser; parser(); '
+            + 'from dispread.live.session import LiveConfig; '
+            + 'import hashlib; from pathlib import Path; '
+            + f'assert hashlib.sha256(Path({str(release / TEMPLATE)!r}).read_bytes()).hexdigest() == '
+            + repr(hashlib.sha256(bundle.files[TEMPLATE]).hexdigest()))
+    step('Selbsttest: Module und Lesevorlage')
+    checked([venv / 'bin/python', '-I', '-c', code], runner)
+    return venv
+
+
 def install(args, runner=subprocess.run, progress=None):
     step = progress or (lambda _text: None)
     valid_host(args.host)
@@ -293,28 +321,7 @@ def install(args, runner=subprocess.run, progress=None):
                 created.append(parent)
             path.mkdir(mode=0o700)
             created.append(path)
-        release.mkdir(parents=True, mode=0o755)
-        step(f'Release {bundle.release_id} entpacken')
-        for name, content in bundle.files.items():
-            destination = release / name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            with destination.open('xb') as stream:
-                stream.write(content)
-            destination.chmod(0o755 if name.endswith('.sh') else 0o644)
-        (release / 'release.json').write_text(json.dumps(bundle.manifest, indent=2) + '\n')
-        venv = release / '.venv'
-        step('Python-Umgebung anlegen und Paket installieren')
-        checked([info.python, '-m', 'venv', '--system-site-packages', venv], runner)
-        checked([venv / 'bin/python', '-m', 'pip', '--disable-pip-version-check', 'install', '--no-index',
-                 '--no-deps', '--no-build-isolation', str(release)], runner)
-        code = ('import importlib; ' + '; '.join('importlib.import_module(' + repr(m) + ')' for m in MODULES)
-                + '; from dispread.workbench.cli import parser; parser(); '
-                + 'from dispread.live.session import LiveConfig; '
-                + 'import hashlib; from pathlib import Path; '
-                + f'assert hashlib.sha256(Path({str(release / TEMPLATE)!r}).read_bytes()).hexdigest() == '
-                + repr(hashlib.sha256(bundle.files[TEMPLATE]).hexdigest()))
-        step('Selbsttest: Module und Lesevorlage')
-        checked([venv / 'bin/python', '-I', '-c', code], runner)
+        venv = prepare_release(bundle, release, info, runner, step)
         for directory in (paths['data'] / 'workbench', paths['data'] / 'live', paths['data'] / 'calibration',
                           paths['data'] / 'workbench/tls', paths['config'].parent):
             directory.mkdir(parents=True, exist_ok=True, mode=0o700)
