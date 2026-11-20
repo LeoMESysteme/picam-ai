@@ -7,7 +7,8 @@ python3-numpy       # Arrays und numerische Bildverarbeitung
 python3-opencv      # UVC-Bildquelle und Bildverarbeitung (cv2)
 python3-serial      # Referenz, UART direkt und Bruecke (serial)
 python3-aiohttp     # HTTPS/WebSockets und lokale Socket-API
-python3-textual     # Bestehende optionale Werkbank-TUI
+python3-textual     # Verwaltungskonsole picam und alte Werkbank-TUI
+python3-rich        # Textausgabe von picam (kommt auch mit textual)
 python3-pam         # Linux-Kontoanmeldung (PAM)
 python3-cryptography # Pi-Identitaet, Zertifikate und Kopplung
 python3-zeroconf    # Optionale DNS-SD-Discovery (dynamischer Import)

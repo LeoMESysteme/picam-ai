@@ -15,6 +15,7 @@ MODULE_PACKAGES = {
     'numpy': 'python3-numpy',
     'serial': 'python3-serial',
     'textual': 'python3-textual',
+    'rich': 'python3-rich',
     'zeroconf': 'python3-zeroconf',
 }
 
