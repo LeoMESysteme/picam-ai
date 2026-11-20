@@ -73,3 +73,30 @@ def test_theme_carries_palette_variables():
     assert theme.dark is False
     assert theme.variables['picam-surface'] == ui.HELL.surface
     assert theme.background == ui.HELL.canvas
+
+
+@pytest.mark.parametrize('palette', PALETTES, ids=lambda p: p.name)
+def test_inset_values_and_badges_are_readable(palette):
+    p = palette
+    # eingelassene Werte: Wert und Einheit lesbar, Feld vom Grund unterscheidbar
+    for role in ('text', 'text_muted', 'accent', 'ok', 'warn', 'fail'):
+        assert contrast(getattr(p, role), p.inset) >= 4.5, role
+    assert contrast(p.surface, p.inset) >= 1.2
+    assert contrast(p.canvas, p.inset) >= 1.08
+    # Abzeichen: Statusfarbe auf ihrer Tönung
+    for tone, tint in (('ok', 'tint_ok'), ('warn', 'tint_warn'), ('fail', 'tint_fail'), ('off', 'tint_off'),
+                       ('unknown', 'tint_off'), ('accent_strong', 'tint_info')):
+        assert contrast(getattr(p, tone), getattr(p, tint)) >= 4.5, tone
+
+
+def test_icons_have_single_cell_glyphs_and_ascii_fallback(monkeypatch):
+    from rich.cells import cell_len
+
+    from dispread.admin import widgets
+    banned = set('✔⚙⏸⏹ℹ⚠⚡')
+    for name, (glyph, plain) in widgets.ICONS.items():
+        assert cell_len(glyph) == 1 and glyph not in banned, name
+        assert plain.isascii() and plain, name
+    monkeypatch.setenv('PICAM_ASCII', '1')
+    assert widgets.icon('camera') == 'o'
+    assert widgets.badge('ok', 'läuft', 'on').plain == ' * läuft '

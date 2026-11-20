@@ -34,6 +34,7 @@ from textual.widgets import Button, Static
 
 from .. import probes
 from ..ui import ACCENT, MUTED, Action, Segment, fact_title, hint_block, kv_table
+from ..widgets import ActionBar, action_label
 
 
 class TabView(VerticalScroll):
@@ -42,17 +43,33 @@ class TabView(VerticalScroll):
     KEY = ''          # Direkttaste (Ziffer) oder ''
     INFO_TITLE = ''
     INFO: tuple[str, ...] = ()
+    #: Eigene Aktionsleiste mit Tastenfeldern (neue Bildsprache, ``widgets``); die
+    #: Tastenzeile unten nennt dann nur noch die allgemeinen Tasten.
+    OWN_BAR = False
     can_focus = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.OWN_BAR:  # Inhalt scrollt in ``.tab-body``, die Aktionsleiste bleibt unten stehen
+            self.add_class('own-bar')
 
     def update_view(self) -> None:
         """Inhalt aus ``self.app`` neu zeichnen (billig, oft aufgerufen)."""
+
+    def on_resize(self, event) -> None:
+        # Neue Bildsprache misst Zeilen selbst aus (Abzeichen rechtsbündig, Pfade gekürzt)
+        if self.OWN_BAR:
+            self.call_after_refresh(self.update_view)
 
     def actions(self) -> list[Action]:
         return []
 
     # Knöpfe: id 'act-<taste>' ruft die gleichnamige Aktion auf
+    def button_label(self, action: Action):
+        return action_label(action) if self.OWN_BAR else action.label
+
     def action_button(self, action: Action) -> Button:
-        button = Button(f'{action.label}', id=f'act-{action.key}',
+        button = Button(self.button_label(action), id=f'act-{action.key}',
                         variant='error' if action.danger else 'default', classes='act')
         button.disabled = action.blocked is not None
         button.tooltip = action.blocked
@@ -63,7 +80,10 @@ class TabView(VerticalScroll):
             for button in self.query(f'#act-{action.key}'):
                 button.disabled = action.blocked is not None
                 button.tooltip = action.blocked
-                button.label = action.label
+                button.label = self.button_label(action)
+        if self.OWN_BAR:
+            for bar in self.query(ActionBar):
+                bar.fit(self.size.width - 5)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if not (event.button.id or '').startswith('act-'):
@@ -138,7 +158,7 @@ class FactView(TabView):
         for key in self.FACTS:
             fact = self.app.fact(key)
             if fact is not None and fact.command and fact.level in (probes.WARN, probes.FAIL):
-                actions.append(Action('a', 'Abhilfe ausführen', lambda f=fact: self.app.run_fix(f)))
+                actions.append(Action('a', 'Abhilfe ausführen', lambda f=fact: self.app.run_fix(f), icon='fix'))
                 break
         return actions
 

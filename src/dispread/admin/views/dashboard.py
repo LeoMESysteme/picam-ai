@@ -1,4 +1,13 @@
-"""Dashboard: links Logo, Lauf und Knöpfe, rechts die Statusliste der Bereiche."""
+"""Dashboard: Lauf, Hinweis, Bereiche, letzte Meldungen; unten die Aktionsleiste.
+
+Zwei Anordnungen (``PICAM_LAYOUT``):
+
+- A „Karten + Abzeichen“: links Logo, Hinweis und Laufkarte, rechts die Karte
+  „Bereiche“ (Zeichen, Name, Abzeichen bzw. Wertfeld), darunter die Meldungen.
+- B „Kacheln + Details“: oben fünf Kacheln (Werkbank, Lauf, Kamera, Ausgabe,
+  Speicher; Enter oder Klick öffnet den Tab), darunter links die Laufzeilen,
+  rechts die übrigen Bereiche als schlichte Zeilen.
+"""
 
 from __future__ import annotations
 
@@ -14,9 +23,25 @@ from textual.widgets.option_list import Option
 
 from .. import probes
 from ..intro import SHINE_PERIOD, SHINE_S, logo_text
-from ..ui import ACCENT, MUTED, SOFT, TONE, Action, Segment, ascii_mode, section_text, status_strip, symbol
-from .base import TabView, actions_segment
-from .lauf import drift, fmt_duration, fmt_int, latest_text
+from ..ui import MUTED, Action, P, status_strip
+from ..widgets import (
+    ActionBar,
+    TabBody,
+    TileRow,
+    badge,
+    clip,
+    fact_badge,
+    fields,
+    header,
+    help_line,
+    icon,
+    key_chip,
+    layout_mode,
+    tile_text,
+    value,
+)
+from .base import TabView
+from .lauf import STALE_AFTER_S, STATUS_WORDS, age_text, drift, fmt_duration, fmt_int, run_age
 
 SHINE_EVERY_S = 20.0
 TAIL_LINES = 400
@@ -26,6 +51,14 @@ SPLIT = 76          # darunter: gestapelt, Liste zuerst
 LOGO_MIN_LEFT = 40  # Logo (38 Spalten) nur, wenn die linke Spalte so breit ist
 LOGO_MIN_HEIGHT = 30
 
+#: Zeichen je Bereich (Liste und Kacheln)
+GLYPHS = {'dienst': 'service', 'lauf': 'run', 'ausgabe': 'output', 'kamera': 'camera', 'bruecke': 'bridge',
+          'zertifikat': 'cert', 'speicher': 'storage', '#cpu': 'system', '#ram': 'system', '#temp': 'system',
+          'version': 'version', '#setup': 'setup'}
+#: Kacheln der Richtung B: (Befund, Titel, Tab)
+TILES = (('dienst', 'Werkbank', 'dienst'), ('lauf', 'Lauf', 'lauf'), ('kamera', 'Kamera', 'kamera'),
+         ('ausgabe', 'Ausgabe', 'ausgabe'), ('speicher', 'Speicher', 'speicher'))
+
 
 class RunCard(Static):
     """Laufkarte; Klick oder Enter öffnet den Tab Lauf."""
@@ -33,10 +66,12 @@ class RunCard(Static):
     can_focus = True
     BINDINGS = [Binding('enter', 'open', show=False)]
     DEFAULT_CSS = '''
-    RunCard { border-left: wide $picam-line; transition: background 150ms out_cubic; }
-    RunCard.running { border-left: wide $picam-accent; }
+    RunCard { padding: 0 1; background: $picam-surface; transition: background 150ms out_cubic; }
+    RunCard.plain { background: $picam-canvas; border-left: wide $picam-line; }
+    RunCard.plain.running { border-left: wide $picam-accent; }
     RunCard:hover { background: $picam-raised; }
-    RunCard:focus { background: $picam-raised; border-left: wide $picam-accent-strong; }
+    RunCard:focus { background: $picam-raised; }
+    RunCard.plain:focus { border-left: wide $picam-accent-strong; }
     '''
 
     def on_click(self) -> None:
@@ -48,31 +83,48 @@ class RunCard(Static):
 
 class DashboardView(TabView):
     TAB_ID, TITLE, KEY = 'dashboard', 'Dashboard', '1'
+    OWN_BAR = True
     INFO_TITLE = 'Dashboard'
-    INFO = ('Links der Lauf (nur lesend; Läufe startet und beendet die Werkbank im Browser) und die '
-            'häufigsten Aktionen, rechts alle Bereiche mit ihrem Zustand. Enter oder Klick öffnet einen '
-            'Bereich als Tab.',)
+    INFO = ('Der Lauf ist nur zum Ansehen (Läufe startet und beendet die Werkbank im Browser); 2 oder Enter '
+            'öffnet die Laufdetails. Daneben alle Bereiche mit ihrem Zustand; Enter oder Klick öffnet einen '
+            'Bereich als Tab. Unten die häufigsten Aktionen.',)
 
-    ROWS = (('dienst', 'Werkbank', 'dienst'), ('lauf', 'Lauf', 'lauf'), ('ausgabe', '└ Ausgabe', 'ausgabe'),
+    ROWS = (('dienst', 'Werkbank', 'dienst'), ('lauf', 'Lauf', 'lauf'), ('ausgabe', 'Ausgabe', 'ausgabe'),
             ('kamera', 'Kamera', 'kamera'), ('bruecke', 'Brücke', 'ausgabe'),
             ('zertifikat', 'Zertifikat', 'zertifikat'), ('speicher', 'Speicher', 'speicher'),
             ('#cpu', 'CPU', 'dienst'), ('#ram', 'RAM', 'dienst'), ('#temp', 'Temperatur', 'dienst'),
             ('version', 'Version', 'dienst'), ('#setup', 'Einrichtung', None))
+    SUB_ROWS = ('ausgabe',)  # gehört zum Lauf: eingerückt
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mode = layout_mode()
+
+    def rows(self) -> tuple:
+        """Zeilen der Bereichsliste; in B stehen die Kachelbereiche nicht noch einmal in der Liste."""
+        if self.mode != 'b':
+            return self.ROWS
+        tiles = {key for key, _, _ in TILES}
+        return tuple(row for row in self.ROWS if row[0] not in tiles)
 
     def compose(self):
-        with Horizontal(id='dash'):
-            with Vertical(id='dash-left'):
-                yield Static(id='dash-logo')
-                yield Static(id='dash-warn', classes='hint')
-                yield RunCard(id='dash-run')
-                yield actions_segment()
-                with Segment(id='dash-tail'):
-                    yield Static(id='tail-head', classes='section')
-                    yield RichLog(id='tail-log', max_lines=TAIL_LINES, wrap=True, markup=False, auto_scroll=True,
-                                  min_width=20)
-            with Vertical(id='dash-right'):
-                with Segment('Bereiche', id='dash-areas'):
-                    yield OptionList(id='dash-list')
+        with TabBody(classes='tab-body'):
+            if self.mode == 'b':
+                yield TileRow(len(TILES), id='dash-tiles', min_tile=14, classes='nav')
+            with Horizontal(id='dash'):
+                with Vertical(id='dash-left'):
+                    yield Static(id='dash-logo')
+                    yield Static(id='dash-warn')
+                    yield RunCard(id='dash-run', classes='plain' if self.mode == 'b' else '')
+                    with Vertical(id='dash-tail'):
+                        yield Static(id='tail-head')
+                        yield RichLog(id='tail-log', max_lines=TAIL_LINES, wrap=True, markup=False,
+                                      auto_scroll=True, min_width=20)
+                with Vertical(id='dash-right'):
+                    with Vertical(id='dash-areas', classes='plain' if self.mode == 'b' else ''):
+                        yield Static(id='areas-head')
+                        yield OptionList(id='dash-list')
+        yield ActionBar()
 
     def on_mount(self) -> None:
         bar = self.query_one('#buttons', Horizontal)
@@ -84,10 +136,6 @@ class DashboardView(TabView):
         self._layout()
         if self.app.animation_level != 'none':
             self.set_interval(SHINE_EVERY_S, self._start_shine)
-        head = section_text('Letzte Meldungen', styled=False)
-        head.append('   l', style=f'bold {ACCENT}')
-        head.append(' ganzes Protokoll', style=MUTED)
-        self.query_one('#tail-head', Static).update(head)
 
     # ------------------------------------------------------------ Layout
     def on_resize(self, event: Resize) -> None:
@@ -109,32 +157,14 @@ class DashboardView(TabView):
             if dash.children and dash.children[0] is left:
                 dash.move_child(right, before=left)
         else:
-            left.styles.padding = (1, 2, 0, 0)
+            left.styles.padding = (0, 2, 0, 0)
             if dash.children and dash.children[0] is right:
                 dash.move_child(left, before=right)
         left_w = (width - 5) if stacked else (width - 5 - right_w - 3 - 2)
         self._left_w = left_w
-        self._logo_ok = left_w >= LOGO_MIN_LEFT and height >= LOGO_MIN_HEIGHT and not stacked
+        self._logo_ok = (self.mode != 'b' and left_w >= LOGO_MIN_LEFT and height >= LOGO_MIN_HEIGHT
+                         and not stacked)
         self.query_one('#dash-logo').display = self._logo_ok
-        bar = self.query_one('#buttons')
-        buttons = list(bar.query('Button'))
-        if left_w < 46:
-            mode = 'col'
-        elif left_w < 86:
-            mode = 'grid'
-        else:
-            mode = 'row'
-        bar.styles.layout = {'col': 'vertical', 'grid': 'grid', 'row': 'horizontal'}[mode]
-        if mode == 'grid':
-            bar.styles.grid_size_columns = 2
-            bar.styles.grid_gutter_vertical = 0
-            bar.styles.grid_gutter_horizontal = 1
-            bar.styles.grid_rows = '1'
-        bar.styles.margin = (1, 0, 0, 0)
-        for button in buttons:
-            button.styles.width = 'auto' if mode == 'row' else '1fr'
-            button.styles.margin = (0, 2, 0, 0) if mode == 'row' else (0, 0, 0, 0)
-        # Meldung: Hinweistext nur, wenn Platz ist
         self._tall = height >= LOGO_MIN_HEIGHT
 
     # ------------------------------------------------------------ Logo
@@ -164,64 +194,73 @@ class DashboardView(TabView):
     # ------------------------------------------------------------ Inhalte
     def update_view(self) -> None:
         self._layout()
+        if self.mode == 'b':
+            self._render_tiles()
         self._render_list()
         self._render_run()
         self._render_warn()
+        self._render_heads()
         self.sync_buttons()
 
-    def _row(self, key: str, label: str) -> Text:
+    def _render_heads(self) -> None:
+        width = max(20, getattr(self, '_list_width', 31))
+        self.query_one('#areas-head', Static).update(header('dashboard', 'Bereiche', width=width))
+        head = header('log', 'Letzte Meldungen')
+        head.append('   ')
+        head.append_text(key_chip('l'))
+        head.append(' ganzes Protokoll', style=MUTED)
+        self.query_one('#tail-head', Static).update(head)
+
+    def _area(self, key: str) -> tuple[Text, str | None]:
+        """Rechte Seite einer Bereichszeile: Abzeichen (Zustand) oder Wertfeld (Zahl)."""
         app = self.app
-        width = max(20, getattr(self, '_list_width', 31) - 3)
-        value, level = '–', None
         metrics = app.metrics or {}
-        if key == '#cpu':
-            cpu = metrics.get('cpu_percent')
-            value = '–' if cpu is None else f'{cpu:.0f} %'
-            level = probes.OK if cpu is None or cpu < 85 else probes.WARN
-        elif key == '#ram':
-            ram = metrics.get('ram_percent')
-            value = '–' if ram is None else f'{ram:.0f} %'
-            level = probes.OK if ram is None or ram < 85 else probes.WARN
-        elif key == '#temp':
-            temp = metrics.get('temperature_c')
-            value = '–' if temp is None else f'{temp:.0f} °C'
-            level = probes.OK if temp is None or temp < 75 else probes.WARN
-        elif key == '#setup':
-            setup = [f for k, f in app.setup_facts().items() if f.level in (probes.WARN, probes.FAIL)]
+        metric = {'#cpu': ('cpu_percent', '%', 85), '#ram': ('ram_percent', '%', 85),
+                  '#temp': ('temperature_c', '°C', 75)}.get(key)
+        if metric is not None:
+            number = metrics.get(metric[0])
+            if number is None:
+                return value(None), None
+            if number >= metric[2]:
+                return badge(probes.WARN, f'{number:.0f} {metric[1]}'), probes.WARN
+            return value(f'{number:.0f}', metric[1]), probes.OK
+        if key == '#setup':
+            setup = [f for f in app.setup_facts().values() if f.level in (probes.WARN, probes.FAIL)]
             if not app.setup_facts():
-                value, level = 'wird geprüft', None
-            elif setup:
+                return badge(probes.UNKNOWN, 'wird geprüft', 'busy'), None
+            if setup:
                 level = min((f.level for f in setup), key=probes.LEVEL_ORDER.__getitem__)
-                value = f'{len(setup)} offen'
-            else:
-                value, level = 'vollständig', probes.OK
-        else:
-            fact = app.fact(key)
-            if fact is not None:
-                value, level = fact.value, fact.level
-        text = Text()
-        if label.startswith('└'):
-            text.append('  ' + label, style=MUTED)
-        else:
-            mark = symbol(level) if level else ' '
-            text.append(f'{mark} ', style=TONE.get(level, MUTED))
-            text.append(label)
-        quiet = level in (None, probes.OK, probes.OFF)
-        right = Text(value, style=MUTED if quiet else TONE[level])
+                return badge(level, f'{len(setup)} offen'), level
+            return badge(probes.OK, 'vollständig'), probes.OK
+        fact = app.fact(key)
+        if fact is None:
+            return value(None), None
+        return fact_badge(fact), fact.level
+
+    def _row(self, key: str, label: str) -> Text:
+        width = max(20, getattr(self, '_list_width', 31) - 2)
+        right, _ = self._area(key)
+        text = Text(no_wrap=True)
+        if key in self.SUB_ROWS and self.mode != 'b':
+            text.append(f' {icon("sub")} ', style=P.line)
+        text.append(f'{icon(GLYPHS.get(key, "system"))} ', style=MUTED)
+        text.append(label)
         room = width - text.cell_len - 1
         if right.cell_len > room:
-            right.truncate(max(1, room), overflow='ellipsis')
+            right = right.copy()
+            right.truncate(max(4, room), overflow='ellipsis')
         text.append(' ' * max(1, width - text.cell_len - right.cell_len))
         text.append_text(right)
         return text
 
     def _render_list(self) -> None:
         listing = self.query_one('#dash-list', OptionList)
-        if listing.option_count != len(self.ROWS):
+        rows = self.rows()
+        if listing.option_count != len(rows):
             listing.clear_options()
-            listing.add_options([Option(self._row(key, label), id=key) for key, label, _ in self.ROWS])
+            listing.add_options([Option(self._row(key, label), id=key) for key, label, _ in rows])
             return
-        for key, label, _ in self.ROWS:
+        for key, label, _ in rows:
             listing.replace_option_prompt(key, self._row(key, label))
 
     @on(OptionList.OptionSelected, '#dash-list')
@@ -232,87 +271,157 @@ class DashboardView(TabView):
         if target:
             self.app.open_tab(target)
 
+    # ------------------------------------------------------------ Kacheln (B)
+    def _render_tiles(self) -> None:
+        app = self.app
+        row = self.query_one('#dash-tiles', TileRow)
+        inner = row.arrange(row.size.width or max(40, self.app.size.width - 6))
+        live = app.snapshot.live if app.snapshot is not None else None
+        run = (live or {}).get('run') or {}
+        for index, (key, title, _) in enumerate(TILES):
+            if key == 'dienst':
+                kennzahl = value(f'{app.instance.host}:{app.instance.port}' if app.instance.host else None)
+            elif key == 'lauf':
+                elapsed = run.get('elapsed_s')
+                kennzahl = value(fmt_duration(float(elapsed) + drift(app)) if elapsed is not None else None)
+            elif key == 'kamera':
+                frames = ((live or {}).get('camera') or {}).get('frames')
+                kennzahl = value(fmt_int(frames) if frames is not None else None, 'Bilder')
+            elif key == 'ausgabe':
+                kennzahl = value(((live or {}).get('output') or {}).get('state') if live else None)
+            else:
+                reserve = dict(app.fact('speicher').detail).get('Reserve') if app.fact('speicher') else None
+                kennzahl = value(reserve, 'Reserve' if reserve else None)
+            row.set_tile(index, tile_text(GLYPHS[key], title, fact_badge(app.fact(key)), kennzahl, inner))
+
+    @on(TileRow.Selected, '#dash-tiles')
+    def _tile_open(self, event: TileRow.Selected) -> None:
+        if event.activate:
+            self.app.open_tab(TILES[event.index][2])
+
+    # ------------------------------------------------------------ Lauf
+    def _latest(self, run: dict) -> Text:
+        """Letzter Wert (eingelassen), Status als Abzeichen, Alter; älter als ~5 s markiert."""
+        app = self.app
+        latest = run.get('latest') or {}
+        age = run_age(app, run)
+        stale = age is None or age > STALE_AFTER_S
+        text = Text()
+        val = latest.get('value')
+        text.append_text(value(val, latest.get('unit'), tone=MUTED if stale else None, bold=not stale))
+        if latest:
+            word, level = STATUS_WORDS.get(str(latest.get('status')), ('–', probes.UNKNOWN))
+            text.append(' ')
+            text.append_text(badge(level, word))
+        text.append('  ')
+        if age is None:
+            text.append_text(badge(probes.WARN, 'Alter unbekannt'))
+        elif stale:
+            text.append_text(badge(probes.WARN, age_text(age)))
+        else:
+            text.append(age_text(age), style=MUTED)
+        return text
+
+    def _counts(self, run: dict, width: int) -> Text:
+        counts = run.get('counts') or {}
+        items = [(name, counts.get(key), level) for name, key, level in (
+            ('gültig', 'valid', probes.OK), ('Übergang', 'transition', probes.WARN),
+            ('unlesbar', 'unreadable', probes.FAIL), ('veraltet', 'stale', probes.UNKNOWN))]
+        per_line = 4 if width >= 64 else 2
+        text = Text()
+        for index, (name, number, level) in enumerate(items):
+            if index:
+                text.append('\n' if index % per_line == 0 else '  ')
+            text.append(f'{icon({probes.OK: "ok", probes.WARN: "warn", probes.FAIL: "fail"}.get(level, "unknown"))} ',
+                        style=P.ok if level == probes.OK else (P.warn if level == probes.WARN else
+                                                                 P.fail if level == probes.FAIL else P.unknown))
+            text.append(f'{name} ', style=MUTED)
+            text.append_text(value(fmt_int(number)))
+        return text
+
     def _render_run(self) -> None:
         app = self.app
         snap = app.snapshot
         card = self.query_one('#dash-run', RunCard)
-        text = Text()
+        width = card.content_size.width or max(30, self._left_w - (4 if self.mode == 'b' else 2))
         running = False
+        rows: list = []
+        hint: Text | None = None
+        extra: list[Text] = []
         if snap is None:
-            text.append('Laufstatus wird geprüft …', style=MUTED)
+            state = badge(probes.UNKNOWN, 'Laufstatus wird geprüft', 'busy')
         elif snap.live is None:
-            text.append(f'{symbol(probes.UNKNOWN)} Laufstatus unbekannt', style=TONE[probes.UNKNOWN])
-            text.append('\nSteuerung der Werkbank nicht erreichbar.', style=MUTED)
+            state = badge(probes.UNKNOWN, 'Laufstatus unbekannt')
+            hint = help_line('Steuerung der Werkbank nicht erreichbar.')
         else:
             live = snap.live
-            state = live.get('state')
-            word = probes.STATE_WORDS.get(state, str(state))
+            status = live.get('state')
+            word = probes.STATE_WORDS.get(status, str(status))
             run = live.get('run') or {}
-            if state == 'running':
+            if status == 'running':
                 running = True
-                output = (live.get('output') or {}).get('transport')
+                state = badge(probes.OK, 'Lauf aktiv', 'on')
                 elapsed = run.get('elapsed_s')
                 if elapsed is not None:
                     elapsed = float(elapsed) + drift(app)
-                text.append('* ' if ascii_mode() else '● ', style=f'bold {ACCENT}')
-                text.append('Lauf aktiv', style='bold')
+                output = (live.get('output') or {}).get('transport')
                 step = str(live.get('step') or '')
-                parts = [step if step != 'Lauf' else '', fmt_duration(elapsed)]
-                if self._left_w >= 56:
-                    parts.append(f'Ausgabe {probes._transport_word(output)}')
-                text.append('  ·  ' + '  ·  '.join(p for p in parts if p and p != '–'), style=MUTED)
-                counts = run.get('counts') or {}
-                segments = [(name, counts.get(key), level) for name, key, level in (
-                    ('gültig', 'valid', probes.OK), ('Übergang', 'transition', probes.WARN),
-                    ('unlesbar', 'unreadable', probes.FAIL), ('veraltet', 'stale', probes.UNKNOWN))]
-                inner = max(20, self._left_w - 3)
-                per_line = 4 if inner >= 56 else 2
-                for index, (name, value, level) in enumerate(segments):
-                    text.append('\n' if index % per_line == 0 else '   ')
-                    text.append(f'{name} ', style=MUTED)
-                    text.append(fmt_int(value), style=TONE[level])
-                text.append('\n')
-                text.append_text(status_strip(run.get('recent') or [], max(20, min(60, inner))))
-                text.append('\n')
-                text.append_text(latest_text(app, run))
-                text.append('\n2', style=f'bold {ACCENT}')
-                text.append(' oder Enter: Laufdetails', style=MUTED)
-            elif state in ('setup_running', 'setup_ready', 'setup_failed'):
-                level = probes.FAIL if state == 'setup_failed' else probes.OK
-                busy = state == 'setup_running'
-                mark = ('* ' if ascii_mode() else '◐ ') if busy else f'{symbol(level)} '
-                text.append(mark, style=f'bold {ACCENT}' if busy else TONE[level])
-                text.append(f'Einrichtung: {word}', style='bold')
+                rows = [('Dauer', value(fmt_duration(elapsed))),
+                        ('Ausgabe', value(probes._transport_word(output)))]
+                if step and step != 'Lauf':
+                    rows.insert(1, ('Schritt', value(step)))
+                extra = [self._counts(run, width - 2),
+                         Text('Letzte 60 s  ', style=MUTED) + status_strip(run.get('recent') or [],
+                                                                        max(20, min(60, width - 15))),
+                         Text('Letzter Wert ' if width >= 48 else 'Wert ', style=MUTED) + self._latest(run)]
+                hint = help_line('Laufdetails:', '2', 'oder Enter')
+            elif status in ('setup_running', 'setup_ready', 'setup_failed'):
+                level = probes.FAIL if status == 'setup_failed' else probes.OK
+                busy = status == 'setup_running'
+                state = badge('busy' if busy else level, f'Einrichtung: {word}', 'busy' if busy else None)
                 if live.get('step'):
-                    text.append(f'  ·  {live["step"]}', style=MUTED)
-                text.append('\nLäufe und Einrichtung steuert die Werkbank im Browser.', style=MUTED)
+                    rows = [('Schritt', value(live['step']))]
+                hint = help_line('Läufe und Einrichtung steuert die Werkbank im Browser.')
             else:
-                text.append(f'{symbol(probes.OFF)} ', style=MUTED)
-                text.append('Kein Lauf', style='bold')
-                if state != 'idle':
-                    text.append(f'  ·  {word}', style=MUTED)
+                state = badge(probes.OFF, 'kein Lauf' if status == 'idle' else f'kein Lauf · {word}')
                 if app.instance.url:
-                    text.append('\nLäufe startet die Werkbank: ', style=MUTED)
-                    text.append(app.instance.url, style=ACCENT)
+                    rows = [('Werkbank', value(app.instance.url))]
+                hint = help_line('Läufe startet die Werkbank im Browser.')
+        text = Text()
+        # B: Zustand steht schon auf der Kachel „Lauf“
+        text.append_text(clip(header('run', 'Lauf', None if self.mode == 'b' and snap is not None else state,
+                                     width), width))
+        if rows:
+            text.append('\n')
+            text.append_text(fields(rows, width, label_w=13, columns=2))
+        for line in extra:
+            text.append('\n')
+            text.append_text(line)
+        if hint is not None:
+            text.append('\n')
+            text.append_text(clip(hint, width))
         card.set_class(running, 'running')
         card.update(text)
 
     def _render_warn(self) -> None:
         warn = self.query_one('#dash-warn', Static)
-        problems = [f for f in self.app.problems() if f.key not in ('lauf',)]
+        # in B stehen die Kachelbereiche schon mit Abzeichen oben
+        hidden = {'lauf'} | ({key for key, _, _ in TILES} if self.mode == 'b' else set())
+        problems = [f for f in self.app.problems() if f.key not in hidden]
         if not problems:
             warn.display = False
             return
         worst = problems[0]
+        width = max(30, self._left_w - 2)
         text = Text()
-        text.append(f'{symbol(worst.level)} {worst.label}: {worst.value}', style=f'bold {TONE[worst.level]}')
+        text.append_text(badge(worst.level, f'{worst.label}: {worst.value}'))
         if len(problems) > 1:
-            text.append(f'   +{len(problems) - 1} weitere', style=MUTED)
+            text.append(f'  +{len(problems) - 1} weitere', style=MUTED)
         if worst.hint and getattr(self, '_tall', True):
-            text.append('\n' + worst.hint, style=SOFT)
+            text.append('\n')
+            text.append_text(clip(help_line(worst.hint), width))
         warn.update(text)
         warn.display = True
-        warn.set_class(worst.level == probes.FAIL, 'fail')
 
     def actions(self) -> list[Action]:
         app = self.app
@@ -323,13 +432,14 @@ class DashboardView(TabView):
         blocked = no_unit or unchecked or (app.blocker if running else None)
         actions = [
             Action('s', 'Werkbank stoppen' if running else 'Werkbank starten',
-                   lambda: app.service_action('stop' if running else 'start'), blocked=blocked, danger=running),
-            Action('r', 'Neu starten', lambda: app.service_action('restart'), blocked=blocked),
+                   lambda: app.service_action('stop' if running else 'start'), blocked=blocked, danger=running,
+                   icon='stop' if running else 'start'),
+            Action('r', 'Neu starten', lambda: app.service_action('restart'), blocked=blocked, icon='restart'),
             Action('k', 'Kamera neu starten', app.camera_restart,
-                   blocked=('Werkbank läuft nicht' if not running else app.blocker)),
+                   blocked=('Werkbank läuft nicht' if not running else app.blocker), icon='restart'),
         ]
         if app.instance.bridge_directory:
-            actions.append(Action('b', 'Brücke: UART-Empfang', app.bridge_prepare,
+            actions.append(Action('b', 'Brücke: UART-Empfang', app.bridge_prepare, icon='bridge',
                                   blocked=None if running else 'Werkbank läuft nicht'))
         return actions
 

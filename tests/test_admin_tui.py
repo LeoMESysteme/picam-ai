@@ -111,6 +111,13 @@ def test_info_key_explains_current_tab():
 
 def test_footer_shows_tab_actions():
     async def check(app, pilot):
+        # Tabs mit eigener Aktionsleiste (Dashboard, Kamera, Ausgabe): Tasten stehen an den Knöpfen,
+        # die Tastenzeile nennt nur die allgemeinen Tasten
+        footer = text_of(app.query_one('#footer'))
+        assert 'Hilfe' in footer and 'Neu starten' not in footer
+        assert 'Neu starten' in str(app.view().query_one('#act-r').label)
+        await pilot.press('3')
+        await pilot.pause(0.2)
         footer = text_of(app.query_one('#footer'))
         assert 'Neu starten' in footer and 'Hilfe' in footer
     drive(check, size=(140, 30))

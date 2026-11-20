@@ -82,6 +82,10 @@ Screen { background: $picam-canvas; layers: base overlay; }
 #body { height: 1fr; padding: 0 2; }
 TabView { height: 1fr; scrollbar-size-vertical: 1; }
 TabView > Static { width: 1fr; max-width: 120; }
+TabView.own-bar { overflow-y: hidden; }
+.tab-body { height: 1fr; width: 1fr; scrollbar-size-vertical: 1; }
+.actionbar Button { margin: 0 2 0 0; padding: 0 1 0 0; min-width: 8; width: auto; }
+.actionbar.-grid Button { width: 100%; margin: 0; content-align: left middle; text-align: left; }
 .title { margin: 1 0 0 0; }
 .fact-title { margin: 1 0 0 0; }
 .hint { border-left: wide $warning; padding: 0 1; margin: 1 0 0 0; background: $picam-tint-warn; max-width: 110; }
@@ -108,12 +112,17 @@ TabView > Static { width: 1fr; max-width: 120; }
 #dash { height: auto; }
 #dash-left { width: 1fr; height: auto; padding: 1 2 0 0; }
 #dash-right { width: 42; height: auto; padding: 0 0 0 0; }
-#dash-logo { height: auto; }
-#dash-run { height: auto; margin: 1 0 0 0; padding: 0 1; background: $picam-surface; }
+#dash-logo { height: auto; margin: 1 0 0 0; }
+#dash-run { height: auto; margin: 1 0 0 0; }
+#dash-warn { height: auto; margin: 1 0 0 0; }
+#dash-areas { height: auto; margin: 1 0 0 0; padding: 0 1; background: $picam-surface; }
+#dash-areas.plain { background: $picam-canvas; padding: 0; }
+#areas-head { height: 1; width: 1fr; }
+#dash-warn, #dash-run, #tail-head { width: 1fr; }
 #dash-list { height: auto; max-height: 20; border: none; background: transparent; padding: 0; }
 #dash-list:focus { border: none; background-tint: 0%; }
 #dash-list > .option-list--option { padding: 0 1; }
-#dash-tail { display: none; }
+#dash-tail { display: none; height: auto; margin: 1 0 0 0; padding: 0 1; background: $picam-surface; }
 #tail-head { height: 1; }
 #tail-log { height: 12; background: transparent; border: none; scrollbar-size-vertical: 1; padding: 0;
             overflow-x: hidden; }
@@ -428,7 +437,8 @@ class PicamApp(App[int]):
         text = Text()
         pieces = []
         chip, chip_dim = f'bold {ACCENT} on {P.raised}', f'{P.disabled_fg} on {P.band}'
-        for action in self.view().actions():
+        view = self.view()
+        for action in ([] if view.OWN_BAR else view.actions()):
             dim = action.blocked is not None
             pieces.append((action.key, action.label, chip_dim if dim else chip, P.disabled_fg if dim else TEXT))
         pieces += [(key, label, chip, SOFT) for key, label in

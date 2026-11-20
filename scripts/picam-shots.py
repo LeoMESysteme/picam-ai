@@ -6,6 +6,7 @@ Beispiel: … /tmp/shots lauf:120:40:run:2 kamera:80:24:idle:4
 Schreibt SVG; PNG z. B. mit cairosvg (nicht im Projekt-venv).
 Farbvariante über PICAM_THEME (schiefer | petrol | hell, auch a | b | c), z. B.
 PICAM_THEME=hell PYTHONPATH=src python3 scripts/picam-shots.py /tmp/shots-hell cfg:100:30:idle:c
+Anordnung der neuen Bildsprache über PICAM_LAYOUT (a = Karten + Abzeichen, b = Kacheln + Details).
 """
 import asyncio
 import sys

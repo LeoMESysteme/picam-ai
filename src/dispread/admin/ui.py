@@ -68,6 +68,8 @@ class Palette:
     tint_warn: str
     tint_fail: str
     tint_info: str
+    tint_off: str        # Abzeichen „aus“/„unbekannt“
+    inset: str           # eingelassenes Wertfeld (Live-Wert, Pfad, Zahl): dunkler als die Fläche
     # Bedienelemente
     control: str         # Knopf
     control_hover: str
@@ -112,6 +114,7 @@ SCHIEFER = Palette(
     secondary='#8fb2e8',
     ok='#97d9ae', warn='#eec977', fail='#f69e94', off='#adb7c2', unknown='#c3b6f2',
     tint_ok='#32463d', tint_warn='#4a4230', tint_fail='#4d3639', tint_info='#2c4b4f',
+    tint_off='#3a434e', inset='#21272f',
     control='#47525f', control_hover='#515d6b', disabled_fg='#939da8', disabled_bg='#39424d',
     field='#272e37', field_focus='#225050', select_bg='#225a57', select_fg='#f2fbfa', select_blur_bg='#3c4753',
     backdrop='#161c22b3', scrollbar='#4b5764', scrollbar_hover='#5b6876',
@@ -130,6 +133,7 @@ PETROL = Palette(
     secondary='#f2b45e',
     ok='#a3deac', warn='#f5b65f', fail='#ff9d8f', off='#a3c0bb', unknown='#cbbcf3',
     tint_ok='#23493d', tint_warn='#4b4128', tint_fail='#4c3438', tint_info='#1c5458',
+    tint_off='#264b50', inset='#0f2628',
     control='#30595e', control_hover='#3a666b', disabled_fg='#86a5a1', disabled_bg='#244a4e',
     field='#132f32', field_focus='#11615b', select_bg='#0f6a64', select_fg='#f2fbfa', select_blur_bg='#2b5459',
     backdrop='#0a1a1cb3', scrollbar='#386166', scrollbar_hover='#4a7378',
@@ -147,6 +151,7 @@ HELL = Palette(
     secondary='#3c5f9e',
     ok='#276a40', warn='#865700', fail='#ad2c24', off='#56636a', unknown='#5d43a8',
     tint_ok='#e2f0e6', tint_warn='#f7ecd3', tint_fail='#f8e1dd', tint_info='#dcefec',
+    tint_off='#e6e8e5', inset='#e2e1d9',
     control='#e1e5e3', control_hover='#d3d9d6', disabled_fg='#778186', disabled_bg='#eceeec',
     field='#e3e6e2', field_focus='#cbe8e3', select_bg='#c9e7e2', select_fg='#0f2a29', select_blur_bg='#e6e9e7',
     backdrop='#3a4a4a59', scrollbar='#c2c9c6', scrollbar_hover='#a9b3af',
@@ -426,6 +431,7 @@ class Action:
     run: object  # Aufrufbar ohne Argumente
     blocked: str | None = None  # Grund, warum gerade nicht möglich (dann ausgegraut)
     danger: bool = False
+    icon: str = ''  # Name in ``widgets.ICONS`` (Knopf der Aktionsleiste: Taste, Zeichen, Verb)
 
 
 @dataclass

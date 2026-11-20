@@ -1,8 +1,18 @@
-"""Tab Ausgabe: die vier Wege der Werte (Aus, UART direkt, UART über Brücke, Netzwerk) mit Einzelheiten."""
+"""Tab Ausgabe: die vier Wege der Werte (Aus, UART direkt, UART über Brücke, Netzwerk) mit Einzelheiten.
+
+Die Wege sind eine reine Auswahl der Ansicht: ← → oder Klick zeigen die
+Einzelheiten eines Wegs. Welcher Weg im Lauf benutzt wird, trägt das Abzeichen
+„● im Lauf“; gewählt wird er beim Laufstart in der Werkbank.
+
+Zwei Anordnungen (``PICAM_LAYOUT``): A – Karte „Ausgabe“ (Lauf) und Karte mit
+Auswahlleiste und Einzelheiten; B – vier Kacheln (eine je Weg) als Auswahl,
+darunter die Einzelheiten.
+"""
 
 from __future__ import annotations
 
 from rich.text import Text
+from textual import on
 from textual.containers import Horizontal
 from textual.widgets import Static
 
@@ -10,68 +20,83 @@ from dispread.bridge.baud import UART_BAUD
 from dispread.hardware_ports import DIRECT_UART_BAUD, GSV_UART_PORT
 
 from .. import probes
-from ..ui import MUTED, TONE, Action, Segment, ascii_mode, kv_table, symbol
-from .base import FactView, actions_segment
+from ..ui import Action
+from ..widgets import (
+    ActionBar,
+    CardBox,
+    ChipSelector,
+    DetailPanel,
+    SectionCard,
+    TabBody,
+    TileRow,
+    badge,
+    clip,
+    fact_badge,
+    fields,
+    header,
+    help_line,
+    layout_mode,
+    tile_text,
+    value,
+)
+from .base import FactView
 
 DASH = '–'
-#: (Schlüssel in live.status.output.transport, lange Beschriftung, kurze Beschriftung)
-PATHS = (('off', 'Aus', 'Aus'), ('serial', 'UART direkt', 'UART'),
-         ('uart', 'UART über Brücke', 'Brücke UART'), ('tcp', 'Netzwerk (Brücke)', 'Brücke Netz'))
+#: (Schlüssel in live.status.output.transport, lange Beschriftung, kurze Beschriftung, Zeichen)
+PATHS = (('off', 'Aus', 'Aus', 'off'), ('serial', 'UART direkt', 'UART', 'uart'),
+         ('uart', 'UART über Brücke', 'Brücke UART', 'bridge'),
+         ('tcp', 'Netzwerk (Brücke)', 'Brücke Netz', 'network'))
 UART_STATES = {'unprepared': 'nicht vorbereitet', 'prepared': 'vorbereitet', 'ready': 'bereit'}
-
-
-class PathTab(Static):
-    """Ein Unter-Tab; Klick wählt ihn."""
-
-    def __init__(self, index: int):
-        super().__init__(id=f'path-{index}', classes='path')
-        self.index = index
-
-    def on_click(self) -> None:
-        self.query_ancestor(AusgabeView).choose(self.index)
+UART_LEVELS = {'nicht vorbereitet': probes.OFF, 'vorbereitet': probes.OK, 'bereit': probes.OK}
+NOTES = ('Werte werden nur aufgezeichnet, nicht an GSVmulti gesendet.',
+         'Direkt vom Pi zu GSVmulti; RS-232 nur über Pegelwandler.',
+         'Über das Kabel zur Windows-Brücke; sie gibt die Werte an GSVmulti weiter.',
+         'Über das Netzwerk zur gekoppelten Windows-Brücke (verschlüsselt, HTTPS).')
+CHOSEN_AT_START = 'Den Weg wählt man beim Laufstart in der Werkbank; hier nur ansehen.'
 
 
 class AusgabeView(FactView):
     TAB_ID, TITLE, KEY = 'ausgabe', 'Ausgabe', '5'
     FACTS = ('ausgabe', 'bruecke')
+    OWN_BAR = True
     INFO_TITLE = 'Ausgabe und Brücke'
     INFO = ('Die Ausgabe ist der Weg, auf dem die gelesenen Werte zu GSVmulti kommen. Es gibt vier Wege: '
             '„Aus“ (nur aufzeichnen), „UART direkt“ (Kabel vom Pi zu GSVmulti), „UART über Brücke“ '
             '(Kabel zur Windows-Brücke) und „Netzwerk (Brücke)“ (Windows-Brücke per Netzwerk).',
             'Den Weg wählt man beim Laufstart in der Werkbank; er wird nicht im Dienst gespeichert. Hier '
-            'sieht man, welcher Weg im laufenden Lauf benutzt wird, und die Einzelheiten jedes Wegs.',
-            'Mit „w“, den Unter-Tabs oder der Maus wechselt man die Ansicht. Das ändert nichts am Lauf.',
+            'sieht man, welcher Weg im laufenden Lauf benutzt wird („● im Lauf“), und die Einzelheiten jedes Wegs.',
+            'Mit ← → oder der Maus wählt man, welcher Weg hier gezeigt wird. Das ändert nichts am Lauf.',
             'Pi-Pegel nie direkt an RS-232 anschließen: dafür gehört ein Pegelwandler dazwischen.')
-    SCOPED_CSS = False
-    DEFAULT_CSS = """
-    AusgabeView #paths { height: 1; margin: 0; }
-    AusgabeView .path { width: auto; padding: 0 1; margin: 0 1 0 0; color: $picam-text-soft; }
-    AusgabeView .path.-sel { color: $picam-text; background: $picam-raised; text-style: bold underline; }
-    AusgabeView .seg:focus-within .path.-sel { background: $picam-surface; }
-    AusgabeView #out-active { margin: 0; }
-    AusgabeView #out-body { margin: 1 0 0 0; }
-    Screen.stacked AusgabeView .buttons { layout: grid; grid-size: 2; grid-gutter: 0 1; grid-rows: 1; }
-    Screen.stacked AusgabeView .buttons Button { width: 100%; margin: 0; }
-    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.path_sel: int | None = None
+        self.mode = layout_mode()
 
     def compose(self):
-        yield Static(Text(self.TITLE, style='bold'), classes='title')
-        yield Segment(None, Static(id='out-active'))
-        yield Segment(None, Horizontal(*[PathTab(i) for i in range(len(PATHS))], id='paths'), Static(id='out-body'))
-        yield actions_segment()
+        with TabBody(classes='tab-body'):
+            if self.mode == 'b':
+                yield TileRow(len(PATHS), id='out-tiles', min_tile=18)
+                yield Static(id='out-tiles-help')
+                yield DetailPanel(id='out-body')
+            else:
+                yield SectionCard(id='out-active')
+                with CardBox(id='out-paths'):
+                    yield ChipSelector(id='paths')
+                    yield Static(id='out-body')
+        yield ActionBar()
 
     # ------------------------------------------------------------ Zustand
+    def _live(self) -> dict | None:
+        return self.app.snapshot.live if self.app.snapshot is not None else None
+
     def active_index(self) -> int | None:
-        live = self.app.snapshot.live if self.app.snapshot is not None else None
+        live = self._live()
         if not live or live.get('state') != 'running':
             return None
         transport = (live.get('output') or {}).get('transport') or 'off'
-        for index, (key, _, _) in enumerate(PATHS):
-            if key == transport:
+        for index, path in enumerate(PATHS):
+            if path[0] == transport:
                 return index
         return None
 
@@ -84,97 +109,141 @@ class AusgabeView(FactView):
     def choose(self, index: int) -> None:
         self.path_sel = index % len(PATHS)
         self.update_view()
-        self.app.refresh_footer()
 
-    def next_path(self) -> None:
-        self.choose(self.selected_index() + 1)
+    @on(ChipSelector.Selected, '#paths')
+    def _chip_selected(self, event: ChipSelector.Selected) -> None:
+        if event.index != self.selected_index():
+            self.choose(event.index)
+
+    @on(TileRow.Selected, '#out-tiles')
+    def _tile_selected(self, event: TileRow.Selected) -> None:
+        if event.index != self.selected_index():
+            self.choose(event.index)
+
+    # ------------------------------------------------------------ Inhalte
+    def _run_state(self, active: int | None) -> tuple[Text, list]:
+        """Abzeichen und Zeilen zum Lauf (welcher Weg, Zustand, Fehler)."""
+        app = self.app
+        live = self._live()
+        output = (live or {}).get('output') or {}
+        if app.snapshot is None:
+            return badge(probes.UNKNOWN, 'wird geprüft', 'busy'), []
+        if not live:
+            return badge(probes.UNKNOWN, 'Werkbank nicht erreichbar'), [('Weg im Lauf', value(None))]
+        if active is None:
+            return badge(probes.OFF, 'kein Lauf'), [('Weg im Lauf', value(None))]
+        rows = [('Weg im Lauf', value(PATHS[active][1])), ('Zustand', value(output.get('state')))]
+        if output.get('error'):
+            rows.append(('Fehler', badge(probes.FAIL, str(output['error'])), True))
+            return badge(probes.FAIL, 'Fehler'), rows
+        return badge(probes.OK, 'Lauf aktiv', 'on'), rows
+
+    def _in_run(self, index: int, active: int | None) -> Text:
+        if index != active:
+            return badge(probes.OFF, 'ungenutzt')
+        if ((self._live() or {}).get('output') or {}).get('error'):
+            return badge(probes.FAIL, 'Fehler im Lauf')
+        return badge(probes.OK, 'im Lauf', 'on')
+
+    def _bridge_rows(self) -> list:
+        app = self.app
+        bridge = app.fact('bruecke')
+        detail = dict(bridge.detail) if bridge is not None else {}
+        out = dict(app.fact('ausgabe').detail) if app.fact('ausgabe') is not None else {}
+        state = out.get('Brücke')
+        bridge_badge = badge(probes.OK, state, 'on') if state else fact_badge(bridge)
+        return [('Brücke', bridge_badge), ('Kopplungen', value(detail.get('Kopplungen'))),
+                ('Pi-ID', value(detail.get('Pi-ID')))]
+
+    def _path_rows(self, chosen: int, active: int | None, with_state: bool = True) -> list:
+        app = self.app
+        output = (self._live() or {}).get('output') or {}
+        state = value(output.get('state')) if chosen == active and with_state else None
+        # „im Lauf“ steht schon an der Auswahl (Abzeichen); hier nur der Zustand des Wegs im Lauf
+        status = [('Zustand', state)] if state is not None else []
+        if chosen == 0:
+            return status
+        if chosen == 1:
+            uart = dict(app.fact('uart').detail) if app.fact('uart') is not None else {}
+            return [*status, ('Port', value(GSV_UART_PORT)),
+                    ('Baudrate', value(DIRECT_UART_BAUD, 'Bd · Standard, je Lauf wählbar')),
+                    ('Gerät', value(uart.get('Gerät'))), ('Boot', value(uart.get('Boot')))]
+        if chosen == 2:
+            bridge = app.fact('bruecke')
+            raw = dict(bridge.detail).get('UART-Empfang') if bridge is not None else None
+            prepared = UART_STATES.get(raw, raw)
+            receive = badge(UART_LEVELS.get(prepared, probes.UNKNOWN), prepared) if prepared else value(None)
+            return [*status, ('Port', value(GSV_UART_PORT)), ('Baudrate', value(UART_BAUD, 'Bd')),
+                    ('UART-Empfang', receive), *self._bridge_rows()]
+        return [*status, ('Werkbank', value(app.instance.url), True), *self._bridge_rows()]
+
+    def _path_key(self, index: int) -> Text:
+        """Kennzahl der Kachel eines Wegs."""
+        if index == 1:
+            return value(DIRECT_UART_BAUD, 'Bd')
+        if index == 2:
+            return value(UART_BAUD, 'Bd')
+        if index == 3:
+            host, port = getattr(self.app.instance, 'host', None), getattr(self.app.instance, 'port', None)
+            return value(f'{host}:{port}' if host and port else None)
+        return value(None)
 
     # ------------------------------------------------------------ Anzeige
     def update_view(self) -> None:
         active, chosen = self.active_index(), self.selected_index()
-        wide = self.size.width >= 76 or self.size.width == 0
-        for index, (_, long, short) in enumerate(PATHS):
-            tab = self.query_one(f'#path-{index}', PathTab)
-            mark = ('*' if ascii_mode() else '●') if index == active else ' '
-            text = Text()
-            text.append(mark + ' ', style=TONE[probes.OK] if index == active else MUTED)
-            text.append(long if wide else short)
-            tab.update(text)
-            tab.set_class(index == chosen, '-sel')
-        self.query_one('#out-active', Static).update(self._active_line(active))
-        self.query_one('#out-body', Static).update(self._body(chosen, active))
+        if self.mode == 'b':
+            self._update_b(active, chosen)
+        else:
+            self._update_a(active, chosen)
         self.sync_buttons()
 
-    def _active_line(self, active: int | None) -> Text:
-        app = self.app
+    def _update_a(self, active: int | None, chosen: int) -> None:
+        card = self.query_one('#out-active', SectionCard)
+        width = card.inner_width(max(40, self.size.width - 6))
+        state, rows = self._run_state(active)
+        card.show(header('output', 'Ausgabe', state, width), fields(rows, width, label_w=14, columns=2),
+                  help_line(CHOSEN_AT_START))
+        selector = self.query_one('#paths', ChipSelector)
+        long = sum(len(p[1]) + 6 for p in PATHS) + 12 <= width
+        items = [(glyph, (label if long else short), badge(probes.OK, 'im Lauf', 'on') if i == active else None)
+                 for i, (_, label, short, glyph) in enumerate(PATHS)]
+        selector.set_items(items, chosen)
+        # A: der Zustand des Wegs im Lauf steht schon in der Karte „Ausgabe“
+        body = fields(self._path_rows(chosen, active, with_state=False), width, label_w=14, columns=2)
         text = Text()
-        live = app.snapshot.live if app.snapshot is not None else None
-        if app.snapshot is None:
-            text.append('Wird geprüft …', style=MUTED)
-        elif not live:
-            text.append(f'{symbol(probes.UNKNOWN)} Ausgabe unbekannt (Werkbank nicht erreichbar)',
-                        style=TONE[probes.UNKNOWN])
-        elif active is None:
-            text.append(f'{symbol(probes.OFF)} Kein Lauf', style=MUTED)
-            text.append(' – den Weg wählt man beim Laufstart in der Werkbank.', style=MUTED)
-        else:
-            output = live.get('output') or {}
-            error = output.get('error')
-            if error:
-                text.append(f'{symbol(probes.FAIL)} {PATHS[active][1]}: Fehler – {error}', style=TONE[probes.FAIL])
-            elif active == 0:
-                text.append(f'{symbol(probes.OFF)} Aus', style='bold')
-                text.append(' – keine Ausgabe, Werte werden nur aufgezeichnet', style=MUTED)
-            else:
-                text.append(f'{symbol(probes.OK)} Im Lauf: {PATHS[active][1]}', style=f'bold {TONE[probes.OK]}')
-                text.append(f' · Zustand {output.get("state") or DASH}', style=MUTED)
-        return text
+        if body.plain:
+            text.append_text(body)
+            text.append('\n')
+        text.append_text(clip(help_line(NOTES[chosen]), width))
+        self.query_one('#out-body', Static).update(text)
 
-    def _bridge_rows(self) -> list[tuple[str, str]]:
-        bridge = self.app.fact('bruecke')
-        detail = dict(bridge.detail) if bridge is not None else {}
-        out = dict(self.app.fact('ausgabe').detail) if self.app.fact('ausgabe') is not None else {}
-        return [('Brücke', out.get('Brücke') or (bridge.value if bridge is not None else DASH)),
-                ('Kopplungen', detail.get('Kopplungen') or DASH),
-                ('Pi-ID', detail.get('Pi-ID') or DASH)]
-
-    def _body(self, chosen: int, active: int | None):
-        app = self.app
-        live = app.snapshot.live if app.snapshot is not None else None
-        output = (live or {}).get('output') or {}
-        state = str(output.get('state') or DASH) if active == chosen else 'nicht in Benutzung'
-        out = Text()
-        if chosen == 0:
-            out.append('Keine Ausgabe. ', style='bold')
-            out.append('Werte werden nur aufgezeichnet und nicht an GSVmulti gesendet. Sinnvoll zum Einrichten '
-                       'und Üben.', style=MUTED)
-            return out
-        bridge = app.fact('bruecke')
-        bridge_detail = dict(bridge.detail) if bridge is not None else {}
-        if chosen == 1:
-            uart = app.fact('uart')
-            uart_detail = dict(uart.detail) if uart is not None else {}
-            rows = [('Port', GSV_UART_PORT), ('Baudrate', f'{DIRECT_UART_BAUD} (Standard, je Lauf wählbar)'),
-                    ('Zustand', state), ('Gerät', uart_detail.get('Gerät') or DASH),
-                    ('Boot', uart_detail.get('Boot') or DASH)]
-            out_note = 'Direkt vom Pi zu GSVmulti; RS-232 nur über Pegelwandler.'
-        elif chosen == 2:
-            prepared = UART_STATES.get(bridge_detail.get('UART-Empfang'), bridge_detail.get('UART-Empfang'))
-            rows = [('Port', GSV_UART_PORT), ('Baudrate', str(UART_BAUD)), ('Zustand', state),
-                    ('UART-Empfang', prepared or DASH), *self._bridge_rows()]
-            out_note = 'Über das Kabel zur Windows-Brücke; sie gibt die Werte an GSVmulti weiter.'
-        else:
-            rows = [('Werkbank', app.instance.url or DASH), ('Zustand', state), *self._bridge_rows()]
-            out_note = 'Über das Netzwerk zur gekoppelten Windows-Brücke (verschlüsselt, HTTPS).'
-        group = Text()
-        group.append(out_note + '\n', style=MUTED)
-        from rich.console import Group
-        return Group(group, kv_table(rows))
+    def _update_b(self, active: int | None, chosen: int) -> None:
+        row = self.query_one('#out-tiles', TileRow)
+        inner = row.arrange(row.size.width or max(40, self.size.width - 4))
+        row.selected = chosen
+        for index, (_, label, short, glyph) in enumerate(PATHS):
+            title = label if len(label) + 2 <= inner else short
+            row.set_tile(index, tile_text(glyph, title, self._in_run(index, active), self._path_key(index), inner))
+        state, _ = self._run_state(active)
+        line = Text(no_wrap=True, overflow='ellipsis')
+        line.append_text(state)
+        line.append('  ')
+        line.append_text(help_line(CHOSEN_AT_START))
+        self.query_one('#out-tiles-help', Static).update(clip(line, max(40, self.size.width - 5)))
+        detail = self.query_one('#out-body', DetailPanel)
+        width = detail.inner_width(max(40, self.size.width - 8))
+        rows = self._path_rows(chosen, active)
+        text = Text()
+        if rows:
+            text.append_text(fields(rows, width, label_w=14, columns=2))
+            text.append('\n')
+        text.append_text(clip(help_line(NOTES[chosen]), width))
+        detail.update(text)
 
     # ------------------------------------------------------------ Aktionen
     def actions(self) -> list[Action]:
         app = self.app
-        actions = [Action('w', 'Weg wechseln', self.next_path)]
+        actions = []
         if self.selected_index() == 2:
             service = app.fact('dienst')
             down = None if service is not None and service.level in (probes.OK, probes.WARN) \
@@ -182,9 +251,9 @@ class AusgabeView(FactView):
             bridge = app.fact('bruecke')
             state = dict(bridge.detail).get('UART-Empfang') if bridge is not None else None
             ready = state in ('vorbereitet', 'bereit')
-            actions += [Action('p', 'UART-Empfang vorbereiten', app.bridge_prepare,
+            actions += [Action('p', 'UART-Empfang vorbereiten', app.bridge_prepare, icon='bridge',
                                blocked=down or ('schon vorbereitet' if ready else None)),
-                        Action('e', 'UART-Empfang beenden', app.bridge_stop, danger=True,
+                        Action('e', 'UART-Empfang beenden', app.bridge_stop, danger=True, icon='stop',
                                blocked=down or app.blocker or (None if ready else 'nicht vorbereitet'))]
         return actions + super().actions()
 
@@ -198,4 +267,5 @@ class AusgabeView(FactView):
         for key in ('p', 'e'):
             for button in self.query(f'#act-{key}'):
                 button.display = key in shown
+        bar.display = bool(shown)
         super().sync_buttons()

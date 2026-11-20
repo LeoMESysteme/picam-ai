@@ -139,8 +139,11 @@ async def test_ausgabe_shows_active_path_in_run():
         view = app.view()
         assert view.active_index() == 3 and view.selected_index() == 3
         text = text_of(app, 'ausgabe')
-        assert 'Im Lauf: Netzwerk (Brücke)' in text
+        assert 'Weg im Lauf' in text and 'Netzwerk (Brücke)' in text and 'Lauf aktiv' in text
         assert 'sending' in text
+        # „im Lauf“ steht an genau dem Weg, der im Lauf benutzt wird
+        selector = view.query_one('#paths')
+        assert [mark is not None for _, _, mark in selector.items] == [False, False, False, True]
 
 
 @sync
@@ -173,9 +176,12 @@ async def test_ausgabe_paths_and_bridge_uart_actions():
         view = app.view()
         assert view.active_index() is None
         text = text_of(app, 'ausgabe')
-        assert 'Kein Lauf' in text and '/dev/ttyAMA0' in text and '115200' in text
+        assert 'kein Lauf' in text and '/dev/ttyAMA0' in text and '115200' in text
         assert 'p' not in {a.key for a in view.actions()}
-        await pilot.press('w')
+        # Die Wege sind nur eine Auswahl der Ansicht: kein eigener „Weg wechseln“ mehr
+        assert 'w' not in {a.key for a in view.actions()}
+        assert app.focused is view.query_one('#paths')
+        await pilot.press('right')
         await pilot.pause(0.3)
         assert view.selected_index() == 2
         assert '460800' in text_of(app, 'ausgabe')
@@ -221,3 +227,72 @@ async def test_zertifikat_renew_confirm_for_plain_certificate():
         await pilot.click('#ok')
         await pilot.pause(0.5)
         assert ran and 'renew-tls' in ran[0] and '/var/lib/picam/workbench/tls' in ran[0]
+
+
+@pytest.mark.parametrize('layout', ['a', 'b'])
+@pytest.mark.parametrize('size', SIZES)
+@pytest.mark.parametrize('key', ['4', '5'])
+@sync
+async def test_layouts_render_kamera_and_ausgabe(layout, size, key, monkeypatch):
+    monkeypatch.setenv('PICAM_LAYOUT', layout)
+    app = admin_fakes.make_app('run')
+    async with app.run_test(size=size) as pilot:
+        await pilot.pause(0.4)
+        await open_tab(pilot, key)
+        text = text_of(app, app.current)
+        assert ('KAMERA' in text and '/dev/video0' in text) if key == '4' else 'Netzwerk' in text
+        assert app.view().query_one('#buttons').region.bottom <= size[1] - 2  # Leiste bleibt sichtbar
+
+
+@sync
+async def test_ausgabe_layout_b_tiles_select_path(monkeypatch):
+    monkeypatch.setenv('PICAM_LAYOUT', 'b')
+    app = admin_fakes.make_app('idle')
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause(0.4)
+        await open_tab(pilot, '5')
+        view = app.view()
+        assert app.focused is view.query_one('#out-tiles')
+        await pilot.press('right')
+        await pilot.pause(0.3)
+        assert view.selected_index() == 2 and '460800' in text_of(app, 'ausgabe')
+        await pilot.click('#out-tiles-3')
+        await pilot.pause(0.3)
+        assert view.selected_index() == 3
+
+
+@sync
+async def test_ausgabe_click_on_path_chip_selects_it():
+    app = admin_fakes.make_app('idle')
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause(0.4)
+        await open_tab(pilot, '5')
+        view = app.view()
+        selector = view.query_one('#paths')
+        line, start, _ = selector._spans[0]
+        await pilot.click('#paths', offset=(start + 1, line))
+        await pilot.pause(0.3)
+        assert view.selected_index() == 0
+
+
+@sync
+async def test_kamera_layout_b_tile_shows_details(monkeypatch):
+    monkeypatch.setenv('PICAM_LAYOUT', 'b')
+    app = admin_fakes.make_app('idle')
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause(0.4)
+        await open_tab(pilot, '4')
+        assert '/dev/video0' in text_of(app, 'kamera')
+        await pilot.press('right')
+        await pilot.pause(0.3)
+        text = text_of(app, 'kamera')
+        assert 'timing-streamcam.json' in text and 'Ohne Timing-Kalibrierung' in text
+
+
+@sync
+async def test_kamera_info_carries_full_hints():
+    app = admin_fakes.make_app('idle')
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause(0.4)
+        await open_tab(pilot, '4')
+        assert any('scripts/timing-calibration.py' in line for line in app.view().INFO)
