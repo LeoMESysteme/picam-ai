@@ -259,7 +259,9 @@ def fact_run(live: dict | None, service: Fact) -> Fact:
 
 def _transport_word(transport) -> str:
     return {'off': 'aus', None: 'aus', 'serial': 'UART direkt', 'bridge_network': 'Netzwerk (Brücke)',
-            'bridge_uart': 'UART über Brücke', 'network': 'Netzwerk'}.get(transport, str(transport))
+            'bridge_uart': 'UART über Brücke', 'network': 'Netzwerk',
+            # Laufausgabe (live/output.py): off | serial | uart | tcp
+            'uart': 'UART über Brücke', 'tcp': 'Netzwerk (Brücke)'}.get(transport, str(transport))
 
 
 def _usb_camera(sys_root: Path = Path('/sys/bus/usb/devices')) -> dict | None:
@@ -633,3 +635,137 @@ def collect(instance: Instance, run=run_command, live_source=None, bridge_source
         facts['uhr'] = fact_clock(run)
         facts['version'] = fact_version(instance, run)
     return Snapshot(instance, facts, live, time.time())
+
+
+# ------------------------------------------------------------------ Systemwerte
+# Lokal und billig gelesen; unbekannt bleibt None (Anzeige „–“), nichts wird geschätzt.
+
+_CPU_LAST: tuple[int, int] | None = None
+
+
+def _cpu_times(proc: Path) -> tuple[int, int] | None:
+    try:
+        fields = (proc / 'stat').read_text().splitlines()[0].split()[1:]
+        values = [int(v) for v in fields]
+    except (OSError, ValueError, IndexError):
+        return None
+    idle = values[3] + (values[4] if len(values) > 4 else 0)
+    return sum(values), idle
+
+
+def system_metrics(proc: Path = Path('/proc'), sys_root: Path = Path('/sys')) -> dict:
+    """CPU-Last seit dem letzten Aufruf (%), RAM belegt (%/Bytes), SoC-Temperatur (°C)."""
+    global _CPU_LAST
+    result: dict = {'cpu_percent': None, 'ram_percent': None, 'ram_used': None, 'ram_total': None,
+                    'temperature_c': None, 'load1': None}
+    times = _cpu_times(proc)
+    if times is not None and _CPU_LAST is not None:
+        total, idle = times[0] - _CPU_LAST[0], times[1] - _CPU_LAST[1]
+        if total > 0:
+            result['cpu_percent'] = round(100.0 * (total - idle) / total, 1)
+    _CPU_LAST = times
+    try:
+        info = {}
+        for line in (proc / 'meminfo').read_text().splitlines():
+            key, _, rest = line.partition(':')
+            info[key] = int(rest.split()[0]) * 1024
+        total, available = info['MemTotal'], info.get('MemAvailable', info.get('MemFree', 0))
+        result.update(ram_total=total, ram_used=total - available,
+                      ram_percent=round(100.0 * (total - available) / total, 1) if total else None)
+    except (OSError, ValueError, KeyError, IndexError):
+        pass
+    try:
+        result['temperature_c'] = round(int((sys_root / 'class/thermal/thermal_zone0/temp').read_text()) / 1000, 1)
+    except (OSError, ValueError):
+        pass
+    try:
+        result['load1'] = float((proc / 'loadavg').read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    return result
+
+
+def _du(path: Path, run=run_command, timeout: float = 20.0) -> int | None:
+    if not path.exists():
+        return None
+    code, out, _ = run(['du', '-sb', '--one-file-system', str(path)], timeout=timeout)
+    if code not in (0, 1) or not out.strip():  # 1: einzelne Dateien nicht lesbar, Summe trotzdem da
+        return None
+    try:
+        return int(out.split()[0])
+    except ValueError:
+        return None
+
+
+def storage_usage(instance: Instance, run=run_command) -> dict:
+    """Belegung des Datenträgers und Größe der picam-Orte (langsam: im Hintergrund aufrufen).
+
+    ``groups`` ist eine Liste (Name, Pfad, Bytes|None); „Läufe“ ohne die
+    Diagnoseordner, die einzeln gezählt werden. Der Rest des Datenträgers
+    erscheint als „Sonstiges“.
+    """
+    target = Path(instance.live_data or instance.data or '/')
+    probe = target
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    try:
+        disk = shutil.disk_usage(probe)
+    except OSError:
+        return {'total': None, 'used': None, 'free': None, 'groups': [], 'mount': str(probe)}
+    groups: list[tuple[str, str, int | None]] = []
+    live = Path(instance.live_data) if instance.live_data else None
+    if live is not None:
+        size = _du(live, run)
+        diagnose = 0
+        if live.is_dir():
+            for folder in live.glob('live-*/run-*/diagnose'):
+                diagnose += _du(folder, run) or 0
+        groups.append(('Läufe', str(live), None if size is None else max(0, size - diagnose)))
+        groups.append(('Diagnose', str(live / '*/run-*/diagnose'), diagnose))
+    if instance.data:
+        data = Path(instance.data)
+        size = _du(data, run)
+        bridge = _du(Path(instance.bridge_directory), run) if instance.bridge_directory else None
+        inside = bridge if instance.bridge_directory and str(instance.bridge_directory).startswith(str(data)) else 0
+        groups.append(('Werkbank-Daten', str(data), None if size is None else max(0, size - (inside or 0))))
+        if instance.bridge_directory:
+            groups.append(('Brücke', str(instance.bridge_directory), bridge))
+    if instance.root and Path(instance.root).parent.name == 'releases':
+        releases = Path(instance.root).parent
+        groups.append(('Programmversionen', str(releases), _du(releases, run)))
+    known = sum(size or 0 for _, _, size in groups)
+    groups.append(('Sonstiges', 'übriger Datenträger', max(0, disk.used - known)))
+    return {'total': disk.total, 'used': disk.used, 'free': disk.free, 'groups': groups, 'mount': str(probe)}
+
+
+def network_info(run=run_command) -> dict:
+    """Hostname, Schnittstellen mit Adressen und Zustand, Tailscale falls installiert."""
+    import json
+
+    info: dict = {'hostname': socket.gethostname(), 'interfaces': [], 'tailscale': None}
+    code, out, _ = run(['ip', '-j', 'addr', 'show'])
+    if code == 0:
+        try:
+            for link in json.loads(out or '[]'):
+                name = str(link.get('ifname', ''))
+                if name == 'lo':
+                    continue
+                addresses = [f"{a.get('local')}/{a.get('prefixlen')}" for a in link.get('addr_info', [])
+                             if a.get('local')]
+                info['interfaces'].append({'name': name, 'state': str(link.get('operstate', '?')).lower(),
+                                           'mac': link.get('address'), 'addresses': addresses})
+        except (ValueError, AttributeError):
+            pass
+    if shutil.which('tailscale'):
+        code, out, err = run(['tailscale', 'status', '--json'], timeout=4.0)
+        if code == 0:
+            try:
+                data = json.loads(out or '{}')
+                own = data.get('Self') or {}
+                info['tailscale'] = {'state': data.get('BackendState'), 'name': own.get('DNSName', '').rstrip('.'),
+                                     'addresses': list(own.get('TailscaleIPs') or [])}
+            except ValueError:
+                info['tailscale'] = {'state': 'unbekannt', 'name': '', 'addresses': []}
+        else:
+            info['tailscale'] = {'state': (err or 'nicht erreichbar').strip()[:80], 'name': '', 'addresses': []}
+    return info

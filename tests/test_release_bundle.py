@@ -45,7 +45,7 @@ def source(tmp_path):
         "scripts/install.py": "print('installer')\n",
         "install.sh": "#!/bin/sh\nexec python3 scripts/install.py\n",
     }
-    for name in ("__init__", "platform", "archive", "engine", "guided", "update", "__main__"):
+    for name in ("__init__", "platform", "archive", "engine", "guided", "update", "uninstall", "__main__"):
         files[f"packaging/picam_installer/{name}.py"] = "# installer\n"
     for name, content in files.items():
         path = root / name

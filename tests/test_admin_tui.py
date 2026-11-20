@@ -1,46 +1,17 @@
-"""picam-Konsole headless (Textual run_test): Navigation, Sperren, Dialoge, Größen."""
+"""picam-Konsole headless (Textual run_test): Tabs, Sperren, Dialoge, Popups, Größen, Startbild."""
 
 import asyncio
 import time
 
-from textual.widgets import Button, Input, OptionList, RichLog
+import admin_fakes
+from textual.widgets import Button, Input, RichLog
 
 from dispread.admin import probes
 from dispread.admin.instance import Instance
 from dispread.admin.service import LogLine
-from dispread.admin.tui import ConfirmScreen, PicamApp
+from dispread.admin.tui import ConfirmScreen, InfoScreen, PicamApp
 
 F = probes.Fact
-
-
-def facts(state='idle'):
-    data = {
-        'dienst': F('dienst', 'Dienst', probes.OK, 'läuft', [('Unit', 'u')]),
-        'lauf': F('lauf', 'Lauf', probes.OK, 'kein Lauf'),
-        'kamera': F('kamera', 'Kamera', probes.OK, 'bereit'),
-        'ausgabe': F('ausgabe', 'Ausgabe', probes.OFF, 'aus'),
-        'bruecke': F('bruecke', 'Brücke', probes.OK, 'wartet'),
-        'zertifikat': F('zertifikat', 'Zertifikat', probes.OK, 'bis 11/2027'),
-        'speicher': F('speicher', 'Speicher', probes.WARN, '2,5 GB frei', hint='Wird knapp.',
-                      command='true'),
-        'vorlage': F('vorlage', 'Lesevorlage', probes.OK, 'geprüft'),
-        'kalibrierung': F('kalibrierung', 'Kalibrierung', probes.FAIL, 'fehlt', hint='Messen.'),
-        'uart': F('uart', 'UART', probes.OK, 'aktiv'),
-        'konto': F('konto', 'Konto', probes.OK, 'labor'),
-        'uhr': F('uhr', 'Uhrzeit', probes.OK, 'synchron'),
-        'version': F('version', 'Version', probes.OK, '1.0.0'),
-    }
-    if state == 'run':
-        data['lauf'] = F('lauf', 'Lauf', probes.OK, 'Lauf aktiv')
-    return data
-
-
-def collector(state='idle'):
-    live = {'state': 'running' if state == 'run' else 'idle', 'diagnose_kopie': False}
-
-    def collect(instance, include_setup=True, **_):
-        return probes.Snapshot(instance, facts(state), live, time.time())
-    return collect
 
 
 def dev(**extra):
@@ -50,29 +21,94 @@ def dev(**extra):
     return Instance(**values)
 
 
-def drive(test, *, size=(100, 30), state='idle', instance=None, runner=None, journal=None):
+def drive(test, *, size=(100, 30), state='idle', instance=None, runner=None, journal=None, collect=None,
+          intro=False, animations=None, popups=False, socket=None):
     async def main():
-        app = PicamApp(instance or dev(), collect=collector(state), journal_source=journal,
-                       service_runner=runner, auto_refresh=False)
+        app = PicamApp(instance or dev(), collect=collect or admin_fakes.collector(state),
+                       journal_source=journal or admin_fakes.journal, service_runner=runner, auto_refresh=False,
+                       intro=intro, socket_request=socket or admin_fakes.FakeSocket(),
+                       metrics_source=admin_fakes.metrics, storage_source=admin_fakes.storage,
+                       network_source=admin_fakes.network, popups=popups)
+        if animations is not None:
+            app.animation_level = animations
         async with app.run_test(size=size) as pilot:
-            await pilot.pause(0.2)
+            await pilot.pause(0.3)
             await test(app, pilot)
     asyncio.run(main())
 
 
-def nav_text(app):
-    nav = app.query_one('#nav', OptionList)
-    return [str(nav.get_option_at_index(i).prompt) for i in range(nav.option_count)]
+def text_of(widget) -> str:
+    from rich.console import Console
+
+    content = getattr(widget, '_content', None) or getattr(widget, 'renderable', None) or widget.render()
+    console = Console(width=200, record=True, file=open('/dev/null', 'w'))
+    console.print(content)
+    return console.export_text()
 
 
-def test_overview_counts_problems_and_nav_shows_words():
+# ------------------------------------------------------------ Tabs
+
+def test_starts_on_dashboard_and_number_keys_switch_tabs():
     async def check(app, pilot):
-        rows = nav_text(app)
-        assert any('Übersicht' in r and '✗ 2' in r for r in rows)
-        assert any('Speicher' in r and '2,5 GB frei' in r for r in rows)
-        assert app.selected == 'uebersicht'
+        assert app.current == 'dashboard'
+        for key, tab in (('3', 'dienst'), ('4', 'kamera'), ('l', 'protokoll'), ('c', 'einstellungen'),
+                         ('1', 'dashboard')):
+            if isinstance(app.focused, Input):
+                app.set_focus(None)
+            await pilot.press(key)
+            await pilot.pause(0.1)
+            assert app.current == tab, key
     drive(check)
 
+
+def test_tab_key_cycles_tabs_and_escape_returns_to_dashboard():
+    async def check(app, pilot):
+        await pilot.press('tab')
+        await pilot.pause(0.1)
+        assert app.current == 'lauf'
+        await pilot.press('shift+tab', 'shift+tab')
+        await pilot.pause(0.1)
+        assert app.current == 'einstellungen'
+        await pilot.press('escape')
+        await pilot.pause(0.1)
+        assert app.current == 'dashboard'
+    drive(check)
+
+
+def test_arrow_keys_move_between_controls_inside_the_tab():
+    async def check(app, pilot):
+        await pilot.press('3')
+        await pilot.pause(0.2)
+        first = app.focused
+        assert first is not None and app.view() in first.ancestors
+        await pilot.press('right')
+        await pilot.pause(0.1)
+        assert app.focused is not first and app.current == 'dienst'
+        await pilot.press('left')
+        await pilot.pause(0.1)
+        assert app.focused is first
+    drive(check)
+
+
+def test_info_key_explains_current_tab():
+    async def check(app, pilot):
+        await pilot.press('6', 'i')
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, InfoScreen)
+        await pilot.press('escape')
+        await pilot.pause(0.1)
+        assert not isinstance(app.screen, InfoScreen)
+    drive(check)
+
+
+def test_footer_shows_tab_actions():
+    async def check(app, pilot):
+        footer = text_of(app.query_one('#footer'))
+        assert 'Neu starten' in footer and 'Hilfe' in footer
+    drive(check, size=(140, 30))
+
+
+# ------------------------------------------------------------ Dienstaktionen
 
 def test_restart_dialog_starts_on_cancel_and_enter_cancels():
     calls = []
@@ -105,30 +141,107 @@ def test_confirmed_restart_runs_plan_without_sudo_for_dev():
     assert calls[1][0] == 'systemd-run' and calls[1][-3:] == ['/py', '-m', 'x']
 
 
-def test_running_measurement_disables_service_actions():
+def test_running_measurement_blocks_service_actions():
     calls = []
 
     async def check(app, pilot):
-        footer = str(app.query_one('#footer').render())
-        assert 'neu starten' not in footer
-        assert 'gesperrt' in str(app.query_one('#status').render())
+        assert 'gesperrt' in text_of(app.query_one('#status'))
         await pilot.press('r')
         await pilot.pause(0.2)
-        assert isinstance(app.screen, ConfirmScreen)
-        assert app.screen.query_one('#ok', Button).disabled
+        assert not isinstance(app.screen, ConfirmScreen)  # gesperrte Aktion öffnet keinen Dialog
+        assert 'gesperrt' in text_of(app.query_one('#status')) or 'erst in der Werkbank' in text_of(
+            app.query_one('#status'))
     drive(check, state='run', runner=lambda c: calls.append(c) or 0)
     assert calls == []
 
 
-def test_narrow_terminal_stacks_and_escape_returns():
+def test_restart_before_first_status_is_blocked():
+    def failing(instance, include_setup=True, **_):
+        raise OSError('noch kein Status')
+
     async def check(app, pilot):
-        assert app.screen.has_class('stacked')
-        await pilot.press('down', 'down', 'down', 'enter')
-        await pilot.pause(0.1)
-        assert app.screen.has_class('open') and app.selected == 'kamera'  # Kopfzeilen werden übersprungen
+        assert app.snapshot is None
+        assert app.blocker == 'Laufstatus noch nicht geprüft'
+        await pilot.press('r')
+        await pilot.pause(0.2)
+        assert not isinstance(app.screen, ConfirmScreen)
+    drive(check, collect=failing)
+
+
+def test_camera_restart_goes_through_confirmation_and_socket():
+    socket = admin_fakes.FakeSocket()
+
+    async def check(app, pilot):
+        await pilot.press('k')
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, ConfirmScreen) and app.focused.id == 'cancel'
+        await pilot.press('right', 'enter')
+        for _ in range(20):
+            await pilot.pause(0.1)
+            if 'live.camera.restart' in socket.calls:
+                break
+    drive(check, socket=socket)
+    assert 'live.camera.restart' in socket.calls
+
+
+def test_dialog_text_with_brackets_renders():
+    async def check(app, pilot):
+        app.show_info('Test', ['Pfad [nicht] gesetzt, Markup [bold]x[/] bleibt Text'])
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, InfoScreen)
+    drive(check)
+
+
+# ------------------------------------------------------------ Fehler-Popups
+
+def test_new_failure_opens_popup_once():
+    state = {'value': 'idle'}
+
+    async def check(app, pilot):
+        state['value'] = 'down'
+        app.action_refresh()
+        await pilot.pause(0.4)
+        assert isinstance(app.screen, InfoScreen)
         await pilot.press('escape')
         await pilot.pause(0.1)
-        assert not app.screen.has_class('open')
+        app.action_refresh()
+        await pilot.pause(0.4)
+        assert not isinstance(app.screen, InfoScreen)  # derselbe Fehler meldet sich nicht erneut
+
+    def collect(instance, include_setup=True, **_):
+        return admin_fakes.collector(state['value'])(instance, include_setup)
+    drive(check, collect=collect, popups=True)
+
+
+def test_popup_choice_opens_protokoll():
+    async def check(app, pilot):
+        await pilot.pause(0.3)
+        assert isinstance(app.screen, InfoScreen)
+        await pilot.press('enter')  # erste Wahl: Protokoll ansehen
+        await pilot.pause(0.2)
+        assert app.current == 'protokoll'
+    drive(check, state='down', popups=True)
+
+
+def test_status_arriving_while_dialog_is_open_does_not_crash():
+    """Regression: die Prüfung fragte den Dialog statt der Konsole ab (NoMatches)."""
+    def slow(instance, include_setup=True, **_):
+        time.sleep(0.6)
+        return admin_fakes.collector()(instance)
+
+    async def check(app, pilot):
+        await pilot.press('question_mark')
+        await pilot.pause(0.9)
+        assert app.snapshot is not None
+        await pilot.press('escape')
+    drive(check, collect=slow)
+
+
+# ------------------------------------------------------------ Größen
+
+def test_narrow_terminal_stacks_dashboard():
+    async def check(app, pilot):
+        assert app.screen.has_class('stacked')
     drive(check, size=(60, 20))
 
 
@@ -138,6 +251,15 @@ def test_too_small_terminal_shows_message():
     drive(check, size=(40, 12))
 
 
+def test_tall_terminal_shows_recent_messages_on_dashboard():
+    async def check(app, pilot):
+        assert app.screen.has_class('tall')
+        assert app.query_one('#tail-log', RichLog).lines
+    drive(check, size=(120, 40))
+
+
+# ------------------------------------------------------------ Protokoll, Einstellungen
+
 def test_log_view_and_problem_filter():
     lines = [LogLine('10:00:00', 'info', 'Kamerastart'), LogLine('10:00:01', 'fehler', 'Rahmen verdeckt'),
              LogLine('10:00:02', 'warnung', 'Brücke getrennt')]
@@ -146,10 +268,9 @@ def test_log_view_and_problem_filter():
         await pilot.press('l')
         await pilot.pause(0.3)
         log = app.query_one('#log', RichLog)
-        assert app.selected == 'protokoll' and len(log.lines) >= 3
+        assert app.current == 'protokoll' and len(log.lines) >= 3
         await pilot.press('e')
         await pilot.pause(0.2)
-        assert app._errors_only
         text = '\n'.join(str(line.text) for line in log.lines)
         assert 'Kamerastart' not in text and 'Rahmen verdeckt' in text
     drive(check, journal=lambda: lines)
@@ -168,9 +289,10 @@ def test_config_change_writes_after_confirmation(tmp_path):
         port = app.query_one('#cfg-port', Input)
         assert app.focused is port
         port.value = '8443'
-        app.query_one('#config-check', Button).press()
+        await pilot.press('enter')
         await pilot.pause(0.3)
         assert isinstance(app.screen, ConfirmScreen)
+        assert 'Risiko' in ' '.join(str(s.render()) for s in app.screen.query('.dialog-line'))
         await pilot.press('right', 'enter')
         await pilot.pause(0.3)
     drive(check, instance=instance)
@@ -187,55 +309,32 @@ def test_q_in_input_is_text_not_quit(tmp_path):
         await pilot.press('c')
         await pilot.pause(0.2)
         app.query_one('#cfg-bridge_name', Input).focus()
-        await pilot.press('end', 'q')
+        await pilot.press('end', 'q', '3')
         await pilot.pause(0.1)
-        assert app.is_running and app.query_one('#cfg-bridge_name', Input).value == 'aq'
+        assert app.is_running and app.query_one('#cfg-bridge_name', Input).value == 'aq3'
+        assert app.current == 'einstellungen'
     drive(check, instance=instance)
 
 
-def test_restart_before_first_status_is_blocked():
-    def failing(instance, include_setup=True, **_):
-        raise OSError('noch kein Status')
-
-    async def main():
-        app = PicamApp(dev(), collect=failing, auto_refresh=False, service_runner=lambda c: 0)
-        async with app.run_test(size=(100, 30)) as pilot:
-            await pilot.pause(0.2)
-            assert app.snapshot is None
-            await pilot.press('r')
-            await pilot.pause(0.2)
-            assert isinstance(app.screen, ConfirmScreen)
-            assert app.screen.query_one('#ok', Button).disabled
-    asyncio.run(main())
-
-
-def test_dialog_text_with_brackets_renders():
-    from dispread.admin.tui import Confirmation
-
+def test_settings_show_login_account_and_paths():
     async def check(app, pilot):
-        app.push_screen(ConfirmScreen(Confirmation('Titel', ['Archiv: /home/u/[/x]/a.tar.gz'], ['cmd [x]'], 'OK')))
+        await pilot.press('c')
         await pilot.pause(0.2)
-        assert isinstance(app.screen, ConfirmScreen)
+        text = text_of(app.query_one('#cfg-paths'))
+        assert 'Linux-Passwort' in text and 'journald' in text
+    drive(check, instance=admin_fakes.INSTANCE)
+
+
+def test_uninstall_blocked_for_dev_instance():
+    async def check(app, pilot):
+        await pilot.press('c')
+        await pilot.pause(0.2)
+        button = app.query_one('#act-x', Button)
+        assert button.disabled
     drive(check)
 
 
-# ------------------------------------------------------------ Startbild, große Fenster, Bewegung
-
-def log_lines():
-    return [LogLine('21:31:39', 'info', 'Werkbank gestartet'), LogLine('21:40:12', 'warnung', 'Brücke getrennt')]
-
-
-def drive_with(test, *, size=(100, 30), intro=False, journal=None, animations=None, collect=None):
-    async def main():
-        app = PicamApp(dev(), collect=collect or collector(), journal_source=journal, auto_refresh=False,
-                       intro=intro)
-        if animations is not None:
-            app.animation_level = animations
-        async with app.run_test(size=size) as pilot:
-            await pilot.pause(0.2)
-            await test(app, pilot)
-    asyncio.run(main())
-
+# ------------------------------------------------------------ Startbild
 
 def test_intro_key_skips_without_triggering_an_action(monkeypatch):
     from dispread.admin import intro
@@ -247,9 +346,8 @@ def test_intro_key_skips_without_triggering_an_action(monkeypatch):
         await pilot.press('s')
         await pilot.pause(0.6)
         assert not app.query('#intro')
-        assert not isinstance(app.screen, ConfirmScreen)  # „s“ hat nur das Startbild beendet
-        assert app.focused is app.query_one('#nav')
-    drive_with(check, intro=True)
+        assert not isinstance(app.screen, ConfirmScreen)
+    drive(check, intro=True)
 
 
 def test_intro_finishes_by_itself_once_status_is_known(monkeypatch):
@@ -259,10 +357,10 @@ def test_intro_finishes_by_itself_once_status_is_known(monkeypatch):
 
     async def check(app, pilot):
         widget = app.query_one('#intro')
-        assert any(name == 'Hinweise' and value == '2 offen' for _, _, name, value in widget._lines)
+        assert any(name == 'Hinweise' and value.endswith('offen') for _, _, name, value in widget._lines)
         await pilot.pause(1.0)
         assert not app.query('#intro')
-    drive_with(check, intro=True)
+    drive(check, intro=True)
 
 
 def test_intro_static_without_animations(monkeypatch):
@@ -272,69 +370,7 @@ def test_intro_static_without_animations(monkeypatch):
     async def check(app, pilot):
         await pilot.pause(0.5)
         assert not app.query('#intro')
-    drive_with(check, intro=True, animations='none')
-
-
-def test_wide_terminal_shows_messages_column_and_cards():
-    async def check(app, pilot):
-        await pilot.pause(0.3)
-        assert app.screen.has_class('wide') and not app.screen.has_class('tall')
-        assert app.query_one('#tail').display
-        assert app.query_one('#tail-log', RichLog).lines
-        assert app.query('.card')
-        await pilot.press('l')
-        await pilot.pause(0.2)
-        assert app.screen.has_class('no-tail')
-    drive_with(check, size=(180, 50), journal=log_lines)
-
-
-def test_tall_terminal_puts_messages_below_without_cards():
-    async def check(app, pilot):
-        await pilot.pause(0.3)
-        assert app.screen.has_class('tall')
-        assert app.query_one('#tail-log', RichLog).lines
-        assert not app.query('.card')
-    drive_with(check, size=(120, 40), journal=log_lines)
-
-
-def test_standard_terminal_has_no_messages_pane():
-    async def check(app, pilot):
-        assert not app.screen.has_class('tall') and not app.screen.has_class('wide')
-        assert not app.query_one('#tail').display
-    drive_with(check, journal=log_lines)
-
-
-def test_changed_value_is_highlighted_briefly():
-    state = {'value': '2,5 GB frei'}
-
-    def collect(instance, include_setup=True, **_):
-        data = facts()
-        data['speicher'] = F('speicher', 'Speicher', probes.WARN, state['value'])
-        return probes.Snapshot(instance, data, {'state': 'idle', 'diagnose_kopie': False}, time.time())
-
-    async def check(app, pilot):
-        state['value'] = '1,9 GB frei'
-        app.action_refresh()
-        await pilot.pause(0.3)
-        prompt = app._nav_prompt('speicher', None)
-        assert '1,9 GB frei' in prompt.plain
-        assert any('on #' in str(span.style) for span in prompt.spans)
-        assert not any('on #' in str(span.style) for span in app._nav_prompt('kamera', None).spans)
-    drive_with(check, collect=collect)
-
-
-def test_status_arriving_while_dialog_is_open_does_not_crash():
-    """Regression: die Prüfung alle 5 s fragte den Dialog statt der Konsole ab (NoMatches #nav)."""
-    def slow(instance, include_setup=True, **_):
-        time.sleep(0.6)
-        return collector()(instance)
-
-    async def check(app, pilot):
-        await pilot.press('question_mark')
-        await pilot.pause(0.8)  # Spinner und Statusanwendung laufen unter dem Dialog weiter
-        assert app.snapshot is not None
-        await pilot.press('escape')
-    drive_with(check, collect=slow)
+    drive(check, intro=True, animations='none')
 
 
 def test_intro_skipped_in_too_small_terminal():
@@ -342,4 +378,4 @@ def test_intro_skipped_in_too_small_terminal():
         await pilot.pause(0.3)
         assert not app.query('#intro')
         assert app.screen.has_class('too-small')
-    drive_with(check, size=(40, 12), intro=True)
+    drive(check, size=(40, 12), intro=True)

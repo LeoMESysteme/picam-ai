@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -377,6 +378,11 @@ class LiveSession:
         self._frame_info: tuple[float, dict] | None = None
         self._frame_info_warned = False
         self._processing_window: deque[tuple[float, int]] = deque()
+        #: Verarbeitungskennzahlen fuer live.status (run.proc): letzter Stand und
+        #: Latenzmaxima je 1-s-Eimer ueber 60 s; nur aus dem HUD-Abbild abgeleitet.
+        self._proc_last: tuple[float, dict, list] | None = None
+        self._latency_buckets: deque[list] = deque()
+        self._proc_lock = threading.Lock()
         #: TRANSITION wegen Ziffernwechsel (Grund anzeige_wechselt), getrennt
         #: gezaehlt, damit Laeufe mit frueheren vergleichbar bleiben.
         self._display_changing = 0
@@ -647,6 +653,7 @@ class LiveSession:
                     self._processing_window.popleft()
                 self._processing_window.append((now, skipped))
                 self._frame_info = (now, self._build_frame_info(sequence, record, track, coarse))
+                self._observe_proc(now, self._frame_info[1])
             except Exception as exc:  # noqa: BLE001 - Messung hat Vorrang vor Anzeige
                 self._frame_info = None
                 if not self._frame_info_warned:
@@ -851,6 +858,46 @@ class LiveSession:
         """Bereich(e) dauerhaft unstimmig, letzte Auswertung; auch nach dem Stopp. Kein Freigabeentscheid."""
         window = self._region_consistency
         return None if window is None else window.snapshot()
+
+    def _observe_proc(self, now: float, info: dict) -> None:
+        proc = info.get('proc') or {}
+        latency = proc.get('latency_ms')
+        with self._proc_lock:
+            self._proc_last = (now, dict(proc), list(info.get('cells') or []))
+            if latency is not None:
+                bucket = math.floor(now) * 1000
+                while self._latency_buckets and self._latency_buckets[0][0] <= now * 1000 - 60000:
+                    self._latency_buckets.popleft()
+                if self._latency_buckets and self._latency_buckets[-1][0] == bucket:
+                    self._latency_buckets[-1][1] = max(self._latency_buckets[-1][1], latency)
+                else:
+                    self._latency_buckets.append([bucket, latency])
+
+    def proc_status(self) -> dict:
+        """Verarbeitungskennzahlen des Laufs fuer live.status; unbekannt = None.
+
+        `cells.min_margin` ist der kleinste Abstand zwischen bester und zweiter
+        Vorlage der letzten Ablesung, keine Fehlerwahrscheinlichkeit."""
+        now = self._monotonic()
+        with self._proc_lock:
+            last = self._proc_last
+            buckets = [list(b) for b in self._latency_buckets if b[0] > now * 1000 - 60000]
+        if last is None:
+            return {'fps': None, 'latency_ms': None, 'latency_recent': [], 'latency_now_ms': 0.0,
+                    'skipped_recent': None, 'cells': {'min_margin': None, 'uncertain': 0}, 'age_s': None}
+        observed, proc, cells = last
+        margins = [float(c['margin']) for c in cells]
+        origin = buckets[0][0] if buckets else 0.0
+        return {
+            'fps': proc.get('fps'),
+            'latency_ms': proc.get('latency_ms'),
+            'latency_recent': [[b[0] - origin, b[1]] for b in buckets],
+            'latency_now_ms': now * 1000 - origin if buckets else 0.0,
+            'skipped_recent': proc.get('skipped_recent'),
+            'cells': {'min_margin': min(margins) if margins else None,
+                      'uncertain': sum(1 for m in margins if m < 0)},
+            'age_s': now - observed,
+        }
 
     def latest_age_s(self) -> float | None:
         """Alter der letzten Ablesung fuer die STALE-Anzeige, ohne neuen Datensatz."""

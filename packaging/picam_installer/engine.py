@@ -19,7 +19,8 @@ from .platform import SystemInfo as SystemInfo
 
 
 def parser():
-    cli = argparse.ArgumentParser(description='picam: getrennte Neuinstallation; Vorgabe ist ein schreibfreier Plan.')
+    cli = argparse.ArgumentParser(description='picam: getrennte Neuinstallation; Vorgabe ist ein schreibfreier Plan.',
+                                  epilog='Entfernen: --uninstall --help')
     cli.add_argument('--source', required=True, help='Releasearchiv oder HTTPS-Adresse')
     cli.add_argument('--sha256', help='Archiv-SHA256; Pflicht bei HTTPS')
     cli.add_argument('--mode', choices=('system', 'user', 'portable'), default='system')
@@ -380,6 +381,10 @@ def install(args, runner=subprocess.run, progress=None):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else list(argv)
+    if '--uninstall' in argv:
+        from .uninstall import main as uninstall_main
+
+        return uninstall_main(argv)
     if '--guided-apply' in argv:
         from .guided import guided_apply_main
 

@@ -275,6 +275,9 @@ async def handle_local_op(op, args, controller, live, bridge_hub=None):
             await asyncio.to_thread(live.stop_run)
         elif op == 'live.mark':
             await asyncio.to_thread(live.mark, text=(args or {}).get('text'))
+        elif op == "live.camera.restart":
+            camera = await asyncio.to_thread(live.restart_camera)
+            return web.json_response({"ok": True, "camera": camera})
         elif op == "live.camera":
             await asyncio.to_thread(live.start_camera)
         else:

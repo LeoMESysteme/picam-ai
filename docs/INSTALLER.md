@@ -31,17 +31,26 @@ getrennt erhaltenem SHA-256).
 
 ## Verwalten mit `picam`
 
-`picam` ohne Argument öffnet im Terminal die Verwaltungskonsole: links
-die Bereiche (Dienst, Lauf, Kamera, Ausgabe, Brücke, Zertifikat, Speicher,
-dann die Einrichtung mit Netzwerk, Lesevorlage, Kalibrierung, UART, Konto, Uhrzeit,
-Version), rechts Befund, Abhilfe und Aktionen. `s` startet/stoppt, `r`
-startet neu, `l` zeigt das Protokoll (`f` mitlaufen, `e` nur Probleme),
-`c` öffnet die Konfiguration, `a` führt den empfohlenen Befehl eines
-Befunds nach Rückfrage aus, `?` zeigt alle Tasten. Jede Aktion zeigt den
-genauen Befehl und startet auf „Abbrechen“. Stoppen und Neustarten sind
-gesperrt, solange ein Lauf, eine Einrichtung oder eine Diagnosekopie aktiv
-ist oder der Laufstatus unbekannt ist. Messläufe und Messwerte bleiben in
-der Werkbank; picam startet keinen Lauf.
+`picam` ohne Argument öffnet im Terminal die Verwaltungskonsole. Oben
+stehen die Tabs: Dashboard (1), Lauf (2), Dienst (3), Kamera (4),
+Ausgabe (5), Zertifikat (6), Speicher (7), Netzwerk (8), UART (9),
+Konto (0), Protokoll (`l`) und Einstellungen (`c`); `←`/`→` wechseln,
+Tabs und Knöpfe sind auch per Maus klickbar. Das Dashboard zeigt links den
+Lauf und die häufigsten Aktionen (Werkbank starten/stoppen, neu starten,
+Kamera neu starten, UART-Empfang der Brücke), rechts alle Bereiche mit
+CPU, RAM und Temperatur. Der Tab Lauf zeigt einen laufenden Messlauf nur
+lesend (Zählwerte, 60-s-Band, letzter Wert mit Alter, Latenz, Margin).
+`i` erklärt den aktuellen Tab, `?` zeigt alle Tasten, die Tasten des Tabs
+stehen in der untersten Zeile. Neue Fehler (Dienst ausgefallen,
+Kamera, Ausgabe, Lauf) melden sich einmal als Fenster mit Optionen.
+
+Jede Aktion zeigt vorher den genauen Befehl und startet auf „Abbrechen“.
+Dienst- und Kameraaktionen sind gesperrt, solange ein Lauf, eine
+Einrichtung oder eine Diagnosekopie aktiv ist oder der Laufstatus
+unbekannt ist. Läufe startet und beendet nur die Werkbank im Browser.
+Angemeldet wird an der Werkbank mit dem Linux-Konto des Dienstes und
+dessen Passwort (Tab Konto, Einstellungen und Ende der Installation nennen
+das Konto); ändern lässt es sich mit `sudo passwd KONTO`.
 
 Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 
@@ -59,14 +68,12 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam url` | Adresse der Werkbank |
 
 `--no-color` (oder `NO_COLOR`) und `--ascii` gelten für alle Befehle.
-Die Konsole beginnt mit einem kurzen Startbild (Objektiv und Punktmatrix,
-darunter die ersten Prüfergebnisse). Es endet von selbst, sobald der
-Status da ist, jede Taste überspringt es. `--no-intro` oder
+Die Konsole beginnt mit einem kurzen Startbild (ME-Logo und
+Punktmatrix, darunter die ersten Prüfergebnisse). Es endet von selbst,
+sobald der Status da ist, jede Taste überspringt es. `--no-intro` oder
 `PICAM_INTRO=0` lassen es weg, `TEXTUAL_ANIMATIONS=none` schaltet alle
-Bewegungen ab (Startbild statisch, keine Überblendungen). Ab 34 Zeilen
-zeigt die Konsole unter dem Bereich die letzten Meldungen des Dienstes,
-ab 150 Spalten als eigene Spalte rechts, dann mit Betriebskarten in der
-Übersicht.
+Bewegungen ab. Ab 34 Zeilen zeigt das Dashboard die letzten Meldungen
+des Dienstes.
 `picam` findet die Instanz selbst: `/etc/picam/config.toml`,
 `~/.config/picam/config.toml` oder `--config PFAD`. Auf dem
 Entwicklungs-Pi ohne Installation verwaltet es den mit
@@ -277,6 +284,27 @@ zweiten Aufruf beabsichtigt: keine stillschweigende Aktualisierung,
 Migration, neue Identität oder Zertifikatserneuerung. Bei einem Fehler vor
 Aktivierung werden nur die von diesem Aufruf angelegten Ziele aufgeräumt.
 Der aktive Versionslink wird zuletzt angelegt.
+
+## Deinstallieren
+
+`install.sh --uninstall [--mode system|user|portable]` zeigt den Plan,
+mit `--apply` wird er ausgeführt: Dienst stoppen und abmelden, Unit-Datei,
+`picam`-Verknüpfung (nur wenn sie in die Installation zeigt) und
+`releases/`, `current`, `previous` entfernen. Daten, Konfiguration,
+Kopplungen und Kalibrierung bleiben, damit eine Neuinstallation sie
+wiederfindet; `--purge-data` löscht auch sie. In der Konsole:
+Einstellungen, `x` (zeigt zuerst den Plan, dann Bestätigung durch Tippen).
+
+## Zertifikat erneuern
+
+Ohne Windows-Brücke: `python -m dispread.workbench.cli renew-tls
+[--directory DIR] [--host ADRESSE] [--days 365]` stellt das Zertifikat mit
+demselben Schlüssel neu aus (alte Datei als `cert.pem.bak-<Zeit>`).
+Browser müssen dem neuen Zertifikat erneut vertrauen, die Werkbank muss
+neu starten. Mit Brücke ist das Zertifikat die Brückenidentität; die
+Windows-App prüft dessen vollständigen SHA-256. Eine Erneuerung würde jede
+Kopplung ungültig machen, deshalb gibt es dafür keinen Befehl. HTTPS lässt
+sich nicht abschalten (die Brücke setzt TLS voraus).
 
 ## Update und Rückweg
 

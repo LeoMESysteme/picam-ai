@@ -427,6 +427,27 @@
     "dir": "run-01",
     "latest_age_s": 2.0,
     "guess": null,
+    "proc": {
+      "fps": 9.8,
+      "latency_ms": 42.0,
+      "latency_recent": [
+        [
+          0.0,
+          40.0
+        ],
+        [
+          1000.0,
+          45.0
+        ]
+      ],
+      "latency_now_ms": 1500.0,
+      "skipped_recent": 0.0,
+      "cells": {
+        "min_margin": 0.4,
+        "uncertain": 0
+      },
+      "age_s": 2.0
+    },
     "tracking": {
       "mode": "frame_local",
       "profile_mode": "frame_local",

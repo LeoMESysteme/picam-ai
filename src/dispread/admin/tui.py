@@ -1,12 +1,14 @@
-"""picam-Konsole: ruhige Verwaltungsoberfläche für die Werkbank (Textual 2.x).
+"""picam-Konsole: Verwaltung und Fehlersuche für die Werkbank (Textual 2.x).
 
-Aufbau (ab 76 Spalten): links die Liste der Bereiche mit je einem Zeichen
-und einem Wort, rechts der gewählte Bereich mit Befund, Abhilfe und Aktionen.
-Schmaler wird daraus ein Stapel: Liste, Enter öffnet, Esc zurück.
+Oben die Tabs (Dashboard, Lauf, Dienst, Kamera, Ausgabe, Zertifikat,
+Speicher, Netzwerk, UART, Konto, Protokoll, Einstellungen), darunter der
+Inhalt, unten Statuszeile und Tastenleiste. Die Tabs liegen in
+``dispread.admin.views``; hier stehen Datenabruf, Aktionen mit Bestätigung,
+Fehler-Popups und das Startbild.
 
-Die Konsole verwaltet nur den Dienst und seine Einrichtung. Sie startet
-keinen Messlauf und zeigt keine Messwerte; Dienstaktionen sind gesperrt,
-solange ein Lauf, eine Einrichtung oder eine Diagnosekopie aktiv ist.
+Die Konsole ist kein zweites Bedienpult: Läufe und Einrichtung steuert die
+Werkbank im Browser. Dienst- und Kameraaktionen sind gesperrt, solange ein
+Lauf, eine Einrichtung oder eine Diagnosekopie aktiv ist.
 """
 
 from __future__ import annotations
@@ -17,484 +19,236 @@ import shlex
 import subprocess
 import sys
 import threading
-from dataclasses import dataclass
+import time
 from pathlib import Path
 
-from rich.console import Group
 from rich.table import Table
 from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
-from textual.reactive import reactive
-from textual.screen import ModalScreen
-from textual.theme import Theme
-from textual.widgets import Button, Checkbox, Input, OptionList, RichLog, Static
-from textual.widgets.option_list import Option
+from textual.containers import Horizontal
+from textual.widgets import ContentSwitcher, Input, Static, Tab, Tabs
 
 from . import probes
 from .instance import Instance
+from .ui import (  # noqa: F401  (für Tests und Tabs erneut exportiert)
+    ACCENT,
+    MUTED,
+    SPINNER,
+    THEME,
+    TONE,
+    AskScreen,
+    Canvas,
+    Choice,
+    Confirmation,
+    ConfirmScreen,
+    InfoScreen,
+    ascii_mode,
+    fade_in,
+    symbol,
+)
+from .views import TABS
 
 MIN_WIDTH, MIN_HEIGHT = 48, 14
 SPLIT_WIDTH = 76
-#: Ab dieser Höhe bekommt der rechte Bereich unten „Letzte Meldungen“,
-#: ab dieser Breite stehen sie als eigene Spalte rechts.
 TALL_HEIGHT = 34
-WIDE_WIDTH = 150
-TAIL_LINES = 400
-SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 REFRESH_S = 5.0
 SETUP_REFRESH_S = 60.0
+STORAGE_REFRESH_S = 60.0
+NETWORK_REFRESH_S = 30.0
 LOG_LIMIT = 2000
+SERVICE_WORDS = {'start': ('Werkbank starten', 'Starten'), 'stop': ('Werkbank stoppen', 'Stoppen'),
+                 'restart': ('Werkbank neu starten', 'Neu starten')}
+#: Befunde, deren Wechsel auf Fehler ein Popup öffnet.
+ALERT_FACTS = ('dienst', 'kamera', 'ausgabe', 'lauf')
 
-SYMBOL = {probes.OK: '✓', probes.WARN: '!', probes.FAIL: '✗', probes.OFF: '○', probes.UNKNOWN: '?'}
-ASCII_SYMBOL = {probes.OK: '+', probes.WARN: '!', probes.FAIL: 'x', probes.OFF: '-', probes.UNKNOWN: '?'}
-#: Semantische Farben, passend zum Theme (Status: genau ein Zeichen + eine Farbe).
-TONE = {probes.OK: '#8fbf8f', probes.WARN: '#e5b567', probes.FAIL: '#e5787a', probes.OFF: '#7d8590',
-        probes.UNKNOWN: '#b799d4'}
-MUTED = '#7d8590'
-ACCENT = '#6cb6c4'
-
-THEME = Theme(
-    name='picam',
-    primary=ACCENT,
-    secondary='#8aa4c8',
-    accent=ACCENT,
-    warning=TONE[probes.WARN],
-    error=TONE[probes.FAIL],
-    success=TONE[probes.OK],
-    foreground='#d6dae0',
-    background='#0e1116',
-    surface='#151a21',
-    panel='#1b2129',
-    dark=True,
-    variables={
-        'footer-key-foreground': ACCENT,
-        'footer-description-foreground': '#9aa3ad',
-        'footer-background': '#0e1116',
-        'block-cursor-background': '#1f3a40',
-        'block-cursor-foreground': '#e8eef2',
-        'block-cursor-text-style': 'none',
-        'block-cursor-blurred-background': '#1a252b',
-        'block-cursor-blurred-text-style': 'none',
-        'scrollbar': '#252c35',
-        'scrollbar-background': '#0e1116',
-        'scrollbar-background-hover': '#0e1116',
-        'scrollbar-background-active': '#0e1116',
-        'scrollbar-corner-color': '#0e1116',
-        'scrollbar-hover': '#2f3842',
-        'scrollbar-active': ACCENT,
-        'input-cursor-background': ACCENT,
-    },
-)
-
-TOOLS = (('protokoll', 'Protokoll'), ('konfiguration', 'Konfiguration'))
-SERVICE_WORDS = {'start': ('Dienst starten', 'Starten'), 'stop': ('Dienst stoppen', 'Stoppen'),
-                 'restart': ('Dienst neu starten', 'Neu starten')}
-
-
-def ascii_mode() -> bool:
-    return bool(os.environ.get('PICAM_ASCII')) or 'UTF-8' not in (os.environ.get('LANG', '') +
-                                                                   os.environ.get('LC_ALL', '') +
-                                                                   os.environ.get('LC_CTYPE', '')).upper()
-
-
-def symbol(level: str) -> str:
-    return (ASCII_SYMBOL if ascii_mode() else SYMBOL)[level]
-
-
-def fit(text: str, width: int) -> str:
-    """Auf Zellbreite kürzen (Rich misst breite Zeichen korrekt)."""
-    rendered = Text(text)
-    if rendered.cell_len <= width:
-        return text
-    rendered.truncate(max(1, width), overflow='ellipsis')
-    return rendered.plain
-
-
-def fade_in(widget, start: float = 0.0, duration: float = 0.14) -> None:
-    """Kurz einblenden; mit TEXTUAL_ANIMATIONS=none sofort sichtbar."""
-    if widget.app.animation_level == 'none':
-        return
-    widget.styles.opacity = start
-    widget.styles.animate('opacity', 1.0, duration=duration, easing='out_cubic')
-
-
-# ----------------------------------------------------------------- Dialoge
-
-@dataclass
-class Confirmation:
-    title: str
-    lines: list[str]
-    commands: list[str]
-    action_label: str
-    danger: bool = False
-    blocker: str | None = None
-
-
-class ConfirmScreen(ModalScreen[bool]):
-    """Bestätigung mit sichtbarem Befehl. Fokus startet auf „Abbrechen“."""
-
-    BINDINGS = [Binding('escape', 'cancel', 'Abbrechen', show=False),
-                Binding('left,right', 'switch', show=False)]
-
-    def __init__(self, confirmation: Confirmation):
-        super().__init__()
-        self.c = confirmation
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id='dialog'):
-            yield Static(Text(self.c.title, style='bold'), id='dialog-title')
-            for line in self.c.lines:
-                yield Static(Text(line), classes='dialog-line')
-            if self.c.commands:
-                yield Static(Text('\n'.join('$ ' + c for c in self.c.commands), style=MUTED), id='dialog-cmd')
-            if self.c.blocker:
-                yield Static(Text(f'{symbol(probes.WARN)} Gesperrt: {self.c.blocker}', style=TONE[probes.WARN]),
-                             id='dialog-blocker')
-            with Horizontal(id='dialog-buttons'):
-                yield Button('Abbrechen', id='cancel')
-                yield Button(self.c.action_label, id='ok', variant='error' if self.c.danger else 'primary',
-                             disabled=self.c.blocker is not None)
-
-    def on_mount(self) -> None:
-        self.query_one('#cancel', Button).focus()
-        fade_in(self.query_one('#dialog'))
-
-    def action_cancel(self) -> None:
-        self.dismiss(False)
-
-    def action_switch(self) -> None:
-        self.focus_next(Button)
-
-    @on(Button.Pressed, '#cancel')
-    def _cancel(self) -> None:
-        self.dismiss(False)
-
-    @on(Button.Pressed, '#ok')
-    def _ok(self) -> None:
-        self.dismiss(True)
+CSS_PATH_FREE = """
+Screen { background: $background; layers: base overlay; }
+#top { height: 1; background: $surface; }
+#brand { width: auto; padding: 0 1; height: 1; background: #0f6e68; color: #f2fbfa; text-style: bold; }
+#tabs { width: 1fr; height: 1; background: $surface; }
+#tabs Tab { padding: 0 1; height: 1; color: #a9b4c2; text-style: none; }
+#tabs Tab.-active { color: #0b1a1c; text-style: bold; background: $primary; }
+#tabs Tab:hover { color: #e3e9f0; background: #263240; }
+#tabs Tab.-active:hover { color: #0b1a1c; background: #5fd8cc; }
+#tabs .underline--bar { color: $primary; background: $surface; }
+#rule { height: 1; }
+#body { height: 1fr; padding: 0 2; }
+TabView { height: 1fr; scrollbar-size-vertical: 1; }
+TabView > Static { width: 1fr; max-width: 120; }
+.title { margin: 1 0 0 0; }
+.fact-title { margin: 1 0 0 0; }
+.hint { border-left: wide $warning; padding: 0 1; margin: 1 0 0 0; background: #2a2416; max-width: 110; }
+.hint.fail { border-left: wide $error; background: #2c1a1c; }
+.hint.info { border-left: wide $primary; background: #13292b; }
+.section { margin: 1 0 0 0; }
+.note { color: #8a96a6; margin: 1 0 0 0; }
+.buttons { height: auto; margin: 1 0 1 0; }
+.buttons Button { margin: 0 2 0 0; }
+.cards { height: auto; max-width: 110; grid-gutter: 1 2; grid-rows: auto; }
+.card { height: auto; padding: 0 1; background: $surface; border-left: wide #2b3644; }
+.card.card-warn { border-left: wide $warning; }
+.card.card-fail { border-left: wide $error; }
+#dash { height: auto; }
+#dash-left { width: 1fr; height: auto; padding: 1 2 0 0; }
+#dash-right { width: 42; height: auto; padding: 1 0 0 2; border-left: vkey #2b3644; }
+#dash-logo { height: auto; }
+#dash-run { height: auto; margin: 1 0 0 0; padding: 0 1; background: $surface; border-left: wide $primary; }
+#dash-list { height: auto; max-height: 20; border: none; background: $background; padding: 0; }
+#dash-list:focus { border: none; background-tint: 0%; }
+#dash-list > .option-list--option { padding: 0 1; }
+#dash-tail { display: none; height: auto; }
+#tail-head { height: 1; margin: 1 0 0 0; }
+#tail-log { height: 12; background: $background; border: none; scrollbar-size-vertical: 1; padding: 0;
+            overflow-x: hidden; }
+Screen.tall #dash-tail { display: block; }
+Screen.stacked #dash { layout: vertical; }
+Screen.stacked #dash-right { width: 1fr; border-left: none; padding: 0; }
+Screen.stacked #dash-logo { display: none; }
+#log-head { height: 1; margin: 1 0 0 0; }
+#log { height: 1fr; background: $background; border: none; scrollbar-size-vertical: 1; padding: 0;
+       overflow-x: hidden; }
+ProtokollView { overflow-y: hidden; }
+.field { height: auto; margin: 1 0 0 0; }
+.field-label { color: #a9b4c2; }
+.field-risk { margin: 0 0 0 1; }
+.field Input { width: 40; height: 1; margin: 0; padding: 0 1; border: none; background: $panel; }
+.field Input:focus { border: none; background: #17403f; }
+.field Checkbox { margin: 0; height: 1; padding: 0; border: none; background: $background; }
+.field Checkbox:focus { border: none; background-tint: 0%; }
+.field Checkbox > .toggle--button { background: #2b3644; color: #2b3644; }
+.field Checkbox.-on > .toggle--button { background: $primary; color: #0b1a1c; }
+.field Checkbox:focus > .toggle--label { text-style: bold underline; background: transparent; }
+#status { height: 1; width: 1fr; padding: 0 1; background: $surface; }
+#footer { height: 1; width: 1fr; padding: 0 1; background: $background; }
+#small { display: none; width: 1fr; height: 1fr; content-align: center middle; color: #8a96a6; }
+Screen.too-small #small { display: block; }
+Screen.too-small #top, Screen.too-small #body, Screen.too-small #status, Screen.too-small #footer {
+    display: none; }
+ConfirmScreen, AskScreen, InfoScreen { align: center middle; background: rgba(6, 9, 13, 0.75); }
+#dialog { width: 76; max-width: 95%; height: auto; padding: 1 2; background: $panel;
+          border: none; border-top: tall $primary; }
+#dialog.fail { border-top: tall $error; }
+#dialog.warn { border-top: tall $warning; }
+#dialog-title { margin: 0 0 1 0; }
+.dialog-line { margin: 0 0 1 0; }
+#dialog-cmd { margin: 0 0 1 0; padding: 0 1; background: $background; color: #a9b4c2; }
+#dialog-blocker { margin: 0 0 1 0; }
+#ask-input { height: 1; border: none; padding: 0 1; margin: 0 0 1 0; background: $background; }
+#ask-input:focus { background: #17403f; }
+#dialog-buttons { height: auto; align-horizontal: right; }
+#dialog-buttons Button { margin: 0 0 0 2; }
+Button { border: none; height: 1; min-width: 12; padding: 0 2; background: #263240; color: $foreground;
+         text-style: none; }
+Button:hover { background: #31404f; }
+Button:focus { background: $primary; color: #0b1a1c; text-style: bold; background-tint: 0%; }
+Button.-primary { background: #0f6e68; color: #f2fbfa; }
+Button.-primary:focus { background: $primary; color: #0b1a1c; }
+Button.-error { color: $error; }
+Button.-error:focus { background: $error; color: #1a0c0c; }
+Button:disabled { color: #566273; background: #1a222c; }
+Intro { layer: overlay; width: 1fr; height: 1fr; align: center middle; background: $background; }
+Intro:focus { background-tint: 0%; }
+#intro-row { width: 1fr; height: auto; align: center top; }
+#intro-logo { margin: 0 5 0 0; }
+#intro-side { width: auto; height: auto; }
+#intro-lcd { width: auto; height: auto; margin: 0 0 1 0; }
+#intro-tag { width: auto; margin: 0 0 1 0; }
+#intro-checks { width: 46; height: 3; }
+#intro-hint { width: 1fr; content-align: center middle; margin: 1 0 0 0; }
+"""
 
 
-class AskScreen(ModalScreen[str | None]):
-    """Eine Eingabe mit Erklärung; Enter übernimmt, Esc bricht ab."""
-
-    BINDINGS = [Binding('escape', 'cancel', 'Abbrechen', show=False)]
-
-    def __init__(self, title: str, lines: list[str], value: str = '', placeholder: str = ''):
-        super().__init__()
-        self.title_text, self.lines, self.value, self.placeholder = title, lines, value, placeholder
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id='dialog'):
-            yield Static(Text(self.title_text, style='bold'), id='dialog-title')
-            for line in self.lines:
-                yield Static(Text(line), classes='dialog-line')
-            yield Input(value=self.value, placeholder=self.placeholder, id='ask-input')
-            with Horizontal(id='dialog-buttons'):
-                yield Button('Abbrechen', id='cancel')
-                yield Button('Weiter', id='ok', variant='primary')
-
-    def on_mount(self) -> None:
-        self.query_one('#ask-input', Input).focus()
-        fade_in(self.query_one('#dialog'))
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-    @on(Input.Submitted)
-    @on(Button.Pressed, '#ok')
-    def _ok(self) -> None:
-        value = self.query_one('#ask-input', Input).value.strip()
-        self.dismiss(value or None)
-
-    @on(Button.Pressed, '#cancel')
-    def _cancel(self) -> None:
-        self.dismiss(None)
-
-
-class HelpScreen(ModalScreen[None]):
-    BINDINGS = [Binding('escape,q,question_mark,f1', 'close', show=False)]
-
+class HelpScreen(InfoScreen):
     KEYS = (
-        ('↑ ↓  j k', 'Bereich wählen'),
-        ('Enter', 'Bereich öffnen (schmales Terminal)'),
-        ('Esc', 'zurück / Dialog schließen'),
-        ('s', 'Dienst starten oder stoppen'),
-        ('r', 'Dienst neu starten'),
-        ('l', 'Protokoll'),
-        ('c', 'Konfiguration'),
-        ('a', 'empfohlenen Befehl ausführen (mit Rückfrage)'),
-        ('u', 'Version: Update aus Releasearchiv'),
-        ('z', 'Version: zurück auf die vorige Version'),
+        ('Tab  ⇧Tab', 'nächster / voriger Tab (oder Klick auf den Tab)'),
+        ('1 … 9  0', 'Dashboard, Lauf, Dienst, Kamera, Ausgabe, Zertifikat, Speicher, Netzwerk, UART, Konto'),
+        ('l   c', 'Protokoll, Einstellungen'),
+        ('↑ ↓ ← →', 'im Tab: Knopf, Listeneintrag oder Feld wählen'),
+        ('Enter', 'Knopf oder Listeneintrag auslösen'),
+        ('i', 'Erklärung zum aktuellen Tab'),
         ('g', 'jetzt neu prüfen'),
-        ('f', 'Protokoll: mitlaufen an/aus'),
-        ('e', 'Protokoll: nur Warnungen und Fehler'),
-        ('o', 'Werkbank-Adresse anzeigen'),
+        ('Esc', 'zurück zum Dashboard / Dialog schließen'),
         ('q  Ctrl+C', 'beenden'),
     )
 
-    def compose(self) -> ComposeResult:
+    def __init__(self):
         table = Table.grid(padding=(0, 3))
         table.add_column(style=f'bold {ACCENT}', no_wrap=True)
         table.add_column()
         for key, text in self.KEYS:
             table.add_row(key, text)
-        with Vertical(id='dialog'):
-            yield Static(Text('Tasten', style='bold'), id='dialog-title')
-            yield Static(table)
-            yield Static(Text('picam verwaltet den Dienst. Messläufe und Einrichtung der Anzeige '
-                              'laufen in der Werkbank im Browser.', style=MUTED), classes='note')
-
-    def on_mount(self) -> None:
-        fade_in(self.query_one('#dialog'))
-
-    def action_close(self) -> None:
-        self.dismiss(None)
-
-    def on_click(self) -> None:
-        self.dismiss(None)
-
-
-# ----------------------------------------------------------------- Bereiche
-
-class Detail(VerticalScroll):
-    """Rechter Bereich für einen Befund oder die Übersicht."""
-
-    can_focus = False
-
-
-class LogPane(Vertical):
-    pass
-
-
-class Cards(Grid):
-    """Kartenraster der Übersicht; ``signature`` verhindert unnötiges Neuzeichnen."""
-
-    def __init__(self, cards: list[Static], columns: int, signature: str):
-        super().__init__(*cards, classes='cards')
-        self.styles.grid_size_columns = columns
-        self.signature = signature
-
-
-CARD_ROWS = 3
-
-
-def fact_card(fact: probes.Fact) -> Static:
-    """Karte: Zeichen, Name, Wert und bis zu drei Detailzeilen, gekürzt statt umbrochen."""
-    title = Text(no_wrap=True, overflow='ellipsis')
-    title.append(f'{symbol(fact.level)} ', style=TONE[fact.level])
-    title.append(fact.label, style='bold')
-    title.append(f'  {fact.value}', style=MUTED if fact.level in (probes.OK, probes.OFF) else TONE[fact.level])
-    table = Table.grid(padding=(0, 2), expand=True)
-    table.add_column(style=MUTED, no_wrap=True)
-    table.add_column(style='#b8c0c8', no_wrap=True, overflow='ellipsis', ratio=1)
-    detail = [(k, v) for k, v in fact.detail if v and k not in ('Unit', 'Zustand', 'Weg')][:CARD_ROWS]
-    for key, value in detail:
-        table.add_row(key, str(value))
-    for _ in range(CARD_ROWS - len(detail)):
-        table.add_row('', '')
-    level = {probes.FAIL: ' card-fail', probes.WARN: ' card-warn'}.get(fact.level, '')
-    return Static(Group(title, table), classes='card' + level)
-
-
-class ConfigPane(VerticalScroll):
-    pass
-
-
-def kv_table(rows) -> Table:
-    table = Table.grid(padding=(0, 2))
-    table.add_column(style=MUTED, no_wrap=True)
-    table.add_column(overflow='fold')
-    for key, value in rows:
-        table.add_row(key, value)
-    return table
-
-
-def fact_title(fact: probes.Fact) -> Text:
-    title = Text()
-    title.append(fact.label, style='bold')
-    title.append('   ')
-    title.append(f'{symbol(fact.level)} {fact.value}', style=TONE[fact.level])
-    return title
-
-
-def hint_block(fact: probes.Fact) -> Text | None:
-    if not fact.hint and not fact.command:
-        return None
-    text = Text()
-    if fact.hint:
-        text.append(fact.hint)
-    if fact.command:
-        if fact.hint:
-            text.append('\n')
-        text.append('-> ' if ascii_mode() else '→ ', style=MUTED)
-        text.append(fact.command, style=ACCENT)
-    return text
+        note = Text('Die Tasten des aktuellen Tabs stehen in der untersten Zeile. Messläufe und Einrichtung '
+                    'laufen in der Werkbank im Browser.', style=MUTED)
+        super().__init__('Tasten', [table, note])
 
 
 class PicamApp(App[int]):
     TITLE = 'picam'
-    CSS = """
-    Screen { background: $background; layers: base overlay; }
-    #top { height: 1; padding: 0 1; background: $background; }
-    #main { height: 1fr; }
-    #nav { width: 30; height: 1fr; border: none; padding: 0 0 0 0; background: $background;
-           scrollbar-size-vertical: 1; }
-    #nav:focus { border: none; background-tint: 0%; }
-    #nav > .option-list--option { padding: 0 1; }
-    #nav > .option-list--option-disabled { color: $text-muted; text-style: bold; padding: 0 1; }
-    #nav > .option-list--separator { color: $background; }
-    #pane { width: 1fr; height: 1fr; padding: 0 0 0 2; border-left: vkey #252c35; layout: vertical; }
-    #views { width: 1fr; height: 1fr; padding: 0 2 0 0; }
-    #tail { display: none; width: 1fr; height: 40%; min-height: 8; padding: 0 2 0 0; }
-    #tail-head { height: 1; margin: 1 0 0 0; }
-    #tail-log { height: 1fr; background: $background; border: none; scrollbar-size-vertical: 1; padding: 0;
-                overflow-x: hidden; }
-    Screen.tall #tail { display: block; }
-    Screen.wide #pane { layout: horizontal; }
-    Screen.wide #tail { display: block; width: 44%; max-width: 90; height: 1fr; padding: 0 2;
-                        border-left: vkey #1b2129; }
-    Screen.no-tail #tail { display: none; }
-    Detail { height: 1fr; scrollbar-size-vertical: 1; }
-    Detail > Static { width: 1fr; max-width: 110; }
-    .cards { height: auto; max-width: 110; grid-gutter: 1 2; grid-rows: auto; }
-    .card { height: auto; padding: 0 1; background: $surface; border-left: wide #2a333d; }
-    .card.card-warn { border-left: wide $warning; }
-    .card.card-fail { border-left: wide $error; }
-    .title { margin: 1 0 1 0; }
-    .hint { border-left: wide $warning; padding: 0 1; margin: 0 0 1 0; background: #16140f; }
-    .hint.fail { border-left: wide $error; background: #191212; }
-    .hint.info { border-left: wide $primary; background: #11171a; }
-    .section { color: $text-muted; text-style: bold; margin: 1 0 0 0; }
-    .actions { color: $text-muted; margin: 1 0 0 0; }
-    LogPane { height: 1fr; }
-    #log-head { height: 1; margin: 1 0 0 0; }
-    #log { height: 1fr; background: $background; border: none; scrollbar-size-vertical: 1; padding: 0;
-           overflow-x: hidden; }
-    ConfigPane { height: 1fr; }
-    .field { height: auto; margin: 1 0 0 0; }
-    .field-label { color: $text-muted; }
-    .field Input { width: 40; height: 1; margin: 0; padding: 0 1; border: none; background: $surface; }
-    .field Input:focus { border: none; background: #1a2a2f; }
-    .field Checkbox { margin: 0; height: 1; padding: 0; border: none; background: $background; }
-    .field Checkbox:focus { border: none; background-tint: 0%; }
-    .field Checkbox > .toggle--button { background: #252c35; color: #252c35; }
-    .field Checkbox.-on > .toggle--button { background: $primary; color: #0e1116; }
-    .field Checkbox:focus > .toggle--label { text-style: bold underline; background: transparent; }
-    .note { color: $text-muted; margin: 1 0 0 0; }
-    #config-check { margin: 1 0 0 0; }
-    #status { height: 1; padding: 0 1; color: $text-muted; }
-    #footer { height: 1; padding: 0 1; background: $background; }
-    #small { display: none; width: 1fr; height: 1fr; content-align: center middle; color: $text-muted; }
-    Screen.too-small #small { display: block; }
-    Screen.too-small #top, Screen.too-small #main, Screen.too-small #status, Screen.too-small #footer {
-        display: none; }
-    Screen.stacked #nav { width: 1fr; }
-    Screen.stacked #pane { display: none; border-left: none; padding: 0 0 0 1; }
-    Screen.stacked.open #nav { display: none; }
-    Screen.stacked.open #pane { display: block; }
-    ConfirmScreen, HelpScreen, AskScreen { align: center middle; background: rgba(5, 7, 10, 0.72); }
-    Intro { layer: overlay; width: 1fr; height: 1fr; align: center middle; background: $background; }
-    Intro:focus { background-tint: 0%; }
-    #intro-row { width: 1fr; height: auto; align: center top; }
-    #intro-logo { margin: 0 5 0 0; }
-    #intro-side { width: auto; height: auto; }
-    #intro-lcd { width: auto; height: auto; margin: 0 0 1 0; }
-    #intro-tag { width: auto; margin: 0 0 1 0; }
-    #intro-checks { width: auto; }
-    #intro-hint { width: 1fr; content-align: center middle; margin: 1 0 0 0; }
-    #dialog { width: 72; max-width: 95%; height: auto; padding: 1 2; background: $panel; border: none; }
-    #dialog-title { margin: 0 0 1 0; }
-    .dialog-line { margin: 0 0 1 0; }
-    #dialog-cmd { margin: 0 0 1 0; padding: 0 1; background: $background; }
-    #dialog-blocker { margin: 0 0 1 0; }
-    #ask-input { height: 1; border: none; padding: 0 1; margin: 0 0 1 0; background: $background; }
-    #ask-input:focus { background: #1a2a2f; }
-    #dialog-buttons { height: auto; align-horizontal: right; }
-    #dialog-buttons Button { margin: 0 0 0 2; }
-    Button { border: none; height: 1; min-width: 14; padding: 0 2; background: #252c35; color: $foreground;
-             text-style: none; }
-    Button:hover { background: #2f3842; }
-    Button:focus { background: $primary; color: #0e1116; text-style: bold; background-tint: 0%; }
-    Button.-primary:focus { background: $primary; }
-    Button.-error { color: $error; }
-    Button.-error:focus { background: $error; color: #0e1116; }
-    Button:disabled { color: #4a525c; background: #1b2129; }
-    """
+    CSS = CSS_PATH_FREE
 
     BINDINGS = [
         Binding('q', 'quit_app', 'Ende'),
         Binding('ctrl+c', 'quit_app', 'Ende', show=False, priority=True),
         Binding('question_mark,f1', 'help', 'Hilfe'),
-        Binding('s', 'toggle_service', 'Start/Stopp'),
-        Binding('r', 'restart', 'Neustart'),
-        Binding('l', 'show("protokoll")', 'Protokoll'),
-        Binding('c', 'show("konfiguration")', 'Konfig.'),
-        Binding('a', 'run_fix', 'Ausführen', show=False),
-        Binding('u', 'update', 'Update', show=False),
-        Binding('z', 'rollback', 'Rückweg', show=False),
+        Binding('i', 'info', 'Info', show=False),
         Binding('g', 'refresh', 'Prüfen', show=False),
-        Binding('o', 'open_url', 'Adresse', show=False),
-        Binding('f', 'toggle_follow', 'Mitlaufen', show=False),
-        Binding('e', 'toggle_errors', 'Nur Probleme', show=False),
         Binding('escape', 'go_back', 'Zurück', show=False),
-        Binding('j', 'nav_down', show=False),
-        Binding('k', 'nav_up', show=False),
+        Binding('tab', 'tab_step(1)', 'Tabs', show=False, priority=True),
+        Binding('shift+tab', 'tab_step(-1)', show=False, priority=True),
+        Binding('up,left', 'focus_step(-1)', show=False),
+        Binding('down,right', 'focus_step(1)', show=False),
+        *[Binding(view.KEY, f'open_tab("{view.TAB_ID}")', show=False) for view in TABS if view.KEY],
     ]
 
-    selected: reactive[str] = reactive('uebersicht', init=False)
+    def __init__(self, instance: Instance, collect=probes.collect, journal_source=None,
+                 service_runner=None, auto_refresh: bool = True, intro: bool = False,
+                 socket_request=None, metrics_source=None, storage_source=None, network_source=None,
+                 popups: bool = True):
+        super().__init__()
+        self.instance = instance
+        self._collect = collect
+        self._journal_source = journal_source
+        self._service_runner = service_runner
+        self._auto_refresh = auto_refresh
+        self._intro_enabled = intro
+        self._socket = socket_request or probes.socket_request
+        self._metrics_source = metrics_source or probes.system_metrics
+        self._storage_source = storage_source or probes.storage_usage
+        self._network_source = network_source or probes.network_info
+        self._popups = popups
+        self.snapshot: probes.Snapshot | None = None
+        self._setup_facts: dict[str, probes.Fact] = {}
+        self._setup_at = 0.0
+        self.metrics: dict = {}
+        self.storage: dict | None = None
+        self.network: dict | None = None
+        self._busy: str | None = None
+        self._message: tuple[str, str] | None = None
+        self.log_lines: list = []
+        self._log_thread: threading.Thread | None = None
+        self._log_process: subprocess.Popen | None = None
+        self._alerted: dict[str, tuple[str, str]] = {}
+        self._spin = 0
+        self._spinner_timer = None
+        self.current = 'dashboard'
 
     @property
     def main_screen(self):
         """Konsolenbildschirm, auch während ein Dialog darüber liegt."""
         return self.screen_stack[0] if self.screen_stack else self.screen
 
-    def __init__(self, instance: Instance, collect=probes.collect, journal_source=None,
-                 service_runner=None, auto_refresh: bool = True, intro: bool = False):
-        super().__init__()
-        self._intro_enabled = intro
-        self._changed: dict[str, float] = {}
-        self._spin = 0
-        self._spinner_timer = None
-        self.instance = instance
-        self._collect = collect
-        self._journal_source = journal_source
-        self._service_runner = service_runner
-        self._auto_refresh = auto_refresh
-        self.snapshot: probes.Snapshot | None = None
-        self._setup_facts: dict[str, probes.Fact] = {}
-        self._setup_at = 0.0
-        self._busy: str | None = None
-        self._message: tuple[str, str] | None = None
-        self._follow = True
-        self._errors_only = False
-        self._log_lines: list = []
-        self._log_thread: threading.Thread | None = None
-        self._log_process: subprocess.Popen | None = None
-        self._config_draft: dict = {}
-        self._rendered_detail: str | None = None
-
     # ------------------------------------------------------------ Aufbau
     def compose(self) -> ComposeResult:
-        yield Static(id='top')
-        with Horizontal(id='main'):
-            yield OptionList(id='nav')
-            with Container(id='pane'):
-                with Vertical(id='views'):
-                    yield Detail(id='detail')
-                    with LogPane(id='logpane'):
-                        yield Static(id='log-head')
-                        yield RichLog(id='log', max_lines=LOG_LIMIT, wrap=True, markup=False, auto_scroll=True,
-                                      min_width=20)
-                    yield ConfigPane(id='configpane')
-                with Vertical(id='tail'):
-                    yield Static(id='tail-head')
-                    yield RichLog(id='tail-log', max_lines=TAIL_LINES, wrap=True, markup=False, auto_scroll=True,
-                                  min_width=20)
-        yield Static(id='status')
-        yield Static(id='footer')
+        with Horizontal(id='top'):
+            yield Static(Text('picam', style=f'bold {ACCENT}'), id='brand')
+            yield Tabs(*[Tab(view.TITLE, id=f'tab-{view.TAB_ID}') for view in TABS], id='tabs')
+        with ContentSwitcher(id='body', initial='dashboard'):
+            for view in TABS:
+                yield view(id=view.TAB_ID)
+        yield Canvas(id='status')
+        yield Canvas(id='footer')
         yield Static(f'Terminal zu klein – mindestens {MIN_WIDTH}×{MIN_HEIGHT}.\n'
                      'Alternativ: picam status', id='small')
         if self._intro_enabled:
@@ -505,15 +259,15 @@ class PicamApp(App[int]):
     def on_mount(self) -> None:
         self.register_theme(THEME)
         self.theme = 'picam'
-        self._build_nav()
-        self.main_screen.query_one('#logpane').display = False
-        self.main_screen.query_one('#configpane').display = False
         self._apply_size()
-        self._render_top()
-        self._render_footer()
-        self._render_detail()
-        self._render_tail_head()
-        self.main_screen.query_one('#nav', OptionList).focus()
+        self.metrics = self._metrics_source()
+        self._render_status()
+        self.refresh_footer()
+        self.view().update_view()
+        tabs = self.main_screen.query_one('#tabs', Tabs)
+        tabs.can_focus = False  # Tabs per Tab-Taste/Ziffer/Maus; Pfeile bleiben im Tab
+        if not self._intro_enabled:
+            self.call_after_refresh(self.focus_view)
         if self._intro_enabled:
             intro = self.main_screen.query_one('#intro')
             intro.set_lines(self._intro_lines())
@@ -522,23 +276,175 @@ class PicamApp(App[int]):
         self._spinner_timer = self.set_interval(0.1, self._spin_tick, pause=True)
         self._sync_spinner()
         self.action_refresh()
+        self._start_log()
         if self._auto_refresh:
             self.set_interval(REFRESH_S, self.action_refresh)
+            self.set_interval(STORAGE_REFRESH_S, self._storage_worker)
+            self.set_interval(NETWORK_REFRESH_S, self._network_worker)
+        self._storage_worker()
+        self._network_worker()
+
+    # ------------------------------------------------------------ Tabs
+    def view(self, tab_id: str | None = None):
+        return self.main_screen.query_one(f'#{tab_id or self.current}')
+
+    def open_tab(self, tab_id: str) -> None:
+        self.main_screen.query_one('#tabs', Tabs).active = f'tab-{tab_id}'
+
+    def action_open_tab(self, tab_id: str) -> None:
+        if isinstance(self.focused, Input):
+            return
+        self.open_tab(tab_id)
+
+    def action_tab_step(self, step: int) -> None:
+        if len(self.screen_stack) > 1:  # im Dialog: Tab bewegt wie gewohnt den Fokus
+            (self.screen.focus_next if step > 0 else self.screen.focus_previous)()
+            return
+        if self.main_screen.query('#intro'):
+            return
+        ids = [view.TAB_ID for view in TABS]
+        self.open_tab(ids[(ids.index(self.current) + step) % len(ids)])
+
+    def _view_focusables(self) -> list:
+        view = self.view()
+        return [widget for widget in self.main_screen.focus_chain
+                if widget is not view and view in widget.ancestors]
+
+    def focus_view(self) -> None:
+        """Fokus auf das erste bedienbare Element des Tabs (sonst nirgends)."""
+        widgets = self._view_focusables()
+        if widgets:
+            widgets[0].focus()
+        else:
+            self.set_focus(None)
+
+    def action_focus_step(self, step: int) -> None:
+        """Pfeiltasten: nächstes/voriges Element im Tab (Knöpfe, Liste, Felder)."""
+        if len(self.screen_stack) > 1:
+            (self.screen.focus_next if step > 0 else self.screen.focus_previous)()
+            return
+        widgets = self._view_focusables()
+        if not widgets:
+            return
+        if self.focused not in widgets:
+            widgets[0 if step > 0 else -1].focus()
+            return
+        index = widgets.index(self.focused) + step
+        if 0 <= index < len(widgets):
+            widgets[index].focus()
+            widgets[index].scroll_visible()
+
+    @on(Tabs.TabActivated, '#tabs')
+    def _tab_activated(self, event: Tabs.TabActivated) -> None:
+        tab_id = (event.tab.id or 'tab-dashboard')[4:]
+        switcher = self.main_screen.query_one('#body', ContentSwitcher)
+        if tab_id == self.current and switcher.current == tab_id:
+            return
+        self.current = tab_id
+        switcher.current = tab_id
+        view = self.view()
+        view.update_view()
+        fade_in(view, start=0.35, duration=0.15)
+        self.call_after_refresh(view.focus_first if tab_id == 'einstellungen' else self.focus_view)
+        self.refresh_footer()
+
+    def action_go_back(self) -> None:
+        if self.current != 'dashboard':
+            self.open_tab('dashboard')
+        else:
+            self.focus_view()
+
+    def action_info(self) -> None:
+        if isinstance(self.focused, Input):
+            return
+        view = self.view()
+        if view.INFO:
+            self.show_info(view.INFO_TITLE or view.TITLE, list(view.INFO))
+
+    def on_key(self, event) -> None:
+        """Tasten des aktuellen Tabs (stehen in der Tastenleiste)."""
+        if isinstance(self.focused, Input) or len(self.screen_stack) > 1:
+            return
+        if self.main_screen.query('#intro'):
+            return
+        for action in self.view().actions():
+            if action.key == event.key:
+                event.stop()
+                if action.blocked:
+                    self.message(probes.WARN, f'{action.label}: {action.blocked}')
+                else:
+                    action.run()
+                return
+
+    # ------------------------------------------------------------ Größe
+    def on_resize(self) -> None:
+        self._apply_size()
+        self.refresh_footer()
+        self.view().update_view()
+
+    def _apply_size(self) -> None:
+        width, height = self.size
+        screen = self.main_screen
+        screen.set_class(width < MIN_WIDTH or height < MIN_HEIGHT, 'too-small')
+        screen.set_class(width < SPLIT_WIDTH, 'stacked')
+        screen.set_class(height >= TALL_HEIGHT and width >= SPLIT_WIDTH, 'tall')
+
+    # ------------------------------------------------------------ Kopf/Fuß
+    def refresh_footer(self) -> None:
+        width = self.size.width - 2
+        text = Text()
+        pieces = []
+        chip, chip_dim = f'bold {ACCENT} on #1e2a35', '#566273 on #1a222c'
+        for action in self.view().actions():
+            dim = action.blocked is not None
+            pieces.append((action.key, action.label, chip_dim if dim else chip, '#566273' if dim else '#c8d1dc'))
+        pieces += [('Tab', 'Tabs', chip, '#a9b4c2'), ('↑↓', 'Auswahl', chip, '#a9b4c2'),
+                   ('i', 'Info', chip, '#a9b4c2'), ('?', 'Hilfe', chip, '#a9b4c2'), ('q', 'Ende', chip, '#a9b4c2')]
+        for key, label, key_style, label_style in pieces:
+            piece = Text()
+            piece.append(f' {key} ', style=key_style)
+            piece.append(' ' + label + '  ', style=label_style)
+            if text.cell_len + piece.cell_len > width:
+                break
+            text.append_text(piece)
+        footer = self._line('#footer')
+        if footer is not None:
+            footer.show(text)
+
+    def _render_status(self) -> None:
+        text = Text()
+        if self._busy:
+            text.append(f'{self._spinner()} {self._busy}', style=ACCENT)
+        elif self._message:
+            level, message = self._message
+            text.append(f'{symbol(level)} {message}', style=TONE[level])
+        elif self.snapshot is None:
+            text.append(f'{self._spinner()} prüfe Dienst, Kamera und Einrichtung …', style=MUTED)
+        else:
+            service = self.snapshot.facts['dienst']
+            text.append(f'{symbol(service.level)} ', style=TONE[service.level])
+            text.append(f'Werkbank {service.value}', style=MUTED)
+            if self.instance.url:
+                text.append(f'  ·  {self.instance.url}', style=MUTED)
+            blocker = self.snapshot.stop_blocker
+            if blocker and service.level == probes.OK:
+                text.append(f'  ·  Dienstaktionen gesperrt: {blocker}', style=TONE[probes.WARN])
+        status = self._line('#status')
+        if status is not None:
+            status.show(text)
 
     # ------------------------------------------------------------ Startbild
     def _intro_lines(self) -> list[tuple[str, str, str, str]]:
-        lines = [(symbol(probes.OK), TONE[probes.OK], 'Instanz', self.instance.label)]
-        if self.instance.problem:
-            lines[0] = (symbol(probes.WARN), TONE[probes.WARN], 'Instanz', self.instance.label)
+        level = probes.WARN if self.instance.problem else probes.OK
+        lines = [(symbol(level), TONE[level], 'Instanz', self.instance.label)]
         if self.snapshot is None:
             return lines + [('spin', '', 'Dienst', 'prüfe …'), ('spin', '', 'Einrichtung', 'prüfe …')]
         service = self.snapshot.facts['dienst']
         lines.append((symbol(service.level), TONE[service.level], 'Dienst', service.value))
-        problems = self._problems()
+        problems = self.problems()
         if problems:
-            worst = min((f.level for f in problems), key=probes.LEVEL_ORDER.__getitem__)
-            count = len(problems)
-            lines.append((symbol(worst), TONE[worst], 'Hinweise', f'{count} offen'))
+            worst = problems[0].level
+            lines.append((symbol(worst), TONE[worst], 'Hinweise', f'{len(problems)} offen'))
         else:
             lines.append((symbol(probes.OK), TONE[probes.OK], 'Einrichtung', 'alles in Ordnung'))
         return lines
@@ -548,13 +454,14 @@ class PicamApp(App[int]):
         if not intro:
             return
         widget = intro.first()
-        nav = self.main_screen.query_one('#nav', OptionList)
 
         def reveal() -> None:
             widget.remove()
-            nav.focus()
-            for selector in ('#top', '#main', '#status', '#footer'):
+            self.call_after_refresh(self._sync_spinner)
+            self.call_after_refresh(self.focus_view)
+            for selector in ('#top', '#body', '#status', '#footer'):
                 fade_in(self.main_screen.query_one(selector), duration=0.3)
+            self.call_after_refresh(self._maybe_alert)
 
         if self.animation_level == 'none':
             reveal()
@@ -565,7 +472,8 @@ class PicamApp(App[int]):
     def _sync_spinner(self) -> None:
         if self._spinner_timer is None:
             return
-        active = (self._busy is not None or self.snapshot is None) and self.animation_level != 'none'
+        active = ((self._busy is not None or self.snapshot is None) and self.animation_level != 'none'
+                  and not self.main_screen.query('#intro'))
         if active:
             self._spinner_timer.resume()
         else:
@@ -573,465 +481,189 @@ class PicamApp(App[int]):
 
     def _spin_tick(self) -> None:
         self._spin = (self._spin + 1) % len(SPINNER)
-        if self._busy:
-            self._render_status()
-        if self.snapshot is None:
-            self._render_top()
+        self._render_status()
 
     def _spinner(self) -> str:
         if ascii_mode() or self.animation_level == 'none':
             return '…'
         return SPINNER[self._spin]
 
-    def on_resize(self) -> None:
-        self._apply_size()
-        self._render_top()
-        if (self.size.height >= 27) != getattr(self, '_nav_gaps', None):
-            selected = self.selected
-            self._build_nav()
-            self._select_nav(selected)
-        self._update_nav()
-        self._render_footer()
-        if self.selected not in ('protokoll', 'konfiguration'):
-            self.call_after_refresh(self._render_detail)
-
-    def _select_nav(self, key: str) -> None:
-        nav = self.main_screen.query_one('#nav', OptionList)
-        try:
-            nav.highlighted = nav.get_option_index(key)
-        except Exception:  # noqa: BLE001 - Option nicht (mehr) vorhanden
-            pass
-
-    def _apply_size(self) -> None:
-        width, height = self.size
-        screen = self.main_screen
-        screen.set_class(width < MIN_WIDTH or height < MIN_HEIGHT, 'too-small')
-        stacked = width < SPLIT_WIDTH
-        screen.set_class(stacked, 'stacked')
-        wide = not stacked and width >= WIDE_WIDTH and height >= 20
-        tall = not stacked and not wide and height >= TALL_HEIGHT
-        screen.set_class(wide, 'wide')
-        screen.set_class(tall, 'tall')
-        screen.set_class(self.selected == 'protokoll', 'no-tail')
-        nav = self.main_screen.query_one('#nav')
-        if not stacked:
-            nav.styles.width = 36 if width >= WIDE_WIDTH else 32 if width >= 100 else 29
-            screen.remove_class('open')
-        if self._tail_visible():
-            self._start_log()
-
-    def _tail_visible(self) -> bool:
-        screen = self.main_screen
-        return ((screen.has_class('wide') or screen.has_class('tall')) and not screen.has_class('no-tail')
-                and not screen.has_class('too-small'))
-
-    # ------------------------------------------------------------ Liste
-    def _nav_entries(self):
-        yield 'uebersicht', 'Übersicht', None
-        yield '#betrieb', 'Betrieb', None
-        for key in probes.OVERVIEW:
-            yield key, None, None
-        yield '#einrichtung', 'Einrichtung', None
-        for key in probes.SETUP:
-            if key == 'linger' and self.instance.scope != 'user':
-                continue
-            yield key, None, None
-        yield '#werkzeuge', 'Werkzeuge', None
-        for key, label in TOOLS:
-            yield key, label, None
-
-    def _nav_width(self) -> int:
-        """Nutzbare Zellen einer Zeile (Breite minus Innenabstand links/rechts)."""
-        nav = self.main_screen.query_one('#nav')
-        width = nav.size.width or (30 if self.size.width >= 100 else 28)
-        return max(16, width - 3)
-
-    def _fact(self, key: str) -> probes.Fact | None:
+    # ------------------------------------------------------------ Daten für Tabs
+    def fact(self, key: str) -> probes.Fact | None:
         if self.snapshot is not None and key in self.snapshot.facts:
             return self.snapshot.facts[key]
         return self._setup_facts.get(key)
 
-    _NAV_LABELS = {'dienst': 'Dienst', 'lauf': 'Lauf', 'kamera': 'Kamera', 'ausgabe': 'Ausgabe',
-                   'bruecke': 'Brücke', 'zertifikat': 'Zertifikat', 'speicher': 'Speicher',
-                   'netzwerk': 'Netzwerk', 'vorlage': 'Lesevorlage', 'kalibrierung': 'Kalibrierung', 'uart': 'UART',
-                   'konto': 'Konto', 'linger': 'Nach Abmeldung', 'uhr': 'Uhrzeit', 'version': 'Version'}
+    _fact = fact
 
-    def _nav_prompt(self, key: str, label: str | None) -> Text:
-        width = self._nav_width()
-        if key.startswith('#'):
-            return Text(label.upper() if label else '', style=f'bold {MUTED}')
+    def setup_facts(self) -> dict[str, probes.Fact]:
+        return dict(self._setup_facts)
 
-        def row(left: Text, right: Text) -> Text:
-            room = width - left.cell_len - 1
-            if right.cell_len > room:
-                right.truncate(max(1, room), overflow='ellipsis')
-            left.append(' ' * max(1, width - left.cell_len - right.cell_len))
-            left.append_text(right)
-            return left
+    def first_setup_tab(self) -> str:
+        homes = {'netzwerk': 'netzwerk', 'uhr': 'netzwerk', 'vorlage': 'kamera', 'kalibrierung': 'kamera',
+                 'uart': 'uart', 'konto': 'konto', 'linger': 'konto', 'version': 'dienst'}
+        for key, fact in self._setup_facts.items():
+            if fact.level in (probes.FAIL, probes.WARN):
+                return homes.get(key, 'dashboard')
+        return 'dienst'
 
-        if label is not None:  # Übersicht, Werkzeuge
-            left = Text('  ' + label)
-            if key == 'uebersicht' and self.snapshot is not None:
-                problems = self._problems()
-                if problems:
-                    worst = min((f.level for f in problems), key=probes.LEVEL_ORDER.__getitem__)
-                    return row(left, Text(f'{symbol(worst)} {len(problems)}', style=TONE[worst]))
-            return left
-        fact = self._fact(key)
-        name = self._NAV_LABELS.get(key, key)
-        if fact is None:
-            return row(Text('  ' + name), Text('·', style=MUTED))
-        left = Text()
-        left.append(symbol(fact.level) + ' ', style=TONE[fact.level])
-        left.append(name)
-        quiet = fact.level in (probes.OK, probes.OFF)
-        result = row(left, Text(fact.value, style=MUTED if quiet else TONE[fact.level]))
-        changed = self._changed.get(key)
-        if changed is not None:
-            import time as _time
-
-            age = _time.monotonic() - changed
-            if age < 0.85:
-                result.stylize('on #22363c')
-            elif age < 1.7:
-                result.stylize('on #172328')
-        return result
-
-    def _build_nav(self) -> None:
-        nav = self.main_screen.query_one('#nav', OptionList)
-        options = []
-        first = True
-        self._nav_gaps = self.size.height >= 27
-        for key, label, _ in self._nav_entries():
-            if key.startswith('#'):
-                if not first and self._nav_gaps:
-                    options.append(Option('', id=f'{key}-gap', disabled=True))
-                options.append(Option(self._nav_prompt(key, label), id=key, disabled=True))
-            else:
-                options.append(Option(self._nav_prompt(key, label), id=key))
-            first = False
-        nav.clear_options()
-        nav.add_options(options)
-        nav.highlighted = 0
-
-    def _update_nav(self) -> None:
-        nav = self.main_screen.query_one('#nav', OptionList)
-        for key, label, _ in self._nav_entries():
-            try:
-                nav.replace_option_prompt(key, self._nav_prompt(key, label))
-            except Exception:  # noqa: BLE001 - Option fehlt (z. B. linger), Liste neu bauen
-                self._build_nav()
-                return
-
-    @on(OptionList.OptionHighlighted, '#nav')
-    def _highlighted(self, event: OptionList.OptionHighlighted) -> None:
-        if event.option.id and not event.option.id.startswith('#'):
-            if not self.main_screen.has_class('stacked'):
-                self.selected = event.option.id
-
-    @on(OptionList.OptionSelected, '#nav')
-    def _chosen(self, event: OptionList.OptionSelected) -> None:
-        if event.option.id and not event.option.id.startswith('#'):
-            self.selected = event.option.id
-            if self.main_screen.has_class('stacked'):
-                self.main_screen.add_class('open')
-                self._render_footer()
-            if self.selected == 'konfiguration':
-                self._request_config_focus()
-
-    def watch_selected(self) -> None:
-        self._rendered_detail = None
-        self._fade_next = True
-        self.main_screen.set_class(self.selected == 'protokoll', 'no-tail')
-        logpane, configpane, detail = (self.main_screen.query_one('#logpane'), self.main_screen.query_one('#configpane'),
-                                       self.main_screen.query_one('#detail'))
-        logpane.display = self.selected == 'protokoll'
-        configpane.display = self.selected == 'konfiguration'
-        detail.display = self.selected not in ('protokoll', 'konfiguration')
-        if self.selected == 'protokoll':
-            self._start_log()
-            self._render_log_head()
-            fade_in(logpane, start=0.35, duration=0.15)
-        elif self.selected == 'konfiguration':
-            self._render_config()
-        else:
-            self._render_detail()
-            detail.scroll_home(animate=False)
-        self._render_footer()
-
-    # ------------------------------------------------------------ Kopf/Fuß
-    def _render_top(self) -> None:
-        top = Text()
-        top.append('picam', style=f'bold {ACCENT}')
-        top.append('  ')
-        snap = self.snapshot
-        if snap is None:
-            top.append(f'{self._spinner()} prüfe …', style=MUTED)
-        else:
-            service = snap.facts['dienst']
-            top.append(symbol(service.level) + ' ', style=TONE[service.level])
-            top.append(f'Werkbank {service.value}')
-            version = self._fact('version')
-            room = self.size.width - 2
-            for part in ([version.value] if version is not None else []) + (
-                    [self.instance.url] if self.instance.url else []):
-                piece = Text('  ·  ' + part, style=MUTED)
-                if top.cell_len + piece.cell_len > room:
-                    break
-                top.append_text(piece)
-        self.main_screen.query_one('#top', Static).update(top)
-
-    def _keys(self) -> list[tuple[str, str]]:
-        stacked = self.main_screen.has_class('stacked')
-        open_ = self.main_screen.has_class('open')
-        keys = []
-        if stacked and not open_:
-            keys.append(('enter', 'öffnen'))
-        if stacked and open_:
-            keys.append(('esc', 'zurück'))
-        service = self._fact('dienst')
-        blocked = self.snapshot is not None and self.snapshot.stop_blocker is not None
-        if service is not None and self.instance.unit is not None and not blocked:
-            keys.append(('s', 'stoppen' if service.level in (probes.OK, probes.WARN) else 'starten'))
-            keys.append(('r', 'neu starten'))
-        if self.selected == 'protokoll':
-            keys += [('f', 'mitlaufen ' + ('aus' if self._follow else 'an')),
-                     ('e', 'alle' if self._errors_only else 'nur Probleme')]
-        else:
-            fact = self._fact(self.selected)
-            if fact is not None and fact.command and fact.level in (probes.WARN, probes.FAIL):
-                keys.append(('a', 'Befehl ausführen'))
-            if self.selected == 'version' and self._installed():
-                keys.append(('u', 'Update'))
-            keys += [('l', 'Protokoll'), ('c', 'Konfig.')]
-        keys += [('?', 'Hilfe'), ('q', 'Ende')]
-        return keys
-
-    def _render_footer(self) -> None:
-        width = self.size.width - 2
-        text = Text()
-        for key, label in self._keys():
-            piece = Text()
-            piece.append(key, style=f'bold {ACCENT}')
-            piece.append(' ' + label + '   ', style='#9aa3ad')
-            if text.cell_len + piece.cell_len > width:
-                break
-            text.append_text(piece)
-        self.main_screen.query_one('#footer', Static).update(text)
-
-    def _render_status(self) -> None:
-        text = Text()
-        if self._busy:
-            text.append(f'{self._spinner()} {self._busy}', style=ACCENT)
-        elif self._message:
-            level, message = self._message
-            text.append(f'{symbol(level)} {message}', style=TONE[level])
-        elif self.snapshot is not None:
-            blocker = self.snapshot.stop_blocker
-            if blocker and self._fact('dienst') and self._fact('dienst').level == probes.OK:
-                text.append(f'Dienstaktionen gesperrt: {blocker}', style=MUTED)
-        self.main_screen.query_one('#status', Static).update(text)
-
-    # ------------------------------------------------------------ Inhalte
-    def _problems(self) -> list[probes.Fact]:
+    def problems(self) -> list[probes.Fact]:
         facts = list(self.snapshot.facts.values()) if self.snapshot else []
         facts += [f for k, f in self._setup_facts.items() if not self.snapshot or k not in self.snapshot.facts]
         problems = [f for f in facts if f.level in (probes.FAIL, probes.WARN)]
         return sorted(problems, key=lambda f: probes.LEVEL_ORDER[f.level])
 
-    def _overview(self) -> list:
-        parts: list = []
-        snap = self.snapshot
-        parts.append(Static(Text('Übersicht', style='bold'), classes='title'))
-        if snap is None:
-            parts.append(Static(Text('Prüfe Dienst, Kamera und Einrichtung …', style=MUTED)))
-            return parts
-        rows = [('Instanz', self.instance.label)]
-        if self.instance.url:
-            rows.append(('Werkbank', self.instance.url))
-        if self.instance.config:
-            rows.append(('Konfiguration', self.instance.config))
-        run = snap.facts.get('lauf')
-        if run is not None:
-            rows.append(('Lauf', run.value))
-        if self.instance.problem:
-            parts.append(Static(Text(self.instance.problem), classes='hint'))
-        problems = self._problems()
-        if not problems:
-            parts.append(Static(Text(f'{symbol(probes.OK)} Alles in Ordnung.', style=TONE[probes.OK]),
-                                classes='hint info'))
-        else:
-            parts.append(Static(Text(f'{len(problems)} Punkt{"e" if len(problems) != 1 else ""} '
-                                     'brauchen Aufmerksamkeit', style='bold')))
-            for fact in problems:
-                block = Text()
-                block.append(f'{symbol(fact.level)} {fact.label}', style=f'bold {TONE[fact.level]}')
-                block.append(f'  {fact.value}', style=TONE[fact.level])
-                hint = hint_block(fact)
-                if hint is not None:
-                    block.append('\n')
-                    block.append_text(hint)
-                parts.append(Static(block, classes='hint fail' if fact.level == probes.FAIL else 'hint'))
-        columns = self._card_columns(problems, len(rows))
-        if columns:
-            shown = [snap.facts[k] for k in probes.OVERVIEW if k in snap.facts]
-            signature = repr([(f.key, f.level, f.value, f.detail) for f in shown]) + f'/{columns}'
-            parts.append(Static(Text('BETRIEB', style=f'bold {MUTED}'), classes='section'))
-            parts.append(Cards([fact_card(f) for f in shown], columns, signature))
-        parts.append(Static(Text('INSTANZ', style=f'bold {MUTED}'), classes='section'))
-        parts.append(Static(kv_table(rows)))
-        return parts
+    @property
+    def blocker(self) -> str | None:
+        if self.snapshot is None:
+            return 'Laufstatus noch nicht geprüft'
+        return self.snapshot.stop_blocker
 
-    def _card_columns(self, problems: list, instance_rows: int) -> int:
-        """Spalten für die Betriebskarten, 0 wenn sie nicht ganz ins Fenster passen."""
-        views = self.main_screen.query_one('#views').size
-        width = min(110, views.width - 2)
-        if width < 56 or views.height <= 0:
-            return 0
-        columns = min(3, width // 30)
-        used = 3 + 3 + instance_rows  # Titel, Abstände, Instanz
-        for fact in problems:
-            hint = len(fact.hint or '') + len(fact.command or '') + 4
-            used += 2 + -(-hint // max(20, width - 4))
-        cards = len(probes.OVERVIEW)
-        needed = 2 + -(-cards // columns) * (CARD_ROWS + 2)
-        return columns if used + needed <= views.height else 0
+    def installed(self) -> bool:
+        root = self.instance.root or ''
+        return self.instance.kind in ('system', 'user') and Path(root).parent.name == 'releases'
 
-    def _fact_view(self, fact: probes.Fact) -> list:
-        parts: list = [Static(fact_title(fact), classes='title')]
-        hint = hint_block(fact)
-        if hint is not None:
-            cls = 'hint fail' if fact.level == probes.FAIL else ('hint' if fact.level == probes.WARN
-                                                                  else 'hint info')
-            parts.append(Static(hint, classes=cls))
-        if fact.detail:
-            parts.append(Static(kv_table(fact.detail)))
-        actions = self._fact_actions(fact)
-        if actions:
-            parts.append(Static(actions, classes='actions'))
-        return parts
+    def ascii(self) -> bool:
+        return ascii_mode()
 
-    def _fact_actions(self, fact: probes.Fact) -> Text | None:
-        text = Text()
-        if fact.key == 'dienst' and self.instance.unit is not None:
-            running = fact.level in (probes.OK, probes.WARN)
-            text.append('s', style=f'bold {ACCENT}')
-            text.append(' stoppen   ' if running else ' starten   ')
-            text.append('r', style=f'bold {ACCENT}')
-            text.append(' neu starten   ')
-            text.append('l', style=f'bold {ACCENT}')
-            text.append(' Protokoll')
-        elif fact.key == 'version' and self._installed():
-            text.append('u', style=f'bold {ACCENT}')
-            text.append(' Update aus Archiv   ')
-            if any(k == 'Vorige' for k, _ in fact.detail):
-                text.append('z', style=f'bold {ACCENT}')
-                text.append(' zurück auf vorige Version')
-        elif fact.command and fact.level in (probes.WARN, probes.FAIL):
-            text.append('a', style=f'bold {ACCENT}')
-            text.append(' Befehl ausführen (mit Rückfrage)')
-        elif fact.key == 'lauf':
-            text.append('Messläufe startet und beendet die Werkbank im Browser.', style=MUTED)
-        return text if text.plain else None
+    def _line(self, selector: str):
+        """Status-/Tastenzeile oder None (z. B. beim Beenden, wenn ein Worker spät antwortet)."""
+        found = self.main_screen.query(selector)
+        return found.first() if found else None
 
-    def _render_detail(self) -> None:
-        detail = self.main_screen.query_one('#detail', Detail)
-        if self.selected == 'uebersicht':
-            parts = self._overview()
-        else:
-            fact = self._fact(self.selected)
-            if fact is None:
-                parts = [Static(Text(self._NAV_LABELS.get(self.selected, self.selected), style='bold'),
-                                classes='title'),
-                         Static(Text('Wird geprüft …', style=MUTED))]
-            else:
-                parts = self._fact_view(fact)
-        signature = repr([getattr(p, 'signature', None) or getattr(p, 'renderable', p) for p in parts])
-        if signature == self._rendered_detail:
-            return
-        self._rendered_detail = signature
-        self.call_next(self._swap, detail, parts)
-
-    _fade_next = False
-
-    async def _swap(self, container, parts) -> None:
-        with self.batch_update():
-            await container.remove_children()
-            await container.mount_all(parts)
-        if self._fade_next:
-            self._fade_next = False
-            fade_in(container, start=0.35, duration=0.15)
-        if container.id == 'configpane' and self.selected == 'konfiguration' and self._focus_config_pending:
-            self._focus_config_pending = False
-            self._focus_config()
-
-    # ------------------------------------------------------------ Daten
-    def action_refresh(self) -> None:
-        self._collect_worker()
-
-    @work(thread=True, exclusive=True, group='collect')
-    def _collect_worker(self) -> None:
-        import time as _time
-
-        try:
-            with_setup = _time.time() - self._setup_at > SETUP_REFRESH_S or not self._setup_facts
-            snapshot = self._collect(self.instance, include_setup=with_setup)
-        except Exception as error:  # noqa: BLE001 - Anzeige statt Absturz
-            self.call_from_thread(self._show_message, probes.FAIL, f'Prüfung fehlgeschlagen: {error}')
-            return
-        self.call_from_thread(self._apply_snapshot, snapshot, with_setup)
-
-    def _apply_snapshot(self, snapshot: probes.Snapshot, with_setup: bool) -> None:
-        import time as _time
-
-        if self.snapshot is not None:
-            now = _time.monotonic()
-            for key, fact in snapshot.facts.items():
-                old = self._fact(key)
-                if old is not None and (old.level, old.value) != (fact.level, fact.value):
-                    self._changed[key] = now
-            if any(now - at < 0.1 for at in self._changed.values()):
-                self.set_timer(0.9, self._update_nav)
-                self.set_timer(1.8, self._update_nav)
-        if with_setup:
-            self._setup_facts = {k: snapshot.facts[k] for k in probes.SETUP if k in snapshot.facts}
-            self._setup_at = _time.time()
-        self.snapshot = snapshot
-        self._update_nav()
-        self._render_top()
-        self._render_status()
-        self._render_footer()
-        if self.selected not in ('protokoll', 'konfiguration'):
-            self._render_detail()
-        self._sync_spinner()
-        if self._intro_enabled and self.main_screen.query('#intro'):
-            intro = self.main_screen.query_one('#intro')
-            version = self._fact('version')
-            if version is not None:
-                intro.version = version.value
-            intro.ready(self._intro_lines())
-
-    def _show_message(self, level: str, message: str) -> None:
+    def message(self, level: str, message: str) -> None:
         self._message = (level, message)
         self._render_status()
-        self.set_timer(8 if level == probes.OK else 20, self._clear_message)
+        status = self._line('#status')
+        if status is not None:
+            fade_in(status, start=0.2, duration=0.2)
+        self.set_timer(8 if level in (probes.OK, probes.OFF) else 20, self._clear_message)
+
+    _show_message = message
 
     def _clear_message(self) -> None:
         self._message = None
         self._render_status()
 
-    # ------------------------------------------------------------ Dienst
-    def action_toggle_service(self) -> None:
-        service = self._fact('dienst')
-        if service is None:
+    def show_info(self, title: str, lines: list, choices=None, tone=None, callback=None) -> None:
+        self.push_screen(InfoScreen(title, lines, choices, tone), callback=callback)
+
+    # ------------------------------------------------------------ Abruf
+    def action_refresh(self) -> None:
+        self._collect_worker()
+
+    @work(thread=True, exclusive=True, group='collect')
+    def _collect_worker(self) -> None:
+        try:
+            with_setup = time.time() - self._setup_at > SETUP_REFRESH_S or not self._setup_facts
+            snapshot = self._collect(self.instance, include_setup=with_setup)
+            metrics = self._metrics_source()
+        except Exception as error:  # noqa: BLE001 - Anzeige statt Absturz
+            self.call_from_thread(self.message, probes.FAIL, f'Prüfung fehlgeschlagen: {error}')
             return
-        self._service('stop' if service.level in (probes.OK, probes.WARN) else 'start')
+        self.call_from_thread(self._apply_snapshot, snapshot, with_setup, metrics)
 
-    def action_restart(self) -> None:
-        self._service('restart')
+    def _apply_snapshot(self, snapshot: probes.Snapshot, with_setup: bool, metrics: dict | None = None) -> None:
+        if with_setup:
+            self._setup_facts = {k: snapshot.facts[k] for k in probes.SETUP if k in snapshot.facts}
+            self._setup_at = time.time()
+        self.snapshot = snapshot
+        if metrics is not None:
+            self.metrics = metrics
+        self._render_status()
+        self._sync_spinner()
+        self._update_views()
+        if self._intro_enabled and self.main_screen.query('#intro'):
+            intro = self.main_screen.query_one('#intro')
+            version = self.fact('version')
+            if version is not None:
+                intro.version = version.value
+            intro.ready(self._intro_lines())
+        else:
+            self._maybe_alert()
 
+    def _update_views(self) -> None:
+        self.view().update_view()
+        if self.current != 'dashboard':
+            self.view('dashboard').update_view()
+        self.refresh_footer()
+
+    @work(thread=True, exclusive=True, group='storage')
+    def _storage_worker(self) -> None:
+        try:
+            usage = self._storage_source(self.instance)
+        except Exception:  # noqa: BLE001 - nur Anzeige
+            return
+        self.call_from_thread(self._apply_extra, 'storage', usage)
+
+    @work(thread=True, exclusive=True, group='network')
+    def _network_worker(self) -> None:
+        try:
+            info = self._network_source()
+        except Exception:  # noqa: BLE001 - nur Anzeige
+            return
+        self.call_from_thread(self._apply_extra, 'network', info)
+
+    def _apply_extra(self, name: str, value) -> None:
+        setattr(self, name, value)
+        self.view().update_view()
+
+    # ------------------------------------------------------------ Fehler-Popups
+    ALERTS = {
+        'dienst': ('Die Werkbank ist ausgefallen',
+                   'Der Dienst läuft nicht mehr. Browser und Windows-Brücke erreichen den Pi nicht; ein '
+                   'laufender Messlauf ist damit beendet.',
+                   [Choice('Protokoll ansehen', 'protokoll', primary=True), Choice('Neu starten', 'restart'),
+                    Choice('Schließen', 'close')]),
+        'kamera': ('Kamera-Fehler',
+                   'Die Werkbank bekommt keine Bilder. Ohne Kamera kann sie nicht lesen.',
+                   [Choice('Kamera neu starten', 'camera', primary=True), Choice('Kamera-Tab', 'kamera'),
+                    Choice('Schließen', 'close')]),
+        'ausgabe': ('Ausgabe-Fehler',
+                    'Die Werte erreichen GSVmulti nicht. Der Lauf zeichnet weiter auf, sendet aber nicht.',
+                    [Choice('Ausgabe-Tab', 'ausgabe', primary=True), Choice('Protokoll ansehen', 'protokoll'),
+                     Choice('Schließen', 'close')]),
+        'lauf': ('Lauf-Fehler',
+                 'Der Lauf meldet einen Fehler. Details und Abhilfe in der Werkbank im Browser.',
+                 [Choice('Lauf-Tab', 'lauf', primary=True), Choice('Protokoll ansehen', 'protokoll'),
+                  Choice('Schließen', 'close')]),
+    }
+
+    def _maybe_alert(self) -> None:
+        if not self._popups or self.snapshot is None or len(self.screen_stack) > 1:
+            return
+        if self.main_screen.query('#intro'):
+            return
+        for key in ALERT_FACTS:
+            fact = self.snapshot.facts.get(key)
+            if fact is None:
+                continue
+            state = (fact.level, fact.value)
+            previous = self._alerted.get(key)
+            self._alerted[key] = state
+            if fact.level != probes.FAIL or previous == state:
+                continue
+            title, meaning, choices = self.ALERTS[key]
+            lines = [Text(f'{symbol(fact.level)} {fact.label}: {fact.value}', style=f'bold {TONE[fact.level]}'),
+                     meaning]
+            if fact.hint:
+                lines.append(fact.hint)
+            self.show_info(title, lines, choices, tone='fail', callback=self._alert_choice)
+            return
+
+    def _alert_choice(self, value: str | None) -> None:
+        if value in (None, 'close'):
+            return
+        if value == 'restart':
+            self.service_action('restart')
+        elif value == 'camera':
+            self.camera_restart()
+        else:
+            self.open_tab(value)
+
+    # ------------------------------------------------------------ Dienst
     @work(exclusive=True, group='service')
-    async def _service(self, action: str) -> None:
+    async def service_action(self, action: str) -> None:
         from . import service
 
         if self.instance.unit is None or self._busy:
@@ -1039,29 +671,30 @@ class PicamApp(App[int]):
         try:
             plan = service.plan(action, self.instance, self.snapshot)
         except ValueError as error:
-            self._show_message(probes.FAIL, str(error))
+            self.message(probes.FAIL, str(error))
             return
         title, label = SERVICE_WORDS[action]
         lines = []
         if action in ('stop', 'restart'):
             lines.append('Die Werkbank ist danach kurz nicht erreichbar; verbundene Browser und die '
                          'Brücke verbinden sich neu.')
+        if action == 'stop':
+            lines.append('Gestoppt bleibt sie aus, bis jemand sie wieder startet.')
         if plan.note:
             lines.append(plan.note)
         ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
             title, lines, plan.shell(), label, danger=action == 'stop', blocker=plan.blocker)))
         if not ok:
             return
-        needs_terminal = any(cmd and cmd[0] == 'sudo' for cmd in plan.commands)
-        if needs_terminal:
+        if any(cmd and cmd[0] == 'sudo' for cmd in plan.commands):
             with self.suspend():
                 print(f'\n{title} – sudo fragt gegebenenfalls nach dem Passwort.\n')
                 result = service.execute(plan, self.instance, interactive=True, run=self._service_runner,
                                          recheck=self._recheck)
             self._finish_service(result)
         else:
-            self._busy = {'start': 'starte Dienst, warte auf HTTPS', 'stop': 'stoppe Dienst',
-                          'restart': 'starte Dienst neu, warte auf HTTPS'}[action]
+            self._busy = {'start': 'starte Werkbank, warte auf HTTPS', 'stop': 'stoppe Werkbank',
+                          'restart': 'starte Werkbank neu, warte auf HTTPS'}[action]
             self._sync_spinner()
             self._render_status()
             self._service_thread(plan)
@@ -1081,19 +714,78 @@ class PicamApp(App[int]):
         ok, message = result
         self._busy = None
         self._sync_spinner()
-        self._show_message(probes.OK if ok else probes.FAIL, message)
+        self.message(probes.OK if ok else probes.FAIL, message)
         self._setup_at = 0.0
         self.action_refresh()
 
+    # ------------------------------------------------------------ Steuerungsbefehle
+    @work(exclusive=True, group='socket')
+    async def socket_action(self, op: str, title: str, lines: list[str], label: str, *, danger: bool = False,
+                            guarded: bool = True, done: str = 'Erledigt.') -> None:
+        """Steuerungsbefehl der Werkbank nach Bestätigung (``guarded``: gesperrt wie Dienstaktionen)."""
+        ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
+            title, lines, [f'Steuerung: {op}'], label, danger=danger,
+            blocker=self.blocker if guarded else None)))
+        if not ok:
+            return
+        self._busy = title
+        self._sync_spinner()
+        self._render_status()
+        self._socket_thread(op, done, guarded)
+
+    @work(thread=True, exclusive=True, group='socket-run')
+    def _socket_thread(self, op: str, done: str, guarded: bool) -> None:
+        if guarded:
+            blocker = self._recheck()
+            if blocker:
+                self.call_from_thread(self._finish_socket, False, f'Abgebrochen: {blocker}')
+                return
+        try:
+            reply = self._socket(self.instance.socket, op, timeout=20.0)
+        except Exception as error:  # noqa: BLE001
+            reply = {'error': str(error)}
+        if not isinstance(reply, dict):
+            self.call_from_thread(self._finish_socket, False, 'Steuerung nicht erreichbar.')
+        elif reply.get('error'):
+            self.call_from_thread(self._finish_socket, False, str(reply['error']))
+        else:
+            self.call_from_thread(self._finish_socket, True, done)
+
+    def _finish_socket(self, ok: bool, text: str) -> None:
+        self._busy = None
+        self._sync_spinner()
+        self.message(probes.OK if ok else probes.FAIL, text)
+        self.action_refresh()
+
+    def camera_connect(self) -> None:
+        self.socket_action('live.camera', 'Kamera verbinden',
+                           ['Öffnet die Kamera, falls sie gerade nicht läuft (z. B. nach dem Einstecken).'],
+                           'Verbinden', guarded=False, done='Kamera wird verbunden.')
+
+    def camera_restart(self) -> None:
+        self.socket_action('live.camera.restart', 'Kamera neu starten',
+                           ['Schließt die Kamera und öffnet sie neu. Die Vorschau im Browser setzt kurz aus.',
+                            'Hilft, wenn die Kamera hängt oder nach dem Umstecken keine Bilder liefert.'],
+                           'Neu starten', done='Kamera neu gestartet.')
+
+    def bridge_prepare(self) -> None:
+        self.socket_action('bridge.prepare-uart', 'Brücke: UART-Empfang vorbereiten',
+                           ['Öffnet den UART-Empfang für die Windows-Brücke, damit sie Werte über das '
+                            'Kabel bekommt. Ein Laufstart mit anderer Ausgabe beendet ihn wieder.'],
+                           'Vorbereiten', guarded=False, done='UART-Empfang vorbereitet.')
+
+    def bridge_stop(self) -> None:
+        self.socket_action('bridge.stop-uart', 'Brücke: UART-Empfang beenden',
+                           ['Schließt den vorbereiteten UART-Empfang der Brücke.'],
+                           'Beenden', danger=True, done='UART-Empfang beendet.')
+
     # ------------------------------------------------------------ Abhilfe
     @work(exclusive=True, group='fix')
-    async def action_run_fix(self) -> None:
-        fact = self._fact(self.selected)
-        if fact is None or not fact.command or fact.level not in (probes.WARN, probes.FAIL):
+    async def run_fix(self, fact: probes.Fact) -> None:
+        if not fact.command:
             return
         ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
-            f'{fact.label}: Befehl ausführen', [fact.hint] if fact.hint else [], [fact.command],
-            'Ausführen')))
+            f'{fact.label}: Befehl ausführen', [fact.hint] if fact.hint else [], [fact.command], 'Ausführen')))
         if not ok:
             return
         with self.suspend():
@@ -1106,16 +798,11 @@ class PicamApp(App[int]):
                 input()
             except EOFError:
                 pass
-        self._show_message(probes.OK if code == 0 else probes.FAIL,
-                           f'{fact.command} → Exit {code}')
+        self.message(probes.OK if code == 0 else probes.FAIL, f'{fact.command} → Exit {code}')
         self._setup_at = 0.0
         self.action_refresh()
 
-    # ------------------------------------------------------------ Update
-    def _installed(self) -> bool:
-        root = self.instance.root or ''
-        return self.instance.kind in ('system', 'user') and Path(root).parent.name == 'releases'
-
+    # ------------------------------------------------------------ Update, Deinstallation
     def _newest_archive(self) -> str:
         candidates = []
         for base in (Path.home(), Path.home() / 'Downloads', Path.cwd()):
@@ -1125,10 +812,16 @@ class PicamApp(App[int]):
                 continue
         return str(max(candidates, key=lambda p: p.stat().st_mtime)) if candidates else ''
 
-    def _run_cli(self, argv: list[str], title: str) -> int:
+    def run_cli(self, argv: list[str], title: str) -> int:
         command = [sys.executable, '-m', 'dispread.admin.cli', *argv]
         if self.instance.config:
             command[3:3] = ['--config', self.instance.config]
+        return self.run_in_terminal(command, title)
+
+    _run_cli = run_cli
+
+    def run_in_terminal(self, command: list[str], title: str) -> int:
+        """Befehl im normalen Terminal ausführen (Konsole pausiert), danach Enter."""
         with self.suspend():
             print(f'\n{title}\n')
             code = subprocess.call(command)
@@ -1140,16 +833,17 @@ class PicamApp(App[int]):
         return code
 
     @work(exclusive=True, group='update')
-    async def action_update(self) -> None:
-        if self.selected != 'version' or not self._installed():
+    async def start_update(self) -> None:
+        if not self.installed():
             return
-        if self.snapshot is not None and self.snapshot.stop_blocker:
-            self._show_message(probes.WARN, f'Update gesperrt: {self.snapshot.stop_blocker}')
+        if self.blocker:
+            self.message(probes.WARN, f'Update gesperrt: {self.blocker}')
             return
         source = await self.push_screen_wait(AskScreen(
             'Update installieren',
-            ['Neue Version wird neben der laufenden vorbereitet und geprüft, dann umgeschaltet und der '
-             'Dienst neu gestartet. Antwortet sie nicht, schaltet picam auf die jetzige zurück.',
+            ['Neue Version wird neben der laufenden vorbereitet und geprüft (eigene Umgebung, Selbsttest), '
+             'dann umgeschaltet und der Dienst neu gestartet. Antwortet sie nicht, schaltet picam auf die '
+             'jetzige zurück. Daten, Einstellungen und Kopplungen bleiben.',
              'Pfad oder HTTPS-Adresse des Releasearchivs:'],
             value=self._newest_archive(), placeholder='/home/…/picam-1.1.0.tar.gz'))
         if not source:
@@ -1159,42 +853,91 @@ class PicamApp(App[int]):
             [f'picam update --source {shlex.quote(source)}'], 'Installieren')))
         if not ok:
             return
-        code = self._run_cli(['update', '--source', source, '--yes'], 'picam update')
-        self._after_update(code)
+        self._after_update(self.run_cli(['update', '--source', source, '--yes'], 'picam update'))
 
     @work(exclusive=True, group='update')
-    async def action_rollback(self) -> None:
-        fact = self._fact('version')
-        if self.selected != 'version' or not self._installed() or fact is None:
+    async def start_rollback(self) -> None:
+        fact = self.fact('version')
+        if not self.installed() or fact is None:
             return
         previous = dict(fact.detail).get('Vorige')
         if not previous:
-            self._show_message(probes.OFF, 'Keine vorige Version vorhanden.')
+            self.message(probes.OFF, 'Keine vorige Version vorhanden.')
             return
         ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
             f'Zurück auf {previous}', ['Schaltet auf die vorige Version um und startet den Dienst neu.'],
-            ['picam update --rollback'], 'Zurückschalten', blocker=self.snapshot.stop_blocker
-            if self.snapshot else None)))
+            ['picam update --rollback'], 'Zurückschalten', blocker=self.blocker)))
         if ok:
-            self._after_update(self._run_cli(['update', '--rollback', '--yes'], 'picam update --rollback'))
+            self._after_update(self.run_cli(['update', '--rollback', '--yes'], 'picam update --rollback'))
 
     def _after_update(self, code: int) -> None:
         from .instance import discover
 
         self.instance = discover(self.instance.config)
         self._setup_at = 0.0
-        self._show_message(probes.OK if code == 0 else probes.FAIL,
-                           'Update abgeschlossen.' if code == 0 else f'Update nicht abgeschlossen (Exit {code}).')
+        self.message(probes.OK if code == 0 else probes.FAIL,
+                     'Update abgeschlossen.' if code == 0 else f'Update nicht abgeschlossen (Exit {code}).')
         self.action_refresh()
+
+    def _uninstall_command(self) -> list[str]:
+        script = Path(self.instance.root or '') / 'install.sh'
+        command = [str(script), '--uninstall', '--mode', 'system' if self.instance.scope == 'system' else 'user']
+        if self.instance.scope == 'system' and os.geteuid() != 0:
+            command.insert(0, 'sudo')
+        return command
+
+    def uninstall_blocker(self) -> str | None:
+        if not self.installed():
+            return 'nur für eine installierte Werkbank'
+        if not (Path(self.instance.root or '') / 'install.sh').is_file():
+            return 'install.sh fehlt in der aktiven Version'
+        return self.blocker
+
+    @work(exclusive=True, group='uninstall')
+    async def start_uninstall(self) -> None:
+        blocker = self.uninstall_blocker()
+        if blocker:
+            self.message(probes.WARN, f'Deinstallieren: {blocker}')
+            return
+        command = self._uninstall_command()
+        ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
+            'Werkbank deinstallieren',
+            ['Stoppt den Dienst und entfernt Dienst, Programmversionen und den Befehl picam.',
+             'Läufe, Einstellungen, Kopplungen und Kalibrierung bleiben erhalten (eine Neuinstallation '
+             'findet sie wieder). Endgültig löschen nur im Terminal mit --purge-data.',
+             'Zuerst zeigt der Installer den genauen Plan; erst danach wird gefragt.'],
+            [' '.join(shlex.quote(c) for c in command)], 'Plan zeigen', danger=True)))
+        if not ok:
+            return
+        with self.suspend():
+            print('\nDeinstallation – Plan:\n')
+            subprocess.call(command)
+            try:
+                answer = input('\nJetzt so deinstallieren? Tippe „deinstallieren“ zum Bestätigen: ').strip()
+            except EOFError:
+                answer = ''
+            code = None
+            if answer == 'deinstallieren':
+                code = subprocess.call([*command, '--apply'])
+                print(f'\nExit {code}.')
+            else:
+                print('\nNicht deinstalliert.')
+            try:
+                input('Enter drücken …')
+            except EOFError:
+                pass
+        if code == 0:
+            self.exit(0)  # Programm und Befehl sind entfernt: Konsole beenden
+        elif code is not None:
+            self.message(probes.FAIL, f'Deinstallation nicht abgeschlossen (Exit {code}).')
 
     # ------------------------------------------------------------ Protokoll
     def _start_log(self) -> None:
         if self._log_thread is not None and self._log_thread.is_alive():
             return
-        log = self.main_screen.query_one('#log', RichLog)
-        log.clear()
-        self.main_screen.query_one('#tail-log', RichLog).clear()
-        self._log_lines.clear()
+        self.view('protokoll').clear_log()
+        self.view('dashboard').clear_log()
+        self.log_lines.clear()
         self._log_thread = threading.Thread(target=self._log_reader, daemon=True)
         self._log_thread.start()
 
@@ -1222,7 +965,7 @@ class PicamApp(App[int]):
             for line in service.parse_journal(raw):
                 self.call_from_thread(self._add_log, line)
 
-    def _log_text(self, line) -> Table:
+    def log_row(self, line) -> Table:
         style = {'fehler': TONE[probes.FAIL], 'warnung': TONE[probes.WARN], 'debug': MUTED}.get(line.level, '')
         row = Table.grid(padding=(0, 2), expand=True)
         row.add_column(width=8, style=MUTED, no_wrap=True)
@@ -1231,222 +974,16 @@ class PicamApp(App[int]):
         return row
 
     def _add_log(self, line) -> None:
-        self._log_lines.append(line)
-        if len(self._log_lines) > LOG_LIMIT:
-            del self._log_lines[: len(self._log_lines) - LOG_LIMIT]
-        self.main_screen.query_one('#tail-log', RichLog).write(self._log_text(line), scroll_end=True)
-        if self._errors_only and line.level not in ('fehler', 'warnung'):
-            return
-        log = self.main_screen.query_one('#log', RichLog)
-        log.write(self._log_text(line), scroll_end=self._follow)
+        self.log_lines.append(line)
+        if len(self.log_lines) > LOG_LIMIT:
+            del self.log_lines[: len(self.log_lines) - LOG_LIMIT]
+        row = self.log_row(line)
+        self.view('dashboard').add_log(row)
+        self.view('protokoll').add_log(line, row)
 
-    def _render_tail_head(self) -> None:
-        head = Text()
-        head.append('LETZTE MELDUNGEN', style=f'bold {MUTED}')
-        head.append('   ')
-        head.append('l', style=f'bold {ACCENT}')
-        head.append(' ganzes Protokoll', style=MUTED)
-        self.main_screen.query_one('#tail-head', Static).update(head)
-
-    def _render_log_head(self) -> None:
-        head = Text()
-        head.append('Protokoll', style='bold')
-        unit = self.instance.unit or '–'
-        head.append(f'   {unit}', style=MUTED)
-        state = []
-        state.append('läuft mit' if self._follow else 'angehalten')
-        if self._errors_only:
-            state.append('nur Warnungen und Fehler')
-        head.append('   ' + ' · '.join(state), style=ACCENT if self._follow else TONE[probes.WARN])
-        self.main_screen.query_one('#log-head', Static).update(head)
-
-    def action_toggle_follow(self) -> None:
-        if self.selected != 'protokoll':
-            return
-        self._follow = not self._follow
-        log = self.main_screen.query_one('#log', RichLog)
-        log.auto_scroll = self._follow
-        if self._follow:
-            log.scroll_end(animate=False)
-        self._render_log_head()
-        self._render_footer()
-
-    def action_toggle_errors(self) -> None:
-        if self.selected != 'protokoll':
-            return
-        self._errors_only = not self._errors_only
-        log = self.main_screen.query_one('#log', RichLog)
-        log.clear()
-        for line in self._log_lines:
-            if not self._errors_only or line.level in ('fehler', 'warnung'):
-                log.write(self._log_text(line), scroll_end=False)
-        if self._follow:
-            log.scroll_end(animate=False)
-        self._render_log_head()
-        self._render_footer()
-
-    # ------------------------------------------------------------ Konfiguration
-    def _render_config(self) -> None:
-        from . import configedit
-
-        pane = self.main_screen.query_one('#configpane', ConfigPane)
-        parts: list = [Static(Text('Konfiguration', style='bold'), classes='title')]
-        inst = self.instance
-        if inst.config is None:
-            parts.append(Static(Text('Entwicklungsbetrieb: Werte stammen aus dem Startbefehl des Dienstes '
-                                     '(scripts/werkbank-dienst.sh). Eine installierte Werkbank hat dafür '
-                                     'eine config.toml, die hier änderbar ist.'), classes='hint info'))
-            rows = [('Adresse', inst.host or '–'), ('Port', str(inst.port or '–')),
-                    ('Steuerung', inst.socket or '–'), ('Daten', inst.data or '–'),
-                    ('Laufdaten', inst.live_data or '–'), ('Brücke', inst.bridge_directory or '–'),
-                    ('Code', inst.root or '–')]
-            parts.append(Static(kv_table(rows)))
-        else:
-            rows = [('Datei', inst.config), ('Adresse', inst.host or '–'), ('Anmeldung', inst.pam_user or '–'),
-                    ('Daten', inst.data or '–'), ('Laufdaten', inst.live_data or '–')]
-            parts.append(Static(kv_table(rows)))
-            parts.append(Static('Die Adresse steht im Zertifikat und in den Kopplungen und wird nur '
-                                'bei einer Neuinstallation gewählt.', classes='note'))
-            labels = {'port': 'Port der Werkbank (1–65535)', 'bridge_name': 'Name des Pi in der Windows-Brücke',
-                      'bridge_discovery': 'Im Netzwerk ankündigen (Windows-App findet den Pi selbst)'}
-            for key in configedit.EDITABLE:
-                label = labels[key]
-                current = getattr(inst, key)
-                field = Vertical(classes='field')
-                field.compose_add_child(Static(label, classes='field-label'))
-                if key == 'bridge_discovery':
-                    field.compose_add_child(Checkbox('angekündigt', value=bool(current), id=f'cfg-{key}'))
-                else:
-                    field.compose_add_child(Input(value='' if current is None else str(current),
-                                                  id=f'cfg-{key}', placeholder='nicht gesetzt'))
-                parts.append(field)
-            parts.append(Button('Änderung prüfen …', id='config-check'))
-        self.call_next(self._swap, pane, parts)
-
-    _focus_config_pending = False
-
-    def _request_config_focus(self) -> None:
-        self._focus_config_pending = True
-        self.call_after_refresh(self._focus_config_if_ready)
-
-    def _focus_config_if_ready(self) -> None:
-        if self.main_screen.query('#cfg-port'):
-            self._focus_config_pending = False
-            self._focus_config()
-
-    def _focus_config(self) -> None:
-        try:
-            self.main_screen.query_one('#cfg-port', Input).focus()
-        except Exception:  # noqa: BLE001 - keine Felder (Entwicklungsbetrieb)
-            pass
-
-    @on(Button.Pressed, '#config-check')
-    def _config_check(self) -> None:
-        self._config_flow()
-
-    @work(exclusive=True, group='config')
-    async def _config_flow(self) -> None:
-        from . import configedit
-
-        inst = self.instance
-        if inst.config is None:
-            return
-        proposals = []
-        for key in configedit.EDITABLE:
-            widget = self.main_screen.query_one(f'#cfg-{key}')
-            raw = ('true' if widget.value else 'false') if isinstance(widget, Checkbox) else widget.value
-            current = getattr(inst, key)
-            if key != 'bridge_discovery' and raw.strip() == ('' if current is None else str(current)):
-                continue
-            if key == 'bridge_discovery' and bool(widget.value) == bool(current):
-                continue
-            proposals.append((key, raw))
-        if not proposals:
-            self._show_message(probes.OFF, 'Keine Änderung.')
-            return
-        text_lines, commands = [], []
-        try:
-            new_text = None
-            for key, raw in proposals:
-                new_text, changes = configedit.propose(inst.config, key, raw)
-                text_lines += [c.text for c in changes]
-                commands.append(f'picam config set {key} {shlex.quote(raw)}')
-                if len(proposals) > 1:
-                    break
-        except (ValueError, OSError) as error:
-            self._show_message(probes.FAIL, str(error))
-            return
-        if len(proposals) > 1:
-            self._show_message(probes.WARN, 'Bitte ein Feld nach dem anderen ändern.')
-            return
-        writable = os.access(inst.config, os.W_OK)
-        lines = text_lines + ['Wirksam nach einem Neustart des Dienstes (r).']
-        if not writable:
-            lines.append('Die Datei gehört root: picam führt die Änderung mit sudo aus.')
-        ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
-            'Konfiguration ändern', lines, commands if not writable else [], 'Übernehmen')))
-        if not ok:
-            return
-        key, raw = proposals[0]
-        if writable:
-            try:
-                configedit.apply(inst.config, new_text)
-            except OSError as error:
-                self._show_message(probes.FAIL, str(error))
-                return
-            code = 0
-        else:
-            command = ['sudo', sys.executable, '-m', 'dispread.admin.cli', '--config', inst.config,
-                       'config', 'set', key, raw, '--yes']
-            with self.suspend():
-                code = subprocess.call(command)
-        if code == 0:
-            from .instance import discover
-
-            self.instance = discover(inst.config)
-            self._render_config()
-            self._show_message(probes.OK, 'Gespeichert. Mit r neu starten, damit es wirkt.')
-        else:
-            self._show_message(probes.FAIL, f'Nicht gespeichert (Exit {code}).')
-
-    # ------------------------------------------------------------ Tasten
-    def action_show(self, key: str) -> None:
-        nav = self.main_screen.query_one('#nav', OptionList)
-        try:
-            nav.highlighted = nav.get_option_index(key)
-        except Exception:  # noqa: BLE001
-            return
-        self.selected = key
-        if self.main_screen.has_class('stacked'):
-            self.main_screen.add_class('open')
-        self._render_footer()
-        if key == 'konfiguration':
-            self._request_config_focus()
-
-    def action_go_back(self) -> None:
-        if self.main_screen.has_class('stacked') and self.main_screen.has_class('open'):
-            self.main_screen.remove_class('open')
-            self.main_screen.query_one('#nav', OptionList).focus()
-            self._render_footer()
-        elif self.focused is not None and self.focused.id != 'nav':
-            self.main_screen.query_one('#nav', OptionList).focus()
-
-    def action_nav_down(self) -> None:
-        if isinstance(self.focused, Input):
-            return
-        self.main_screen.query_one('#nav', OptionList).action_cursor_down()
-
-    def action_nav_up(self) -> None:
-        if isinstance(self.focused, Input):
-            return
-        self.main_screen.query_one('#nav', OptionList).action_cursor_up()
-
+    # ------------------------------------------------------------ Sonstiges
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
-
-    def action_open_url(self) -> None:
-        if self.instance.url:
-            self._show_message(probes.OK, self.instance.url)
 
     def action_quit_app(self) -> None:
         self._stop_log()

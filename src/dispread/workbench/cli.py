@@ -27,59 +27,54 @@ async def request(op, args=None, socket_path=None):
             return data
 
 
-def init_tls(directory, host):
+TLS_DAYS = 365
+TLS_SUBJECT = "/CN=dispread-workbench"
+
+
+def _host_san(host):
     import ipaddress
 
     if not host or not host.strip():
         raise ValueError('Adresse angeben, unter der Windows den Pi erreicht (--host <adresse>)')
     try:
         ipaddress.ip_address(host)
-        san = "IP:" + host
+        return "IP:" + host
     except ValueError:
         if not all(c.isalnum() or c in ".-" for c in host):
             raise ValueError("Ungueltiger Hostname") from None
-        san = "DNS:" + host
+        return "DNS:" + host
+
+
+def _openssl_certificate(key_args, cert, san, days=TLS_DAYS):
+    """Selbstsigniertes Zertifikat wie bei init-tls; ``key_args`` waehlt neuen oder vorhandenen Schluessel."""
+    subprocess.run(
+        ["openssl", "req", "-x509", *key_args, "-days", str(days), "-out", str(cert),
+         "-subj", TLS_SUBJECT, "-addext", f"subjectAltName={san}"],
+        check=True,
+    )
+
+
+def init_tls(directory, host):
+    san = _host_san(host)
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     cert, key = directory / "cert.pem", directory / "key.pem"
     if cert.exists() or key.exists():
         raise ValueError("Zertifikat/Schluessel existiert bereits; nicht ueberschrieben")
-    subprocess.run(
-        [
-            "openssl",
-            "req",
-            "-x509",
-            "-newkey",
-            "rsa:3072",
-            "-nodes",
-            "-days",
-            "365",
-            "-keyout",
-            str(key),
-            "-out",
-            str(cert),
-            "-subj",
-            "/CN=dispread-workbench",
-            "-addext",
-            f"subjectAltName={san},DNS:localhost,IP:127.0.0.1",
-        ],
-        check=True,
-    )
+    _openssl_certificate(["-newkey", "rsa:3072", "-nodes", "-keyout", str(key)], cert,
+                         f"{san},DNS:localhost,IP:127.0.0.1")
     key.chmod(0o600)
     print(f"Zertifikat: {cert}\nVor Anmeldung auf Windows vertrauen. Fingerabdruck:")
     subprocess.run(["openssl", "x509", "-in", str(cert), "-noout", "-fingerprint", "-sha256"], check=True)
 
 
-def show_tls(directory):
-    """SANs und Ablaufzeit lesen, auch ohne Zugriff auf den privaten Schluessel."""
+def _san_entries(cert):
     from cryptography import x509
 
-    cert_path = Path(directory) / 'cert.pem'
-    cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
     try:
         names = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
     except x509.ExtensionNotFound:
-        names = []
+        return []
     san = []
     for name in names:
         if isinstance(name, x509.DNSName):
@@ -88,7 +83,86 @@ def show_tls(directory):
             san.append(f'IP:{name.value}')
         elif isinstance(name, x509.UniformResourceIdentifier):
             san.append(f'URI:{name.value}')
-    print(json.dumps({'certificate': str(cert_path), 'san': san,
+    return san
+
+
+def renew_tls(directory, host=None, days=TLS_DAYS, *, now=None):
+    """Zertifikat von init-tls mit DEMSELBEN Schluessel neu ausstellen.
+
+    Das alte ``cert.pem`` bleibt als ``cert.pem.bak-<UTC-Zeit>`` erhalten,
+    ``key.pem`` wird nicht veraendert. SAN: ``--host`` plus localhost und
+    127.0.0.1, sonst die DNS-/IP-Eintraege des alten Zertifikats. Der
+    SHA-256-Fingerabdruck aendert sich trotzdem: Browser muessen dem neuen
+    Zertifikat erneut vertrauen. Fuer die Brueckenidentitaet nicht zustaendig.
+    """
+    import stat
+    import tempfile
+    from datetime import UTC, datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    directory = Path(directory)
+    cert, key = directory / "cert.pem", directory / "key.pem"
+    for path in (directory, cert, key):
+        if path.is_symlink():
+            raise ValueError(f"{path} ist ein Symlink; nicht erneuert")
+    if not cert.is_file():
+        raise ValueError(f"{cert} fehlt; zuerst init-tls")
+    if not key.is_file():
+        raise ValueError(f"{key} fehlt. Ohne eigenen Schluessel ist {cert} vermutlich der Export der "
+                         "Brueckenidentitaet; deren Erneuerung bricht die Windows-Kopplung und ist hier nicht moeglich")
+    old = x509.load_pem_x509_certificate(cert.read_bytes())
+    private = serialization.load_pem_private_key(key.read_bytes(), password=None)
+    if not isinstance(private, rsa.RSAPrivateKey):
+        raise ValueError("Schluessel ist kein RSA-Schluessel; nicht erneuert")
+    if private.public_key().public_numbers() != old.public_key().public_numbers():
+        raise ValueError("cert.pem und key.pem passen nicht zusammen; nicht erneuert")
+    if host is not None:
+        san = f"{_host_san(host)},DNS:localhost,IP:127.0.0.1"
+    else:
+        entries = [entry for entry in _san_entries(old) if entry.startswith(("DNS:", "IP:"))]
+        if not entries:
+            raise ValueError("Altes Zertifikat ohne DNS-/IP-SAN; --host angeben")
+        san = ",".join(entries)
+    stamp = (now or datetime.now(UTC)).strftime("%Y%m%dT%H%M%SZ")
+    backup = directory / f"cert.pem.bak-{stamp}"
+    mode = stat.S_IMODE(cert.stat().st_mode)
+    fd, temporary = tempfile.mkstemp(prefix=".cert-", suffix=".pem", dir=directory)
+    os.close(fd)
+    try:
+        _openssl_certificate(["-new", "-key", str(key)], temporary, san, days)
+        new = x509.load_pem_x509_certificate(Path(temporary).read_bytes())
+        if new.public_key().public_numbers() != old.public_key().public_numbers():
+            raise ValueError("Neues Zertifikat traegt einen anderen Schluessel; nicht uebernommen")
+        os.chmod(temporary, mode)
+        # Sicherung exklusiv anlegen: eine vorhandene gleichnamige Sicherung bleibt unangetastet.
+        with open(cert, "rb") as source, open(backup, "xb") as target:
+            target.write(source.read())
+            target.flush()
+            os.fsync(target.fileno())
+        os.chmod(backup, mode)
+        os.replace(temporary, cert)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    result = {"certificate": str(cert), "backup": str(backup), "key_unchanged": str(key),
+              "san": _san_entries(new), "not_after_utc": new.not_valid_after_utc.isoformat(),
+              "certificate_sha256": new.fingerprint(hashes.SHA256()).hex(),
+              "previous_certificate_sha256": old.fingerprint(hashes.SHA256()).hex(), "time_basis": "UTC",
+              "notes": ["Fingerabdruck geaendert: Browser/Windows muessen dem neuen Zertifikat erneut vertrauen.",
+                        "Laufende Werkbank liest das Zertifikat erst nach einem Neustart."]}
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return result
+
+
+def show_tls(directory):
+    """SANs und Ablaufzeit lesen, auch ohne Zugriff auf den privaten Schluessel."""
+    from cryptography import x509
+
+    cert_path = Path(directory) / 'cert.pem'
+    cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+    print(json.dumps({'certificate': str(cert_path), 'san': _san_entries(cert),
                       'not_after_utc': cert.not_valid_after_utc.isoformat(), 'time_basis': 'UTC'}, indent=2))
 
 
@@ -212,6 +286,11 @@ def parser():
     tls.add_argument("--directory", default=str(TLS_DIR))
     tls.add_argument("--host", help="Adresse, unter der Windows den Pi erreicht; bei Erzeugung erforderlich")
     tls.add_argument("--show", action="store_true", help="SAN-Adressen und Ablaufdatum des vorhandenen Zertifikats anzeigen")
+    renew = sub.add_parser("renew-tls", help="Zertifikat von init-tls mit demselben Schluessel neu ausstellen; "
+                                             "altes cert.pem bleibt als Sicherung. Nicht fuer die Brueckenidentitaet")
+    renew.add_argument("--directory", default=str(TLS_DIR))
+    renew.add_argument("--host", help="Neue Adresse fuer den SAN; sonst DNS-/IP-SAN des alten Zertifikats")
+    renew.add_argument("--days", type=positive_days, default=TLS_DAYS)
     bridge = sub.add_parser("bridge", help="Pi-Identitaet und lokale Kopplung ohne Messstart")
     bridge_sub = bridge.add_subparsers(dest="action", required=True)
     for action in ('prepare-uart', 'stop-uart', 'status'):
@@ -255,6 +334,9 @@ def main(argv=None):
                 show_tls(args.directory)
             else:
                 init_tls(args.directory, args.host)
+            return 0
+        if args.command == "renew-tls":
+            renew_tls(args.directory, args.host, args.days)
             return 0
         if args.command == "tui":
             from .tui import WorkbenchTUI

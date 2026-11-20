@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from cryptography import x509
@@ -91,3 +92,68 @@ def test_live_status_uses_selected_socket(monkeypatch, capsys):
     assert cli.main(['live', 'status', '--socket', '/tmp/example/control.sock']) == 0
     assert calls == [('live.status', {}, '/tmp/example/control.sock')]
     assert json.loads(capsys.readouterr().out) == {'state': 'idle'}
+
+
+def _fingerprint_and_key(directory):
+    cert = x509.load_pem_x509_certificate((directory / 'cert.pem').read_bytes())
+    return cert, cert.public_key().public_numbers()
+
+
+def test_renew_keeps_key_backs_up_old_certificate_and_extends_validity(tmp_path, capsys):
+    directory = tmp_path / 'tls'
+    assert cli.main(['init-tls', '--directory', str(directory), '--host', 'pi.example']) == 0
+    old_cert_bytes = (directory / 'cert.pem').read_bytes()
+    old_key = (directory / 'key.pem').read_bytes()
+    old, old_numbers = _fingerprint_and_key(directory)
+    capsys.readouterr()
+    assert cli.main(['renew-tls', '--directory', str(directory)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    new, new_numbers = _fingerprint_and_key(directory)
+    assert (directory / 'key.pem').read_bytes() == old_key
+    assert new_numbers == old_numbers
+    assert new.serial_number != old.serial_number
+    assert result['san'] == ['DNS:pi.example', 'DNS:localhost', 'IP:127.0.0.1']
+    assert result['certificate_sha256'] != result['previous_certificate_sha256']
+    backups = list(directory.glob('cert.pem.bak-*'))
+    assert [Path(result['backup'])] == backups
+    assert backups[0].read_bytes() == old_cert_bytes
+    expiry = datetime.fromisoformat(result['not_after_utc'])
+    assert timedelta(days=364) < expiry - datetime.now(UTC) <= timedelta(days=365)
+    assert not list(directory.glob('.cert-*'))
+
+
+def test_renew_with_new_host_replaces_address_san(tmp_path, capsys):
+    directory = tmp_path / 'tls'
+    assert cli.main(['init-tls', '--directory', str(directory), '--host', 'pi.example']) == 0
+    capsys.readouterr()
+    assert cli.main(['renew-tls', '--directory', str(directory), '--host', '192.0.2.7']) == 0
+    assert json.loads(capsys.readouterr().out)['san'] == ['IP:192.0.2.7', 'DNS:localhost', 'IP:127.0.0.1']
+
+
+def test_renew_refuses_bridge_export_without_key(certificate, capsys):
+    before = certificate.read_bytes()
+    assert cli.main(['renew-tls', '--directory', str(certificate.parent)]) != 0
+    assert 'Brueckenidentitaet' in capsys.readouterr().out
+    assert certificate.read_bytes() == before
+    assert list(certificate.parent.iterdir()) == [certificate]
+
+
+def test_renew_refuses_mismatched_key_and_existing_backup(tmp_path, capsys):
+    directory = tmp_path / 'tls'
+    assert cli.main(['init-tls', '--directory', str(directory), '--host', 'pi.example']) == 0
+    original = (directory / 'cert.pem').read_bytes()
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key = directory / 'key.pem'
+    saved_key = key.read_bytes()
+    key.write_bytes(other.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                        serialization.NoEncryption()))
+    assert cli.main(['renew-tls', '--directory', str(directory)]) != 0
+    assert (directory / 'cert.pem').read_bytes() == original
+    key.write_bytes(saved_key)
+    moment = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+    (directory / 'cert.pem.bak-20261120T120000Z').write_bytes(b'alt')
+    with pytest.raises(FileExistsError):
+        cli.renew_tls(directory, now=moment)
+    assert (directory / 'cert.pem').read_bytes() == original
+    assert (directory / 'cert.pem.bak-20261120T120000Z').read_bytes() == b'alt'
+    assert not list(directory.glob('.cert-*'))

@@ -160,6 +160,10 @@ class OwnerSetupCamera:
         return got[1].image.copy()
 
 
+#: Zustaende ohne Lauf und ohne laufende Einrichtung (Spiegel von STOP_SAFE_STATES der Admin-Konsole).
+CAMERA_RESTART_SAFE_STATES = frozenset({"idle", "setup_ready", "setup_failed", "confirmed", "stopped"})
+
+
 class LiveService:
     def __init__(
         self,
@@ -373,6 +377,8 @@ class LiveService:
                     "region_deactivated": (self._session.region_deactivations()
                                            if hasattr(self._session, "region_deactivations") else []),
                 }
+                if hasattr(self._session, "proc_status"):
+                    run["proc"] = self._session.proc_status()
                 if hasattr(self._session, "rejection_causes"):
                     causes = self._session.rejection_causes()
                     run["rejection_causes"] = {**causes, "causes": [live_cause(c) for c in causes["causes"]]}
@@ -450,6 +456,21 @@ class LiveService:
                 self._owner.start(reason="kamera_verbinden")
             except Exception as exc:  # noqa: BLE001 - Meldung fuer die Seite
                 raise LiveError(f"Kamera nicht gestartet: {exc}") from exc
+
+    def restart_camera(self) -> dict:
+        """Kamera trennen und neu verbinden (Admin-Konsole); nur in ruhigen Zustaenden."""
+        with self._operation_lock:
+            with self._lock:
+                if self._state not in CAMERA_RESTART_SAFE_STATES:
+                    raise LiveError(f"Kamera-Neustart nicht moeglich: Zustand \"{self._state}\" "
+                                    "(Lauf oder Einrichtung zuerst beenden)")
+                if any(getattr(s, 'diagnose_kopie', False) for s in [*self._diagnostic_copies, self._session]):
+                    raise LiveError("Kamera-Neustart nicht moeglich: Diagnosekopie noch nicht fertig")
+            try:
+                self._owner.restart(reason="kamera_neustart")
+            except Exception as exc:  # noqa: BLE001 - Meldung fuer Admin-Konsole
+                raise LiveError(f"Kamera-Neustart fehlgeschlagen: {exc}") from exc
+            return self._owner.status()
 
     # -- Einrichtung ---------------------------------------------------------
     def _cache_setup_grid(self, proposal: dict) -> None:

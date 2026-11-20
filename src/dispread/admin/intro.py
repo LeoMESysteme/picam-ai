@@ -22,6 +22,8 @@ from rich.text import Text
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
 
+from .ui import Canvas
+
 #: HD44780-Zeichensatz (ROM A00), 5×7, nur die benötigten Zeichen.
 LCD_FONT = {
     'p': ('.....', '.....', '####.', '#...#', '####.', '#....', '#....'),
@@ -123,8 +125,16 @@ def scramble_caption(text: str, phase: float) -> str:
 def logo_text(t: float, scale: int = 1, animated: bool = True, ascii_only: bool = False) -> Text:
     text = Text(no_wrap=True, overflow='crop')
     for row in logo_cells(t, scale, animated):
+        run_chars: list[str] = []
+        run_level = None
         for char, level in row:
-            text.append(char if level else ' ', LOGO_STYLES.get(level))
+            if level != run_level and run_chars:
+                text.append(''.join(run_chars), LOGO_STYLES.get(run_level))
+                run_chars = []
+            run_level = level
+            run_chars.append(char if level else ' ')
+        if run_chars:
+            text.append(''.join(run_chars), LOGO_STYLES.get(run_level))
         text.append('\n')
     caption = scramble_caption(CAPTION, t / CAPTION_S) if animated else CAPTION
     pad = max(0, (LOGO_W * scale - len(caption)) // 2)
@@ -207,12 +217,22 @@ def lcd_text(word: str, progress: float, compact: bool = False, ascii_only: bool
 SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
 
+def logo_frame_key(t: float, animated: bool):
+    """Gleicher Schlüssel = gleiches Bild; spart Neuzeichnen zwischen den Glanzläufen."""
+    if not animated:
+        return 'fest'
+    if t < max(REVEAL_S, CAPTION_S) + 0.05:
+        return round(t, 3)
+    phase = ((t - REVEAL_S - 0.4) % SHINE_PERIOD) / SHINE_S
+    return round(t, 3) if phase < 1 else 'fest'
+
+
 class Intro(Vertical):
     """Startbild über der Konsole. Die App ruft ``ready`` mit der ersten Prüfung."""
 
     can_focus = True
     MIN_S, HOLD_S, MAX_S, STATIC_MIN_S = 2.4, 0.7, 6.0, 0.8
-    FPS = 20
+    FPS = 30
     SWEEP_START, SWEEP_S = 0.9, 1.2
 
     def __init__(self, label: str, version: str | None, ascii_only: bool, animate: bool, **kwargs):
@@ -228,14 +248,17 @@ class Intro(Vertical):
         self._done = False
         self._timer = None
         self.on_done = None
+        self._logo_key = None
+        self._lcd_key = None
+        self._checks_key = None
 
     def compose(self):
         with Horizontal(id='intro-row'):
-            yield Static(id='intro-logo')
+            yield Canvas(id='intro-logo')
             with Vertical(id='intro-side'):
-                yield Static(id='intro-lcd')
+                yield Canvas(id='intro-lcd')
                 yield Static(id='intro-tag')
-                yield Static(id='intro-checks')
+                yield Canvas(id='intro-checks')
         yield Static(id='intro-hint')
 
     def on_mount(self) -> None:
@@ -268,7 +291,7 @@ class Intro(Vertical):
             return
         self._size_key = key
         self._scale, self._spaced = scale, spaced
-        logo = self.query_one('#intro-logo', Static)
+        logo = self.query_one('#intro-logo', Canvas)
         logo.display = scale > 0
         side_height = (7 if spaced else 4) + 3 + 3
         logo_height = logo_size(scale)[1] if scale else side_height
@@ -276,6 +299,15 @@ class Intro(Vertical):
             logo.styles.width, logo.styles.height = logo_size(scale)
             logo.styles.margin = (max(0, (side_height - logo_height) // 2), gap, 0, 0)
         self.query_one('#intro-side').styles.margin = (max(0, (logo_height - side_height) // 2), 0, 0, 0)
+        lcd = self.query_one('#intro-lcd', Canvas)
+        lcd.styles.width = lcd_columns('picam') * (2 if spaced else 1)
+        lcd.styles.height = 7 if spaced else 4
+        self._logo_key = self._lcd_key = None
+        tag = Text('Werkbank-Verwaltung', style='#d6dae0')
+        if self.version:
+            tag.append(f'  ·  {self.version}', style='#7d8590')
+        self.query_one('#intro-tag', Static).update(tag)
+        self.query_one('#intro-hint', Static).update(Text('Taste: weiter', style='#4a525c'))
 
     def elapsed(self) -> float:
         return time.monotonic() - self._started
@@ -293,20 +325,24 @@ class Intro(Vertical):
             return
         t = self.elapsed()
         if self._scale:
-            self.query_one('#intro-logo', Static).update(
-                logo_text(t, self._scale, self.animated, self.ascii_only))
-        if self.animated:
-            progress = min(1.0, max(0.0, (t - self.SWEEP_START) / self.SWEEP_S))
-        else:
-            progress = 1.0
-        self.query_one('#intro-lcd', Static).update(
-            lcd_text('picam', progress, compact=not self._spaced, ascii_only=self.ascii_only))
-        tag = Text('Werkbank-Verwaltung', style='#d6dae0')
-        if self.version:
-            tag.append(f'  ·  {self.version}', style='#7d8590')
-        self.query_one('#intro-tag', Static).update(tag)
-        self.query_one('#intro-checks', Static).update(self._checks_text(t))
-        self.query_one('#intro-hint', Static).update(Text('Taste: weiter', style='#4a525c'))
+            key = logo_frame_key(t, self.animated)
+            if key != self._logo_key:
+                self._logo_key = key
+                self.query_one('#intro-logo', Canvas).show(logo_text(t, self._scale, self.animated, self.ascii_only))
+        progress = min(1.0, max(0.0, (t - self.SWEEP_START) / self.SWEEP_S)) if self.animated else 1.0
+        lcd_key = round(progress * 60)
+        if lcd_key != self._lcd_key:
+            self._lcd_key = lcd_key
+            self.query_one('#intro-lcd', Canvas).show(
+                lcd_text('picam', progress, compact=not self._spaced, ascii_only=self.ascii_only))
+        checks_key = (int(t * 12), tuple(self._lines), self.version)
+        if checks_key != self._checks_key:
+            if self._checks_key is not None and self._checks_key[2] != self.version:
+                tag = Text('Werkbank-Verwaltung', style='#d6dae0')
+                tag.append(f'  ·  {self.version}', style='#7d8590')
+                self.query_one('#intro-tag', Static).update(tag)
+            self._checks_key = checks_key
+            self.query_one('#intro-checks', Canvas).show(self._checks_text(t))
         minimum = self.MIN_S if self.animated else self.STATIC_MIN_S
         if self._ready_at is not None and t >= max(minimum, self._ready_at + (self.HOLD_S if self.animated else 0)):
             self.finish()

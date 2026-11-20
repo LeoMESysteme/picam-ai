@@ -361,7 +361,9 @@ def apply(args, out=None, input_=input, runner=subprocess.run, installer=engine.
         steps.append('Dienst starten: picam start')
     if args.mode == 'portable':
         steps.append('Starten: ' + shlex.join(result.get('start_command', [])))
-    steps += [f'Im Browser öffnen: {result["url"]} (Anmeldung: {args.user})',
+    steps += [f'Im Browser öffnen: {result["url"]}',
+              f'Anmelden mit Benutzer „{args.user}“ und dem Linux-Passwort dieses Kontos '
+              f'(dasselbe wie für SSH; ändern mit: sudo passwd {args.user})',
               'Auf Windows dem Zertifikat vertrauen: ' + paths['data'] + '/workbench/tls/cert.pem',
               'Offene Einrichtung durchgehen (Kamera, UART, Kalibrierung): ' + (
                   'picam setup' if args.mode != 'portable' else
