@@ -26,7 +26,7 @@ def reserve_bytes(app) -> int | None:
     if isinstance(storage, dict) and storage.get('reserve_bytes') is not None:
         return storage['reserve_bytes']
     try:
-        from dispread.live.service import STORAGE_RESERVE_BYTES
+        from dispread.live.storage import STORAGE_RESERVE_BYTES
     except Exception:  # noqa: BLE001 - nur Anzeige
         return None
     return STORAGE_RESERVE_BYTES

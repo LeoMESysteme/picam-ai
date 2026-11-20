@@ -8,6 +8,11 @@ import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+#: Freier Platz, unter dem die Werkbank neue Läufe ablehnt, und ab dem sie warnt.
+#: Hier statt in service.py, damit picam sie ohne OpenCV-Import lesen kann.
+STORAGE_RESERVE_BYTES = 2_000_000_000
+STORAGE_WARNING_BYTES = 5_000_000_000
+
 
 def _tree_info(path: Path) -> tuple[int, float] | None:
     """Bytes/neuste Datei-mtime; Links/Sonderdateien sperren den Kandidaten.

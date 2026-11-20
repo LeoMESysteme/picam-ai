@@ -395,7 +395,7 @@ def fact_storage(instance: Instance, live: dict | None) -> Fact:
     if isinstance(storage, dict) and storage.get('free_bytes') is not None:
         free, reserve = storage['free_bytes'], storage.get('reserve_bytes') or 0
     elif target:
-        from dispread.live.service import STORAGE_RESERVE_BYTES
+        from dispread.live.storage import STORAGE_RESERVE_BYTES
 
         path = Path(target)
         while not path.exists() and path != path.parent:

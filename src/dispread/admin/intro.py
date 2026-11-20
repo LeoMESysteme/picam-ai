@@ -232,7 +232,7 @@ class Intro(Vertical):
 
     can_focus = True
     MIN_S, HOLD_S, MAX_S, STATIC_MIN_S = 2.4, 0.7, 6.0, 0.8
-    FPS = 30
+    FPS = 25
     SWEEP_START, SWEEP_S = 0.9, 1.2
 
     def __init__(self, label: str, version: str | None, ascii_only: bool, animate: bool, **kwargs):
@@ -267,6 +267,14 @@ class Intro(Vertical):
             self.call_after_refresh(self.finish)
             return
         self._layout()
+        # Erst loslaufen, wenn die Oberfläche einmal gezeichnet ist; sonst springt die
+        # Animation über den Aufbau der ganzen Konsole (≈ 0,3 s) hinweg.
+        self.call_after_refresh(self._begin)
+
+    def _begin(self) -> None:
+        if self._done:
+            return
+        self._started = time.monotonic()
         self._tick()
         self._timer = self.set_interval(1 / self.FPS if self.animated else 0.1, self._tick)
 

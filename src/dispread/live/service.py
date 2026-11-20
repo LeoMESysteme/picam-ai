@@ -37,7 +37,11 @@ from dispread.live.reference import ReferenceRecorder, parse_norm_schedule
 from dispread.live.reference_eval import evaluate_records, validate_reference_session
 from dispread.live.region_hint import MIN_SHARE
 from dispread.live.session import LiveConfig, LiveSession, build_live_pipeline
-from dispread.live.storage import cleanup_runs
+from dispread.live.storage import (  # noqa: F401 (Wiederexport)
+    STORAGE_RESERVE_BYTES,
+    STORAGE_WARNING_BYTES,
+    cleanup_runs,
+)
 from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.records import ValueStatus
 from dispread.session_profile import SessionProfile
@@ -47,8 +51,6 @@ OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay
 SETUP_STEPS = ("fokus", "kamera", "belichtung", "standbilder", "vorschlag")
 DEVICE_ID = "gsv-sensor-161a"
 DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
-STORAGE_RESERVE_BYTES = 2_000_000_000
-STORAGE_WARNING_BYTES = 5_000_000_000
 _LOG = logging.getLogger(__name__)
 
 BRIDGE_BUSY_TEXT = ("Die Windows-Brücke führt gerade einen Empfangstest (Demo) aus. Bitte in der Windows-App "

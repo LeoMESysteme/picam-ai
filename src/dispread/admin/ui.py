@@ -399,17 +399,47 @@ def sparkline(values: list, width: int, tone: str | None = None) -> Text:
 
 
 class Canvas(Widget):
-    """Feste Fläche für Einzelbilder: ``show`` zeichnet neu, ohne das Layout neu zu berechnen."""
+    """Feste Fläche für Einzelbilder (Startbild, Status-/Tastenzeile).
+
+    ``show`` wandelt den Text einmal in fertige Zeilen (Strips) um und zeichnet
+    nur diese Fläche neu, ohne Layout und ohne Textual-Umwandlung je Abruf.
+    """
 
     DEFAULT_CSS = 'Canvas { width: auto; height: auto; }'
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._content = Text()
+        self._strips: list = []
 
     def show(self, content: Text) -> None:
+        from rich.segment import Segment
+        from textual.strip import Strip
+
         self._content = content
+        lines = content.split('\n', allow_blank=True) if isinstance(content, Text) else [content]
+        self._strips = [Strip(list(Segment.simplify(line.render(_CANVAS_CONSOLE)))) for line in lines]
         self.refresh()
 
-    def render(self) -> Text:
+    def render(self) -> Text:  # für Breite/Höhe ``auto`` und Bildschirmfotos
         return self._content
+
+    def render_line(self, y: int):
+        from textual.strip import Strip
+
+        width = self.size.width
+        base = self.rich_style
+        strip = self._strips[y] if y < len(self._strips) else Strip([])
+        return strip.crop_extend(0, width, base).apply_style(base)
+
+
+def _canvas_console():
+    import io
+
+    from rich.console import Console
+
+    return Console(file=io.StringIO(), width=1000, color_system='truecolor', force_terminal=True,
+                   legacy_windows=False)
+
+
+_CANVAS_CONSOLE = _canvas_console()

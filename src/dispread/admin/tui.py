@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import select
 import shlex
 import subprocess
 import sys
@@ -276,6 +277,14 @@ class PicamApp(App[int]):
         self._spinner_timer = self.set_interval(0.1, self._spin_tick, pause=True)
         self._sync_spinner()
         self.action_refresh()
+        if not self._intro_enabled:
+            self._start_background()
+
+    def _start_background(self) -> None:
+        """Protokoll, Speicher und Netzwerk erst nach dem Startbild laden (sonst ruckelt es)."""
+        if getattr(self, '_background_started', False):
+            return
+        self._background_started = True
         self._start_log()
         if self._auto_refresh:
             self.set_interval(REFRESH_S, self.action_refresh)
@@ -457,6 +466,7 @@ class PicamApp(App[int]):
 
         def reveal() -> None:
             widget.remove()
+            self.call_after_refresh(self._start_background)
             self.call_after_refresh(self._sync_spinner)
             self.call_after_refresh(self.focus_view)
             for selector in ('#top', '#body', '#status', '#footer'):
@@ -945,8 +955,7 @@ class PicamApp(App[int]):
         from . import service
 
         if self._journal_source is not None:
-            for line in self._journal_source():
-                self.call_from_thread(self._add_log, line)
+            self.call_from_thread(self._add_logs, list(self._journal_source()))
             return
         try:
             command = service.journal_command(self.instance, 300, follow=True)
@@ -957,13 +966,26 @@ class PicamApp(App[int]):
             self.call_from_thread(self._add_log, service.LogLine('', 'fehler', f'Protokoll nicht lesbar: {error}'))
             return
         assert self._log_process.stdout is not None
-        for raw in self._log_process.stdout:
-            if not raw.lstrip().startswith('{'):
-                if raw.strip():
-                    self.call_from_thread(self._add_log, service.LogLine('', 'fehler', raw.strip()))
-                continue
-            for line in service.parse_journal(raw):
-                self.call_from_thread(self._add_log, line)
+        stream = self._log_process.stdout
+        batch: list = []
+        last = time.monotonic()
+        while True:
+            ready = select.select([stream], [], [], 0.25)[0]
+            if ready:
+                raw = stream.readline()
+                if not raw:
+                    break
+                if not raw.lstrip().startswith('{'):
+                    if raw.strip():
+                        batch.append(service.LogLine('', 'fehler', raw.strip()))
+                else:
+                    batch.extend(service.parse_journal(raw))
+            # gebündelt an die Oberfläche: höchstens 4× pro Sekunde
+            if batch and (not ready or time.monotonic() - last > 0.25):
+                self.call_from_thread(self._add_logs, batch)
+                batch, last = [], time.monotonic()
+        if batch:
+            self.call_from_thread(self._add_logs, batch)
 
     def log_row(self, line) -> Table:
         style = {'fehler': TONE[probes.FAIL], 'warnung': TONE[probes.WARN], 'debug': MUTED}.get(line.level, '')
@@ -974,12 +996,17 @@ class PicamApp(App[int]):
         return row
 
     def _add_log(self, line) -> None:
-        self.log_lines.append(line)
+        self._add_logs([line])
+
+    def _add_logs(self, lines: list) -> None:
+        self.log_lines.extend(lines)
         if len(self.log_lines) > LOG_LIMIT:
             del self.log_lines[: len(self.log_lines) - LOG_LIMIT]
-        row = self.log_row(line)
-        self.view('dashboard').add_log(row)
-        self.view('protokoll').add_log(line, row)
+        dashboard, protokoll = self.view('dashboard'), self.view('protokoll')
+        for line in lines[-LOG_LIMIT:]:
+            row = self.log_row(line)
+            dashboard.add_log(row)
+            protokoll.add_log(line, row)
 
     # ------------------------------------------------------------ Sonstiges
     def action_help(self) -> None:
