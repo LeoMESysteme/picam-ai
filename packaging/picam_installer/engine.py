@@ -110,6 +110,13 @@ def target_paths(args, owner):
     return values
 
 
+SOCKET_PATH_MAX = 100  # Unix-Sockets: sun_path 108 Bytes inkl. Nullbyte, mit Reserve
+
+
+def socket_too_long(runtime):
+    return len(str(Path(runtime) / 'control.sock').encode()) > SOCKET_PATH_MAX
+
+
 def quote_unit(value):
     return json.dumps(str(value).replace('%', '%%').replace('$', '$$'), ensure_ascii=False)
 
@@ -223,7 +230,8 @@ def hardware_id_available():
         return False
 
 
-def install(args, runner=subprocess.run):
+def install(args, runner=subprocess.run, progress=None):
+    step = progress or (lambda _text: None)
     valid_host(args.host)
     if not 1 <= args.port <= 65535:
         raise ValueError('Port muss zwischen 1 und 65535 liegen')
@@ -247,6 +255,8 @@ def install(args, runner=subprocess.run):
               'bridge_enabled': not args.without_bridge,
               'notes': ['Kalibrierung und Hardware separat pruefen.', 'Bestehende Installationen werden nicht migriert.',
                         'Kein automatischer Dienststart; Startbefehl erst auf dem Zielsystem ausfuehren.']}
+    if not args.root and socket_too_long(paths['runtime']):
+        result['notes'].append('Steuerungssocket-Pfad zu lang fuer Unix-Sockets; kuerzeren --prefix/--runtime waehlen.')
     if not args.apply:
         result['notes'].append('Nur Plan: Zielverzeichnisse, Pakete und Dienste unveraendert.')
         return result
@@ -259,6 +269,7 @@ def install(args, runner=subprocess.run):
     except (ConnectionRefusedError, socket.gaierror, TimeoutError, OSError):
         pass
     if args.install_packages:
+        step('Fehlende Debian-Pakete installieren (apt)')
         if os.geteuid() != 0:
             raise ValueError('Explizite apt-Installation braucht root')
         needed = missing_packages(bundle, runner)
@@ -270,6 +281,7 @@ def install(args, runner=subprocess.run):
     created, unit_created = [], False
     try:
         # mkdir without exist_ok claims each root exclusively; parallel installs lose safely.
+        step('Zielverzeichnisse anlegen')
         for path in roots:
             parents = []
             parent = path.parent
@@ -282,6 +294,7 @@ def install(args, runner=subprocess.run):
             path.mkdir(mode=0o700)
             created.append(path)
         release.mkdir(parents=True, mode=0o755)
+        step(f'Release {bundle.release_id} entpacken')
         for name, content in bundle.files.items():
             destination = release / name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -290,6 +303,7 @@ def install(args, runner=subprocess.run):
             destination.chmod(0o755 if name.endswith('.sh') else 0o644)
         (release / 'release.json').write_text(json.dumps(bundle.manifest, indent=2) + '\n')
         venv = release / '.venv'
+        step('Python-Umgebung anlegen und Paket installieren')
         checked([info.python, '-m', 'venv', '--system-site-packages', venv], runner)
         checked([venv / 'bin/python', '-m', 'pip', '--disable-pip-version-check', 'install', '--no-index',
                  '--no-deps', '--no-build-isolation', str(release)], runner)
@@ -299,12 +313,14 @@ def install(args, runner=subprocess.run):
                 + 'import hashlib; from pathlib import Path; '
                 + f'assert hashlib.sha256(Path({str(release / TEMPLATE)!r}).read_bytes()).hexdigest() == '
                 + repr(hashlib.sha256(bundle.files[TEMPLATE]).hexdigest()))
+        step('Selbsttest: Module und Lesevorlage')
         checked([venv / 'bin/python', '-I', '-c', code], runner)
         for directory in (paths['data'] / 'workbench', paths['data'] / 'live', paths['data'] / 'calibration',
                           paths['data'] / 'workbench/tls', paths['config'].parent):
             directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         if args.mode == 'portable':
             paths['runtime'].mkdir(parents=True, exist_ok=True, mode=0o700)
+        step('Konfiguration schreiben')
         with paths['config'].open('x') as stream:
             stream.write(config_text(args, paths, release))
         paths['config'].chmod(0o600)
@@ -322,8 +338,10 @@ def install(args, runner=subprocess.run):
             provision = [venv / 'bin/python', '-m', 'dispread.workbench.cli', 'bridge', 'identity', '--provision',
                          '--directory', paths['data'] / 'workbench/bridge', '--host', args.host,
                          '--export-certificate', paths['data'] / 'workbench/tls/cert.pem']
+        step('Brückenidentität und Zertifikat erzeugen' if not args.without_bridge else 'Zertifikat erzeugen')
         checked(provision, runner, owner=owner if args.mode == 'system' and not args.root else None)
         if paths['unit']:
+            step('Dienst-Unit schreiben (nicht gestartet)')
             paths['unit'].parent.mkdir(parents=True, exist_ok=True)
             with paths['unit'].open('x') as stream:
                 unit_created = True
@@ -331,6 +349,7 @@ def install(args, runner=subprocess.run):
                                        user=args.user, mode=args.mode, runtime=paths['runtime']))
             paths['unit'].chmod(0o644)
         # Activation is last; no product service is enabled or started here.
+        step('Version aktivieren')
         (paths['prefix'] / 'current').symlink_to(release)
         result['applied'] = True
         result['start_command'] = ([str(venv / 'bin/python'), '-m', 'dispread.workbench.cli', 'serve',
@@ -353,6 +372,17 @@ def install(args, runner=subprocess.run):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if '--guided-apply' in argv:
+        from .guided import guided_apply_main
+
+        return guided_apply_main(argv)
+    required = ('--user', '--host')
+    if '--guided' in argv or (sys.stdin.isatty() and sys.stdout.isatty()
+                              and not any(flag in argv for flag in required + ('--json', '-h', '--help'))):
+        from .guided import run
+
+        return run([arg for arg in argv if arg != '--guided'])
     args = parser().parse_args(argv)
     try:
         result = install(args)

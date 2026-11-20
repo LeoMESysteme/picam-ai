@@ -19,6 +19,7 @@ import shutil
 import socket
 import ssl
 import subprocess
+import sys
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -149,10 +150,19 @@ def peer_certificate(host: str, port: int, timeout: float = 3.0):
 
 # --------------------------------------------------------------------- Fakten
 
-def fact_service(instance: Instance, run=run_command) -> Fact:
+def fact_service(instance: Instance, run=run_command, ping=None) -> Fact:
     if instance.unit is None:
-        return Fact('dienst', 'Dienst', UNKNOWN, 'kein Dienst',
-                    detail=[('Art', instance.label)], hint=instance.problem)
+        if instance.kind != 'portable' or instance.problem:
+            return Fact('dienst', 'Dienst', UNKNOWN, 'kein Dienst',
+                        detail=[('Art', instance.label)], hint=instance.problem)
+        # Portabel: kein Dienstmanager; läuft, wenn die lokale Steuerung antwortet.
+        answer = (ping or (lambda: socket_request(instance.socket, 'live.status', timeout=2)))()
+        detail = [('Art', 'portabel (ohne Dienstmanager)'), ('Steuerung', instance.socket or '–')]
+        if answer is not None:
+            return Fact('dienst', 'Dienst', OK, 'läuft', detail)
+        start = f'{sys.executable} -m dispread.workbench.cli serve --config {instance.config}'
+        return Fact('dienst', 'Dienst', OFF, 'gestoppt', detail, hint='Portabel installiert: von Hand starten.',
+                    command=start)
     code, out, err = run(systemctl(instance) + ['show', instance.unit, '-p', 'ActiveState', '-p', 'SubState',
                                                 '-p', 'ActiveEnterTimestamp', '-p', 'MainPID',
                                                 '-p', 'LoadState', '-p', 'UnitFileState', '-p', 'Result'])
@@ -269,6 +279,9 @@ def _usb_camera(sys_root: Path = Path('/sys/bus/usb/devices')) -> dict | None:
 
 def fact_camera(live: dict | None, service: Fact, usb=_usb_camera) -> Fact:
     camera = (live or {}).get('camera')
+    if (live or {}).get('simulate') and service.level == OK:
+        return Fact('kamera', 'Kamera', OFF, 'Simulation', [('Quelle', 'synthetische Bilder (--simulate)')],
+                    hint='Die Werkbank läuft ohne Kamera; keine Messläufe mit echten Werten.')
     if isinstance(camera, dict) and service.level == OK:
         source = camera.get('source') or {}
         detail = [('Gerät', str(source.get('device', '–'))), ('USB', str(source.get('usb_id', '–')))]
@@ -413,9 +426,11 @@ def fact_calibration(instance: Instance, now=time.time) -> Fact:
         return Fact('kalibrierung', 'Kalibrierung', UNKNOWN, 'unbekannt')
     path = Path(instance.calibration)
     if not path.is_file():
+        tool = Path(instance.root or '.') / 'scripts' / 'timing-calibration.py'
         return Fact('kalibrierung', 'Kalibrierung', FAIL, 'fehlt', [('Datei', str(path))],
-                    hint='Ohne Timing-Kalibrierung startet kein Messlauf. Am Aufbau messen.',
-                    command='scripts/timing-calibration.py')
+                    hint=('Ohne Timing-Kalibrierung startet kein Messlauf. Am Aufbau messen '
+                          '(scripts/timing-calibration.py im Entwicklungs-Checkout) und die Datei hier ablegen.'),
+                    command=f'{sys.executable} {tool}' if tool.is_file() else None)
     age_days = int((now() - path.stat().st_mtime) // 86400)
     return Fact('kalibrierung', 'Kalibrierung', OK, 'vorhanden',
                 [('Datei', str(path)), ('Stand', datetime.fromtimestamp(path.stat().st_mtime)
