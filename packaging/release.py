@@ -15,13 +15,18 @@ import tempfile
 from pathlib import Path
 
 TEMPLATE_PATH = "src/dispread/data/templates-stufe2c-2026-09-30.json"
+INSTALLER_MODULES = ("__init__", "platform", "archive", "engine", "guided", "tui", "fastfetch", "update", "uninstall",
+                     "__main__")
+# Optionale Komponente me-fastfetch: der Installer kopiert sie ins Home des Bedienerkontos.
+FASTFETCH_FILES = ("me-logo.py", "me-fastfetch.in", "config.jsonc", "me-logo.txt")
 REQUIRED_FILES = (
     "pyproject.toml",
     "VERSION",
     "packaging/apt-packages.txt",
     "scripts/install.py",
     "install.sh",
-    *(f"packaging/picam_installer/{name}.py" for name in ("__init__", "platform", "archive", "engine", "guided", "update", "uninstall", "__main__")),
+    *(f"packaging/picam_installer/{name}.py" for name in INSTALLER_MODULES),
+    *(f"packaging/me-fastfetch/{name}" for name in FASTFETCH_FILES),
     "src/dispread/__init__.py",
     "src/dispread/live/__init__.py",
 )
@@ -61,6 +66,8 @@ def _product_path(name: str) -> bool:
         return False
     if name.startswith("packaging/picam_installer/"):
         return path.suffix == ".py"
+    if name.startswith("packaging/me-fastfetch/"):
+        return path.name in FASTFETCH_FILES
     if not name.startswith("src/dispread/") or name == TEMPLATE_PATH:
         return False
     if path.suffix == ".py":
@@ -128,10 +135,10 @@ def build_release(root: Path, output: Path, templates: Path, release_id: str) ->
 
     commit = _git(root, "rev-parse", "HEAD").strip()
     dirty = bool(_git(root, "status", "--porcelain", "--untracked-files=normal"))
-    candidates = _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "src", "packaging/picam_installer").split("\0")
+    candidates = _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "src", "packaging/picam_installer", "packaging/me-fastfetch").split("\0")
     # Reject links anywhere in candidate trees, including links whose suffix
     # would otherwise exclude them. Never traverse directory symlinks.
-    for folder in (root / "src", root / "packaging/picam_installer"):
+    for folder in (root / "src", root / "packaging/picam_installer", root / "packaging/me-fastfetch"):
         _no_symlink(folder)
         for parent, directories, filenames in os.walk(folder, followlinks=False):
             for name in (*directories, *filenames):

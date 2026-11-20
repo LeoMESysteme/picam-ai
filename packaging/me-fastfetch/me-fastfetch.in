@@ -1,0 +1,4 @@
+#!/bin/sh
+# me-fastfetch: Fastfetch mit einmaligem ME-Glanzlauf (picam-Installer).
+# me-logo.py braucht nur die Python-Standardbibliothek, daher System-Python.
+exec /usr/bin/python3 @ME_LOGO@ --fastfetch "$@"

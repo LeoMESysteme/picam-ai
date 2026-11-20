@@ -45,8 +45,11 @@ def source(tmp_path):
         "scripts/install.py": "print('installer')\n",
         "install.sh": "#!/bin/sh\nexec python3 scripts/install.py\n",
     }
-    for name in ("__init__", "platform", "archive", "engine", "guided", "update", "uninstall", "__main__"):
+    for name in ("__init__", "platform", "archive", "engine", "guided", "tui", "fastfetch", "update", "uninstall",
+                 "__main__"):
         files[f"packaging/picam_installer/{name}.py"] = "# installer\n"
+    for name in ("me-logo.py", "me-fastfetch.in", "config.jsonc", "me-logo.txt"):
+        files[f"packaging/me-fastfetch/{name}"] = f"# {name}\n"
     for name, content in files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +80,20 @@ def test_bundle_contains_verified_payload_manifest_and_executable(source, tmp_pa
         assert files["install.sh"].mode == 0o755
         assert "scripts/install.py" in files
         assert "packaging/picam_installer/__main__.py" in files
+        assert {"packaging/picam_installer/tui.py", "packaging/picam_installer/fastfetch.py"} <= set(files)
+        assert {f"packaging/me-fastfetch/{name}" for name in
+                ("me-logo.py", "me-fastfetch.in", "config.jsonc", "me-logo.txt")} <= set(files)
+
+
+def test_me_fastfetch_extras_are_not_bundled(source, tmp_path):
+    root, template = source
+    for name in ("packaging/me-fastfetch/me-logo.py.bak", "packaging/me-fastfetch/notes.md"):
+        (root / name).write_text("private\n")
+    output = build_release(root, tmp_path / "bundle.tar.gz", template, "release-1")
+    with tarfile.open(output) as archive:
+        names = set(archive.getnames())
+    assert "picam/packaging/me-fastfetch/config.jsonc" in names
+    assert not {"picam/packaging/me-fastfetch/me-logo.py.bak", "picam/packaging/me-fastfetch/notes.md"} & names
 
 
 def test_reproducible_bytes_ignore_source_mtime(source, tmp_path):
@@ -145,7 +162,8 @@ def test_rejects_invalid_external_template_before_output(source, tmp_path, probl
     assert not output.exists()
 
 
-@pytest.mark.parametrize("missing", ["scripts/install.py", "install.sh", "packaging/picam_installer/engine.py", "VERSION"])
+@pytest.mark.parametrize("missing", ["scripts/install.py", "install.sh", "packaging/picam_installer/engine.py", "VERSION",
+                                     "packaging/me-fastfetch/me-logo.py"])
 def test_rejects_incomplete_source_without_artifact(source, tmp_path, missing):
     root, template = source
     (root / missing).unlink()

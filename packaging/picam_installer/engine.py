@@ -13,6 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import fastfetch
 from .archive import TEMPLATE, load_source
 from .platform import MODULES, probe_system
 from .platform import SystemInfo as SystemInfo
@@ -34,6 +35,11 @@ def parser():
     cli.add_argument('--apply', action='store_true', help='Plan tatsaechlich ausfuehren; kein Dienststart')
     cli.add_argument('--install-packages', action='store_true', help='Explizit fehlende apt-Pakete installieren (nur system, root)')
     cli.add_argument('--without-bridge', action='store_true', help='Browser-Werkbank ohne Pi-Brueckenidentitaet, z.B. auf anderem Linux-PC')
+    cli.add_argument('--with-fastfetch', dest='fastfetch', action='store_true',
+                     help='Optional: me-fastfetch (ME-Logo beim SSH-Login) fuer das Bedienerkonto einrichten')
+    cli.add_argument('--without-fastfetch', dest='fastfetch', action='store_false',
+                     help='me-fastfetch nicht einrichten (Vorgabe ohne gefuehrte Installation)')
+    cli.set_defaults(fastfetch=None)
     cli.add_argument('--json', action='store_true', help='Maschinenlesbarer Plan/Ergebnis auf stdout')
     return cli
 
@@ -295,6 +301,21 @@ def install(args, runner=subprocess.run, progress=None):
                         'Kein automatischer Dienststart; Startbefehl erst auf dem Zielsystem ausfuehren.']}
     if not args.root and socket_too_long(paths['runtime']):
         result['notes'].append('Steuerungssocket-Pfad zu lang fuer Unix-Sockets; kuerzeren --prefix/--runtime waehlen.')
+    component = None
+    if getattr(args, 'fastfetch', None):
+        # Optionale Komponente im Home des Bedienerkontos; apt nur im Systemmodus als root.
+        home = Path(owner.pw_dir)
+        if args.root:
+            home = absolute(args.root) / home.relative_to('/')
+        component = {'home': home, 'files': fastfetch.sources(bundle.files),
+                     'can_apt': args.mode == 'system' and not args.root and info.apt}
+        if not args.root:
+            component['present'] = fastfetch.package_installed(runner)
+            result['fastfetch'] = fastfetch.plan(home, component['files'], package_present=component['present'],
+                                                 can_install_package=component['can_apt'])
+        else:
+            component['present'] = True  # Staging: nie apt
+            result['fastfetch'] = {'component': fastfetch.NAME, 'home': str(home), 'staged': True, 'applied': False}
     if not args.apply:
         result['notes'].append('Nur Plan: Zielverzeichnisse, Pakete und Dienste unveraendert.')
         return result
@@ -372,7 +393,6 @@ def install(args, runner=subprocess.run, progress=None):
         result['start_command'] = ([str(venv / 'bin/python'), '-m', 'dispread.workbench.cli', 'serve',
                                     '--config', str(paths['config'])] if args.mode == 'portable' else
                                    ['systemctl', *(['--user'] if args.mode == 'user' else []), 'start', 'picam-werkbank.service'])
-        return result
     except BaseException:
         if unit_created:
             paths['unit'].unlink(missing_ok=True)
@@ -386,6 +406,18 @@ def install(args, runner=subprocess.run, progress=None):
                 except OSError:
                     pass
         raise
+    if component is not None:
+        # Nach der Aktivierung und ausserhalb des Rueckbaus: ein Fehler hier laesst die Werkbank stehen.
+        planned = result['fastfetch']
+        try:
+            if args.root:
+                component['home'].mkdir(parents=True, exist_ok=True)
+            result['fastfetch'] = dict(planned, **fastfetch.apply(
+                component['home'], component['files'], uid=owner.pw_uid, gid=owner.pw_gid, runner=runner,
+                step=step, install_package=component['can_apt'] and not component['present'] and os.geteuid() == 0))
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            result['fastfetch'] = dict(planned, applied=False, error=str(error))
+    return result
 
 
 def main(argv=None):

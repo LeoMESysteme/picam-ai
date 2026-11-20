@@ -8,6 +8,11 @@ erhalten; nur ``--purge-data`` entfernt auch sie – genau die Pfade, die der
 Plan nennt. Gelöscht wird nur, was als picam-Installation erkannt ist:
 keine Symlinks im Pfad, Links nur, wenn sie in den Installationsort zeigen.
 
+Die optionale Komponente me-fastfetch (Home des Bedienerkontos, ``home=``)
+wird nur entfernt, soweit sie vom Installer stammt (Manifest): unveränderte
+Dateien und der markierte Block in ``~/.bashrc`` (mit Sicherung). Das Paket
+``fastfetch`` bleibt, außer ``--remove-fastfetch-package``.
+
 ``plan_uninstall`` ist rein lesend und liefert ein JSON-fähiges Dict;
 ``apply_uninstall`` plant aus denselben Angaben neu und führt nur aus, wenn
 der Plan unverändert ist. Standardbibliothek, Python >= 3.9.
@@ -25,6 +30,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from . import fastfetch
 from .engine import absolute, no_symlinks, quote_unit, target_paths
 from .update import check_prefix
 
@@ -89,6 +95,19 @@ def _config_data(config: Path):
         return None
 
 
+def _config_user(config):
+    """``pam_user`` aus der Konfiguration: Bedienerkonto einer Systeminstallation (für me-fastfetch)."""
+    try:
+        text = Path(config).read_text(encoding='utf-8')
+    except (OSError, UnicodeError, TypeError):
+        return None
+    match = re.search(r'^pam_user = (".*")\s*$', text, flags=re.MULTILINE)
+    try:
+        return pwd.getpwnam(json.loads(match.group(1))) if match else None
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
 def _unit_owned(unit: Path, prefix: Path) -> bool:
     try:
         text = unit.read_text(encoding='utf-8')
@@ -110,7 +129,7 @@ def _config_dir_removable(directory: Path) -> bool:
 
 
 def plan_uninstall(*, mode, prefix, data=None, config=None, unit=None, link=None, runtime=None,
-                   purge_data=False):
+                   purge_data=False, home=None, remove_fastfetch_package=False):
     """Schreibfreien Deinstallationsplan erzeugen.
 
     ``mode``: ``system`` | ``user`` | ``portable``. ``unit`` ist die Unit-Datei
@@ -120,7 +139,8 @@ def plan_uninstall(*, mode, prefix, data=None, config=None, unit=None, link=None
     if mode not in ('system', 'user', 'portable'):
         raise UninstallError(f'Unbekannte Installationsart: {mode!r}')
     request = {'mode': mode, 'prefix': _str(prefix), 'data': _str(data), 'config': _str(config),
-               'unit': _str(unit), 'link': _str(link), 'runtime': _str(runtime), 'purge_data': bool(purge_data)}
+               'unit': _str(unit), 'link': _str(link), 'runtime': _str(runtime), 'purge_data': bool(purge_data),
+               'home': _str(home), 'remove_fastfetch_package': bool(remove_fastfetch_package)}
     prefix = _plain_path(prefix, 'Installationsort')
     check_prefix(prefix)
     releases = prefix / 'releases'
@@ -220,7 +240,21 @@ def plan_uninstall(*, mode, prefix, data=None, config=None, unit=None, link=None
         notes.append('Brückenidentität wird gelöscht: Windows-Brücken müssen nach einer Neuinstallation '
                      'neu gekoppelt werden.')
 
-    # 5. Installationsort selbst nur, wenn danach leer
+    # 5. Optionale Komponente me-fastfetch im Home des Bedienerkontos
+    edit, needs_root = [], mode == 'system'
+    if home is not None:
+        component = fastfetch.removal(absolute(home), remove_package=remove_fastfetch_package and mode == 'system')
+        if component is not None and remove_fastfetch_package and mode != 'system':
+            component['notes'].append('Paket fastfetch nur mit sudo entfernen: sudo apt-get remove fastfetch')
+        if component is not None:
+            actions += component['actions']
+            remove += component['remove']
+            keep += component['keep']
+            notes += component['notes']
+            edit += component['edit']
+            needs_root = needs_root or component['needs_root']
+
+    # 6. Installationsort selbst nur, wenn danach leer
     actions.append({'kind': 'rmdir_if_empty', 'path': str(prefix), 'text': 'Installationsort entfernen, falls leer'})
     leftovers = sorted(entry.name for entry in prefix.iterdir()
                        if entry.name not in ('releases', *CODE_ENTRIES)
@@ -230,7 +264,7 @@ def plan_uninstall(*, mode, prefix, data=None, config=None, unit=None, link=None
 
     return {'applied': False, 'mode': mode, 'purge_data': bool(purge_data), 'request': request,
             'prefix': str(prefix), 'unit': unit_info, 'actions': actions, 'remove': remove, 'keep': keep,
-            'needs_root': mode == 'system', 'notes': notes}
+            'edit': edit, 'needs_root': needs_root, 'notes': notes}
 
 
 def apply_uninstall(plan, runner=subprocess.run, progress=None):
@@ -241,7 +275,7 @@ def apply_uninstall(plan, runner=subprocess.run, progress=None):
         raise UninstallError('Installation hat sich seit dem Plan geändert; neu planen')
     if current['needs_root'] and os.geteuid() != 0:
         raise UninstallError('Systeminstallation entfernen braucht root (sudo)')
-    allowed = set(current['remove']) | {current['prefix']}
+    allowed = set(current['remove']) | {current['prefix']} | set(current.get('edit', []))
     done = []
     for action in current['actions']:
         path = Path(action['path']) if 'path' in action else None
@@ -258,6 +292,10 @@ def apply_uninstall(plan, runner=subprocess.run, progress=None):
                     raise UninstallError(f'{path} wurde zum Symlink; abgebrochen')
                 if path.exists():
                     shutil.rmtree(path)
+            elif action['kind'] == 'bashrc_block':
+                backup = fastfetch.remove_block(path)
+                if backup:
+                    action = dict(action, backup=str(backup))
             elif action['kind'] == 'rmdir_if_empty':
                 try:
                     path.rmdir()
@@ -281,6 +319,8 @@ def parser():
     for option in ('prefix', 'data', 'config', 'runtime', 'unit-dir', 'link'):
         cli.add_argument('--' + option, help='Absoluter Pfad, sonst Vorgabe der Installationsart')
     cli.add_argument('--purge-data', action='store_true', help='Auch Daten und Konfiguration löschen')
+    cli.add_argument('--remove-fastfetch-package', action='store_true',
+                     help='Auch das Paket fastfetch entfernen, wenn der Installer es installiert hat')
     cli.add_argument('--apply', action='store_true', help='Plan tatsächlich ausführen')
     cli.add_argument('--json', action='store_true', help='Maschinenlesbarer Plan/Ergebnis auf stdout')
     return cli
@@ -297,10 +337,12 @@ def plan_from_args(args):
     paths = default_paths(args.mode, owner, prefix=args.prefix, data=args.data, config=args.config,
                           runtime=args.runtime, unit_dir=args.unit_dir)
     link = absolute(args.link) if args.link else paths['link']
+    operator = owner if args.user or args.mode != 'system' else (_config_user(paths['config']) or owner)
     return plan_uninstall(mode=args.mode, prefix=paths['prefix'], data=paths['data'], config=paths['config'],
                           unit=paths['unit'], link=link,
                           runtime=paths['runtime'] if args.mode == 'portable' else None,
-                          purge_data=args.purge_data)
+                          purge_data=args.purge_data, home=operator.pw_dir,
+                          remove_fastfetch_package=args.remove_fastfetch_package)
 
 
 def main(argv):
