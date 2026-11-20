@@ -1,4 +1,4 @@
-# TODO — Stand 2026-11-18
+# TODO — Stand 2026-11-20
 
 > **KRITISCHER NUTZERAUFTRAG 2026-11-11:** Vor Bridge-/EXE-Features den Workbench-Blocker bearbeiten.
 > Einstieg: [docs/WORKBENCH_BLOCKER.md](docs/WORKBENCH_BLOCKER.md).
@@ -11,6 +11,39 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
+
+## Übergabe für Mittwoch (Claude, autonom seit 20.11. abends)
+
+Branch `feat/picam-admin` (gepusht, Arbeitsstand sauber). Releasekandidat liegt
+unter `~/picam-releases/` (`picam-rc-<commit>.tar.gz` + `.sha256`), gebaut mit
+`scripts/build-release.py` aus dem jeweils letzten Commit.
+
+**Prüfstand (20.11. abends):** pytest 4943 bestanden (1 Brückentest wackelt nur
+unter Volllast, einzeln 3× grün), 27 übersprungen, 2 xfailed; Playwright Werkbank
+73/73; Node grün; ruff sauber; strenger Doku-Build ohne Befund. Releasetest im
+Scratch: portabel installiert, Test-Werkbank mit `--simulate` gestartet, `picam
+status/doctor`, `kalibrieren --pruefen/--import` (getippte Bestätigung) und Konsole
+im echten Terminal (alle Tabs, Exit 0) geprüft, Deinstallation portabel;
+Systemmodus in Staging-Wurzel installiert, `systemd-analyze verify` der erzeugten
+Unit OK.
+
+**Zuerst von Leonhard:**
+1. **raspi06:** Der Entwicklungsdienst `dispread-werkbank-bruecke` ist seit
+   20.11. 15:00 gestoppt (regulär, nicht durch Claude; vorher 14:46 Stopp/14:48
+   Start – vermutlich Konsolentest). Nicht autonom neu gestartet.
+2. **raspi01 aktualisieren:** `picam update --source picam-rc-….tar.gz --sha256 …`
+   (enthält den Stopp-Fix für Systemdienste mit sudo und den Unit-Fix). Danach
+   `picam kalibrieren` mit gestecktem USB-RS232-Adapter am GSV-2AS; dabei prüfen:
+   180 s genug Ereignisse, Dauer der Auswertung, Platz in `/dev/shm`/SD (~1,2 GB),
+   Normierung exakt zurückgestellt, Strg+C während der Aufnahme, Dateirechte
+   (Bedienkonto vs. sudo). Erst dann ist ein echter Messlauf auf raspi01 möglich.
+3. **Werkbank ohne RS232 am Aufbau:** geführte Eingabe (Kästchen, verschiebbares
+   Fenster) und Schwanken ±1 der letzten Stelle mit echtem GSV prüfen.
+4. **Entscheidungen:** Versionsnummer/Tag (VERSION steht auf `0.1.0.dev0`, Releases
+   heißen bisher `rc-<commit>`), Merge `feat/picam-admin` → `feat/integration` →
+   `master`, me-fastfetch auch in der Texteingabe abfragen (heute nur Menü bzw.
+   `--without-fastfetch`), SerialLoom-Einbindung in die Brücke (Ideen unten),
+   Rasterprüfung 2j bei Übertrag über mehrere Stellen (siehe CHANGELOG).
 
 ## Zuerst: Reihenfolge nach der Abnahme vom 13.11.
 
