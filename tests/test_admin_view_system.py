@@ -109,7 +109,15 @@ def test_uart_grafik_markiert_pins():
         assert 'RS-232' in text and 'Pegelwandler' in text
         assert '/dev/ttyAMA0' in text and 'ttyAMA10' in text
         assert 'enable_uart=1' in text
-        assert 'GPIO21' in text  # breit: ganze Leiste
+        assert 'GPIO21' in text  # breit: ganze Leiste neben den Karten
+    drive(check, '9', size=(130, 40))
+
+
+def test_uart_mittelbreit_stapelt_karten():
+    async def check(app, view, pilot):
+        text = text_of(view)
+        assert 'Pins 11–40 nicht benutzt' in text and 'GPIO14 TXD0' in text
+        assert 'GND → Pin 6, RXD → Pin 8' in text  # Anschlusskarte voll breit, nichts abgeschnitten
     drive(check, '9')
 
 

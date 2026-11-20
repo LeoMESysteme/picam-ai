@@ -96,7 +96,7 @@ def header_graphic(rows: int, compact: bool = False) -> Text:
     return text
 
 
-SIDE = 92  # ab dieser Breite steht die ganze Stiftleiste neben den Karten
+SIDE = 116  # ab dieser Breite steht die ganze Stiftleiste neben den Karten (darunter: Anschlusskarte voll breit statt schmaler Spalte)
 
 
 class UartView(FactView):
@@ -159,7 +159,7 @@ class UartView(FactView):
                 ('Pin 10', value('GPIO15/RXD0'), 'nicht benutzt, nicht bestätigt'),
                 ('RS-232', badge(probes.WARN, 'nie direkt'), '3,3 V am Pi: Pegelwandler nötig (OQ-09)'),
                 ('Kabelblock', badge(probes.WARN, 'nicht aufstecken'),
-                 'Kontaktfolge passt nicht; zwei Jumper: GND an Pin 6, RXD an Pin 8')]
+                 '2 Jumper: GND → Pin 6, RXD → Pin 8')]
         if not side:  # breit genug: Nachsatz in derselben Zeile
             rows = [(label, join(content, f'  {note}')) for label, content, note in rows]
         use.show(header('connect', 'Anschluss', None, side_w), wrap_rows(rows, label_w=11 if side else 12),
