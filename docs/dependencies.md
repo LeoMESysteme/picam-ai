@@ -69,7 +69,13 @@ py -3.13 -m venv --system-site-packages .venv
 .\.venv\Scripts\python.exe scripts/gsv-bridge.py --help
 ```
 
-Ein virtueller COM-Treiber ist zusätzlich erforderlich. Das Originalpaket
+Ein virtueller COM-Treiber ist zusätzlich erforderlich: com0com (unten)
+oder als Alternative [SerialLoom](https://github.com/RahulP5/SerialLoom)
+(MIT-Lizenz, [Releases](https://github.com/RahulP5/SerialLoom/releases);
+Ports über Windows-`usbser.sys` und den Microsoft-signierten
+usbip-win2-Treiber, kein com0com-Abkömmling), wenn com0com mit Fehler 52
+blockiert. Einrichtung: [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md#vcom-wahl).
+Das Originalpaket
 [com0com3.0.0.0](https://com0com.sourceforge.net/) blieb auf dem Zielrechner
 mit Code52 blockiert. Nach angeleitetem Wechsel zur
 [Vovsoft-verlinkten com0com-Ausgabe](https://vovsoft.com/blog/how-to-sniff-serial-port-communication/)

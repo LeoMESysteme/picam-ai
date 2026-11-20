@@ -108,6 +108,50 @@ Speicherintegrität bleiben aktiv. [Beleg](VALIDATION.md#com0com-pair-ok-2026110
 Die Brücke öffnet COM5, GSVmulti COM6. Windows-Python-Brücke und Empfang
 durch GSVmulti über dieses Paar sind noch nicht abgenommen.
 
+### Virtuelles Portpaar: com0com oder SerialLoom {#vcom-wahl}
+
+Die Brücke braucht ein **verbundenes virtuelles COM-Portpaar**: Was sie auf
+der einen Seite schreibt, liest GSVmulti auf der anderen. Zwei Wege sind
+dokumentiert; beide sind kostenlos.
+
+| Weg | Wann | Stand |
+| --- | --- | --- |
+| **com0com** (signierte Ausgabe, siehe oben) | Standard; läuft auf den bisherigen Rechnern | abgenommen mit der Brücke (13.11.) |
+| **[SerialLoom](https://github.com/RahulP5/SerialLoom)** ([Releases](https://github.com/RahulP5/SerialLoom/releases)) | wenn com0com mit Geräte-Manager-Fehler 52 blockiert | Funktionstest auf einem betroffenen Rechner erfolgreich |
+
+**Einrichtung mit SerialLoom:**
+
+1. Aktuelles `SerialLoom_*_x64-setup.exe` von der Releases-Seite laden und
+   installieren (Windows 10 ab 1803 oder Windows 11, x64; Administratorrechte;
+   das Setup ist nicht codesigniert, SmartScreen kann nachfragen – die IT
+   entscheidet über die Freigabe).
+2. In SerialLoom ein **verbundenes Portpaar** (Null-Modem-Paar) anlegen,
+   z. B. `COM21` ↔ `COM22` (Nummern nur als Beispiel).
+3. Im Geräte-Manager unter „Anschlüsse (COM & LPT)“ prüfen, dass beide Ports
+   ohne Warnsymbol erscheinen.
+4. In der picam-ai-Windows-Brücke den einen Port als Ausgabe wählen
+   (Einstellungen → Ports), in GSVmulti den Gegenport als Eingang.
+
+SerialLoom bildet die Ports als USB-CDC-Geräte über den Windows-eigenen
+`usbser.sys` und den mitgelieferten, Microsoft-signierten usbip-win2-Treiber
+ab; Secure Boot kann aktiv bleiben (laut Projektdoku). Es ist kein
+com0com-Abkömmling.
+
+**Fehlerbild com0com-Fehler 52:** Auf manchen Windows-11-Rechnern mit aktivem
+Secure Boot (gesehen auf Build 26200) lädt Windows die signierte
+com0com-Version 3.0.0.0 nicht; die Portpaare fehlen, der Geräte-Manager zeigt
+Fehler 52, die Ereignisanzeige Code-Integrity-Ereignis 3004. Abhilfe ist der
+Wechsel auf SerialLoom oder die oben beschriebene signierte com0com-Ausgabe.
+Secure Boot oder die Treibersignaturprüfung abzuschalten wird **nicht**
+empfohlen. Hintergrund: [com0com-Code-52](#com0com-code52).
+
+**Grenze:** Der SerialLoom-Test zeigt nur, dass das Paar arbeitet. Er ersetzt
+keine Prüfung, ob Messdaten kontinuierlich, vollständig und zeitlich korrekt
+in GSVmulti ankommen; diese Prüfung steht mit SerialLoom noch aus. Die
+Paarprüfung der Brücke kennt bisher nur com0com und meldet bei SerialLoom
+„Ob beide Ports ein com0com-Paar bilden, kann die App noch nicht prüfen“ –
+das ist erwartet.
+
 1. Windows-/GSVmulti-Version und PRO-Funktion festhalten; den belegten
    Treiberstand samt Hash sichern. Vorhandenes Paar CNCA1=COM5/CNCB1=COM6
    verwenden. Auf anderen Zielrechnern beide tatsächlichen Portnamen nachweisen.

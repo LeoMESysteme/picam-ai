@@ -5,6 +5,33 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-20 (Doku): **SerialLoom als Alternative zu com0com.** Problem: Auf einem
+  Windows-11-Rechner (Build 26200, Secure Boot) blockierte Windows die signierte
+  com0com-Version 3.0.0.0 (Geräte-Manager-Fehler 52, Code-Integrity-Ereignis 3004).
+  Geändert: [GSVMULTI_PROTOCOL.md#vcom-wahl](docs/GSVMULTI_PROTOCOL.md#vcom-wahl)
+  beschreibt com0com und [SerialLoom](https://github.com/RahulP5/SerialLoom) als zwei
+  wählbare Wege mit Einrichtung, Fehlerbild und Grenze; Testlauf, Abhängigkeiten und
+  README verweisen darauf; Integrationsidee (CLI bzw. Treiber in der Brücke) in TODO.md.
+  Konsequenz: SerialLoom ist nur funktionsgeprüft; die Prüfung auf vollständige und
+  zeitlich korrekte Übertragung nach GSVmulti steht aus. Kein Programmverhalten geändert.
+
+* 2026-11-20 (spät): **Inbetriebnahme-Kalibrierung `picam kalibrieren`, Installer mit
+  Menüs und me-fastfetch.** Problem: Auf raspi01 fehlte die Timing-Kalibrierung; sie
+  misst Telegramm → Display und ist ohne RS232 nicht messbar, die Messwerkzeuge lagen
+  nicht im Release, und picam prüfte nur, ob die Datei existiert. Geändert:
+  Messkette als Paket `dispread.calibration` (Statistik unverändert, Skripte als
+  Hüllen); `picam kalibrieren` mit vorübergehendem USB-RS232-Adapter: Prüfung, Plan,
+  Werkbank anhalten, Normierung sichern, 180 s Normierungssprünge, Normierung
+  zurückstellen und prüfen, Werkbank neu starten (jeder Weg), Auswertung, Datei nur
+  bei gültigem Ergebnis atomar schreiben, Belege unter `calibration/runs/`;
+  `--pruefen`, `--import` (Warnung, getippte Bestätigung, Notiz), `--rueckstellen`.
+  `picam doctor`/Konsole prüfen Schema und Kamera; `picam setup` und Kamera-Tab bieten
+  Kalibrieren/Prüfen/Später. Installer: Pfeiltasten-Menüs, ME-Intro, Drehzeichen und
+  Fortschritt; me-fastfetch als abwählbare Komponente (Installation und
+  Deinstallation über Manifest). Konsequenz: Ein neuer Pi braucht RS232 nur einmal bei
+  der Inbetriebnahme; ohne gültige Kalibrierung bleibt der Laufstart gesperrt. Noch
+  nicht am echten Aufbau gelaufen.
+
 * 2026-11-20 (nachmittags/abends): **Werkbank-Einrichtung ohne RS232, picam-Konsole
   mit Tabs und Formsprache, Installer-Unit repariert.** Problem: Ohne GSV-2AS-RS232
   (im Betrieb nicht angeschlossen) scheiterte die Einrichtung erst nach Fokus, Kamera

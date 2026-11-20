@@ -24,7 +24,7 @@ Die Werkbank läuft auf dem Pi; für GSVmulti kommt eine Brücke auf den Windows
 
 * [Neuen Pi geführt installieren und mit `picam` verwalten](docs/INSTALLER.md) — `./install.sh` aus dem Releasearchiv fragt Art, Konto, Adresse und Port, danach Konsole `picam` für Status, Diagnose, Dienst, Protokoll und Konfiguration
 * [Werkbank auf dem Pi installieren und starten](docs/anleitung/10-kamera-livevorschau.md#start) — `scripts/install-workbench.sh` (Paketliste `packaging/apt-packages.txt`), einmal `init-tls --host <Adresse für Windows>`, dann Dienst mit `scripts/werkbank-dienst.sh` ([Betrieb](docs/anleitung/10-kamera-livevorschau.md#werkbank-dienst))
-* [Windows-Brücke und GSVmulti vorbereiten](docs/GSVMULTI_PROTOCOL.md#windows-bruecke) — com0com-Portpaar, Windows-App GSVmulti-Brücke 1.0 (`windows/bridge`), GSVmulti am zweiten Port
+* [Windows-Brücke und GSVmulti vorbereiten](docs/GSVMULTI_PROTOCOL.md#windows-bruecke) — virtuelles COM-Portpaar (com0com oder SerialLoom), Windows-App GSVmulti-Brücke 1.0 (`windows/bridge`), GSVmulti am zweiten Port
 
 ### Einrichten
 

@@ -83,6 +83,12 @@ Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlo
   2. Die Werkbank bietet im Brücken-Dialog Schritt 1 genau diesen zum Pi-Stand passenden Installer zum Download an.
   3. Die App prüft beim Verbinden die Protokoll-/Versionspassung und sagt, wenn sie veraltet ist.
   - Übergangslösung erledigt (13.11.): `windows/bridge/build-test.cmd` als Doppelklick-Starter (ruft PowerShell mit `-ExecutionPolicy Bypass`, findet Python 3.13 über `py -3.13` und öffnet am Ende den Ausgabeordner). Unter Windows noch nicht gelaufen.
+- **Virtuelles Portpaar aus der Brücke einrichten (Idee Leonhard, 2026-11-20):** com0com scheitert auf manchen Windows-11-/Secure-Boot-Rechnern mit Fehler 52; [SerialLoom](https://github.com/RahulP5/SerialLoom) läuft dort (Doku: [GSVMULTI_PROTOCOL.md#vcom-wahl](docs/GSVMULTI_PROTOCOL.md#vcom-wahl)). Stand der Recherche (Projektseite, v0.2.0 vom 16.11.):
+  - MIT-Lizenz, Quelltext von App, CLI und eigenem UMDF-Treiber offen. Die Ports laufen als USB-CDC-Geräte über Windows-`usbser.sys` und den mitgelieferten Microsoft-signierten usbip-win2-Treiber (BSD-2); der eigene Rust-UMDF-Treiber ist nicht Microsoft-signiert und standardmäßig aus.
+  - CLI `serialloom-cli` (Automatisierung erst in den Einstellungen freischalten): `status`, `pair [COMa] [COMb]`, `list`, `delete`, `create-port`, `remove-port`, `renumber`, `--json`; dazu eine JSON-API über Named Pipe.
+  - Weg 1 (klein): Die Brücke erkennt SerialLoom-Paare (statt nur com0com) und legt auf Knopfdruck per `serialloom-cli pair` ein Paar an. Braucht die installierte App.
+  - Weg 2 (groß): Portpaar direkt in die Brücke integrieren. Heißt usbip-win2-Treiber mit ausliefern und installieren (Adminrechte, Kerneltreiber, Zertifikatslaufzeit) – Paket-, Sicherheits- und IT-Freigabe nötig; erst nach Weg 1 prüfen.
+  - Vor beidem: Dauertest Brücke → SerialLoom → GSVmulti (Vollständigkeit, Zeitbezug), Texte der App („com0com-Paar“) verallgemeinern.
 - **Keine aufblitzenden Konsolenfenster in der Windows-App (Leonhard, 2026-11-11):** Läuft die Werkbank nicht, öffnet sich bei jedem Verbindungsversuch (alle paar Sekunden) kurz ein Kommandozeilenfenster. Ursache: `windows/bridge/src/dispread_bridge_app/devices.py` `_execute()` startet für die PnP-Inventur `powershell.exe` per `subprocess.run` ohne `creationflags=subprocess.CREATE_NO_WINDOW`, und das bei jedem Versuch.
   - Fix: Flag setzen (Backend, Codex).
   - Inventur nicht bei jedem Wiederholversuch neu abfragen.

@@ -70,7 +70,9 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
 6. **COM-Portpaar einrichten.** Die App erzeugt keine Paare, und der Treiber ist
    unverifiziert. Richten Sie mit **com0com** von Hand ein Paar ein, z. B.
    `COM21` ↔ `COM22`, und notieren Sie, welche Seite die Brücke und welche
-   GSVmulti bekommt. Das Installieren eines Treibers braucht Administratorrechte
+   GSVmulti bekommt. Blockiert Windows com0com (Geräte-Manager-Fehler 52),
+   geht stattdessen **SerialLoom**; Einrichtung siehe
+   [docs/GSVMULTI_PROTOCOL.md#vcom-wahl](../../docs/GSVMULTI_PROTOCOL.md#vcom-wahl). Das Installieren eines Treibers braucht Administratorrechte
    und meist die Freigabe Ihrer IT (Signatur des Treibers prüfen lassen).
 7. **App starten.** Erster Start: Fenster „GSVmulti-Brücke“. Zweitstart holt
    nur das vorhandene Fenster nach vorn. Minimieren hält die Brücke im
