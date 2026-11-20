@@ -37,6 +37,14 @@ def drive(test, *, size=(100, 30), state='idle', instance=None, runner=None, jou
     asyncio.run(main())
 
 
+async def wait_gone(app, pilot, selector='#intro', limit_s=3.0):
+    """Unter paralleler Testlast braucht das Startbild länger; bis zu ``limit_s`` warten."""
+    for _ in range(int(limit_s / 0.1)):
+        if not app.query(selector):
+            return
+        await pilot.pause(0.1)
+
+
 def text_of(widget) -> str:
     from rich.console import Console
 
@@ -358,7 +366,7 @@ def test_intro_finishes_by_itself_once_status_is_known(monkeypatch):
     async def check(app, pilot):
         widget = app.query_one('#intro')
         assert any(name == 'Hinweise' and value.endswith('offen') for _, _, name, value in widget._lines)
-        await pilot.pause(1.0)
+        await wait_gone(app, pilot)
         assert not app.query('#intro')
     drive(check, intro=True)
 
@@ -368,7 +376,7 @@ def test_intro_static_without_animations(monkeypatch):
     monkeypatch.setattr(intro.Intro, 'STATIC_MIN_S', 0.1)
 
     async def check(app, pilot):
-        await pilot.pause(0.5)
+        await wait_gone(app, pilot)
         assert not app.query('#intro')
     drive(check, intro=True, animations='none')
 
