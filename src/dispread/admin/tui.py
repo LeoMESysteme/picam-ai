@@ -228,7 +228,7 @@ class HelpScreen(ModalScreen[None]):
             yield Static(Text('Tasten', style='bold'), id='dialog-title')
             yield Static(table)
             yield Static(Text('picam verwaltet den Dienst. Messläufe und Einrichtung der Anzeige '
-                              'laufen in der Werkbank im Browser.', style=MUTED), classes='dialog-line')
+                              'laufen in der Werkbank im Browser.', style=MUTED), classes='note')
 
     def action_close(self) -> None:
         self.dismiss(None)
@@ -331,7 +331,7 @@ class PicamApp(App[int]):
     Screen.stacked #pane { display: none; border-left: none; padding: 0 1; }
     Screen.stacked.open #nav { display: none; }
     Screen.stacked.open #pane { display: block; }
-    ConfirmScreen, HelpScreen { align: center middle; background: rgba(5, 7, 10, 0.72); }
+    ConfirmScreen, HelpScreen, AskScreen { align: center middle; background: rgba(5, 7, 10, 0.72); }
     #dialog { width: 72; max-width: 95%; height: auto; padding: 1 2; background: $panel; border: none; }
     #dialog-title { margin: 0 0 1 0; }
     .dialog-line { margin: 0 0 1 0; }
