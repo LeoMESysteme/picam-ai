@@ -451,3 +451,15 @@ def test_network_detects_lost_address():
     gone = Instance(kind='system', unit='u', scope='system', host='192.168.1.9')
     fact = probes.fact_network(gone, run)
     assert fact.level == probes.FAIL and 'DHCP' in fact.hint
+
+
+def test_color_system_truecolor_when_terminal_does_not_say():
+    from dispread.admin.cli import choose_color_system
+    env = {'TERM': 'xterm-256color'}
+    assert choose_color_system(env) == 'truecolor' and env['TEXTUAL_COLOR_SYSTEM'] == 'truecolor'
+    assert choose_color_system({'TERM': 'xterm-256color', 'COLORTERM': 'truecolor'}) is None
+    assert choose_color_system({'TERM': 'linux'}) is None
+    assert choose_color_system({'TERM': 'xterm', 'NO_COLOR': '1'}) is None
+    env = {'TERM': 'xterm-256color', 'PICAM_COLORS': '256'}
+    assert choose_color_system(env) == '256'
+    assert choose_color_system({'TERM': 'x', 'TEXTUAL_COLOR_SYSTEM': 'standard'}) is None

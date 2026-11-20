@@ -328,6 +328,29 @@ def cmd_cleanup(args, instance) -> int:
     return EXIT_OK
 
 
+def choose_color_system(environ=os.environ) -> str | None:
+    """Echtfarben für die Konsole, wenn das Terminal es nur nicht ansagt.
+
+    SSH aus Windows (cmd, PowerShell, Windows Terminal) und viele tmux-Sitzungen
+    setzen ``COLORTERM`` nicht; Textual rechnet dann alle Farben auf 256 herunter
+    und die Flächenstufen fallen zusammen. Heutige Terminals können 24 Bit, und
+    tmux rechnet selbst um, falls sein Client es nicht kann. ``PICAM_COLORS=256``
+    (oder ``TEXTUAL_COLOR_SYSTEM``) überstimmt; reine Textkonsolen bleiben unberührt.
+    """
+    if 'TEXTUAL_COLOR_SYSTEM' in environ or environ.get('NO_COLOR'):
+        return None
+    wanted = environ.get('PICAM_COLORS', '').strip().lower()
+    if wanted in ('256', 'standard', 'truecolor'):
+        environ['TEXTUAL_COLOR_SYSTEM'] = {'256': '256'}.get(wanted, wanted)
+        return environ['TEXTUAL_COLOR_SYSTEM']
+    if environ.get('COLORTERM', '').strip().lower() in ('truecolor', '24bit'):
+        return None
+    if environ.get('TERM', '') in ('', 'dumb', 'linux', 'vt100', 'vt220'):
+        return None
+    environ['TEXTUAL_COLOR_SYSTEM'] = 'truecolor'
+    return 'truecolor'
+
+
 def parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument('--config', default=argparse.SUPPRESS,
@@ -392,6 +415,7 @@ def main(argv=None) -> int:
         command = args.command
         interactive = sys.stdin.isatty() and sys.stdout.isatty() and os.environ.get('TERM') != 'dumb'
         if command == 'tui' or (command is None and interactive and not args.ascii):
+            choose_color_system()
             from .tui import run
 
             return run(instance, intro=not getattr(args, 'no_intro', False))

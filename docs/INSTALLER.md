@@ -68,6 +68,11 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam url` | Adresse der Werkbank |
 
 `--no-color` (oder `NO_COLOR`) und `--ascii` gelten für alle Befehle.
+Die Konsole nutzt 24-Bit-Farben, auch wenn das Terminal `COLORTERM` nicht
+setzt (typisch bei SSH aus Windows); `PICAM_COLORS=256` schaltet auf 256
+Farben. In tmux braucht der Client dafür das Merkmal `RGB`
+(`set -as terminal-features ',xterm-256color:RGB'` in `~/.tmux.conf`), sonst
+rechnet tmux selbst auf 256 Farben herunter. Farbvariante: `PICAM_THEME=schiefer|petrol|hell`.
 Die Konsole beginnt mit einem kurzen Startbild (ME-Logo und
 Punktmatrix, darunter die ersten Prüfergebnisse). Es endet von selbst,
 sobald der Status da ist, jede Taste überspringt es. `--no-intro` oder
