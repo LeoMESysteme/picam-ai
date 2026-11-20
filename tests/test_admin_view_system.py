@@ -51,7 +51,7 @@ def test_speicher_zeigt_gb_reserve_und_gruppen():
         text = text_of(view)
         assert '31,0 GB' in text and '28,5 GB' in text and '2,5 GB' in text
         assert 'Reserve 2,0 GB frei' in text
-        assert 'neue Läufe' in text
+        assert 'Reserve' in text and 'bis Reserve' in text
         for name in ('Läufe', 'Diagnose', 'Werkbank-Daten', 'Brücke', 'Programmversionen', 'Sonstiges'):
             assert name in text
         assert '/var/lib/picam/live' in text
@@ -153,5 +153,5 @@ def test_fehlende_befunde_stuerzen_nicht():
 
     for key in ('9', '0'):
         async def check(app, view, pilot):
-            assert 'Wird geprüft' in text_of(view)
+            assert 'wird geprüft' in text_of(view).lower()
         drive(check, key, setup=setup)

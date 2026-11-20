@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from rich.text import Text
-from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, Action, Segment, ascii_mode, bar, fit, symbol
-from .base import FactView, actions_segment
+from ..ui import ACCENT, MUTED, TONE, Action, P, ascii_mode, bar
+from ..widgets import ActionBar, SectionCard, TabBody, fact_badge, fields, header, help_line, shorten, value
+from .base import FactView
 
 
 def gb(value: float | None) -> str:
@@ -35,109 +35,98 @@ class SpeicherView(FactView):
     TAB_ID, TITLE, KEY = 'speicher', 'Speicher', '7'
     FACTS = ('speicher',)
     INFO_TITLE = 'Speicher'
-    INFO = ('Läufe, Diagnoseaufnahmen und Programmversionen liegen auf der SD-Karte des Pi. Die Werkbank hält '
-            'eine Reserve an freiem Platz: Sinkt er darunter, lehnt sie neue Läufe ab, damit nichts '
-            'halb geschrieben wird.',
-            'Aufräumen listet zuerst alte Läufe und was dabei frei würde, und fragt vor dem Löschen. '
-            'Die Größen werden im Hintergrund alle 60 s neu gezählt.')
-
-    DEFAULT_CSS = """
-    SpeicherView #sp-warn { margin: 1 0 0 0; }
-    SpeicherView #sp-disk, SpeicherView #sp-groups { margin: 0; }
-    """
+    ABOUT = ('Läufe, Diagnoseaufnahmen und Programmversionen liegen auf der SD-Karte des Pi. Die Werkbank hält '
+             'eine Reserve an freiem Platz: Sinkt er darunter, lehnt sie neue Läufe ab, damit nichts '
+             'halb geschrieben wird.',
+             'Aufräumen listet zuerst alte Läufe und was dabei frei würde, und fragt vor dem Löschen. '
+             'Die Größen werden im Hintergrund alle 60 s neu gezählt.')
+    INFO_FACTS = ('speicher',)
 
     def compose(self):
-        yield Static(Text(self.TITLE, style='bold'), classes='title')
-        yield Static(id='sp-warn', classes='hint')
-        yield Segment('Datenträger', Static(id='sp-disk'))
-        yield Segment('Aufteilung', Static(id='sp-groups'))
-        yield actions_segment(Static(id='sp-note', classes='note'))
-
-    def on_resize(self) -> None:
-        if self.is_mounted:
-            self.update_view()
+        with TabBody(classes='tab-body'):
+            yield SectionCard(id='sp-disk')
+            yield SectionCard(id='sp-groups')
+        yield ActionBar()
 
     def actions(self) -> list[Action]:
-        return [Action('a', 'Aufräumen …', lambda: self.app.run_cli(['aufraeumen'], 'picam aufraeumen'))]
-
-    def _width(self) -> int:
-        inner = self.query_one('#sp-disk').content_size.width
-        return max(40, inner or (self.size.width or 80) - 5)
+        return [Action('a', 'Aufräumen …', lambda: self.app.run_cli(['aufraeumen'], 'picam aufraeumen'),
+                       icon='storage')]
 
     def update_view(self) -> None:
         app = self.app
         fact = app.fact('speicher')
         level = fact.level if fact is not None else probes.UNKNOWN
-        warn = self.query_one('#sp-warn', Static)
-        warn.display = level in (probes.WARN, probes.FAIL)
-        if warn.display:
-            text = Text()
-            text.append(f'{symbol(level)} ', style=TONE[level])
-            text.append('Läufe könnten abgelehnt werden' if level == probes.WARN
-                        else 'Unter der Reserve: neue Läufe werden abgelehnt', style='bold')
-            text.append('\n' + (fact.hint or ''))
-            warn.update(text)
-            warn.set_class(level == probes.FAIL, 'fail')
         usage = app.storage
-        disk, groups = self.query_one('#sp-disk', Static), self.query_one('#sp-groups', Static)
-        if usage is None:
-            disk.update(Text('wird ermittelt …', style=MUTED))
-            groups.update(Text('wird ermittelt …', style=MUTED))
+        disk, groups = self.query_one('#sp-disk', SectionCard), self.query_one('#sp-groups', SectionCard)
+        width = self.card_width(disk)
+        note = None
+        if usage is not None and usage.get('total'):
+            note = f"{gb(usage['total'])} gesamt · {usage.get('mount', '/')}"
+        if level == probes.WARN:
+            hint = help_line('Läufe könnten abgelehnt werden: wenig Platz.', 'i', 'Abhilfe')
+        elif level == probes.FAIL:
+            hint = help_line('Unter der Reserve: neue Läufe werden abgelehnt.', 'i', 'Abhilfe')
         else:
-            disk.update(self._disk(usage, level))
-            groups.update(self._groups(usage))
-        self.query_one('#sp-note', Static).update(
-            Text('Aufräumen löscht erst nach Vorschau und Rückfrage.', style=MUTED))
+            hint = help_line('Unter der Reserve lehnt die Werkbank neue Läufe ab.')
+        body = Text('wird ermittelt …', style=MUTED) if usage is None else self._disk(usage, level, width)
+        disk.show(header('storage', 'Datenträger', fact_badge(fact), width, note=note), body, hint)
+        body = Text('wird ermittelt …', style=MUTED) if usage is None else self._groups(usage, width)
+        groups.show(header('file', 'Aufteilung', None, width), body,
+                    help_line('Aufräumen löscht erst nach Vorschau und Rückfrage.'))
         self.sync_buttons()
 
-    def _disk(self, usage: dict, level: str) -> Text:
+    def _disk(self, usage: dict, level: str, width: int) -> Text:
         total, used, free = usage.get('total'), usage.get('used'), usage.get('free')
-        text = Text()
         if not total or used is None or free is None:
-            text.append('Belegung unbekannt –', style=MUTED)
-            return text
-        width = self._width()
-        bar_width = max(10, min(60, width))
-        tone = TONE[level] if level in (probes.WARN, probes.FAIL) else ACCENT
-        text.append(f"{usage.get('mount', '/')}   {gb(total)} gesamt\n", style=MUTED)
+            return Text('Belegung unbekannt –', style=MUTED)
+        bar_width = max(10, min(72, width))
+        tight = level in (probes.WARN, probes.FAIL)
+        tone = TONE[level] if tight else ACCENT
+        text = Text()
         text.append_text(bar(used / total, bar_width, tone))
-        text.append(f'\nbelegt {gb(used)} ({used / total * 100:.0f} %)  ·  frei ', style='')
-        text.append(gb(free), style=TONE[level] if level in (probes.WARN, probes.FAIL) else '')
         reserve = reserve_bytes(self.app)
         if reserve:
             mark = '^' if ascii_mode() else '▲'
             position = min(bar_width - 1, max(0, round((1 - reserve / total) * bar_width)))
             label = f'Reserve {gb(reserve)} frei'
-            if position + 2 + len(label) <= bar_width + 10:
+            if position + 2 + len(label) <= width:
                 line = ' ' * position + mark + ' ' + label
             else:
                 line = ' ' * max(0, position - len(label) - 1) + label + ' ' + mark
             text.append('\n' + line, style=MUTED)
+        rows = [('belegt', value(gb(used), f'{used / total * 100:.0f} %')),
+                ('frei', value(gb(free), tone=TONE[level] if tight else None, bold=tight))]
+        if reserve:
             if free >= reserve:
-                text.append(f'\nNoch {gb(free - reserve)} bis zur Reserve. Darunter lehnt die Werkbank '
-                            'neue Läufe ab.')
+                rows.append(('bis Reserve', value(gb(free - reserve))))
             else:
-                text.append(f'\n{gb(reserve - free)} unter der Reserve: neue Läufe werden abgelehnt.',
-                            style=TONE[probes.FAIL])
+                rows.append(('unter Reserve', value(gb(reserve - free), tone=TONE[probes.FAIL], bold=True)))
+        text.append('\n')
+        text.append_text(fields(rows, width, label_w=14, columns=2 if width >= 60 else 1))
         return text
 
-    def _groups(self, usage: dict) -> Text:
+    def _groups(self, usage: dict, width: int) -> Text:
         total = usage.get('total') or 0
-        width = self._width()
-        bar_width = 14 if width >= 76 else 8
         rows = usage.get('groups') or []
         if not rows:
             return Text('–', style=MUTED)
-        name_width = 19
-        path_width = width - (name_width + bar_width + 12)
+        bar_width = 14 if width >= 76 else 8
+        name_width = 19 if width >= 60 else 15
+        size_width = 11
+        path_width = width - (name_width + bar_width + size_width + 2)
         text = Text(no_wrap=True, overflow='ellipsis')
         for index, (name, path, size) in enumerate(rows):
             if index:
                 text.append('\n')
-            text.append(name.ljust(name_width), style='bold' if name != 'Sonstiges' else MUTED)
-            tone = MUTED if name == 'Sonstiges' else ACCENT
-            text.append_text(bar((size or 0) / total if total else 0, bar_width, tone))
-            text.append(' ' + gb(size).rjust(9) + ' ')
+            other = name == 'Sonstiges'
+            text.append(name[:name_width - 1].ljust(name_width), style=MUTED)
+            text.append_text(bar((size or 0) / total if total else 0, bar_width, MUTED if other else ACCENT))
+            text.append(' ')
+            text.append_text(value(gb(size).rjust(8)))
             if path_width >= 12:
-                text.append(fit(str(path), path_width), style=MUTED)
+                text.append(' ')
+                if str(path).startswith('/'):
+                    text.append_text(shorten(value(str(path), tone=P.text_soft), path_width))
+                else:
+                    text.append(str(path)[:path_width], style=MUTED)
         return text

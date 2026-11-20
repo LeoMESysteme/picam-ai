@@ -229,36 +229,18 @@ async def test_zertifikat_renew_confirm_for_plain_certificate():
         assert ran and 'renew-tls' in ran[0] and '/var/lib/picam/workbench/tls' in ran[0]
 
 
-@pytest.mark.parametrize('layout', ['a', 'b'])
 @pytest.mark.parametrize('size', SIZES)
-@pytest.mark.parametrize('key', ['4', '5'])
+@pytest.mark.parametrize('key', ['3', '4', '5', '6'])
 @sync
-async def test_layouts_render_kamera_and_ausgabe(layout, size, key, monkeypatch):
-    monkeypatch.setenv('PICAM_LAYOUT', layout)
+async def test_cards_render_and_actionbar_stays_visible(size, key):
     app = admin_fakes.make_app('run')
     async with app.run_test(size=size) as pilot:
         await pilot.pause(0.4)
         await open_tab(pilot, key)
         text = text_of(app, app.current)
-        assert ('KAMERA' in text and '/dev/video0' in text) if key == '4' else 'Netzwerk' in text
+        expected = {'3': 'WERKBANK-DIENST', '4': '/dev/video0', '5': 'Netzwerk', '6': 'ZERTIFIKAT'}[key]
+        assert expected in text
         assert app.view().query_one('#buttons').region.bottom <= size[1] - 2  # Leiste bleibt sichtbar
-
-
-@sync
-async def test_ausgabe_layout_b_tiles_select_path(monkeypatch):
-    monkeypatch.setenv('PICAM_LAYOUT', 'b')
-    app = admin_fakes.make_app('idle')
-    async with app.run_test(size=(100, 30)) as pilot:
-        await pilot.pause(0.4)
-        await open_tab(pilot, '5')
-        view = app.view()
-        assert app.focused is view.query_one('#out-tiles')
-        await pilot.press('right')
-        await pilot.pause(0.3)
-        assert view.selected_index() == 2 and '460800' in text_of(app, 'ausgabe')
-        await pilot.click('#out-tiles-3')
-        await pilot.pause(0.3)
-        assert view.selected_index() == 3
 
 
 @sync
@@ -273,20 +255,6 @@ async def test_ausgabe_click_on_path_chip_selects_it():
         await pilot.click('#paths', offset=(start + 1, line))
         await pilot.pause(0.3)
         assert view.selected_index() == 0
-
-
-@sync
-async def test_kamera_layout_b_tile_shows_details(monkeypatch):
-    monkeypatch.setenv('PICAM_LAYOUT', 'b')
-    app = admin_fakes.make_app('idle')
-    async with app.run_test(size=(100, 30)) as pilot:
-        await pilot.pause(0.4)
-        await open_tab(pilot, '4')
-        assert '/dev/video0' in text_of(app, 'kamera')
-        await pilot.press('right')
-        await pilot.pause(0.3)
-        text = text_of(app, 'kamera')
-        assert 'timing-streamcam.json' in text and 'Ohne Timing-Kalibrierung' in text
 
 
 @sync

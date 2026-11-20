@@ -2,130 +2,132 @@
 
 from __future__ import annotations
 
-from rich.table import Table
 from rich.text import Text
-from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, Segment, fact_title, hint_block, kv_table, symbol
-from .base import FactView, actions_segment
+from ..ui import MUTED
+from ..widgets import (
+    ActionBar,
+    SectionCard,
+    TabBody,
+    badge,
+    detail_rows,
+    fact_badge,
+    fact_help,
+    fields,
+    header,
+    help_line,
+    shorten,
+    value,
+)
+from .base import FactView
 
-STATE = {'up': (probes.OK, 'up'), 'down': (probes.OFF, 'down')}
+STATE = {'up': (probes.OK, 'up', 'on'), 'down': (probes.OFF, 'down', 'off')}
+LABEL_W = 12
+TAILSCALE = {'Running': probes.OK, 'Stopped': probes.OFF, 'NeedsLogin': probes.WARN}
 
 
 class NetzwerkView(FactView):
     TAB_ID, TITLE, KEY = 'netzwerk', 'Netzwerk', '8'
     FACTS = ('netzwerk', 'uhr')
     INFO_TITLE = 'Netzwerk'
-    INFO = ('Die Werkbank ist unter einer festen Adresse erreichbar, die im Zertifikat steht. Liegt diese '
-            'Adresse auf keiner Schnittstelle, finden Browser und Brücke den Pi nicht.',
-            'Diese Ansicht ist nur zum Lesen. Ändern: WLAN/LAN mit nmcli (z. B. nmcli device status), '
-            'Tailscale in der Tailscale-App oder mit tailscale up. Es wird nichts bei fremden Diensten '
-            'abgefragt, auch keine öffentliche IP.')
-
-    DEFAULT_CSS = """
-    NetzwerkView #net-addr, NetzwerkView #net-clock { margin: 0; }
-    """
+    ABOUT = ('Die Werkbank ist unter einer festen Adresse erreichbar, die im Zertifikat steht. Liegt diese '
+             'Adresse auf keiner Schnittstelle, finden Browser und Brücke den Pi nicht.',
+             'Diese Ansicht ist nur zum Lesen. Ändern: WLAN/LAN mit nmcli (z. B. nmcli device status), '
+             'Tailscale in der Tailscale-App oder mit tailscale up. Es wird nichts bei fremden Diensten '
+             'abgefragt, auch keine öffentliche IP.')
+    INFO_FACTS = FACTS
 
     def compose(self):
-        yield Static(Text(self.TITLE, style='bold'), classes='title')
-        yield Segment('Dieser Pi', Static(id='net-host'))
-        yield Segment('Schnittstellen', Static(id='net-ifaces'))
-        yield Segment('Tailscale', Static(id='net-tailscale'))
-        yield Segment('Adresse der Werkbank', Static(id='net-addr'), Static(id='net-addr-hint', classes='hint'))
-        yield Segment('Uhrzeit', Static(id='net-clock'), Static(id='net-clock-hint', classes='hint'))
-        yield Static(id='net-note', classes='note')
-        yield actions_segment()
-
-    def on_resize(self) -> None:
-        if self.is_mounted:
-            self.update_view()
+        with TabBody(classes='tab-body'):
+            yield SectionCard(id='net-ifaces')
+            yield SectionCard(id='net-addr')
+            yield SectionCard(id='net-tailscale')
+            yield SectionCard(id='net-clock')
+        yield ActionBar()
 
     def actions(self):
         return []
 
     def update_view(self) -> None:
         info = self.app.network
-        host, ifaces, tail = (self.query_one(f'#net-{n}', Static) for n in ('host', 'ifaces', 'tailscale'))
+        cards = {n: self.query_one(f'#net-{n}', SectionCard) for n in ('ifaces', 'addr', 'tailscale', 'clock')}
+        width = self.card_width(cards['ifaces'])
+        waiting = Text('wird ermittelt …', style=MUTED)
         if info is None:
-            for widget in (host, ifaces, tail):
-                widget.update(Text('wird ermittelt …', style=MUTED))
+            body = waiting
         else:
-            host.update(kv_table([('Hostname', info.get('hostname') or '–')]))
-            ifaces.update(self._ifaces(info.get('interfaces') or []))
-            tail.update(self._tailscale(info.get('tailscale')))
-        self._address(info)
+            body = fields([('Hostname', value(info.get('hostname')))], width, label_w=LABEL_W)
+            body.append('\n')
+            body.append_text(self._ifaces(info.get('interfaces') or [], width))
+        cards['ifaces'].show(header('network', 'Dieser Pi', None, width), body,
+                             help_line('Nur zum Ansehen. Ändern mit nmcli (Netz) oder der Tailscale-App.'))
+        self._address(cards['addr'], info, width)
+        tailscale = (info or {}).get('tailscale')
+        if info is None:
+            cards['tailscale'].show(header('tailscale', 'Tailscale', None, width), waiting)
+        elif tailscale is None:
+            cards['tailscale'].show(header('tailscale', 'Tailscale', badge(probes.OFF, 'nicht erkannt'), width),
+                                    None, help_line('Nicht installiert oder nicht erkannt.'))
+        else:
+            state = str(tailscale.get('state') or '–')
+            level = TAILSCALE.get(state, probes.UNKNOWN)
+            rows = [('Name', value(tailscale.get('name')), True),
+                    ('Adressen', value(', '.join(tailscale.get('addresses') or []) or None), True)]
+            cards['tailscale'].show(
+                header('tailscale', 'Tailscale', badge(level, state, 'on' if level == probes.OK else None), width),
+                fields(rows, width, label_w=LABEL_W))
         clock = self.app.fact('uhr')
-        widget = self.query_one('#net-clock', Static)
-        hint = self.query_one('#net-clock-hint', Static)
-        if clock is None:
-            widget.update(Text('Wird geprüft …', style=MUTED))
-            hint.display = False
-        else:
-            widget.update(fact_title(clock))
-            block = hint_block(clock)
-            hint.display = block is not None
-            if block is not None:
-                hint.update(block)
-        self.query_one('#net-note', Static).update(Text(
-            'Nur zum Ansehen. Ändern mit nmcli (Netz) oder der Tailscale-App.', style=MUTED))
+        cards['clock'].show(header('clock', 'Uhrzeit', fact_badge(clock), width),
+                            fields(detail_rows(clock), width, label_w=LABEL_W), fact_help(clock))
         self.sync_buttons()
 
-    def _ifaces(self, interfaces: list) -> Table | Text:
+    def _ifaces(self, interfaces: list, width: int) -> Text:
         if not interfaces:
             return Text('keine Schnittstellen erkannt', style=MUTED)
-        wide = (self.size.width or 80) >= 84
-        table = Table.grid(padding=(0, 2))
-        table.add_column(no_wrap=True)
-        table.add_column(no_wrap=True)
-        table.add_column(overflow='fold', ratio=1)
-        if wide:
-            table.add_column(no_wrap=True, style=MUTED)
-        for item in interfaces:
-            level, word = STATE.get(item.get('state'), (probes.UNKNOWN, 'unbekannt'))
-            name = Text()
-            name.append(f'{symbol(level)} ', style=TONE[level])
-            name.append(str(item.get('name') or '?'), style='bold')
-            addresses = ', '.join(item.get('addresses') or []) or '–'
-            row = [name, Text(word, style=TONE[level]), addresses]
+        name_w = max(LABEL_W, max(len(str(i.get('name') or '?')) for i in interfaces) + 2)
+        states = [badge(*self._state(item)) for item in interfaces]
+        addresses = [value(', '.join(item.get('addresses') or []) or None) for item in interfaces]
+        state_w = max(s.cell_len for s in states) + 2
+        addr_w = max(a.cell_len for a in addresses) + 3
+        wide = name_w + state_w + addr_w + 19 <= width
+        text = Text(no_wrap=True)
+        for index, item in enumerate(interfaces):
+            if index:
+                text.append('\n')
+            text.append(str(item.get('name') or '?').ljust(name_w), style=MUTED)
+            text.append_text(states[index])
+            text.append(' ' * (state_w - states[index].cell_len))
+            field = shorten(addresses[index], max(6, width - name_w - state_w))
+            text.append_text(field)
             if wide:
-                row.append(item.get('mac') or '–')
-            table.add_row(*row)
-        return table
+                text.append(' ' * (addr_w - field.cell_len))
+                text.append_text(value(item.get('mac'), tone=MUTED))
+        return text
 
-    def _tailscale(self, tailscale) -> Text | Table:
-        if tailscale is None:
-            return Text('nicht installiert oder nicht erkannt', style=MUTED)
-        return kv_table([('Zustand', str(tailscale.get('state') or '–')),
-                         ('Name', tailscale.get('name') or '–'),
-                         ('Adressen', ', '.join(tailscale.get('addresses') or []) or '–')])
+    @staticmethod
+    def _state(item: dict) -> tuple[str, str, str]:
+        return STATE.get(item.get('state'), (probes.UNKNOWN, 'unbekannt', 'unknown'))
 
-    def _address(self, info) -> None:
-        widget = self.query_one('#net-addr', Static)
-        hint = self.query_one('#net-addr-hint', Static)
+    def _address(self, card: SectionCard, info, width: int) -> None:
         fact = self.app.fact('netzwerk')
         if fact is None:
-            widget.update(Text('Wird geprüft …', style=MUTED))
-            hint.display = False
+            card.show(header('address', 'Adresse der Werkbank', fact_badge(None), width))
             return
-        text = Text()
-        text.append_text(fact_title(fact))
-        address = self.app.instance.host or dict(fact.detail).get('Werkbank-Adresse') or '–'
+        address = self.app.instance.host or dict(fact.detail).get('Werkbank-Adresse')
         on = None
-        if info is not None and address != '–':
+        if info is not None and address:
             on = next((i['name'] for i in info.get('interfaces') or []
                        if any(a.split('/')[0] == address for a in i.get('addresses') or [])), None)
-        text.append(f'\nAdresse {address}  ', style=MUTED)
         if on:
-            text.append(f'{symbol(probes.OK)} liegt auf {on}', style=TONE[probes.OK])
+            where = badge(probes.OK, f'liegt auf {on}')
         elif info is not None and fact.level == probes.OK:
-            text.append('ist ein Name dieses Pi', style=ACCENT)
+            where = badge(probes.OK, 'ist ein Name dieses Pi')
         elif info is not None:
-            text.append(f'{symbol(probes.FAIL)} liegt auf keiner Schnittstelle', style=TONE[probes.FAIL])
-        widget.update(text)
-        block = hint_block(fact)
-        hint.display = block is not None
-        if block is not None:
-            hint.update(block)
-            hint.set_class(fact.level == probes.FAIL, 'fail')
-            hint.set_class(fact.level not in (probes.FAIL, probes.WARN), 'info')
+            where = badge(probes.FAIL, 'liegt auf keiner Schnittstelle')
+        else:
+            where = value(None)
+        rows = [('Adresse', value(address)), ('Erreichbar', where)]
+        card.show(header('address', 'Adresse der Werkbank', fact_badge(fact), width),
+                  fields(rows, width, label_w=LABEL_W, columns=2 if width >= 60 else 1),
+                  fact_help(fact, 'Steht im Zertifikat und in den Kopplungen.'))

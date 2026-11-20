@@ -1,12 +1,7 @@
 """Dashboard: Lauf, Hinweis, Bereiche, letzte Meldungen; unten die Aktionsleiste.
 
-Zwei Anordnungen (``PICAM_LAYOUT``):
-
-- A „Karten + Abzeichen“: links Logo, Hinweis und Laufkarte, rechts die Karte
-  „Bereiche“ (Zeichen, Name, Abzeichen bzw. Wertfeld), darunter die Meldungen.
-- B „Kacheln + Details“: oben fünf Kacheln (Werkbank, Lauf, Kamera, Ausgabe,
-  Speicher; Enter oder Klick öffnet den Tab), darunter links die Laufzeilen,
-  rechts die übrigen Bereiche als schlichte Zeilen.
+Links Logo, Hinweis und Laufkarte, rechts die Karte „Bereiche“ (Zeichen, Name,
+Abzeichen bzw. Wertfeld), darunter die letzten Meldungen.
 """
 
 from __future__ import annotations
@@ -27,7 +22,6 @@ from ..ui import MUTED, Action, P, ReflowLog, status_strip
 from ..widgets import (
     ActionBar,
     TabBody,
-    TileRow,
     badge,
     clip,
     fact_badge,
@@ -36,8 +30,6 @@ from ..widgets import (
     help_line,
     icon,
     key_chip,
-    layout_mode,
-    tile_text,
     value,
 )
 from .base import TabView
@@ -51,13 +43,10 @@ SPLIT = 76          # darunter: gestapelt, Liste zuerst
 LOGO_MIN_LEFT = 40  # Logo (38 Spalten) nur, wenn die linke Spalte so breit ist
 LOGO_MIN_HEIGHT = 30
 
-#: Zeichen je Bereich (Liste und Kacheln)
+#: Zeichen je Bereich
 GLYPHS = {'dienst': 'service', 'lauf': 'run', 'ausgabe': 'output', 'kamera': 'camera', 'bruecke': 'bridge',
           'zertifikat': 'cert', 'speicher': 'storage', '#cpu': 'system', '#ram': 'system', '#temp': 'system',
           'version': 'version', '#setup': 'setup'}
-#: Kacheln der Richtung B: (Befund, Titel, Tab)
-TILES = (('dienst', 'Werkbank', 'dienst'), ('lauf', 'Lauf', 'lauf'), ('kamera', 'Kamera', 'kamera'),
-         ('ausgabe', 'Ausgabe', 'ausgabe'), ('speicher', 'Speicher', 'speicher'))
 
 
 class RunCard(Static):
@@ -67,11 +56,8 @@ class RunCard(Static):
     BINDINGS = [Binding('enter', 'open', show=False)]
     DEFAULT_CSS = '''
     RunCard { padding: 0 1; background: $picam-surface; transition: background 150ms out_cubic; }
-    RunCard.plain { background: $picam-canvas; border-left: wide $picam-line; }
-    RunCard.plain.running { border-left: wide $picam-accent; }
     RunCard:hover { background: $picam-raised; }
     RunCard:focus { background: $picam-raised; }
-    RunCard.plain:focus { border-left: wide $picam-accent-strong; }
     '''
 
     def on_click(self) -> None:
@@ -96,32 +82,19 @@ class DashboardView(TabView):
             ('version', 'Version', 'dienst'), ('#setup', 'Einrichtung', None))
     SUB_ROWS = ('ausgabe',)  # gehört zum Lauf: eingerückt
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.mode = layout_mode()
-
-    def rows(self) -> tuple:
-        """Zeilen der Bereichsliste; in B stehen die Kachelbereiche nicht noch einmal in der Liste."""
-        if self.mode != 'b':
-            return self.ROWS
-        tiles = {key for key, _, _ in TILES}
-        return tuple(row for row in self.ROWS if row[0] not in tiles)
-
     def compose(self):
         with TabBody(classes='tab-body'):
-            if self.mode == 'b':
-                yield TileRow(len(TILES), id='dash-tiles', min_tile=14, classes='nav')
             with Horizontal(id='dash'):
                 with Vertical(id='dash-left'):
                     yield Static(id='dash-logo')
                     yield Static(id='dash-warn')
-                    yield RunCard(id='dash-run', classes='plain' if self.mode == 'b' else '')
+                    yield RunCard(id='dash-run')
                     with Vertical(id='dash-tail'):
                         yield Static(id='tail-head')
                         yield ReflowLog(id='tail-log', max_lines=TAIL_LINES, wrap=True, markup=False,
                                       auto_scroll=True, min_width=20)
                 with Vertical(id='dash-right'):
-                    with Vertical(id='dash-areas', classes='plain' if self.mode == 'b' else ''):
+                    with Vertical(id='dash-areas'):
                         yield Static(id='areas-head')
                         yield OptionList(id='dash-list')
         yield ActionBar()
@@ -162,8 +135,7 @@ class DashboardView(TabView):
                 dash.move_child(left, before=right)
         left_w = (width - 5) if stacked else (width - 5 - right_w - 3 - 2)
         self._left_w = left_w
-        self._logo_ok = (self.mode != 'b' and left_w >= LOGO_MIN_LEFT and height >= LOGO_MIN_HEIGHT
-                         and not stacked)
+        self._logo_ok = left_w >= LOGO_MIN_LEFT and height >= LOGO_MIN_HEIGHT and not stacked
         self.query_one('#dash-logo').display = self._logo_ok
         self._tall = height >= LOGO_MIN_HEIGHT
 
@@ -196,8 +168,6 @@ class DashboardView(TabView):
         for log in self.query('#tail-log'):
             log.sync()
         self._layout()
-        if self.mode == 'b':
-            self._render_tiles()
         self._render_list()
         self._render_run()
         self._render_warn()
@@ -243,7 +213,7 @@ class DashboardView(TabView):
         width = max(20, getattr(self, '_list_width', 31) - 2)
         right, _ = self._area(key)
         text = Text(no_wrap=True)
-        if key in self.SUB_ROWS and self.mode != 'b':
+        if key in self.SUB_ROWS:
             text.append(f' {icon("sub")} ', style=P.line)
         text.append(f'{icon(GLYPHS.get(key, "system"))} ', style=MUTED)
         text.append(label)
@@ -257,7 +227,7 @@ class DashboardView(TabView):
 
     def _render_list(self) -> None:
         listing = self.query_one('#dash-list', OptionList)
-        rows = self.rows()
+        rows = self.ROWS
         if listing.option_count != len(rows):
             listing.clear_options()
             listing.add_options([Option(self._row(key, label), id=key) for key, label, _ in rows])
@@ -272,34 +242,6 @@ class DashboardView(TabView):
             target = self.app.first_setup_tab()
         if target:
             self.app.open_tab(target)
-
-    # ------------------------------------------------------------ Kacheln (B)
-    def _render_tiles(self) -> None:
-        app = self.app
-        row = self.query_one('#dash-tiles', TileRow)
-        inner = row.arrange(row.size.width or max(40, self.app.size.width - 6))
-        live = app.snapshot.live if app.snapshot is not None else None
-        run = (live or {}).get('run') or {}
-        for index, (key, title, _) in enumerate(TILES):
-            if key == 'dienst':
-                kennzahl = value(f'{app.instance.host}:{app.instance.port}' if app.instance.host else None)
-            elif key == 'lauf':
-                elapsed = run.get('elapsed_s')
-                kennzahl = value(fmt_duration(float(elapsed) + drift(app)) if elapsed is not None else None)
-            elif key == 'kamera':
-                frames = ((live or {}).get('camera') or {}).get('frames')
-                kennzahl = value(fmt_int(frames) if frames is not None else None, 'Bilder')
-            elif key == 'ausgabe':
-                kennzahl = value(((live or {}).get('output') or {}).get('state') if live else None)
-            else:
-                reserve = dict(app.fact('speicher').detail).get('Reserve') if app.fact('speicher') else None
-                kennzahl = value(reserve, 'Reserve' if reserve else None)
-            row.set_tile(index, tile_text(GLYPHS[key], title, fact_badge(app.fact(key)), kennzahl, inner))
-
-    @on(TileRow.Selected, '#dash-tiles')
-    def _tile_open(self, event: TileRow.Selected) -> None:
-        if event.activate:
-            self.app.open_tab(TILES[event.index][2])
 
     # ------------------------------------------------------------ Lauf
     def _latest(self, run: dict) -> Text:
@@ -345,7 +287,7 @@ class DashboardView(TabView):
         app = self.app
         snap = app.snapshot
         card = self.query_one('#dash-run', RunCard)
-        width = card.content_size.width or max(30, self._left_w - (4 if self.mode == 'b' else 2))
+        width = card.content_size.width or max(30, self._left_w - 2)
         running = False
         rows: list = []
         hint: Text | None = None
@@ -390,9 +332,7 @@ class DashboardView(TabView):
                     rows = [('Werkbank', value(app.instance.url))]
                 hint = help_line('Läufe startet die Werkbank im Browser.')
         text = Text()
-        # B: Zustand steht schon auf der Kachel „Lauf“
-        text.append_text(clip(header('run', 'Lauf', None if self.mode == 'b' and snap is not None else state,
-                                     width), width))
+        text.append_text(clip(header('run', 'Lauf', state, width), width))
         if rows:
             text.append('\n')
             text.append_text(fields(rows, width, label_w=13, columns=2))
@@ -407,9 +347,7 @@ class DashboardView(TabView):
 
     def _render_warn(self) -> None:
         warn = self.query_one('#dash-warn', Static)
-        # in B stehen die Kachelbereiche schon mit Abzeichen oben
-        hidden = {'lauf'} | ({key for key, _, _ in TILES} if self.mode == 'b' else set())
-        problems = [f for f in self.app.problems() if f.key not in hidden]
+        problems = [f for f in self.app.problems() if f.key != 'lauf']
         if not problems:
             warn.display = False
             return

@@ -1,4 +1,4 @@
-"""Bildsprache der picam-Konsole: Zeichen, Wertfelder, Abzeichen, Abschnitte, Kacheln, Aktionsleiste.
+"""Bildsprache der picam-Konsole: Zeichen, Wertfelder, Abzeichen, Karten, Aktionsleiste.
 
 Eine feste Grammatik, damit man auf einen Blick sieht, was was ist:
 
@@ -19,19 +19,19 @@ Nie Farbe allein: jedes Abzeichen trägt Zeichen und Wort. Alle Zeichen stehen i
 ``ICONS`` mit ASCII-Ersatz (``ascii_mode()``). Benutzt werden nur Zeichen, die im
 Labor-Terminal (Windows-Konsole über SSH) einspaltig und sauber erscheinen.
 
-Zwei Anordnungen zum Vergleich (``PICAM_LAYOUT``): ``a`` „Karten + Abzeichen“
-(jeder Abschnitt eine Karte, Kopf links, Abzeichen rechts) und ``b`` „Kacheln +
-Details“ (oben Kacheln mit Zustand und Kennzahl, darunter schlichte Zeilen).
+Anordnung „Karten + Abzeichen“: jeder Abschnitt eine Karte (``SectionCard`` oder,
+wenn sie Bedienelemente enthält, ``CardBox``), Kopf links, Abzeichen rechts; die
+Aktionen stehen in der ``ActionBar`` am unteren Rand des Tabs.
 """
 
 from __future__ import annotations
 
-import os
-
+from rich.console import Group
+from rich.table import Table
 from rich.text import Text
 from textual import events
 from textual.binding import Binding
-from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Static
 
@@ -39,16 +39,6 @@ from . import probes
 from .ui import MUTED, SOFT, TEXT, TONE, Action, P, ascii_mode
 
 DASH = '–'
-
-# ----------------------------------------------------------------- Anordnung
-LAYOUTS = ('a', 'b')
-
-
-def layout_mode() -> str:
-    """``PICAM_LAYOUT``: ``a`` (Karten + Abzeichen, Vorgabe) oder ``b`` (Kacheln + Details)."""
-    value = os.environ.get('PICAM_LAYOUT', 'a').strip().lower()
-    return value if value in LAYOUTS else 'a'
-
 
 # ----------------------------------------------------------------- Zeichen
 #: Name → (Unicode, ASCII). Nur Zeichen, die im Labor-Terminal einspaltig erscheinen;
@@ -62,10 +52,13 @@ ICONS: dict[str, tuple[str, str]] = {
     'output': ('⇅', '>'), 'bridge': ('⇄', '='), 'network': ('≋', '~'), 'uart': ('⌁', '-'),
     'cert': ('⚿', 'k'), 'storage': ('▤', '#'), 'clock': ('◷', '@'), 'file': ('⌸', '/'),
     'template': ('⧉', '/'), 'log': ('☰', '='), 'system': ('◆', '+'), 'version': ('⎘', 'v'),
-    'setup': ('✎', '*'), 'info': ('ⓘ', 'i'),
+    'setup': ('✎', '*'), 'info': ('ⓘ', 'i'), 'account': ('☺', '@'), 'pins': ('⏚', '='),
+    'address': ('⚑', '@'), 'tailscale': ('⦿', 'o'), 'values': ('⎓', '='),
     # Handlungen
     'start': ('⏵', '>'), 'stop': ('■', '#'), 'restart': ('↻', '*'), 'connect': ('▸', '>'),
-    'open': ('→', '>'), 'fix': ('✎', '*'), 'power': ('⏻', 'o'),
+    'open': ('→', '>'), 'fix': ('✎', '*'), 'power': ('⏻', 'o'), 'update': ('⟳', '^'),
+    'back': ('⎘', '<'), 'check': ('⌕', '?'), 'remove': ('✘', 'x'), 'filter': ('▾', 'v'),
+    'key': ('⚿', 'k'),
     # Satzzeichen der Bildsprache
     'help': ('›', '>'), 'select': ('▸', '>'), 'sub': ('└', '`'),
 }
@@ -128,11 +121,23 @@ def shorten(text: Text, width: int) -> Text:
     return out
 
 
+class HelpText(Text):
+    """Hilfezeile; ``core`` = Länge ohne Tastenhinweis (fällt weg, wenn die Zeile nicht passt)."""
+
+    core = 0
+
+    def fitted(self, width: int) -> Text:
+        if self.cell_len <= width or not self.core:
+            return clip(self, width)
+        return clip(self[:self.core], width)
+
+
 def help_line(content: str, key: str | None = None, key_label: str | None = None) -> Text:
     """Eine kursive Hilfezeile „› …“; optional ein Tastenhinweis (z. B. i für mehr)."""
-    text = Text(no_wrap=True, overflow='ellipsis')
+    text = HelpText(no_wrap=True, overflow='ellipsis')
     text.append(f'{icon("help")} {content}', style=f'italic {MUTED}')
     if key:
+        text.core = len(text)
         text.append('  ')
         text.append_text(key_chip(key))
         text.append(f' {key_label}', style=f'italic {MUTED}')
@@ -159,6 +164,57 @@ def first_sentence(hint: str | None) -> str | None:
         if end in hint:
             return hint.split(end, 1)[0] + ('.' if end == '. ' else '')
     return hint
+
+
+def fact_help(fact: probes.Fact | None, default: str | None = None, *, always: bool = True) -> Text | None:
+    """Hilfezeile eines Befunds: erster Satz des Hinweises (Rest hinter i), sonst ``default``.
+
+    ``always=False``: Hinweise nur bei Warnung oder Fehler (sonst ``default``).
+    """
+    if fact is not None and fact.hint and (always or fact.level in (probes.WARN, probes.FAIL)):
+        short = first_sentence(fact.hint)
+        more = short != fact.hint.strip() or bool(fact.command)
+        return help_line(short, 'i', 'Abhilfe') if more else help_line(short)
+    return help_line(default) if default else None
+
+
+#: Detailwerte, die eine Aussage sind (Abzeichen statt Wertfeld).
+DETAIL_STATES = {'stimmt': probes.OK, 'vorhanden': probes.OK, 'fehlt': probes.FAIL, 'weicht ab': probes.FAIL}
+
+
+def detail_rows(fact: probes.Fact | None, skip: tuple[str, ...] = ()) -> list:
+    """Einzelheiten eines Befunds: Pfade breit, Aussagen als Abzeichen, sonst Wertfeld."""
+    rows = []
+    for key, raw in (fact.detail if fact is not None else []):
+        if key in skip:
+            continue
+        text = str(raw)
+        if text in DETAIL_STATES:
+            rows.append((key, badge(DETAIL_STATES[text], text)))
+        else:
+            rows.append((key, value(text), text.startswith('/')))
+    return rows
+
+
+def badges(*items: Text) -> Text:
+    """Mehrere Abzeichen nebeneinander (ein Leerzeichen dazwischen)."""
+    out = Text(no_wrap=True)
+    for index, item in enumerate(items):
+        if index:
+            out.append(' ')
+        out.append_text(item)
+    return out
+
+
+def join(*parts: Text | str, muted: bool = True) -> Text:
+    """Wertfeld/Abzeichen mit gedämpftem Nachsatz: ``join(value(x), '  Masse zu GSVmulti')``."""
+    out = Text(no_wrap=True)
+    for part in parts:
+        if isinstance(part, Text):
+            out.append_text(part)
+        else:
+            out.append(part, style=MUTED if muted else TEXT)
+    return out
 
 
 # ----------------------------------------------------------------- Zeilen und Köpfe
@@ -214,7 +270,10 @@ def fields(rows, width: int, label_w: int = 13, columns: int = 1, gap: int = 3) 
             if position:
                 out.append(' ' * gap)
             cell = Text(label.ljust(label_w - 1)[: label_w - 1] + ' ', style=MUTED)
-            content = shorten(content, max(6, room - label_w))
+            # Pfade/IDs in der Mitte kürzen (Anfang und Ende bleiben), Sätze am Ende
+            prose = ' ' in content.plain.strip()
+            content = (clip(content, max(6, room - label_w)) if prose
+                       else shorten(content, max(6, room - label_w)))
             cell.append_text(content)
             if position == 0 and len(line) > 1:
                 cell.append(' ' * max(0, room - cell.cell_len))
@@ -222,9 +281,25 @@ def fields(rows, width: int, label_w: int = 13, columns: int = 1, gap: int = 3) 
     return out
 
 
-# ----------------------------------------------------------------- Abschnitte (Richtung A)
+def wrap_rows(rows, label_w: int = 13) -> Table:
+    """Wie ``fields`` (eine Spalte), für schmale Karten: ``(Beschriftung, Wert[, Nachsatz])``.
+
+    Der Nachsatz steht gedämpft unter dem Wert und bricht innerhalb der Wertspalte um.
+    """
+    table = Table.grid(padding=(0, 1))
+    table.add_column(style=MUTED, no_wrap=True, width=label_w - 1)
+    table.add_column(ratio=1, overflow='fold')
+    for row in rows:
+        label, content = row[0], row[1]
+        table.add_row(label, content if isinstance(content, Text) else value(content))
+        if len(row) > 2 and row[2]:
+            table.add_row('', Text(row[2], style=MUTED))
+    return table
+
+
+# ----------------------------------------------------------------- Karten
 class SectionCard(Static):
-    """Karte der Richtung A: Kopf (Zeichen, TITEL, Abzeichen rechts), Zeilen, eine Hilfezeile.
+    """Karte: Kopf (Zeichen, TITEL, Abzeichen rechts), Zeilen, eine Hilfezeile.
 
     Inhalt über ``show(head, body, help)`` – fertige Rich-Texte; die Karte ordnet sie an.
     """
@@ -238,107 +313,31 @@ class SectionCard(Static):
         width = self.content_size.width or self.size.width
         return width if width > 0 else fallback
 
-    def show(self, head: Text, body: Text | None = None, hint: Text | None = None) -> None:
+    def on_resize(self, event) -> None:
+        # Breite ändert sich auch ohne Größenwechsel des Tabs (Bildlaufleiste erscheint):
+        # dann misst der Tab die Zeilen neu aus
+        if event.size.width != getattr(self, '_drawn_width', event.size.width):
+            for node in self.ancestors:
+                if hasattr(node, 'update_view'):
+                    node.call_after_refresh(node.update_view)
+                    break
+        self._drawn_width = event.size.width
+
+    def show(self, head: Text, body=None, hint: Text | None = None) -> None:
+        """``body``: Text (meist aus ``fields``) oder ein anderer Rich-Inhalt (z. B. ``wrap_rows``)."""
         width = self.inner_width()
-        text = Text()
-        text.append_text(clip(head, width))
-        if body is not None and body.plain:
-            text.append('\n')
-            text.append_text(body)
+        parts = [clip(head, width)]
+        if body is not None and not (isinstance(body, Text) and not body.plain):
+            parts.append(body)
         if hint is not None and hint.plain:
-            text.append('\n')
-            text.append_text(clip(hint, width))
-        self.update(text)
-
-
-# ----------------------------------------------------------------- Kacheln (Richtung B)
-def tile_text(glyph: str, title: str, state: Text, key: Text | None, width: int) -> Text:
-    """Drei Zeilen: Zeichen + TITEL, Abzeichen, Kennzahl (eingelassen)."""
-    text = Text(no_wrap=True, overflow='ellipsis')
-    text.append(f'{icon(glyph)} ', style=P.accent)
-    text.append(title.upper(), style=f'bold {SOFT}')
-    text.truncate(width, overflow='ellipsis')
-    text.append('\n')
-    state = state.copy()
-    state.truncate(width, overflow='ellipsis')
-    text.append_text(state)
-    text.append('\n')
-    if key is not None:
-        text.append_text(shorten(key, width))
-    return text
-
-
-class Tile(Static):
-    """Eine Kachel; ``TileRow`` setzt Inhalt und Auswahl."""
-
-    def on_click(self, event: events.Click) -> None:
-        row = self.parent
-        if isinstance(row, TileRow):
-            event.stop()
-            row.focus()
-            row.select(row.tiles().index(self), activate=True)
-
-
-class TileRow(Grid):
-    """Reihe von Kacheln; ein Fokuspunkt für alle (← → wählen, Enter löst aus).
-
-    Unter ``min_tile`` Zellen je Kachel bricht die Reihe in zwei Spalten um.
-    """
-
-    can_focus = True
-    BINDINGS = [Binding('left', 'step(-1)', show=False), Binding('right', 'step(1)', show=False),
-                Binding('enter', 'activate', show=False)]
-    DEFAULT_CSS = '''
-    TileRow { height: auto; width: 1fr; max-width: 120; grid-gutter: 1 1; grid-rows: auto; margin: 1 0 0 0; }
-    TileRow Tile { height: auto; padding: 0 1; background: $picam-surface; border-left: wide $picam-surface; }
-    TileRow Tile.-sel { background: $picam-raised; border-left: wide $picam-accent; }
-    TileRow:focus Tile.-sel { border-left: wide $picam-accent-strong; }
-    TileRow:focus { background-tint: 0%; }
-    TileRow Tile:hover { background: $picam-raised; }
-    '''
-
-    class Selected(Message):
-        def __init__(self, row: TileRow, index: int, activate: bool):
-            super().__init__()
-            self.row, self.index, self.activate = row, index, activate
-
-        @property
-        def control(self) -> TileRow:
-            return self.row
-
-    def __init__(self, count: int, *, min_tile: int = 20, selectable: bool = True, **kwargs):
-        super().__init__(*[Tile(id=f'{kwargs.get("id", "tiles")}-{i}') for i in range(count)], **kwargs)
-        self.count, self.min_tile, self.selectable = count, min_tile, selectable
-        self.selected = 0
-
-    def tiles(self) -> list[Tile]:
-        return list(self.query(Tile))
-
-    def arrange(self, width: int) -> int:
-        """Spalten nach Breite; gibt die Innenbreite einer Kachel zurück."""
-        width = width or 100
-        columns = self.count
-        while columns > 1 and (width - (columns - 1)) // columns < self.min_tile:
-            columns = (columns + 1) // 2 if columns > 2 else 1
-        self.styles.grid_size_columns = columns
-        return max(8, (width - (columns - 1)) // columns - 3)
-
-    def set_tile(self, index: int, content: Text) -> None:
-        tile = self.tiles()[index]
-        tile.update(content)
-        tile.set_class(self.selectable and index == self.selected, '-sel')
-
-    def select(self, index: int, activate: bool = False) -> None:
-        self.selected = index % self.count
-        for number, tile in enumerate(self.tiles()):
-            tile.set_class(self.selectable and number == self.selected, '-sel')
-        self.post_message(self.Selected(self, self.selected, activate))
-
-    def action_step(self, step: int) -> None:
-        self.select(self.selected + step)
-
-    def action_activate(self) -> None:
-        self.select(self.selected, activate=True)
+            parts.append(hint.fitted(width) if isinstance(hint, HelpText) else clip(hint, width))
+        if all(isinstance(part, Text) for part in parts):
+            # Zeilen sind ausgemessen: nie umbrechen (eine Spalte zu breit wird „…“, nicht zwei Zeilen)
+            text = Text('\n').join(parts)
+            text.no_wrap, text.overflow = True, 'ellipsis'
+            self.update(text)
+        else:
+            self.update(Group(*parts))
 
 
 class TabBody(VerticalScroll):
@@ -348,7 +347,7 @@ class TabBody(VerticalScroll):
 
 
 class CardBox(Vertical):
-    """Karte der Richtung A als Behälter (wenn ein Kopf bedienbar ist, z. B. eine Auswahlleiste)."""
+    """Karte als Behälter (wenn ein Kopf bedienbar ist, z. B. eine Auswahlleiste)."""
 
     DEFAULT_CSS = '''
     CardBox { height: auto; width: 1fr; max-width: 120; margin: 1 0 0 0; padding: 0 1; background: $picam-surface; }
@@ -356,20 +355,7 @@ class CardBox(Vertical):
     '''
 
 
-class DetailPanel(Static):
-    """Einzelheiten der gewählten Kachel (Richtung B): schlichte Zeilen, Randlinie wie die Auswahl."""
-
-    DEFAULT_CSS = '''
-    DetailPanel { height: auto; width: 1fr; max-width: 120; margin: 1 0 0 0; padding: 0 1;
-                  border-left: wide $picam-accent; }
-    '''
-
-    def inner_width(self, fallback: int = 90) -> int:
-        width = self.content_size.width or self.size.width
-        return width if width > 0 else fallback
-
-
-# ----------------------------------------------------------------- Auswahlleiste (Richtung A)
+# ----------------------------------------------------------------- Auswahlleiste
 class ChipSelector(Static):
     """Waagerechte Auswahl („Segmente“) mit einem Fokuspunkt: ← → oder Klick wählen.
 

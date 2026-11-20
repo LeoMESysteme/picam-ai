@@ -7,14 +7,27 @@ import shlex
 import subprocess
 import sys
 
+from rich.table import Table
 from rich.text import Text
 from textual import on, work
-from textual.containers import Horizontal, Vertical
+from textual.containers import Vertical
 from textual.widgets import Button, Checkbox, Input, Static
 
 from .. import probes
-from ..ui import MUTED, TONE, Action, Confirmation, ConfirmScreen, Segment, kv_table
-from .base import TabView, actions_segment
+from ..ui import MUTED, Action, Confirmation, ConfirmScreen
+from ..widgets import (
+    ActionBar,
+    CardBox,
+    SectionCard,
+    TabBody,
+    badge,
+    fields,
+    header,
+    help_line,
+    join,
+    value,
+)
+from .base import TabView
 
 #: Änderbare Felder: Beschriftung, Risiko (Stufe, Erklärung).
 FIELDS = {
@@ -26,13 +39,27 @@ FIELDS = {
     'bridge_discovery': ('Im Netzwerk ankündigen (Windows-App findet den Pi selbst)',
                          (probes.OK, 'gering – aus: die Brücke muss die Adresse von Hand kennen')),
 }
-RISK_WORD = {probes.OK: 'Risiko', probes.WARN: 'Risiko'}
+
+
+def risk_text(level: str, risk: str) -> Table:
+    """Risiko als Abzeichen („Risiko mittel“), die Begründung gedämpft daneben (bricht in ihrer Spalte um).
+
+    Geringes Risiko bleibt grau: grün hieße „in Ordnung“, nicht „wenig Folgen“.
+    """
+    word, _, why = risk.partition(' – ')
+    table = Table.grid(padding=(0, 2))
+    table.add_column(no_wrap=True)
+    table.add_column(ratio=1)
+    table.add_row(badge(level if level != probes.OK else probes.OFF, f'Risiko {word}',
+                        'warn' if level != probes.OK else 'off'), Text(why, style=MUTED))
+    return table
 
 
 class EinstellungenView(TabView):
     TAB_ID, TITLE, KEY = 'einstellungen', 'Einstellungen', 'c'
     INFO_TITLE = 'Einstellungen'
-    INFO = ('Nur wenige Werte sind hier änderbar; alles andere legt die Installation fest. Jede Änderung '
+    OWN_BAR = True
+    ABOUT = ('Nur wenige Werte sind hier änderbar; alles andere legt die Installation fest. Jede Änderung '
             'wird vor dem Speichern geprüft und wirkt nach einem Neustart des Dienstes.',
             'Die Adresse steht im Zertifikat und in den Kopplungen und wird nur bei einer Neuinstallation '
             'gewählt.')
@@ -40,15 +67,18 @@ class EinstellungenView(TabView):
     DEFAULT_CSS = 'EinstellungenView #cfg-fields { height: auto; }'
 
     def compose(self):
-        yield Static(Text('Einstellungen', style='bold'), classes='title')
-        yield Static(id='cfg-intro', classes='hint info')
-        yield Segment(None, Vertical(id='cfg-fields'), id='cfg-values')
-        yield Segment('Orte', Static(id='cfg-paths'))
-        yield actions_segment()
+        with TabBody(classes='tab-body'):
+            with CardBox(id='cfg-values'):
+                yield Static(id='cfg-head')
+                yield Static(id='cfg-intro')
+                yield Vertical(id='cfg-fields')
+                yield Static(id='cfg-help')
+            yield SectionCard(id='cfg-paths')
+        yield ActionBar()
 
     def on_mount(self) -> None:
         self._build_fields()
-        bar = self.query_one('#buttons', Horizontal)
+        bar = self.query_one(ActionBar)
         for action in self.actions():
             bar.mount(self.action_button(action))
 
@@ -58,14 +88,8 @@ class EinstellungenView(TabView):
         inst = self.app.instance
         box = self.query_one('#cfg-fields', Vertical)
         box.remove_children()
-        intro = self.query_one('#cfg-intro', Static)
-        self.query_one('#cfg-values').display = inst.config is not None
         if inst.config is None:
-            intro.update(Text('Entwicklungsbetrieb: Die Werte stammen aus dem Startbefehl des Dienstes '
-                              '(scripts/werkbank-dienst.sh). Eine installierte Werkbank hat dafür eine '
-                              'config.toml, die hier änderbar ist.'))
             return
-        intro.update(Text(f'Datei {inst.config}. Wirksam nach einem Neustart des Dienstes.'))
         for key in configedit.EDITABLE:
             label, (level, risk) = FIELDS[key]
             current = getattr(inst, key)
@@ -76,20 +100,37 @@ class EinstellungenView(TabView):
             else:
                 field.compose_add_child(Input(value='' if current is None else str(current), id=f'cfg-{key}',
                                               placeholder='nicht gesetzt'))
-            field.compose_add_child(Static(Text(risk, style=TONE[level] if level != probes.OK else MUTED),
-                                           classes='field-risk'))
+            field.compose_add_child(Static(risk_text(level, risk), classes='field-risk'))
             box.mount(field)
 
     def update_view(self) -> None:
         inst = self.app.instance
-        rows = [('Konfiguration', inst.config or '– (Startbefehl des Dienstes)'),
-                ('Adresse', inst.url or '–'),
-                ('Anmeldung', f'{inst.pam_user or "Konto des Dienstes"} mit dessen Linux-Passwort'),
-                ('Daten', inst.data or '–'), ('Laufdaten', inst.live_data or '–'),
-                ('Brücke', inst.bridge_directory or '–'), ('Steuerung', inst.socket or '–'),
-                ('Protokoll', f'journald, Unit {inst.unit or "–"} (picam logs)'),
-                ('Programm', inst.root or '–')]
-        self.query_one('#cfg-paths', Static).update(kv_table(rows))
+        card = self.query_one('#cfg-paths', SectionCard)
+        width = self.card_width(card)
+        if inst.config is None:
+            state = badge(probes.OFF, 'Entwicklungsbetrieb', 'off')
+            hint = help_line('Eine installierte Werkbank hat dafür eine config.toml, die hier änderbar ist.')
+        else:
+            state = badge(probes.OFF, 'wirkt nach Neustart', 'restart')
+            hint = help_line('Jede Änderung wird vor dem Speichern geprüft.', 'i', 'mehr')
+        self.query_one('#cfg-head', Static).update(header('values', 'Änderbare Werte', state, width))
+        if inst.config is None:
+            intro = Text('Die Werte stammen aus dem Startbefehl des Dienstes (scripts/werkbank-dienst.sh).',
+                         style=MUTED)
+        else:
+            intro = fields([('Datei', value(inst.config), True)], width, label_w=8)
+        self.query_one('#cfg-intro', Static).update(intro)
+        self.query_one('#cfg-help', Static).update(hint.fitted(width))
+        config = value(inst.config) if inst.config else join(value(None), '  Startbefehl des Dienstes')
+        rows = [('Konfiguration', config, True),
+                ('Adresse', value(inst.url), True),
+                ('Anmeldung', join(value(inst.pam_user or 'Konto des Dienstes'), '  mit dessen Linux-Passwort'), True),
+                ('Daten', value(inst.data), True), ('Laufdaten', value(inst.live_data), True),
+                ('Brücke', value(inst.bridge_directory), True), ('Steuerung', value(inst.socket), True),
+                ('Protokoll', join(value('journald'), f'  Unit {inst.unit or "–"} (picam logs)'), True),
+                ('Programm', value(inst.root), True)]
+        card.show(header('file', 'Orte', None, width), fields(rows, width, label_w=15),
+                  help_line('Die Adresse wird nur bei einer Neuinstallation gewählt.'))
         self.sync_buttons()
 
     def focus_first(self) -> None:
@@ -98,9 +139,9 @@ class EinstellungenView(TabView):
 
     def actions(self) -> list[Action]:
         inst = self.app.instance
-        actions = [Action('p', 'Änderung prüfen …', self.check,
+        actions = [Action('p', 'Änderung prüfen …', self.check, icon='check',
                           blocked=None if inst.config else 'keine config.toml (Entwicklungsbetrieb)')]
-        actions.append(Action('x', 'Deinstallieren …', self.app.start_uninstall,
+        actions.append(Action('x', 'Deinstallieren …', self.app.start_uninstall, icon='remove',
                               blocked=self.app.uninstall_blocker()))
         return actions
 

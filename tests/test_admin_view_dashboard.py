@@ -168,27 +168,13 @@ async def test_unknown_values_are_dashes():
         assert '–' in plain(app, '#run-proc')
 
 
-@pytest.mark.parametrize('layout', ['a', 'b'])
 @pytest.mark.parametrize('state', STATES)
 @pytest.mark.parametrize('size', [(80, 24), (60, 20), (120, 40)])
 @sync
-async def test_dashboard_layouts_render(layout, state, size, monkeypatch):
-    monkeypatch.setenv('PICAM_LAYOUT', layout)
+async def test_dashboard_renders_with_actionbar(state, size):
     app = admin_fakes.make_app(state)
     async with app.run_test(size=size) as pilot:
         await pilot.pause(0.4)
         assert plain(app, '#dash-run').strip()
         bar = app.main_screen.query_one('#buttons')
         assert bar.region.bottom <= size[1] - 2
-
-
-@sync
-async def test_dashboard_b_tile_enter_opens_tab(monkeypatch):
-    monkeypatch.setenv('PICAM_LAYOUT', 'b')
-    app = admin_fakes.make_app('run')
-    async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.pause(0.4)
-        app.main_screen.query_one('#dash-tiles').focus()
-        await pilot.press('right', 'right', 'enter')
-        await pilot.pause(0.3)
-        assert app.current == 'kamera'

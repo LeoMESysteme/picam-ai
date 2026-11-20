@@ -2,78 +2,85 @@
 
 from __future__ import annotations
 
-from rich.text import Text
-from textual.widgets import Static
-
 from .. import probes
-from ..ui import MUTED, TONE, Action, Segment, fact_title, hint_block, kv_table, symbol
-from .base import FactView, actions_segment
+from ..ui import Action
+from ..widgets import (
+    ActionBar,
+    SectionCard,
+    TabBody,
+    badge,
+    fact_badge,
+    fact_help,
+    fields,
+    header,
+    help_line,
+    join,
+    value,
+)
+from .base import FactView
 
 DASH = '–'
+#: Zeilen des Dienstes in dieser Reihenfolge (paarweise, wenn die Breite reicht).
+ROWS = ('Unit', 'Art', 'Autostart', 'PID', 'Seit')
+WIDE = ('Ergebnis', 'Grund')
 
 
 class DienstView(FactView):
     TAB_ID, TITLE, KEY = 'dienst', 'Dienst', '3'
     FACTS = ()
     INFO_TITLE = 'Was ist der Dienst?'
-    INFO = ('Der Dienst ist die Werkbank selbst: ein Hintergrundprogramm (systemd), das die Kamera hält, '
-            'die Weboberfläche ausliefert und die Werte an GSVmulti weitergibt. Er startet beim Hochfahren '
-            'des Pi von selbst, wenn „Autostart“ auf „ja“ steht.',
-            'Stoppen oder Neustarten unterbricht verbundene Browser und die Windows-Brücke kurz; Stoppen '
-            'lässt die Werkbank aus, bis jemand sie wieder startet. Während eines Laufs, einer Einrichtung '
-            'oder einer Diagnosekopie ist beides gesperrt, damit keine Messung verloren geht.',
-            'Update installiert eine neue Version neben der laufenden und schaltet erst nach einem '
-            'Selbsttest um. „Zurück“ schaltet auf die vorige Version zurück.')
-    SCOPED_CSS = False
-    DEFAULT_CSS = """
-    DienstView .blocked { border-left: wide $warning; padding: 0 1; margin: 1 0 0 0; background: $picam-tint-warn;
-                          max-width: 110; }
-    Screen.stacked DienstView .buttons { layout: grid; grid-size: 2; grid-gutter: 0 1; grid-rows: 1; }
-    Screen.stacked DienstView .buttons Button { width: 100%; margin: 0; }
-    """
+    ABOUT = ('Der Dienst ist die Werkbank selbst: ein Hintergrundprogramm (systemd), das die Kamera hält, '
+             'die Weboberfläche ausliefert und die Werte an GSVmulti weitergibt. Er startet beim Hochfahren '
+             'des Pi von selbst, wenn „Autostart“ auf „ja“ steht.',
+             'Stoppen oder Neustarten unterbricht verbundene Browser und die Windows-Brücke kurz; Stoppen '
+             'lässt die Werkbank aus, bis jemand sie wieder startet. Während eines Laufs, einer Einrichtung '
+             'oder einer Diagnosekopie ist beides gesperrt, damit keine Messung verloren geht.',
+             'Update installiert eine neue Version neben der laufenden und schaltet erst nach einem '
+             'Selbsttest um. „Zurück“ schaltet auf die vorige Version zurück.')
+    INFO_FACTS = ('dienst',)
 
     def compose(self):
-        with Segment():
-            yield Static(id='dienst-state', classes='fact-title first')
-            yield Static(id='dienst-hint', classes='hint')
-            yield Static(id='dienst-blocked', classes='blocked')
-            yield Static(id='dienst-rows')
-        yield Segment('Version', Static(id='dienst-version'))
-        yield actions_segment()
+        with TabBody(classes='tab-body'):
+            yield SectionCard(id='dienst-card')
+            yield SectionCard(id='dienst-version')
+        yield ActionBar()
 
     def update_view(self) -> None:
         app = self.app
+        card = self.query_one('#dienst-card', SectionCard)
+        width = self.card_width(card)
+        columns = 2 if width >= 60 else 1
         service = app.fact('dienst')
-        state, hint = self.query_one('#dienst-state', Static), self.query_one('#dienst-hint', Static)
-        if service is None:
-            state.update(Text('Dienst', style='bold'))
-            hint.display = False
-            self.query_one('#dienst-rows', Static).update(Text('Wird geprüft …', style=MUTED))
-        else:
-            state.update(fact_title(service))
-            block = hint_block(service)
-            hint.display = block is not None
-            if block is not None:
-                hint.update(block)
-                hint.set_class(service.level == probes.FAIL, 'fail')
+        rows: list = []
+        if service is not None:
             detail = dict(service.detail)
-            rows = [(key, detail.get(key) or DASH) for key in ('Unit', 'Art', 'Autostart', 'Seit', 'PID')]
-            rows += [(k, v) for k, v in service.detail if k not in dict(rows) and k not in ('Steuerung',)]
-            self.query_one('#dienst-rows', Static).update(kv_table(rows))
-        blocked = self.query_one('#dienst-blocked', Static)
+            for key in ROWS:
+                if key == 'Autostart' and detail.get(key):
+                    on = detail[key] == 'ja'
+                    rows.append((key, badge(probes.OK if on else probes.OFF, detail[key], 'on' if on else 'off')))
+                else:
+                    rows.append((key, value(detail.get(key)), key in WIDE))
+            rows += [(k, value(v), k in WIDE) for k, v in service.detail if k not in ROWS and k != 'Steuerung']
         reason = self._stop_reason()
-        blocked.display = reason is not None
         if reason is not None:
-            text = Text()
-            text.append(f'{symbol(probes.WARN)} Stoppen und Neustarten gesperrt: ', style=f'bold {TONE[probes.WARN]}')
-            text.append(reason)
-            blocked.update(text)
+            rows.append(('Stoppen', join(badge(probes.WARN, 'gesperrt'), f'  auch Neustart · {reason}'), True))
+        if service is not None and service.hint:
+            hint = fact_help(service)
+        else:
+            hint = help_line('Der Dienst ist die Werkbank selbst.', 'i', 'mehr')
+        card.show(header('service', 'Werkbank-Dienst', fact_badge(service), width),
+                  fields(rows, width, label_w=12, columns=columns), hint)
+
         version = app.fact('version')
         info = dict(version.detail) if version is not None else {}
-        rows = [('Version', version.value if version is not None else DASH),
-                ('Commit', info.get('Commit') or DASH), ('Vorige', info.get('Vorige') or DASH),
-                ('Ort', info.get('Ort') or app.instance.root or DASH)]
-        self.query_one('#dienst-version', Static).update(kv_table(rows))
+        rows = [('Version', value(version.value if version is not None else None)),
+                ('Commit', value(info.get('Commit'))), ('Vorige', value(info.get('Vorige'))),
+                ('Ort', value(info.get('Ort') or app.instance.root), True)]
+        right = None if version is None else badge(probes.OFF, 'installiert' if app.installed() else 'Entwicklung',
+                                                   'version')
+        self.query_one('#dienst-version', SectionCard).show(
+            header('version', 'Version', right, width), fields(rows, width, label_w=12, columns=columns),
+            help_line('Update schaltet erst nach einem Selbsttest um.') if app.installed() else None)
         self.sync_buttons()
 
     def _service_running(self) -> bool:
@@ -94,14 +101,14 @@ class DienstView(FactView):
         actions = [
             Action('s', 'Stoppen' if running else 'Starten',
                    lambda: app.service_action('stop' if running else 'start'),
-                   blocked=blocked, danger=running),
-            Action('r', 'Neu starten', lambda: app.service_action('restart'), blocked=blocked),
+                   blocked=blocked, danger=running, icon='stop' if running else 'start'),
+            Action('r', 'Neu starten', lambda: app.service_action('restart'), blocked=blocked, icon='restart'),
         ]
         if app.installed():
-            actions.append(Action('u', 'Update', app.start_update, blocked=app.blocker))
+            actions.append(Action('u', 'Update', app.start_update, blocked=app.blocker, icon='update'))
             version = app.fact('version')
             has_previous = version is not None and any(k == 'Vorige' and v for k, v in version.detail)
-            actions.append(Action('z', 'Zurück', app.start_rollback,
+            actions.append(Action('z', 'Zurück', app.start_rollback, icon='back',
                                   blocked=app.blocker or (None if has_previous else 'keine vorige Version')))
-        actions.append(Action('l', 'Protokoll', lambda: app.open_tab('protokoll')))
+        actions.append(Action('l', 'Protokoll', lambda: app.open_tab('protokoll'), icon='log'))
         return actions

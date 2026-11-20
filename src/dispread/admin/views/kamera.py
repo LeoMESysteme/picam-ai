@@ -1,35 +1,27 @@
 """Tab Kamera: Daten der Logitech StreamCam, Kalibrierung, Lesevorlage, Kameraaktionen.
 
-Zwei Anordnungen (``PICAM_LAYOUT``): A „Karten + Abzeichen“ – je Abschnitt eine
-Karte; B „Kacheln + Details“ – Kacheln Kamera, Kalibrierung, Lesevorlage, darunter
-die Einzelheiten der gewählten Kachel.
+Je Abschnitt eine Karte (Kamera, Kalibrierung, Lesevorlage).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import PurePosixPath
 
 from rich.text import Text
-from textual import on
 
 from .. import probes
 from ..ui import Action
 from ..widgets import (
     ActionBar,
-    DetailPanel,
     SectionCard,
     TabBody,
-    TileRow,
     badge,
-    clip,
+    detail_rows,
     fact_badge,
+    fact_help,
     fields,
-    first_sentence,
     header,
     help_line,
-    layout_mode,
-    tile_text,
     value,
 )
 from .base import FactView, probes_label
@@ -38,8 +30,6 @@ DASH = '–'
 MODEL = 'Logitech StreamCam'
 START_REASONS = {'serverstart': 'Serverstart', 'restart': 'Neustart', 'connect': 'Verbinden',
                  'manual': 'von Hand'}
-#: Detailwerte, die eine Aussage sind (Abzeichen statt Wertfeld).
-DETAIL_STATES = {'stimmt': probes.OK, 'vorhanden': probes.OK, 'fehlt': probes.FAIL, 'weicht ab': probes.FAIL}
 #: Zeichen je Abschnitt
 GLYPHS = {'kamera': 'camera', 'kalibrierung': 'clock', 'vorlage': 'template'}
 PREREQUISITE = 'Voraussetzung für einen Messlauf.'
@@ -63,18 +53,6 @@ def _port(source: dict) -> str:
     return 'USB 3 (blau)' if speed >= 5000 else f'USB 2 ({speed} Mbit/s)'
 
 
-def detail_rows(fact: probes.Fact | None) -> list:
-    """Einzelheiten eines Befunds: Pfade breit, Aussagen als Abzeichen, sonst Wertfeld."""
-    rows = []
-    for key, raw in (fact.detail if fact is not None else []):
-        text = str(raw)
-        if text in DETAIL_STATES:
-            rows.append((key, badge(DETAIL_STATES[text], text)))
-        else:
-            rows.append((key, value(text), text.startswith('/')))
-    return rows
-
-
 class KameraView(FactView):
     TAB_ID, TITLE, KEY = 'kamera', 'Kamera', '4'
     FACTS = ('kalibrierung', 'vorlage')
@@ -89,33 +67,13 @@ class KameraView(FactView):
              'gesperrt.',
              '„Lücken“ zählt Bilder, die der Treiber ausgelassen hat. Die Timing-Kalibrierung und die '
              'Lesevorlage sind Voraussetzungen für einen Messlauf.')
-    SCOPED_CSS = False
-    DEFAULT_CSS = ''
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.mode = layout_mode()
-        self.tile_sel = 0
-
-    @property
-    def INFO(self) -> tuple[str, ...]:  # noqa: N802 - Schnittstelle der App (view.INFO)
-        """Erklärung plus die vollständigen Hinweise der Befunde (auf dem Tab steht nur der erste Satz)."""
-        hints = []
-        for key in ('kamera', *self.FACTS):
-            fact = self.app.fact(key) if self.is_mounted else None
-            if fact is not None and fact.hint:
-                hints.append(f'{fact.label}: {fact.hint}')
-        return (*self.ABOUT, *hints)
+    INFO_FACTS = ('kamera', *FACTS)
 
     def compose(self):
         with TabBody(classes='tab-body'):
-            if self.mode == 'b':
-                yield TileRow(3, id='cam-tiles')
-                yield DetailPanel(id='cam-detail')
-            else:
-                yield SectionCard(id='cam-card')
-                yield SectionCard(id='cam-kalibrierung')
-                yield SectionCard(id='cam-vorlage')
+            yield SectionCard(id='cam-card')
+            yield SectionCard(id='cam-kalibrierung')
+            yield SectionCard(id='cam-vorlage')
         yield ActionBar()
 
     # ------------------------------------------------------------ Daten
@@ -153,23 +111,14 @@ class KameraView(FactView):
         return fact, rows, state
 
     def _help(self, key: str, fact: probes.Fact | None) -> Text:
-        if fact is not None and fact.hint:
-            return help_line(first_sentence(fact.hint), 'i', 'Abhilfe')
-        if key == 'kamera':
+        if key == 'kamera' and (fact is None or not fact.hint):
             return help_line('Nur die Werkbank hält die Kamera, sonst „belegt“.', 'i', 'mehr')
-        return help_line(PREREQUISITE)
+        return fact_help(fact, PREREQUISITE)
 
     # ------------------------------------------------------------ Anzeige
     def update_view(self) -> None:
-        if self.mode == 'b':
-            self._update_b()
-        else:
-            self._update_a()
-        self.sync_buttons()
-
-    def _update_a(self) -> None:
         card = self.query_one('#cam-card', SectionCard)
-        width = card.inner_width(max(40, self.size.width - 6))
+        width = self.card_width(card)
         fact, rows, _ = self._camera()
         columns = 2 if width >= 60 else 1
         card.show(header('camera', 'Kamera', fact_badge(fact), width, note=MODEL),
@@ -179,42 +128,7 @@ class KameraView(FactView):
             fact = self.app.fact(key)
             card.show(header(GLYPHS[key], probes_label(key), fact_badge(fact), width),
                       fields(detail_rows(fact), width, label_w=14), self._help(key, fact))
-
-    def _update_b(self) -> None:
-        row = self.query_one('#cam-tiles', TileRow)
-        inner = row.arrange(row.size.width or max(40, self.size.width - 4))
-        cam_fact, cam_rows, _ = self._camera()
-        keys = ('kamera', *self.FACTS)
-        for index, key in enumerate(keys):
-            fact = cam_fact if key == 'kamera' else self.app.fact(key)
-            if key == 'kamera':
-                live = self.app.snapshot.live if self.app.snapshot is not None else None
-                frames = ((live or {}).get('camera') or {}).get('frames')
-                kennzahl = value(_count(frames) if frames is not None else None, 'Bilder')
-            else:
-                path = dict(fact.detail).get('Datei') if fact is not None else None
-                kennzahl = value(PurePosixPath(path).name if path else None)
-            row.set_tile(index, tile_text(GLYPHS[key], probes_label(key), fact_badge(fact), kennzahl, inner))
-        key = keys[self.tile_sel]
-        detail = self.query_one('#cam-detail', DetailPanel)
-        width = detail.inner_width(max(40, self.size.width - 8))
-        if key == 'kamera':
-            body = fields([('Modell', value(MODEL)), *cam_rows], width, label_w=14,
-                          columns=2 if width >= 60 else 1)
-            fact = cam_fact
-        else:
-            fact = self.app.fact(key)
-            body = fields(detail_rows(fact), width, label_w=14)
-        text = Text()
-        text.append_text(body)
-        text.append('\n')
-        text.append_text(clip(self._help(key, fact), width))
-        detail.update(text)
-
-    @on(TileRow.Selected, '#cam-tiles')
-    def _tile_selected(self, event: TileRow.Selected) -> None:
-        self.tile_sel = event.index
-        self.update_view()
+        self.sync_buttons()
 
     def actions(self) -> list[Action]:
         app = self.app

@@ -8,12 +8,21 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from rich.text import Text
-from textual.containers import Horizontal
-from textual.widgets import Static
-
 from .. import probes
-from ..ui import MUTED, Action, Confirmation, ConfirmScreen, Segment, fact_title, hint_block, kv_table
+from ..ui import Action, Confirmation, ConfirmScreen
+from ..widgets import (
+    ActionBar,
+    SectionCard,
+    TabBody,
+    badge,
+    fact_badge,
+    fact_help,
+    fields,
+    header,
+    help_line,
+    join,
+    value,
+)
 from .base import FactView
 
 DASH = '–'
@@ -32,7 +41,7 @@ class ZertifikatView(FactView):
     TAB_ID, TITLE, KEY = 'zertifikat', 'Zertifikat', '6'
     FACTS = ()
     INFO_TITLE = 'Was ist das Zertifikat?'
-    INFO = ('Das Zertifikat ist der Ausweis der Werkbank: Browser und Windows-Brücke prüfen damit, dass sie '
+    ABOUT = ('Das Zertifikat ist der Ausweis der Werkbank: Browser und Windows-Brücke prüfen damit, dass sie '
             'wirklich mit diesem Pi sprechen, und die Verbindung ist verschlüsselt (HTTPS).',
             'Läuft es ab oder passt der Name nicht zur Adresse, warnen Browser. Nach dem Erneuern müssen '
             'Browser dem neuen Zertifikat wieder vertrauen, und die Werkbank braucht einen Neustart.',
@@ -40,20 +49,13 @@ class ZertifikatView(FactView):
             'merkt sich seinen Fingerabdruck. Ein neues Zertifikat würde jede Kopplung brechen und darum '
             'wird es dort nicht angeboten.',
             'HTTPS lässt sich nicht abschalten: die Brücke und die Anmeldung verlangen verschlüsselte Verbindungen.')
-    SCOPED_CSS = False
-    DEFAULT_CSS = """
-    ZertifikatView #cert-intro { margin: 1 0 0 0; }
-    ZertifikatView #cert-note { margin: 0; color: $picam-text-muted; max-width: 100; }
-    """
+    INFO_FACTS = ('zertifikat',)
 
     def compose(self):
-        yield Static(Text('Ausweis der Werkbank für HTTPS und die Windows-Brücke.', style=MUTED), id='cert-intro')
-        with Segment():
-            yield Static(id='cert-state', classes='fact-title')
-            yield Static(id='cert-hint', classes='hint')
-            yield Static(id='cert-rows')
-        yield Segment('Erneuern und Abschalten', Static(id='cert-note'),
-                      Horizontal(id='buttons', classes='buttons'))
+        with TabBody(classes='tab-body'):
+            yield SectionCard(id='cert-card')
+            yield SectionCard(id='cert-renew')
+        yield ActionBar()
 
     def cert_directory(self) -> Path | None:
         data = self.app.instance.data
@@ -79,43 +81,46 @@ class ZertifikatView(FactView):
     def update_view(self) -> None:
         app = self.app
         fact = app.fact('zertifikat')
-        state, hint = self.query_one('#cert-state', Static), self.query_one('#cert-hint', Static)
-        if fact is None:
-            state.update(Text('Zertifikat', style='bold'))
-            hint.display = False
-            self.query_one('#cert-rows', Static).update(Text('Wird geprüft …', style=MUTED))
-        else:
-            state.update(fact_title(fact))
-            block = hint_block(fact)
-            hint.display = block is not None
-            if block is not None:
-                hint.update(block)
-                hint.set_class(fact.level == probes.FAIL, 'fail')
+        card = self.query_one('#cert-card', SectionCard)
+        width = self.card_width(card)
+        rows: list = []
+        if fact is not None:
             detail = dict(fact.detail)
             left = days_left(fact)
-            until = detail.get('Gültig bis') or DASH
-            if left is not None:
-                until += f' (noch {left} Tage)' if left >= 0 else f' (seit {-left} Tagen abgelaufen)'
+            if left is None:
+                note = None
+            elif left >= 0:
+                note = f'noch {left} Tage'
+            else:
+                note = f'seit {-left} Tagen abgelaufen'
+            until = value(detail.get('Gültig bis'), note)
             bridge = self.is_bridge_identity()
             directory = self.cert_directory()
-            rows = [('Adresse', detail.get('Adresse') or app.instance.url or DASH),
-                    ('Namen', detail.get('Namen') or DASH), ('Gültig bis', until),
-                    ('Identität', detail.get('Identität') or DASH),
-                    ('Datei', str(directory / 'cert.pem') if directory else DASH),
-                    ('Brückenidentität', DASH if bridge is None else 'ja' if bridge else 'nein')]
-            self.query_one('#cert-rows', Static).update(kv_table(rows))
+            rows = [('Adresse', value(detail.get('Adresse') or app.instance.url), True),
+                    ('Namen', value(detail.get('Namen'))), ('Gültig bis', until),
+                    ('Identität', value(detail.get('Identität')), True),
+                    ('Datei', value(str(directory / 'cert.pem') if directory else None), True),
+                    ('Brückenidentität', value(None if bridge is None else 'ja' if bridge else 'nein'))]
+        card.show(header('cert', 'Zertifikat', fact_badge(fact), width),
+                  fields(rows, width, label_w=18, columns=2 if width >= 76 else 1),
+                  fact_help(fact, 'Ausweis der Werkbank für HTTPS und die Windows-Brücke.'))
+
         reason = self.renew_blocker()
-        note = Text()
-        note.append('Erneuern: ' + ('nicht möglich – ' + reason + '.' if reason else
-                                    'stellt das Zertifikat mit demselben Schlüssel neu aus; Browser müssen '
-                                    'wieder vertrauen, danach Dienst neu starten.'))
-        note.append('\nAbschalten: nicht vorgesehen – die Windows-Brücke verlangt TLS und das Anmelden '
-                    'geschieht nur verschlüsselt.')
-        self.query_one('#cert-note', Static).update(note)
+        if reason:
+            renew = join(badge(probes.OFF, 'nicht möglich', 'off'), f'  {reason}')
+            hint = help_line('Erneuern stellt das Zertifikat mit demselben Schlüssel neu aus.', 'i', 'mehr')
+        else:
+            renew = join(badge(probes.OK, 'möglich', 'ok'), '  derselbe Schlüssel; Browser müssen wieder vertrauen')
+            hint = help_line('Danach den Dienst neu starten, erst dann gilt das neue Zertifikat.')
+        rows = [('Erneuern', renew, True),
+                ('Abschalten', join(badge(probes.OFF, 'nicht vorgesehen', 'off'),
+                                    '  Brücke und Anmeldung verlangen TLS'), True)]
+        self.query_one('#cert-renew', SectionCard).show(
+            header('restart', 'Erneuern und Abschalten', None, width), fields(rows, width, label_w=18), hint)
         self.sync_buttons()
 
     def actions(self) -> list[Action]:
-        return [Action('n', 'Erneuern', self.renew, blocked=self.renew_blocker())]
+        return [Action('n', 'Erneuern', self.renew, blocked=self.renew_blocker(), icon='restart')]
 
     def renew_command(self) -> list[str]:
         command = [sys.executable, '-m', 'dispread.workbench.cli', 'renew-tls', '--directory',

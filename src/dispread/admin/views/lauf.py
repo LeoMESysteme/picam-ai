@@ -13,10 +13,10 @@ import time
 from rich.text import Text
 from textual.containers import Vertical
 from textual.events import Resize
-from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, Segment, ascii_mode, bar, sparkline, status_strip, symbol
+from ..ui import MUTED, TONE, ascii_mode, bar, sparkline, status_strip
+from ..widgets import SectionCard, badge, fields, header, help_line, join, value
 from .base import TabView
 
 WIDE = 120          # ab dieser Breite zwei Spalten
@@ -85,60 +85,52 @@ def age_text(age: float | None) -> str:
     return f'vor {fmt_duration(age)} min'
 
 
-def latest_text(app, run: dict, long: bool = False) -> Text:
-    """Letzter Messwert mit Status und Alter; ältere als ~5 s werden gedimmt und markiert."""
+def latest_body(app, run: dict) -> Text:
+    """Letzter Messwert (eingelassen) und Alter; älter als ~5 s gedimmt und als Abzeichen markiert."""
     latest = run.get('latest') or {}
     age = run_age(app, run)
     stale = age is None or age > STALE_AFTER_S
-    word, level = STATUS_WORDS.get(str(latest.get('status')), ('–', probes.UNKNOWN))
-    value = latest.get('value')
-    text = Text()
-    if value is None:
-        text.append('–', style=MUTED)
-    else:
-        text.append(f'{value}', style=MUTED if stale else 'bold')
-        if latest.get('unit'):
-            text.append(f' {latest["unit"]}', style=MUTED)
-    if latest:
-        text.append(f'  {word}', style=TONE[level])
+    text = Text(no_wrap=True)
+    text.append_text(value(latest.get('value'), latest.get('unit'), tone=MUTED if stale else None, bold=not stale))
     text.append('  ')
     if age is None:
-        text.append('Alter unbekannt', style=TONE[probes.WARN])
+        text.append_text(badge(probes.WARN, 'Alter unbekannt'))
     elif stale:
-        text.append(f'{symbol(probes.WARN)} {age_text(age)}' + (' – nicht mehr frisch' if long else ''),
-                    style=TONE[probes.WARN])
+        text.append_text(badge(probes.WARN, f'{age_text(age)} – nicht mehr frisch'))
     else:
         text.append(age_text(age), style=MUTED)
     return text
 
 
+def _warn_tone(flag: bool) -> str | None:
+    return TONE[probes.WARN] if flag else None
+
+
 class LaufView(TabView):
     TAB_ID, TITLE, KEY = 'lauf', 'Lauf', '2'
     INFO_TITLE = 'Lauf'
-    INFO = ('Nur zum Ansehen: Läufe und Einrichtung startet und beendet die Werkbank im Browser. Die Zahlen '
-            'kommen aus dem Laufstatus der Werkbank (alle 5 s); Alter und Dauer laufen dazwischen weiter.',
-            'Margin ist der Abstand der besten zur zweitbesten Ziffernvorlage, keine Fehlerwahrscheinlichkeit.')
+    ABOUT = ('Nur zum Ansehen: Läufe und Einrichtung startet und beendet die Werkbank im Browser. Die Zahlen '
+             'kommen aus dem Laufstatus der Werkbank (alle 5 s); Alter und Dauer laufen dazwischen weiter.',
+             'Margin ist der Abstand der besten zur zweitbesten Ziffernvorlage, keine Fehlerwahrscheinlichkeit.')
 
     DEFAULT_CSS = """
-    LaufView #lauf-cols { height: auto; layout: vertical; }
+    LaufView #lauf-cols { height: auto; layout: vertical; max-width: 160; }
     LaufView .lauf-col { height: auto; width: 1fr; }
     LaufView.wide #lauf-cols { layout: horizontal; }
     LaufView.wide #lauf-a { padding: 0 1 0 0; }
     LaufView.wide #lauf-b { padding: 0 0 0 1; }
-    LaufView .lauf-col Static { height: auto; width: 1fr; }
     """
 
     def compose(self):
-        yield Static(Text('Lauf', style='bold'), classes='title')
         with Vertical(id='lauf-cols'):
             with Vertical(id='lauf-a', classes='lauf-col'):
-                yield Segment('Zustand', Static(id='run-state'))
-                yield Segment('Letzter Wert', Static(id='run-latest'))
-                yield Segment('Zählwerte', Static(id='run-counts'))
+                yield SectionCard(id='run-state')
+                yield SectionCard(id='run-latest')
+                yield SectionCard(id='run-counts')
             with Vertical(id='lauf-b', classes='lauf-col'):
-                yield Segment('Letzte 60 s', Static(id='run-strip'))
-                yield Segment('Verarbeitung', Static(id='run-proc'))
-                yield Segment('System', Static(id='run-system'))
+                yield SectionCard(id='run-strip')
+                yield SectionCard(id='run-proc')
+                yield SectionCard(id='run-system')
 
     def on_mount(self) -> None:
         self.set_interval(1.0, self._tick)
@@ -151,10 +143,10 @@ class LaufView(TabView):
         self.set_class(self.app.size.width >= WIDE, 'wide')
         self.call_after_refresh(self.update_view)
 
-    # ------------------------------------------------------------ Breiten
-    def _avail(self, widget_id: str, default: int = 40) -> int:
-        width = self.query_one(widget_id).size.width
-        return width if width > 0 else default
+    def _card(self, widget_id: str) -> tuple[SectionCard, int]:
+        card = self.query_one(widget_id, SectionCard)
+        wide = self.app.size.width >= WIDE
+        return card, self.card_width(card, margin=6 if not wide else (self.size.width or 120) // 2 + 4)
 
     # ------------------------------------------------------------ Inhalte
     def update_view(self) -> None:
@@ -162,179 +154,167 @@ class LaufView(TabView):
         app = self.app
         live, run = live_run(app)
         self._render_state(live, run)
-        latest = self.query_one('#run-latest', Static)
-        counts = self.query_one('#run-counts', Static)
-        strip = self.query_one('#run-strip', Static)
-        proc = self.query_one('#run-proc', Static)
-        system = self.query_one('#run-system', Static)
         has_run = bool(live) and bool(run)
-        if not has_run:
-            note = Text('–', style=MUTED)
-            for widget in (latest, counts, strip, proc):
-                widget.update(note)
-        else:
-            latest.update(latest_text(app, run, long=True))
-            counts.update(self._counts(run))
-            strip.update(self._strip(run))
-            proc.update(self._proc(run.get('proc') or {}))
-        system.update(self._system(live))
+        # Ohne Lauf nur Zustand und System: leere Karten wären nur Rauschen
+        for widget_id in ('#run-latest', '#run-counts', '#run-strip', '#run-proc'):
+            self.query_one(widget_id).display = has_run
+        self._render_latest(run if has_run else None)
+        card, width = self._card('#run-counts')
+        card.show(header('storage', 'Zählwerte', None, width),
+                  self._counts(run, width) if has_run else value(None))
+        card, width = self._card('#run-strip')
+        card.show(header('clock', 'Letzte 60 s', None, width),
+                  self._strip(run, width) if has_run else value(None),
+                  help_line('Links älter, rechts neuer.') if has_run else None)
+        card, width = self._card('#run-proc')
+        proc = (run.get('proc') or {}) if has_run else {}
+        card.show(header('camera', 'Verarbeitung', self._proc_age(proc), width),
+                  self._proc(proc, width) if proc else value(None),
+                  help_line('Margin (Abstand beste/zweitbeste Vorlage).', 'i', 'mehr')
+                  if proc else None)
+        card, width = self._card('#run-system')
+        card.show(header('system', 'System', None, width), self._system(live, width))
 
     def _render_state(self, live: dict | None, run: dict) -> None:
         app = self.app
-        out = self.query_one('#run-state', Static)
+        card, width = self._card('#run-state')
         if app.snapshot is None:
-            out.update(Text('Laufstatus wird geprüft …', style=MUTED))
+            card.show(header('run', 'Lauf', badge('busy', 'Laufstatus wird geprüft', 'busy'), width))
             return
         if live is None:
-            text = Text()
-            text.append(f'{symbol(probes.UNKNOWN)} Laufstatus unbekannt', style=TONE[probes.UNKNOWN])
-            text.append('\nDie Steuerung der Werkbank ist nicht erreichbar.', style=MUTED)
-            out.update(text)
+            card.show(header('run', 'Lauf', badge(probes.UNKNOWN, 'Laufstatus unbekannt'), width), None,
+                      help_line('Die Steuerung der Werkbank ist nicht erreichbar.'))
             return
         state = live.get('state')
         word = probes.STATE_WORDS.get(state, str(state))
-        rows = []
-        head = Text()
         if state == 'running':
-            head.append('● ' if not ascii_mode() else '* ', style=f'bold {ACCENT}')
-            head.append(word, style='bold')
-        elif state in ('setup_running', 'setup_ready', 'setup_failed'):
-            level = probes.FAIL if state == 'setup_failed' else probes.OK
-            head.append(('◐ ' if not ascii_mode() else '* ') if state == 'setup_running' else f'{symbol(level)} ',
-                        style=f'bold {ACCENT if state == "setup_running" else TONE[level]}')
-            head.append(word, style='bold')
+            badge_text = badge(probes.OK, word, 'on')
+        elif state == 'setup_running':
+            badge_text = badge('busy', word, 'busy')
+        elif state in ('setup_ready', 'setup_failed'):
+            badge_text = badge(probes.FAIL if state == 'setup_failed' else probes.OK, word)
         else:
-            head.append(f'{symbol(probes.OFF)} ', style=MUTED)
-            head.append('Kein Lauf' if state == 'idle' else word, style='bold')
-        rows.append(head)
-        if state == 'idle' and not run:
-            note = Text()
-            note.append('Läufe startet die Werkbank im Browser', style=MUTED)
-            if app.instance.url:
-                note.append(':\n')
-                note.append(app.instance.url, style=ACCENT)
-            else:
-                note.append('.')
-            rows.append(note)
-        details = []
-        if live.get('step'):
-            details.append(('Schritt', str(live['step'])))
-        if state in ('setup_running', 'setup_ready', 'setup_failed') and not live.get('step'):
-            details.append(('Schritt', '–'))
+            badge_text = badge(probes.OFF, 'kein Lauf' if state == 'idle' else word)
+        rows: list = []
+        if live.get('step') or state in ('setup_running', 'setup_ready', 'setup_failed'):
+            rows.append(('Schritt', value(live.get('step'))))
         if live.get('session_id'):
-            details.append(('Sitzung', str(live['session_id'])))
+            rows.append(('Sitzung', value(str(live['session_id']))))
         if run:
             elapsed = run.get('elapsed_s')
             if elapsed is not None and state == 'running':
                 elapsed = float(elapsed) + drift(app)
-            details.append(('Dauer', fmt_duration(elapsed)))
-            details.append(('Ausgabe', probes._transport_word((live.get('output') or {}).get('transport'))))
+            rows.append(('Dauer', value(fmt_duration(elapsed))))
+            rows.append(('Ausgabe', value(probes._transport_word((live.get('output') or {}).get('transport')))))
             if run.get('dir'):
-                details.append(('Ordner', str(run['dir'])))
+                rows.append(('Ordner', value(str(run['dir'])), True))
             if app.instance.live_data:
-                details.append(('Ablage', str(app.instance.live_data)))
-        text = Text()
-        for index, row in enumerate(rows):
-            if index:
-                text.append('\n')
-            text.append_text(row)
-        pad = max((len(key) for key, _ in details), default=0) + 2
-        for key, value in details:
-            text.append('\n')
-            text.append(key.ljust(pad), style=MUTED)
-            text.append(value)
-        out.update(text)
+                rows.append(('Ablage', value(str(app.instance.live_data)), True))
+        if state == 'idle' and not run:
+            rows.append(('Werkbank', value(app.instance.url), True))
+            hint = help_line('Läufe startet die Werkbank im Browser.')
+        else:
+            hint = help_line('Nur ansehen; gesteuert wird im Browser.', 'i', 'mehr')
+        card.show(header('run', 'Lauf', badge_text, width),
+                  fields(rows, width, label_w=10, columns=2 if width >= 56 else 1), hint)
 
-    def _counts(self, run: dict) -> Text:
+    def _render_latest(self, run: dict | None) -> None:
+        card, width = self._card('#run-latest')
+        latest = (run or {}).get('latest') or {}
+        right = None
+        if latest:
+            word, level = STATUS_WORDS.get(str(latest.get('status')), ('–', probes.UNKNOWN))
+            right = badge(level, word)
+        card.show(header('values', 'Letzter Wert', right, width),
+                  latest_body(self.app, run) if run else value(None))
+
+    def _counts(self, run: dict, width: int) -> Text:
         counts = run.get('counts') or {}
         total = sum(int(counts.get(key) or 0) for _, key, _ in STATUS_ROWS)
-        width = self._avail('#run-counts')
-        bar_width = 10 if width >= 44 else 0
-        text = Text()
+        bar_width = max(0, min(24, width - 38))
+        text = Text(no_wrap=True)
         for index, (name, key, level) in enumerate(STATUS_ROWS):
             n = int(counts.get(key) or 0)
             if index:
                 text.append('\n')
-            text.append(f'{name:<9}', style=MUTED)
-            text.append(f'{fmt_int(n):>8}', style=TONE[level])
+            text.append(f'{name:<10}', style=MUTED)
+            text.append_text(value(f'{fmt_int(n):>7}', tone=TONE[level]))
             share = n / total if total else None
-            text.append(f'  {"–" if share is None else format(share * 100, ".1f").replace(".", ",")} %'.rjust(9),
+            text.append(f'{"–" if share is None else format(share * 100, ".1f").replace(".", ",")} %'.rjust(9),
                         style=MUTED)
-            if bar_width and share is not None:
+            if bar_width >= 6 and share is not None:
                 text.append('  ')
                 text.append_text(bar(share, bar_width, TONE[level]))
-        text.append(f'\n{"gesamt":<9}', style=MUTED)
-        text.append(f'{fmt_int(total):>8}')
+        text.append(f'\n{"gesamt":<10}', style=MUTED)
+        text.append_text(value(f'{fmt_int(total):>7}', bold=True))
         return text
 
-    def _strip(self, run: dict) -> Text:
-        width = max(20, min(60, self._avail('#run-strip') - 1))
-        text = status_strip(run.get('recent') or [], width)
+    def _strip(self, run: dict, width: int) -> Text:
+        text = status_strip(run.get('recent') or [], max(20, min(60, width)))
         text.append('\n')
-        legend = Text(no_wrap=False)
         block = '#' if ascii_mode() else '▇'
         for name, _, level in STATUS_ROWS:
-            legend.append(block, style=TONE[level])
-            legend.append(f' {name}  ', style=MUTED)
-        legend.append('\nlinks älter, rechts neuer', style=MUTED)
-        text.append_text(legend)
+            text.append(block, style=TONE[level])
+            text.append(f' {name}  ', style=MUTED)
         return text
 
-    def _proc(self, proc: dict) -> Text:
-        text = Text()
-        if not proc:
-            return Text('–', style=MUTED)
-        width = self._avail('#run-proc')
+    def _proc_age(self, proc: dict) -> Text | None:
         age = proc.get('age_s')
-        age_stale = age is not None and float(age) + drift(self.app) > STALE_AFTER_S
-        text.append(f'{"Bildrate":<13}', style=MUTED)
-        text.append(fmt_num(proc.get('fps'), 1, 'Bilder/s'))
-        text.append(f'\n{"Latenz":<13}', style=MUTED)
-        text.append(fmt_num(proc.get('latency_ms'), 0, 'ms'), style=ACCENT)
+        if age is None:
+            return None
+        shown = float(age) + drift(self.app)
+        if shown > STALE_AFTER_S:
+            return badge(probes.WARN, f'Stand {age_text(shown)}')
+        return None
+
+    def _proc(self, proc: dict, width: int) -> Text:
+        age = proc.get('age_s')
+        latency = value(fmt_num(proc.get('latency_ms'), 0) if proc.get('latency_ms') is not None else None, 'ms')
         series = [v for _, v in (proc.get('latency_recent') or []) if v is not None]
         if series:
-            text.append('  ')
-            text.append_text(sparkline(series, max(8, min(40, width - 44))))
-            text.append(f' min {min(series):.0f} / max {max(series):.0f} ms', style=MUTED)
-        text.append(f'\n{"Übersprungen":<13}', style=MUTED)
+            spark = max(8, min(30, width - 40))
+            latency = join(latency, '  ', sparkline(series, spark),
+                           f' {min(series):.0f}–{max(series):.0f} ms' if width >= 60 else '')
         skipped = proc.get('skipped_recent')
-        text.append('–' if skipped is None else fmt_num(skipped * 100, 0, '%'),
-                    style=TONE[probes.WARN] if skipped is not None and skipped > 0.10 else '')
         cells = proc.get('cells') or {}
-        text.append('\nMargin (Abstand beste/zweitbeste Vorlage)', style=MUTED)
-        text.append('\n  kleinste ', style=MUTED)
         margin = cells.get('min_margin')
-        text.append(fmt_num(margin, 2), style=TONE[probes.WARN] if margin is not None and margin < 0 else '')
-        text.append('   unsichere Zellen ', style=MUTED)
         uncertain = cells.get('uncertain')
-        text.append('–' if uncertain is None else str(uncertain),
-                    style=TONE[probes.WARN] if uncertain else '')
-        text.append('\nStand der Zahlen ', style=MUTED)
         if age is None:
-            text.append('–')
+            stand = value(None)
         else:
             shown = float(age) + drift(self.app)
-            text.append(age_text(shown), style=TONE[probes.WARN] if age_stale else MUTED)
-            if age_stale:
-                text.append(f' {symbol(probes.WARN)}', style=TONE[probes.WARN])
-        return text
+            stand = (badge(probes.WARN, age_text(shown)) if shown > STALE_AFTER_S
+                     else Text(age_text(shown), style=MUTED))
+        rows = [('Bildrate', value(fmt_num(proc.get('fps'), 1) if proc.get('fps') is not None else None,
+                                   'Bilder/s')),
+                ('Latenz', latency, True),
+                ('Übersprungen', value(None if skipped is None else fmt_num(skipped * 100, 0), '%',
+                                       tone=_warn_tone(skipped is not None and skipped > 0.10))),
+                ('Margin min.', value(None if margin is None else fmt_num(margin, 2),
+                                      tone=_warn_tone(margin is not None and margin < 0))),
+                ('Unsicher', value(None if uncertain is None else str(uncertain), 'Zellen' if uncertain is not None
+                                   else None, tone=_warn_tone(bool(uncertain)))),
+                ('Stand', stand)]
+        return fields(rows, width, label_w=14, columns=2 if width >= 64 else 1)
 
-    def _system(self, live: dict | None) -> Text:
+    def _system(self, live: dict | None, width: int) -> Text:
         metrics = self.app.metrics or {}
         cpu = metrics.get('cpu_percent')
         if cpu is None and live:
             cpu = (live.get('system') or {}).get('cpu_percent')
         ram = metrics.get('ram_percent')
         temp = metrics.get('temperature_c')
-        text = Text()
-        for index, (name, value, text_value, limit) in enumerate((
-                ('CPU', cpu, fmt_num(cpu, 0, '%'), 85), ('RAM', ram, fmt_num(ram, 0, '%'), 85),
-                ('Temperatur', temp, fmt_num(temp, 0, '°C'), 75))):
+        bar_width = max(0, min(24, width - 26))
+        text = Text(no_wrap=True)
+        for index, (name, number, unit, limit) in enumerate((
+                ('CPU', cpu, '%', 85), ('RAM', ram, '%', 85), ('Temperatur', temp, '°C', 75))):
             if index:
                 text.append('\n')
-            text.append(f'{name:<10}', style=MUTED)
-            text.append(f'{text_value:>7}', style=TONE[probes.WARN] if value is not None and value >= limit else '')
-            if name != 'Temperatur' and value is not None:
-                text.append('  ')
-                text.append_text(bar(value / 100, 12, TONE[probes.WARN] if value >= limit else None))
+            hot = number is not None and number >= limit
+            text.append(f'{name:<12}', style=MUTED)
+            field = value(None if number is None else f'{fmt_num(number, 0):>3}', unit, tone=_warn_tone(hot))
+            text.append_text(field)
+            if unit == '%' and number is not None and bar_width >= 6:
+                text.append(' ' * max(1, 10 - field.cell_len))
+                text.append_text(bar(number / 100, bar_width, TONE[probes.WARN] if hot else None))
         return text

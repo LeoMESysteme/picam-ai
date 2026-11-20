@@ -86,29 +86,8 @@ TabView.own-bar { overflow-y: hidden; }
 .tab-body { height: 1fr; width: 1fr; scrollbar-size-vertical: 1; }
 .actionbar Button { margin: 0 2 0 0; padding: 0 1 0 0; min-width: 8; width: auto; }
 .actionbar.-grid Button { width: 100%; margin: 0; content-align: left middle; text-align: left; }
-.title { margin: 1 0 0 0; }
-.fact-title { margin: 1 0 0 0; }
-.hint { border-left: wide $warning; padding: 0 1; margin: 1 0 0 0; background: $picam-tint-warn; max-width: 110; }
-.hint.fail { border-left: wide $error; background: $picam-tint-fail; }
-.hint.info { border-left: wide $picam-accent; background: $picam-tint-info; }
-.section { margin: 1 0 0 0; color: $picam-text-soft; }
-.note { color: $picam-text-muted; margin: 1 0 0 0; }
 .buttons { height: auto; margin: 1 0 1 0; }
 .buttons Button { margin: 0 2 0 0; }
-.seg { height: auto; width: 1fr; max-width: 120; margin: 1 0 0 0; padding: 0 1; background: $picam-surface;
-       border-left: wide $picam-surface; transition: background 150ms out_cubic; }
-.seg:focus-within { background: $picam-raised; border-left: wide $picam-accent-strong; }
-.seg > .section, .seg > .fact-title:first-of-type, .seg > .title { margin: 0; }
-.seg:focus-within > .section { color: $picam-accent-strong; }
-.seg .hint { max-width: 108; }
-.seg > .buttons { margin: 1 0 0 0; }
-.seg.actions { padding: 0 1; }
-.seg.actions > .buttons { margin: 0; }
-.seg.actions > .note { margin: 0 0 1 0; }
-.cards { height: auto; max-width: 110; grid-gutter: 1 2; grid-rows: auto; }
-.card { height: auto; padding: 0 1; background: $picam-surface; border-left: wide $picam-line; }
-.card.card-warn { border-left: wide $warning; }
-.card.card-fail { border-left: wide $error; }
 #dash { height: auto; }
 #dash-left { width: 1fr; height: auto; padding: 1 2 0 0; }
 #dash-right { width: 42; height: auto; padding: 0 0 0 0; }
@@ -139,9 +118,8 @@ ProtokollView { overflow-y: hidden; }
                  scrollbar-background-active: $picam-surface; }
 #dash-tail:focus-within #tail-log { scrollbar-background: $picam-raised; }
 .field { height: auto; margin: 1 0 0 0; }
-.seg .field:first-of-type { margin: 0; }
-.field-label { color: $picam-text-soft; }
-.field-risk { margin: 0 0 0 1; }
+.field-label { color: $picam-text-muted; }
+.field-risk { margin: 0; }
 .field Input { width: 40; height: 1; margin: 0; padding: 0 1; border: none; background: $picam-field;
                color: $picam-text; }
 .field Input:focus { border: none; background: $picam-field-focus; }

@@ -9,13 +9,11 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from rich.console import Group
-from rich.table import Table
 from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Grid, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.theme import Theme
 from textual.widget import Widget
@@ -358,70 +356,6 @@ class AskScreen(ModalScreen[str | None]):
 
 
 
-class Cards(Grid):
-    """Kartenraster der Übersicht; ``signature`` verhindert unnötiges Neuzeichnen."""
-
-    def __init__(self, cards: list[Static], columns: int, signature: str):
-        super().__init__(*cards, classes='cards')
-        self.styles.grid_size_columns = columns
-        self.signature = signature
-
-
-CARD_ROWS = 3
-
-
-def fact_card(fact: probes.Fact) -> Static:
-    """Karte: Zeichen, Name, Wert und bis zu drei Detailzeilen, gekürzt statt umbrochen."""
-    title = Text(no_wrap=True, overflow='ellipsis')
-    title.append(f'{symbol(fact.level)} ', style=TONE[fact.level])
-    title.append(fact.label, style='bold')
-    title.append(f'  {fact.value}', style=MUTED if fact.level in (probes.OK, probes.OFF) else TONE[fact.level])
-    table = Table.grid(padding=(0, 2), expand=True)
-    table.add_column(style=MUTED, no_wrap=True)
-    table.add_column(style=SOFT, no_wrap=True, overflow='ellipsis', ratio=1)
-    detail = [(k, v) for k, v in fact.detail if v and k not in ('Unit', 'Zustand', 'Weg')][:CARD_ROWS]
-    for key, value in detail:
-        table.add_row(key, str(value))
-    for _ in range(CARD_ROWS - len(detail)):
-        table.add_row('', '')
-    level = {probes.FAIL: ' card-fail', probes.WARN: ' card-warn'}.get(fact.level, '')
-    return Static(Group(title, table), classes='card' + level)
-
-
-
-
-def kv_table(rows) -> Table:
-    table = Table.grid(padding=(0, 2))
-    table.add_column(style=MUTED, no_wrap=True)
-    table.add_column(overflow='fold')
-    for key, value in rows:
-        table.add_row(key, value)
-    return table
-
-
-def fact_title(fact: probes.Fact) -> Text:
-    title = Text()
-    title.append(fact.label, style='bold')
-    title.append('   ')
-    title.append(f'{symbol(fact.level)} {fact.value}', style=TONE[fact.level])
-    return title
-
-
-def hint_block(fact: probes.Fact) -> Text | None:
-    if not fact.hint and not fact.command:
-        return None
-    text = Text()
-    if fact.hint:
-        text.append(fact.hint)
-    if fact.command:
-        if fact.hint:
-            text.append('\n')
-        text.append('-> ' if ascii_mode() else '→ ', style=MUTED)
-        text.append(fact.command, style=ACCENT)
-    return text
-
-
-
 @dataclass
 class Action:
     """Aktion eines Tabs: Taste, Beschriftung, Methode der App oder des Tabs, Sperrgrund."""
@@ -477,35 +411,6 @@ class InfoScreen(ModalScreen[str | None]):
         index = int((event.button.id or 'choice-0').split('-')[1])
         value = self.choices[index].value
         self.dismiss(None if value == 'close' else value)
-
-
-def section_text(title: str, styled: bool = True) -> Text:
-    """Abschnittskopf: Balken, Titel in Versalien.
-
-    ``styled=False`` lässt die Farbe dem CSS (``.section``), damit der Kopf des
-    Abschnitts mit dem Fokus in der Leitfarbe erscheinen kann.
-    """
-    text = Text()
-    text.append('| ' if ascii_mode() else '▍ ', style=ACCENT if styled else '')
-    text.append(title.upper(), style=f'bold {SOFT}' if styled else 'bold')
-    return text
-
-
-def section(title: str) -> Static:
-    return Static(section_text(title, styled=False), classes='section')
-
-
-class Segment(Vertical):
-    """Abschnitt eines Tabs: eigene Fläche, optional mit Kopf.
-
-    Enthält er das fokussierte Element, hebt CSS ihn an (``:focus-within``:
-    Fläche ``raised``, Leitfarbe am linken Rand und im Kopf), mit kurzem
-    Übergang; mit ``TEXTUAL_ANIMATIONS=none`` springt die Farbe sofort.
-    """
-
-    def __init__(self, title: str | None = None, *children: Widget, classes: str = '', **kwargs):
-        head = [section(title)] if title else []
-        super().__init__(*head, *children, classes=('seg ' + classes).strip(), **kwargs)
 
 
 def bar(fraction: float, width: int, tone: str = None, ascii_only: bool | None = None) -> Text:

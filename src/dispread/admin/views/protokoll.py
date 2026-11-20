@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from rich.text import Text
 from textual.widgets import Static
 
 from .. import probes
-from ..ui import ACCENT, MUTED, TONE, Action, ReflowLog
+from ..ui import Action, ReflowLog
+from ..widgets import badge, badges, header
 from .base import TabView
 
 LOG_LIMIT = 2000
@@ -15,7 +15,7 @@ LOG_LIMIT = 2000
 class ProtokollView(TabView):
     TAB_ID, TITLE, KEY = 'protokoll', 'Protokoll', 'l'
     INFO_TITLE = 'Protokoll'
-    INFO = ('Die Meldungen des Dienstes aus dem Systemprotokoll (journald), neueste unten. Im Terminal: '
+    ABOUT = ('Die Meldungen des Dienstes aus dem Systemprotokoll (journald), neueste unten. Im Terminal: '
             'picam logs -f.',)
 
     def __init__(self, **kwargs):
@@ -29,18 +29,18 @@ class ProtokollView(TabView):
 
     def update_view(self) -> None:
         self.query_one('#log', ReflowLog).sync()
-        head = Text()
-        head.append('Protokoll', style='bold')
-        head.append(f'   {self.app.instance.unit or "–"}', style=MUTED)
-        state = ['läuft mit' if self.follow else 'angehalten']
+        # Zustand der Ansicht, keine Aussage über den Dienst: „läuft mit“ in der Leitfarbe, nie grün
+        state = [badge('busy', 'läuft mit', 'on') if self.follow else badge(probes.WARN, 'angehalten', 'stop')]
         if self.errors_only:
-            state.append('nur Warnungen und Fehler')
-        head.append('   ' + ' · '.join(state), style=ACCENT if self.follow else TONE[probes.WARN])
-        self.query_one('#log-head', Static).update(head)
+            state.append(badge('busy', 'nur Probleme', 'filter'))
+        width = min(120, self.size.width or self.app.size.width - 4)
+        self.query_one('#log-head', Static).update(
+            header('log', 'Protokoll', badges(*state), width, note=self.app.instance.unit or '–'))
 
     def actions(self) -> list[Action]:
-        return [Action('f', 'mitlaufen ' + ('aus' if self.follow else 'an'), self.toggle_follow),
-                Action('e', 'alle' if self.errors_only else 'nur Probleme', self.toggle_errors)]
+        return [Action('f', 'mitlaufen ' + ('aus' if self.follow else 'an'), self.toggle_follow,
+                       icon='stop' if self.follow else 'start'),
+                Action('e', 'alle' if self.errors_only else 'nur Probleme', self.toggle_errors, icon='filter')]
 
     def shows(self, line) -> bool:
         return not self.errors_only or line.level in ('fehler', 'warnung')

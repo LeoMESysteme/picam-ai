@@ -4,16 +4,14 @@ Die Wege sind eine reine Auswahl der Ansicht: ← → oder Klick zeigen die
 Einzelheiten eines Wegs. Welcher Weg im Lauf benutzt wird, trägt das Abzeichen
 „● im Lauf“; gewählt wird er beim Laufstart in der Werkbank.
 
-Zwei Anordnungen (``PICAM_LAYOUT``): A – Karte „Ausgabe“ (Lauf) und Karte mit
-Auswahlleiste und Einzelheiten; B – vier Kacheln (eine je Weg) als Auswahl,
-darunter die Einzelheiten.
+Karte „Ausgabe“ (Lauf), darunter eine Karte mit Auswahlleiste und den
+Einzelheiten des gewählten Wegs.
 """
 
 from __future__ import annotations
 
 from rich.text import Text
 from textual import on
-from textual.containers import Horizontal
 from textual.widgets import Static
 
 from dispread.bridge.baud import UART_BAUD
@@ -25,18 +23,14 @@ from ..widgets import (
     ActionBar,
     CardBox,
     ChipSelector,
-    DetailPanel,
     SectionCard,
     TabBody,
-    TileRow,
     badge,
     clip,
     fact_badge,
     fields,
     header,
     help_line,
-    layout_mode,
-    tile_text,
     value,
 )
 from .base import FactView
@@ -71,19 +65,13 @@ class AusgabeView(FactView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.path_sel: int | None = None
-        self.mode = layout_mode()
 
     def compose(self):
         with TabBody(classes='tab-body'):
-            if self.mode == 'b':
-                yield TileRow(len(PATHS), id='out-tiles', min_tile=18)
-                yield Static(id='out-tiles-help')
-                yield DetailPanel(id='out-body')
-            else:
-                yield SectionCard(id='out-active')
-                with CardBox(id='out-paths'):
-                    yield ChipSelector(id='paths')
-                    yield Static(id='out-body')
+            yield SectionCard(id='out-active')
+            with CardBox(id='out-paths'):
+                yield ChipSelector(id='paths')
+                yield Static(id='out-body')
         yield ActionBar()
 
     # ------------------------------------------------------------ Zustand
@@ -115,11 +103,6 @@ class AusgabeView(FactView):
         if event.index != self.selected_index():
             self.choose(event.index)
 
-    @on(TileRow.Selected, '#out-tiles')
-    def _tile_selected(self, event: TileRow.Selected) -> None:
-        if event.index != self.selected_index():
-            self.choose(event.index)
-
     # ------------------------------------------------------------ Inhalte
     def _run_state(self, active: int | None) -> tuple[Text, list]:
         """Abzeichen und Zeilen zum Lauf (welcher Weg, Zustand, Fehler)."""
@@ -137,13 +120,6 @@ class AusgabeView(FactView):
             rows.append(('Fehler', badge(probes.FAIL, str(output['error'])), True))
             return badge(probes.FAIL, 'Fehler'), rows
         return badge(probes.OK, 'Lauf aktiv', 'on'), rows
-
-    def _in_run(self, index: int, active: int | None) -> Text:
-        if index != active:
-            return badge(probes.OFF, 'ungenutzt')
-        if ((self._live() or {}).get('output') or {}).get('error'):
-            return badge(probes.FAIL, 'Fehler im Lauf')
-        return badge(probes.OK, 'im Lauf', 'on')
 
     def _bridge_rows(self) -> list:
         app = self.app
@@ -169,12 +145,10 @@ class AusgabeView(FactView):
                                            'gekoppelt' if paired else str(bridge.value), 'on' if paired else None)))
         return rows + [('Kopplungen', value(detail.get('Kopplungen'))), ('Pi-ID', value(detail.get('Pi-ID')))]
 
-    def _path_rows(self, chosen: int, active: int | None, with_state: bool = True) -> list:
+    def _path_rows(self, chosen: int) -> list:
+        """Einzelheiten eines Wegs; „im Lauf“ steht an der Auswahl, der Zustand in der Karte „Ausgabe“."""
         app = self.app
-        output = (self._live() or {}).get('output') or {}
-        state = value(output.get('state')) if chosen == active and with_state else None
-        # „im Lauf“ steht schon an der Auswahl (Abzeichen); hier nur der Zustand des Wegs im Lauf
-        status = [('Zustand', state)] if state is not None else []
+        status: list = []
         if chosen == 0:
             return status
         if chosen == 1:
@@ -191,29 +165,11 @@ class AusgabeView(FactView):
                     ('UART-Empfang', receive), *self._bridge_rows()]
         return [*status, ('Werkbank', value(app.instance.url), True), *self._bridge_rows()]
 
-    def _path_key(self, index: int) -> Text:
-        """Kennzahl der Kachel eines Wegs."""
-        if index == 1:
-            return value(DIRECT_UART_BAUD, 'Bd')
-        if index == 2:
-            return value(UART_BAUD, 'Bd')
-        if index == 3:
-            host, port = getattr(self.app.instance, 'host', None), getattr(self.app.instance, 'port', None)
-            return value(f'{host}:{port}' if host and port else None)
-        return value(None)
-
     # ------------------------------------------------------------ Anzeige
     def update_view(self) -> None:
         active, chosen = self.active_index(), self.selected_index()
-        if self.mode == 'b':
-            self._update_b(active, chosen)
-        else:
-            self._update_a(active, chosen)
-        self.sync_buttons()
-
-    def _update_a(self, active: int | None, chosen: int) -> None:
         card = self.query_one('#out-active', SectionCard)
-        width = card.inner_width(max(40, self.size.width - 6))
+        width = self.card_width(card)
         state, rows = self._run_state(active)
         card.show(header('output', 'Ausgabe', state, width), fields(rows, width, label_w=14, columns=2),
                   help_line(CHOSEN_AT_START))
@@ -222,37 +178,15 @@ class AusgabeView(FactView):
         items = [(glyph, (label if long else short), badge(probes.OK, 'im Lauf', 'on') if i == active else None)
                  for i, (_, label, short, glyph) in enumerate(PATHS)]
         selector.set_items(items, chosen)
-        # A: der Zustand des Wegs im Lauf steht schon in der Karte „Ausgabe“
-        body = fields(self._path_rows(chosen, active, with_state=False), width, label_w=14, columns=2)
+        # Der Zustand des Wegs im Lauf steht schon in der Karte „Ausgabe“
+        body = fields(self._path_rows(chosen), width, label_w=14, columns=2)
         text = Text()
         if body.plain:
             text.append_text(body)
             text.append('\n')
         text.append_text(clip(help_line(NOTES[chosen]), width))
         self.query_one('#out-body', Static).update(text)
-
-    def _update_b(self, active: int | None, chosen: int) -> None:
-        row = self.query_one('#out-tiles', TileRow)
-        inner = row.arrange(row.size.width or max(40, self.size.width - 4))
-        row.selected = chosen
-        for index, (_, label, short, glyph) in enumerate(PATHS):
-            title = label if len(label) + 2 <= inner else short
-            row.set_tile(index, tile_text(glyph, title, self._in_run(index, active), self._path_key(index), inner))
-        state, _ = self._run_state(active)
-        line = Text(no_wrap=True, overflow='ellipsis')
-        line.append_text(state)
-        line.append('  ')
-        line.append_text(help_line(CHOSEN_AT_START))
-        self.query_one('#out-tiles-help', Static).update(clip(line, max(40, self.size.width - 5)))
-        detail = self.query_one('#out-body', DetailPanel)
-        width = detail.inner_width(max(40, self.size.width - 8))
-        rows = self._path_rows(chosen, active)
-        text = Text()
-        if rows:
-            text.append_text(fields(rows, width, label_w=14, columns=2))
-            text.append('\n')
-        text.append_text(clip(help_line(NOTES[chosen]), width))
-        detail.update(text)
+        self.sync_buttons()
 
     # ------------------------------------------------------------ Aktionen
     def actions(self) -> list[Action]:
@@ -270,16 +204,3 @@ class AusgabeView(FactView):
                         Action('e', 'UART-Empfang beenden', app.bridge_stop, danger=True, icon='stop',
                                blocked=down or app.blocker or (None if ready else 'nicht vorbereitet'))]
         return actions + super().actions()
-
-    def sync_buttons(self) -> None:
-        bar = self.query_one('#buttons', Horizontal)
-        have = {b.id for b in bar.query('Button.act')}
-        shown = {a.key for a in self.actions()}
-        for action in self.actions():
-            if f'act-{action.key}' not in have:
-                bar.mount(self.action_button(action))
-        for key in ('p', 'e'):
-            for button in self.query(f'#act-{key}'):
-                button.display = key in shown
-        bar.display = bool(shown)
-        super().sync_buttons()

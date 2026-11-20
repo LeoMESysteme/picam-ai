@@ -22,18 +22,18 @@ Was ein Tab von der App benutzen darf (``self.app``):
 
 Darstellung: stabile Widgets in ``compose`` anlegen und in ``update_view``
 nur ihren Inhalt ersetzen (``Static.update``); kein Neuaufbau je Prüfung.
-Farben und Bausteine aus ``dispread.admin.ui``. Nichts erfinden: unbekannt
-wird „–“.
+Bildsprache (Karten, Wertfelder, Abzeichen, Hilfezeile, Aktionsleiste) aus
+``dispread.admin.widgets``, Farben aus ``dispread.admin.ui``. Nichts erfinden:
+unbekannt wird „–“.
 """
 
 from __future__ import annotations
 
-from rich.text import Text
-from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Button, Static
+from textual.containers import VerticalScroll
+from textual.widgets import Button
 
 from .. import probes
-from ..ui import ACCENT, MUTED, Action, Segment, fact_title, hint_block, kv_table
+from ..ui import Action
 from ..widgets import ActionBar, action_label
 
 
@@ -42,9 +42,12 @@ class TabView(VerticalScroll):
     TITLE = ''
     KEY = ''          # Direkttaste (Ziffer) oder ''
     INFO_TITLE = ''
-    INFO: tuple[str, ...] = ()
-    #: Eigene Aktionsleiste mit Tastenfeldern (neue Bildsprache, ``widgets``); die
-    #: Tastenzeile unten nennt dann nur noch die allgemeinen Tasten.
+    #: Erklärung des Tabs (Taste i); dahinter die vollständigen Hinweise der Befunde
+    #: in ``INFO_FACTS`` (auf dem Tab steht nur ihr erster Satz).
+    ABOUT: tuple[str, ...] = ()
+    INFO_FACTS: tuple[str, ...] = ()
+    #: Eigene Aktionsleiste mit Tastenfeldern (``widgets.ActionBar``); die Tastenzeile
+    #: unten nennt dann nur noch die allgemeinen Tasten.
     OWN_BAR = False
     can_focus = False
 
@@ -53,13 +56,30 @@ class TabView(VerticalScroll):
         if self.OWN_BAR:  # Inhalt scrollt in ``.tab-body``, die Aktionsleiste bleibt unten stehen
             self.add_class('own-bar')
 
+    @property
+    def INFO(self) -> tuple[str, ...]:  # noqa: N802 - Schnittstelle der App (view.INFO)
+        hints = []
+        for key in self.INFO_FACTS:
+            fact = self.app.fact(key) if self.is_mounted else None
+            if fact is not None and fact.hint:
+                hints.append(f'{fact.label}: {fact.hint}' + (f' Befehl: {fact.command}' if fact.command else ''))
+        return (*self.ABOUT, *hints)
+
     def update_view(self) -> None:
         """Inhalt aus ``self.app`` neu zeichnen (billig, oft aufgerufen)."""
 
     def on_resize(self, event) -> None:
-        # Neue Bildsprache misst Zeilen selbst aus (Abzeichen rechtsbündig, Pfade gekürzt)
+        # Karten messen Zeilen selbst aus (Abzeichen rechtsbündig, Pfade gekürzt)
         if self.OWN_BAR:
             self.call_after_refresh(self.update_view)
+
+    def card_width(self, card=None, margin: int = 6) -> int:
+        """Innenbreite einer Karte (vor dem ersten Layout aus der Tab-Breite geschätzt)."""
+        fallback = max(30, (self.size.width or self.app.size.width - 4) - margin)
+        if card is None:
+            return fallback
+        width = card.content_size.width or card.size.width
+        return width if width > 0 else fallback
 
     def actions(self) -> list[Action]:
         return []
@@ -76,7 +96,19 @@ class TabView(VerticalScroll):
         return button
 
     def sync_buttons(self) -> None:
-        for action in self.actions():
+        actions = self.actions()
+        if self.OWN_BAR:
+            # Aktionen kommen und gehen mit dem Zustand (z. B. „Abhilfe“): Knöpfe nachziehen
+            for bar in self.query(ActionBar):
+                have = {b.id for b in bar.query('Button.act')}
+                for action in actions:
+                    if f'act-{action.key}' not in have:
+                        bar.mount(self.action_button(action))
+                shown = {f'act-{a.key}' for a in actions}
+                for button in bar.query('Button.act'):
+                    button.display = button.id in shown
+                bar.display = bool(actions)
+        for action in actions:
             for button in self.query(f'#act-{action.key}'):
                 button.disabled = action.blocked is not None
                 button.tooltip = action.blocked
@@ -96,62 +128,16 @@ class TabView(VerticalScroll):
                 return
 
 
-def actions_segment(*children) -> Segment:
-    """Abschnitt mit den Knöpfen eines Tabs (ohne Kopf); hebt sich hervor, solange ein Knopf den Fokus hat."""
-    return Segment(None, *children, Horizontal(id='buttons', classes='buttons'), classes='actions')
-
-
-def key_hint(key: str, label: str) -> Text:
-    text = Text()
-    text.append(key, style=f'bold {ACCENT}')
-    text.append(f' {label}', style=MUTED)
-    return text
-
-
 class FactView(TabView):
-    """Tab aus Befunden: Titel, Abhilfe, Details je Befund, darunter Knöpfe."""
+    """Tab aus Befunden; bietet „Abhilfe ausführen“ an, sobald ein Befund einen Befehl dafür hat."""
 
     FACTS: tuple[str, ...] = ()
-
-    def compose(self):
-        yield Static(Text(self.TITLE, style='bold'), classes='title')
-        for key in self.FACTS:
-            with Segment():
-                yield from self.fact_widgets(key)
-        yield actions_segment()
-
-    @staticmethod
-    def fact_widgets(key: str):
-        """Titel, Abhilfe und Details eines Befunds (Inhalt eines Abschnitts)."""
-        yield Static(id=f'f-{key}-title', classes='fact-title')
-        yield Static(id=f'f-{key}-hint', classes='hint')
-        yield Static(id=f'f-{key}-detail')
+    OWN_BAR = True
 
     def on_mount(self) -> None:
-        bar = self.query_one('#buttons', Horizontal)
-        for action in self.actions():
-            bar.mount(self.action_button(action))
-
-    def update_view(self) -> None:
-        for key in self.FACTS:
-            fact = self.app.fact(key)
-            title = self.query_one(f'#f-{key}-title', Static)
-            hint = self.query_one(f'#f-{key}-hint', Static)
-            detail = self.query_one(f'#f-{key}-detail', Static)
-            if fact is None:
-                title.update(Text(probes_label(key), style='bold'))
-                hint.display = False
-                detail.update(Text('Wird geprüft …', style=MUTED))
-                continue
-            title.update(fact_title(fact))
-            block = hint_block(fact)
-            hint.display = block is not None
-            if block is not None:
-                hint.update(block)
-                hint.set_class(fact.level == probes.FAIL, 'fail')
-                hint.set_class(fact.level not in (probes.FAIL, probes.WARN), 'info')
-            detail.update(kv_table(fact.detail) if fact.detail else Text(''))
-        self.sync_buttons()
+        for bar in self.query(ActionBar):
+            for action in self.actions():
+                bar.mount(self.action_button(action))
 
     def actions(self) -> list[Action]:
         actions = []
