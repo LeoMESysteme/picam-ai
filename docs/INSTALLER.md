@@ -33,7 +33,7 @@ getrennt erhaltenem SHA-256).
 
 `picam` ohne Argument öffnet im Terminal die Verwaltungskonsole: links
 die Bereiche (Dienst, Lauf, Kamera, Ausgabe, Brücke, Zertifikat, Speicher,
-dann die Einrichtung mit Lesevorlage, Kalibrierung, UART, Konto, Uhrzeit,
+dann die Einrichtung mit Netzwerk, Lesevorlage, Kalibrierung, UART, Konto, Uhrzeit,
 Version), rechts Befund, Abhilfe und Aktionen. `s` startet/stoppt, `r`
 startet neu, `l` zeigt das Protokoll (`f` mitlaufen, `e` nur Probleme),
 `c` öffnet die Konfiguration, `a` führt den empfohlenen Befehl eines
