@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -28,6 +29,24 @@ _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 
 class IdentityConflict(ValueError):
     """Copied state on different hardware requires explicit local reprovisioning."""
+
+
+def _host_san(host):
+    """Validate browser identity before creating or opening any private state."""
+    if (not isinstance(host, str) or not host or not host.isascii()
+            or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in host)
+            or '%' in host):
+        raise ValueError("invalid certificate host")
+    try:
+        return x509.IPAddress(ipaddress.ip_address(host))
+    except ValueError:
+        pass
+    labels = host.removesuffix('.').split('.')
+    if (len(host) > 253 or all(label.isdigit() for label in labels)
+            or any(not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label)
+                   for label in labels)):
+        raise ValueError("invalid certificate host")
+    return x509.DNSName(host.removesuffix('.').lower())
 
 
 def private_directory(directory: Path) -> Path:
@@ -170,8 +189,9 @@ class DeviceIdentity:
         return f"DeviceIdentity(pi_id={self.pi_id!r}, fingerprint={self.fingerprint!r})"
 
     @classmethod
-    def load_or_create(cls, directory: Path, hardware_id: str) -> DeviceIdentity:
-        return cls._open(directory, hardware_id, create=True)
+    def load_or_create(cls, directory: Path, hardware_id: str, *, host: str | None = None) -> DeviceIdentity:
+        host_name = _host_san(host) if host is not None else None
+        return cls._open(directory, hardware_id, create=True, host_name=host_name)
 
     @classmethod
     def load(cls, directory: Path, hardware_id: str) -> DeviceIdentity:
@@ -179,7 +199,7 @@ class DeviceIdentity:
         return cls._open(directory, hardware_id, create=False)
 
     @classmethod
-    def _open(cls, directory, hardware_id, *, create):
+    def _open(cls, directory, hardware_id, *, create, host_name=None):
         if not isinstance(hardware_id, str) or not hardware_id.strip() or len(hardware_id) > 512:
             raise ValueError("hardware identity required")
         directory = private_directory(Path(directory))
@@ -196,12 +216,15 @@ class DeviceIdentity:
                 pi_id = str(uuid.uuid4())
                 name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "dispread-" + pi_id)])
                 now = datetime.now(UTC)
+                names = [x509.UniformResourceIdentifier(_PI_URI + pi_id)]
+                if host_name is not None:
+                    names.append(host_name)
                 cert = (
                     x509.CertificateBuilder()
                     .subject_name(name).issuer_name(name).public_key(key.public_key())
                     .serial_number(x509.random_serial_number())
                     .not_valid_before(now - timedelta(minutes=5)).not_valid_after(now + timedelta(days=365))
-                    .add_extension(x509.SubjectAlternativeName([x509.UniformResourceIdentifier(_PI_URI + pi_id)]), critical=False)
+                    .add_extension(x509.SubjectAlternativeName(names), critical=False)
                     .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
                     .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
                     .sign(key, hashes.SHA256())
@@ -223,6 +246,11 @@ class DeviceIdentity:
             cert = _load_certificate(state["certificate_pem"])
             fingerprint = cert.fingerprint(hashes.SHA256()).hex()
             verify_certificate(state["certificate_pem"], fingerprint, state["pi_id"])
+            if host_name is not None:
+                names = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+                if host_name not in names:
+                    raise ValueError("existing identity certificate does not cover requested host; "
+                                     "explicit certificate renewal required, identity unchanged")
             key = serialization.load_pem_private_key(state["private_key_pem"].encode("ascii"), password=None)
             if not isinstance(key, rsa.RSAPrivateKey) or key.public_key().public_numbers() != cert.public_key().public_numbers():
                 raise ValueError("private key and certificate mismatch")

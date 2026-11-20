@@ -29,6 +29,7 @@ dispread = "dispread.workbench.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
+"dispread" = ["data/templates-stufe2c-2026-09-30.json"]
 "dispread.workbench" = ["static/*", "static/vendor/fonts/*", "static/live/*", "static/live/*/*"]
 
 [tool.ruff]

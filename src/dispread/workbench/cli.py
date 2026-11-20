@@ -116,9 +116,23 @@ def bridge_command(args):
         PairingStore(directory / "pairing").revoke(args.client_id)
         print("Client-Zugang widerrufen")
         return
+    host = getattr(args, "host", None) if args.action == "identity" else None
+    if host is not None and not getattr(args, "provision", False):
+        raise ValueError("--host erfordert --provision; bestehende Zertifikate werden nicht erneuert")
     load = DeviceIdentity.load_or_create if args.action == "identity" and args.provision else DeviceIdentity.load
-    identity = load(directory, local_hardware_id())
+    identity = load(directory, local_hardware_id(), **({"host": host} if host is not None else {}))
     if args.action == "identity":
+        export_path = getattr(args, "export_certificate", None)
+        if export_path is not None:
+            fd = os.open(export_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+            try:
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(identity.certificate_pem.encode("ascii"))
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            except BaseException:
+                Path(export_path).unlink(missing_ok=True)
+                raise
         print(json.dumps({"pi_id": identity.pi_id, "certificate_sha256": identity.fingerprint}, indent=2))
         return
     profile = BridgeProfile(
@@ -150,6 +164,7 @@ def parser():
     root = argparse.ArgumentParser(description="Kamera-Workbench und TUI")
     sub = root.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve")
+    serve.add_argument("--config", help="Explizite TOML-Konfiguration; CLI-Angaben haben Vorrang")
     serve.add_argument("--pam-user", default=None, help="PAM-Konto; sonst DISPREAD_PAM_USER oder lokales Dienstkonto")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=SERVE_PORT)
@@ -205,6 +220,8 @@ def parser():
     identity = bridge_sub.add_parser("identity")
     identity.add_argument("--directory", default=str(BRIDGE_DIR))
     identity.add_argument("--provision", action="store_true", help="Neue Identitaet nur bei fehlender Einrichtung erzeugen")
+    identity.add_argument("--host", help="DNS-/IP-SAN bei expliziter Erstprovisionierung; keine Erneuerung")
+    identity.add_argument("--export-certificate", help="Nur oeffentliches Zertifikat exklusiv exportieren; Elternverzeichnis muss existieren")
     export = bridge_sub.add_parser("export-profile")
     export.add_argument("--directory", default=str(BRIDGE_DIR))
     export.add_argument("--output", required=True)
@@ -222,6 +239,9 @@ def parser():
 def main(argv=None):
     args = parser().parse_args(argv)
     try:
+        from .config import apply_config
+
+        apply_config(args, argv)
         if args.command == "bridge":
             bridge_command(args)
             return 0

@@ -328,8 +328,11 @@ async def serve(args):
                                identity=bridge_config['bridge_identity'],
                                pairing_store=bridge_config['bridge_pairing_store'])
         bridge_config['bridge_hub'] = bridge_hub
+    live_options = {}
+    if getattr(args, "live_config", None) is not None:
+        live_options["config"] = args.live_config
     live = LiveService(owner, Path(getattr(args, "live_data", LIVE_DATA_DIR)),
-                       simulate=args.simulate, bridge_hub=bridge_hub)
+                       simulate=args.simulate, bridge_hub=bridge_hub, **live_options)
     controller = Controller(args.data, args.camera, args.simulate, owner=owner)
     data = controller.snapshot()["config"]
     for name in ("width", "height", "fps"):

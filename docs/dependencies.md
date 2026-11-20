@@ -8,6 +8,15 @@ Projekt-venv mit Debian-Systempaketen gilt weiterhin.
 
 ## Pi-Werkbank installieren {#pi-werkbank-installieren}
 
+Der [getrennte Neuinstaller](INSTALLER.md) prüft die gewählte Laufzeit ab
+Python 3.13 durch tatsächliche Modulimporte. Er verwendet dieselbe zentrale
+apt-Liste und installiert ein lokales Release mit `--no-index --no-deps
+--no-build-isolation` in eine neue Systempaket-venv. Der Bootstrap selbst
+verwendet nur die Standardbibliothek ab Python 3.9. Es kommt keine neue
+Produktabhängigkeit hinzu. Auf anderen Distributionen werden passende
+Systemmodule manuell bereitgestellt; optionale TUI/Discovery sind kein
+Hindernis für eine Installation ohne diese Funktionen.
+
 **Verbindliche Installationsliste:** `packaging/apt-packages.txt`. Sie enthält
 pro Paket den tatsächlichen Zweck und wird direkt von
 `scripts/install-workbench.sh` gelesen. Die Bestandstabellen weiter unten

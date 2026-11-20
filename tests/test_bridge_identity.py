@@ -217,3 +217,67 @@ def test_verification_helpers_import_without_posix_fcntl(identity, monkeypatch):
     cert = module.verify_certificate(identity.certificate_pem, identity.fingerprint, identity.pi_id)
     assert cert.fingerprint(hashes.SHA256()).hex() == identity.fingerprint
     module.verify_hello(identity.certificate_pem, payload, signature)
+
+
+@pytest.mark.parametrize(('host', 'kind', 'expected'), [
+    ('pi.example', x509.DNSName, 'pi.example'),
+    ('192.0.2.5', x509.IPAddress, '192.0.2.5'),
+    ('2001:db8::5', x509.IPAddress, '2001:db8::5'),
+])
+def test_provisioned_host_certificate_passes_browser_and_pinned_verification(tmp_path, host, kind, expected):
+    import ssl
+
+    identity = DeviceIdentity.load_or_create(tmp_path / 'identity', 'hardware-a', host=host)
+    cert = verify_certificate(identity.certificate_pem, identity.fingerprint, identity.pi_id)
+    names = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    assert names.get_values_for_type(x509.UniformResourceIdentifier) == ['urn:dispread:pi:' + identity.pi_id]
+    assert [str(value) for value in names.get_values_for_type(kind)] == [expected]
+    payload = canonical_uart_hello(identity.pi_id, 'client-a', 'a' * 43)
+    verify_hello(identity.certificate_pem, payload, identity.sign_hello(payload))
+    # Exercise the certificate actually served by tls_context with hostname verification enabled.
+    client_context = ssl.create_default_context(cadata=identity.certificate_pem)
+    server_in, server_out, client_in, client_out = [ssl.MemoryBIO() for _ in range(4)]
+    server = identity.tls_context().wrap_bio(server_in, server_out, server_side=True)
+    client = client_context.wrap_bio(client_in, client_out, server_hostname=host)
+    done = set()
+    for _ in range(20):
+        for name, endpoint in (('client', client), ('server', server)):
+            if name not in done:
+                try:
+                    endpoint.do_handshake()
+                    done.add(name)
+                except ssl.SSLWantReadError:
+                    pass
+        server_in.write(client_out.read())
+        client_in.write(server_out.read())
+        if len(done) == 2:
+            break
+    assert done == {'client', 'server'}
+    served = x509.load_der_x509_certificate(client.getpeercert(binary_form=True))
+    assert served.fingerprint(hashes.SHA256()).hex() == identity.fingerprint
+    reloaded = DeviceIdentity.load_or_create(identity.directory, 'hardware-a', host=host)
+    assert reloaded.fingerprint == identity.fingerprint
+
+
+@pytest.mark.parametrize('host', ['', 'bad host', 'https://pi.example', '-bad.example', 'pi..example',
+                                  'fe80::1%eth0', 'pi\n.example', 'pï.example', '999.999.999.999', 123])
+def test_invalid_host_is_rejected_before_identity_directory_creation(tmp_path, host):
+    directory = tmp_path / 'identity'
+    with pytest.raises(ValueError, match='host|Host'):
+        DeviceIdentity.load_or_create(directory, 'hardware-a', host=host)
+    assert not directory.exists()
+
+
+def test_requesting_new_host_never_renews_existing_identity(identity):
+    before = {path.name: path.read_bytes() for path in identity.directory.iterdir()}
+    with pytest.raises(ValueError, match='host|Host'):
+        DeviceIdentity.load_or_create(identity.directory, 'hardware-a', host='new.example')
+    assert {path.name: path.read_bytes() for path in identity.directory.iterdir()} == before
+    assert DeviceIdentity.load(identity.directory, 'hardware-a').fingerprint == identity.fingerprint
+
+
+def test_invalid_host_is_rejected_even_for_existing_identity(identity):
+    before = {path.name: path.read_bytes() for path in identity.directory.iterdir()}
+    with pytest.raises(ValueError, match='host|Host'):
+        DeviceIdentity.load_or_create(identity.directory, 'hardware-a', host='https://bad.example')
+    assert {path.name: path.read_bytes() for path in identity.directory.iterdir()} == before
