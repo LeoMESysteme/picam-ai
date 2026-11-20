@@ -440,3 +440,14 @@ def test_bridge_pairings_are_read_from_sqlite_store(tmp_path):
     store.redeem_offer(offer, 'labor-pc', 'network')
     fact = probes.fact_bridge(instance, {'connected': False}, service_ok)
     assert fact.value == 'gekoppelt' and ('Kopplungen', 'Netzwerk 1') in fact.detail
+
+
+def test_network_detects_lost_address():
+    out = json.dumps([{'ifname': 'lo', 'addr_info': [{'local': '127.0.0.1'}]},
+                      {'ifname': 'eth0', 'addr_info': [{'local': '192.168.1.20'}]}])
+    run = fake_run({'ip -j': (0, out, '')})
+    here = Instance(kind='system', unit='u', scope='system', host='192.168.1.20')
+    assert probes.fact_network(here, run).value == 'eth0'
+    gone = Instance(kind='system', unit='u', scope='system', host='192.168.1.9')
+    fact = probes.fact_network(gone, run)
+    assert fact.level == probes.FAIL and 'DHCP' in fact.hint

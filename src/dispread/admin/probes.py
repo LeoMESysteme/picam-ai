@@ -552,6 +552,42 @@ def fact_linger(instance: Instance, run=run_command) -> Fact | None:
                 command=shlex.join(['sudo', 'loginctl', 'enable-linger', user]))
 
 
+def local_addresses(run=run_command) -> list[tuple[str, str]]:
+    import json
+
+    code, out, _ = run(['ip', '-j', 'addr', 'show'])
+    if code != 0:
+        return []
+    found = []
+    try:
+        for link in json.loads(out or '[]'):
+            for info in link.get('addr_info', []):
+                if info.get('local'):
+                    found.append((str(info['local']), str(link.get('ifname', ''))))
+    except (ValueError, AttributeError):
+        return []
+    return found
+
+
+def fact_network(instance: Instance, run=run_command) -> Fact:
+    host = instance.host
+    if not host:
+        return Fact('netzwerk', 'Netzwerk', UNKNOWN, 'Adresse fehlt')
+    addresses = local_addresses(run)
+    detail = [('Werkbank-Adresse', host)] + [(name or '?', address) for address, name in addresses
+                                             if name != 'lo']
+    if not addresses:
+        return Fact('netzwerk', 'Netzwerk', UNKNOWN, 'unbekannt', detail)
+    names = {socket.gethostname(), socket.gethostname() + '.local'}
+    if host in {address for address, _ in addresses} or host in names:
+        interface = next((name for address, name in addresses if address == host), 'Name')
+        return Fact('netzwerk', 'Netzwerk', OK, interface, detail)
+    return Fact('netzwerk', 'Netzwerk', FAIL, 'Adresse fehlt', detail,
+                hint=(f'{host} liegt auf keiner Schnittstelle dieses Pi (neue DHCP-Adresse? anderes Netz?). '
+                      'Browser und Brücke erreichen die Werkbank so nicht. Feste Adresse einrichten '
+                      'oder neu installieren.'))
+
+
 def fact_clock(run=run_command) -> Fact:
     code, out, _ = run(['timedatectl', 'show', '-p', 'NTPSynchronized', '--value'])
     if code != 0:
@@ -566,7 +602,7 @@ def fact_clock(run=run_command) -> Fact:
 
 #: Reihenfolge der Übersicht: zuerst Betrieb, dann Einrichtung.
 OVERVIEW = ('dienst', 'lauf', 'kamera', 'ausgabe', 'bruecke', 'zertifikat', 'speicher')
-SETUP = ('vorlage', 'kalibrierung', 'uart', 'konto', 'linger', 'uhr', 'version')
+SETUP = ('netzwerk', 'vorlage', 'kalibrierung', 'uart', 'konto', 'linger', 'uhr', 'version')
 
 
 def collect(instance: Instance, run=run_command, live_source=None, bridge_source=None,
@@ -586,6 +622,7 @@ def collect(instance: Instance, run=run_command, live_source=None, bridge_source
     facts['zertifikat'], _ = fact_https(instance, service)
     facts['speicher'] = fact_storage(instance, live)
     if include_setup:
+        facts['netzwerk'] = fact_network(instance, run)
         facts['vorlage'] = fact_templates(instance)
         facts['kalibrierung'] = fact_calibration(instance)
         facts['uart'] = fact_uart()

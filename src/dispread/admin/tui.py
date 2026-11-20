@@ -482,7 +482,7 @@ class PicamApp(App[int]):
 
     _NAV_LABELS = {'dienst': 'Dienst', 'lauf': 'Lauf', 'kamera': 'Kamera', 'ausgabe': 'Ausgabe',
                    'bruecke': 'Brücke', 'zertifikat': 'Zertifikat', 'speicher': 'Speicher',
-                   'vorlage': 'Lesevorlage', 'kalibrierung': 'Kalibrierung', 'uart': 'UART',
+                   'netzwerk': 'Netzwerk', 'vorlage': 'Lesevorlage', 'kalibrierung': 'Kalibrierung', 'uart': 'UART',
                    'konto': 'Konto', 'linger': 'Nach Abmeldung', 'uhr': 'Uhrzeit', 'version': 'Version'}
 
     def _nav_prompt(self, key: str, label: str | None) -> Text:
