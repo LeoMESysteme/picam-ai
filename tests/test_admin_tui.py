@@ -259,7 +259,7 @@ def test_intro_finishes_by_itself_once_status_is_known(monkeypatch):
 
     async def check(app, pilot):
         widget = app.query_one('#intro')
-        assert any(name == 'Hinweise' and '2 Punkte' in value for _, _, name, value in widget._lines)
+        assert any(name == 'Hinweise' and value == '2 offen' for _, _, name, value in widget._lines)
         await pilot.pause(1.0)
         assert not app.query('#intro')
     drive_with(check, intro=True)

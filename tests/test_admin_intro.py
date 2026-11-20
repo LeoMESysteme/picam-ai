@@ -3,19 +3,32 @@
 from dispread.admin import intro, tui
 
 
-def test_lens_has_ring_glass_and_highlight_and_stays_in_bounds():
-    lens = intro.Lens(30, 14)
-    for t in (0.0, 1.3, 2.7, 5.1):
-        chars, level, kind = lens.cells(t)
-        assert chars.shape == (14, 30)
-        kinds = set(kind.ravel())
-        assert {1, 2} <= kinds
-        assert level.max() < intro.LEVELS
+def test_logo_is_drawn_by_scan_then_complete():
+    shape = sum(row.count('#') for row in intro.LOGO)
+    def levels(t, animated=True):
+        return [level for row in intro.logo_cells(t, animated=animated) for _, level in row if level]
+    early = levels(0.05)
+    assert early.count(1) > shape * 0.8  # noch ungelesen: dunkle Punkte
+    done = levels(intro.REVEAL_S + 0.2)
+    assert len(done) == shape and 1 not in done
+    assert levels(0.0, animated=False).count(2) == shape
 
 
-def test_lens_moves_between_frames():
-    lens = intro.Lens(30, 14)
-    assert (lens.cells(0.0)[0] != lens.cells(0.8)[0]).any()
+def test_logo_scales_and_caption_settles():
+    cells = intro.logo_cells(5.0, scale=2)
+    assert len(cells) == 2 * intro.LOGO_H and len(cells[0]) == 2 * intro.LOGO_W
+    assert intro.scramble_caption(intro.CAPTION, 0.1) != intro.CAPTION
+    assert intro.scramble_caption(intro.CAPTION, 0.9) == intro.CAPTION
+    text = intro.logo_text(3.0, ascii_only=True).plain
+    assert text.isascii() and intro.CAPTION in text
+
+
+def test_logo_shine_passes_over_logo():
+    seen = set()
+    for step in range(40):
+        t = intro.REVEAL_S + 0.4 + step * intro.SHINE_S / 40
+        seen |= {level for row in intro.logo_cells(t) for _, level in row}
+    assert 4 in seen
 
 
 def test_lcd_sweep_lights_read_dots():

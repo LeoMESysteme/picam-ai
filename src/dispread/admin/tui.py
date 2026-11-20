@@ -398,8 +398,8 @@ class PicamApp(App[int]):
     ConfirmScreen, HelpScreen, AskScreen { align: center middle; background: rgba(5, 7, 10, 0.72); }
     Intro { layer: overlay; width: 1fr; height: 1fr; align: center middle; background: $background; }
     Intro:focus { background-tint: 0%; }
-    #intro-row { width: auto; height: auto; }
-    #intro-lens { margin: 0 4 0 0; }
+    #intro-row { width: 1fr; height: auto; align: center top; }
+    #intro-logo { margin: 0 5 0 0; }
     #intro-side { width: auto; height: auto; }
     #intro-lcd { width: auto; height: auto; margin: 0 0 1 0; }
     #intro-tag { width: auto; margin: 0 0 1 0; }
@@ -538,9 +538,7 @@ class PicamApp(App[int]):
         if problems:
             worst = min((f.level for f in problems), key=probes.LEVEL_ORDER.__getitem__)
             count = len(problems)
-            lines.append((symbol(worst), TONE[worst], 'Hinweise',
-                          f'{count} Punkt{"e" if count != 1 else ""} brauch{"en" if count != 1 else "t"} '
-                          'Aufmerksamkeit'))
+            lines.append((symbol(worst), TONE[worst], 'Hinweise', f'{count} offen'))
         else:
             lines.append((symbol(probes.OK), TONE[probes.OK], 'Einrichtung', 'alles in Ordnung'))
         return lines
