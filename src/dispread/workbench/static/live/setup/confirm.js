@@ -13,6 +13,9 @@ export const MANUAL_REFERENCE_NOTE = 'Referenz: von Hand eingegeben – Anzeige 
 export const MANUAL_REFERENCE_FLICKER_NOTE = 'Referenz: von Hand eingegeben – Anzeige war während der Standbilder bis auf die letzte Stelle (±1) unverändert';
 // Von Hand eingegebener Wert, nur die letzte Stelle sprang um 1 (setup_checks.LAST_PLACE_HINT).
 export const LAST_PLACE_NOTE = 'Letzte Stelle schwankte (±1) – als Schwanken gewertet';
+// Kein Standbild zeigte genau den eingegebenen Wert, alle ±1 (setup_checks.NEVER_EXACT_HINT,
+// Beleg letzte_stelle_nie_exakt): kein Schwanken belegt, Gegenlesen WARNUNG.
+export const NEVER_EXACT_NOTE = 'Kein Standbild zeigt genau den eingegebenen Wert (alle ±1 in der letzten Stelle)';
 
 const cellValue = (text) => String(text ?? '').slice(1, 8).trim();
 
@@ -24,7 +27,8 @@ export function lastPlaceText(metrics) {
     .filter((note) => { const key = `${note.frame}\u0000${note.read}`; if (seen.has(key)) return false; seen.add(key); return true; });
   if (!notes.length) return null;
   const details = notes.map((note) => `Standbild ${Number(note.frame) + 1}: eingegeben ${cellValue(note.reference)}, gelesen ${cellValue(note.read)}`);
-  return `${LAST_PLACE_NOTE} (${details.join('; ')}).`;
+  const neverExact = (metrics?.notes || []).some((note) => note?.code === 'letzte_stelle_nie_exakt');
+  return `${neverExact ? NEVER_EXACT_NOTE : LAST_PLACE_NOTE} (${details.join('; ')}).`;
 }
 
 export function confirmModel(status) {

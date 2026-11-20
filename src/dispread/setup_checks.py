@@ -378,6 +378,15 @@ def _reader_frame_reason(diag: dict, reference: str, frame_index: int) -> tuple[
 
 #: Hinweis, wenn eine von Hand eingegebene Referenz nur in der letzten Stelle um 1 abweicht.
 LAST_PLACE_HINT = 'Letzte Stelle schwankte (±1) – als Schwanken gewertet'
+#: Kein einziges Standbild zeigt genau den eingegebenen Wert, alle liegen ±1 in
+#: der letzten Stelle daneben. Das kann Schwanken sein, aber auch ein Leser, der
+#: benachbarte Ziffern verwechselt - deshalb WARNUNG statt OK (Bestaetigen bleibt
+#: moeglich, mit Quittung) und keine angepasste Toleranz.
+NEVER_EXACT_CODE = 'letzte_stelle_nie_exakt'
+NEVER_EXACT_HINT = 'Kein Standbild zeigt genau den eingegebenen Wert (alle ±1 in der letzten Stelle)'
+NEVER_EXACT_ADVICE = 'Prüfen, ob die Anzeige wirklich schwankt – sonst Wert neu eingeben.'
+NEVER_EXACT_TOLERANCE = ('Angepasste Toleranz wird nicht angeboten: sie würde dieselben ±1-Lesungen liefern '
+                         'und belegt nicht, dass die Anzeige wirklich schwankt.')
 
 
 def _full_text(cells: list, key: str) -> str | None:
@@ -429,11 +438,19 @@ def _spread_units(reference: str, texts: Sequence[str]) -> int | None:
     return max(steps) - min(steps)
 
 
+def _last_place_details(notes: list[dict]) -> str:
+    return ', '.join(f"Standbild {n['frame'] + 1}: eingegeben {n['reference'][1:8].strip()}, "
+                     f"gelesen {n['read'][1:8].strip()}" for n in notes if n.get('code') == 'letzte_stelle_schwankt')
+
+
 def last_place_hint(notes: list[dict]) -> str:
     """Kurzer Bedienertext mit beiden Werten je betroffenem Standbild."""
-    details = ', '.join(f"Standbild {n['frame'] + 1}: eingegeben {n['reference'][1:8].strip()}, "
-                        f"gelesen {n['read'][1:8].strip()}" for n in notes)
-    return f'{LAST_PLACE_HINT} ({details}).'
+    return f'{LAST_PLACE_HINT} ({_last_place_details(notes)}).'
+
+
+def never_exact_hint(notes: list[dict]) -> str:
+    """Bedienertext, wenn kein Standbild den eingegebenen Wert genau zeigt."""
+    return f'{NEVER_EXACT_HINT} ({_last_place_details(notes)}). {NEVER_EXACT_ADVICE}'
 
 
 def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[float]],
@@ -478,6 +495,11 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
                     verdict[2] = None
                     observations[index][3] = verdict[0]
             notes = []
+    # Mindestens ein Standbild muss den eingegebenen Wert genau zeigen; sonst ist
+    # "Schwanken" nicht belegt (alle gelesen, alle ±1 daneben) - WARNUNG mit
+    # Beleg statt OK. Mit ungelesenen Standbildern entscheidet die Gegenprobe
+    # der angepassten Toleranz (`_tolerance_proposal`).
+    never_exact = bool(notes) and all(reason is None and note is not None for reason, _, note in verdicts)
     for reason, frame_contradictions, _ in verdicts:
         contradictions.extend(frame_contradictions)
         if reason is None:
@@ -486,12 +508,15 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
             reasons[reason] = reasons.get(reason, 0) + 1
     observations = [tuple(observation) for observation in observations]
     count = len(frames)
-    status = 'FEHLER' if contradictions else ('OK' if read_count == count else 'WARNUNG')
+    status = 'FEHLER' if contradictions else ('OK' if read_count == count and not never_exact else 'WARNUNG')
     metrics = {'frames': count, 'read_count': read_count,
                'read_rate': read_count / count, 'rejection_reasons': reasons,
                'masked_cells': masked_cells, 'contradictions': contradictions}
     if notes:
-        metrics['notes'] = notes
+        # Mit NEVER_EXACT_CODE als eigenem Beleg: er landet wie die anderen ueber
+        # `reference_notes` in confirmation.json.
+        metrics['notes'] = notes + ([{'code': NEVER_EXACT_CODE, 'reference': notes[0]['reference'],
+                                      'frames': [note['frame'] for note in notes]}] if never_exact else [])
     lighting = _lighting_finding(depths)
     if lighting is not None:
         metrics['lighting'] = lighting
@@ -500,7 +525,13 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
             f'Ungleichmaessige Beleuchtung auf dem Display (Kontrastsprung zwischen Zelle {i} und {j}, '
             'vermutlich Schatten oder Verschmutzung). Glas reinigen bzw. abschatten und neu einrichten.'
         )
-    if status == 'WARNUNG':
+    if never_exact:
+        # Alle Standbilder gelesen, nur keins genau: eine angepasste Toleranz
+        # liest dasselbe noch einmal und belegt nichts.
+        metrics['tolerance'] = {'possible': False, 'factor': None, 'max_d_best': None, 'd_max': None,
+                                'reason': NEVER_EXACT_CODE, 'reference_kind': reference_kind}
+        metrics['hinweis'] = ' '.join(filter(None, (metrics.get('hinweis'), NEVER_EXACT_TOLERANCE)))
+    elif status == 'WARNUNG':
         tolerance = _tolerance_proposal(observations, reader, layout, template_path, template_sha256, reference_kind)
         metrics['tolerance'] = tolerance
         if tolerance['possible']:
@@ -514,7 +545,13 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
             metrics['hinweis'] = ' '.join(filter(None, (metrics.get('hinweis'), hint)))
     # Belege stehen in metrics['notes'] bzw. tolerance['notes']; die Werkbank zeigt sie
     # beim Bestaetigen, die Pruefungstabelle zeigt den Grund.
-    return CheckResult(status, metrics, reason=last_place_hint(notes) if notes and status == 'OK' else None)
+    if notes and status == 'OK':
+        reason = last_place_hint(notes)
+    elif never_exact:
+        reason = never_exact_hint(notes)
+    else:
+        reason = None
+    return CheckResult(status, metrics, reason=reason)
 
 
 def _lighting_finding(depths: list[list[float]]) -> dict | None:
@@ -620,6 +657,10 @@ def _tolerance_proposal(observations, reader, layout, path, sha, reference_kind)
             return reject('gegenprobe_nicht_gelesen')
         if note is not None:
             notes.append(note)
+    if notes and len(notes) == len(observations):
+        # Auch mit angepasster Toleranz zeigt kein Standbild genau den
+        # eingegebenen Wert: Schwanken nicht belegt (NEVER_EXACT_CODE).
+        return reject(NEVER_EXACT_CODE)
     if notes:
         tolerance['notes'] = notes
     tolerance.update(possible=True, factor=factor)

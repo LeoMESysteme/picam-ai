@@ -200,6 +200,101 @@ def test_uninstall_package_only_on_request_and_only_if_installed_by_picam(home, 
     assert ['apt-get', 'remove', '-y', '--', 'fastfetch'] in [a.get('argv') for a in plan['actions']]
 
 
+def test_non_utf8_bashrc_is_a_plan_error_and_nothing_is_written(home):
+    (home / '.bashrc').write_bytes(b'# Gr\xfc\xdfe\nexport A=1\n')
+    before = sorted(str(p) for p in home.rglob('*'))
+    with pytest.raises(ValueError, match='nicht UTF-8'):
+        fastfetch.plan(home, files(), package_present=True, can_install_package=False)
+    with pytest.raises(ValueError, match='nicht UTF-8'):
+        install(home)
+    assert sorted(str(p) for p in home.rglob('*')) == before
+
+
+def test_failed_step_leaves_manifest_covering_written_files(home, tmp_path, monkeypatch):
+    """Scheitert ein spaeterer Schritt, kennt das Manifest alles bisher
+    Geschriebene; die Deinstallation entfernt es wieder."""
+    real_write = fastfetch._write
+
+    def failing(path, data, mode):
+        if path.name == 'config.jsonc':
+            raise OSError(28, 'No space left on device')
+        return real_write(path, data, mode)
+
+    monkeypatch.setattr(fastfetch, '_write', failing)
+    with pytest.raises(OSError):
+        install(home)
+    monkeypatch.setattr(fastfetch, '_write', real_write)
+    written = [home / '.local/share/me-fastfetch/me-logo.py', home / '.local/bin/me-fastfetch']
+    assert all(path.is_file() for path in written)
+    manifest = json.loads((home / fastfetch.MANIFEST).read_text())
+    assert set(manifest['files']) == {str(path) for path in written}
+    paths = layout(tmp_path / 'inst', mode='portable')
+    plan = uninstall.plan_uninstall(**paths, home=home)
+    uninstall.apply_uninstall(plan, runner=recorder([]))
+    assert not any(path.exists() for path in written)
+    assert not (home / '.local/share/me-fastfetch').exists()
+
+
+def test_uninstall_keeps_non_utf8_bashrc_block_and_reports_decode_errors(home, tmp_path, monkeypatch):
+    install(home)
+    bashrc = home / '.bashrc'
+    bashrc.write_bytes(bashrc.read_bytes() + b'# \xff\n')
+    paths = layout(tmp_path / 'inst', mode='portable')
+    plan = uninstall.plan_uninstall(**paths, home=home)
+    assert 'bashrc_block' not in [action['kind'] for action in plan['actions']]
+    assert any(item['path'] == str(bashrc) and 'nicht UTF-8' in item['reason'] for item in plan['keep'])
+    # Wird sie erst zwischen Plan und Ausfuehrung unlesbar: Meldung statt Traceback.
+    bashrc.write_bytes(bashrc.read_bytes()[:-4])
+    plan = uninstall.plan_uninstall(**paths, home=home)
+
+    def broken(path):
+        raise UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid start byte')
+
+    monkeypatch.setattr(fastfetch, 'remove_block', broken)
+    with pytest.raises(uninstall.UninstallError, match='fehlgeschlagen.*Bereits erledigt'):
+        uninstall.apply_uninstall(plan, runner=recorder([]))
+
+
+def test_uninstall_home_files_run_as_home_owner(home, tmp_path, monkeypatch):
+    """Systemmodus (root): Dateien im Home des Bedienerkontos werden mit
+    dessen Kennung entfernt, nicht als root (wie remove_block)."""
+    from contextlib import contextmanager
+
+    install(home)
+    owners: list = []
+    real_unlink = Path.unlink
+
+    @contextmanager
+    def spy(path):
+        owners.append(path)
+        yield
+
+    def unlink(self, *args, **kwargs):
+        if str(self).startswith(str(home)):
+            assert owners and owners[-1] == str(home), self
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(fastfetch, 'as_owner_of', spy)
+    monkeypatch.setattr(Path, 'unlink', unlink)
+    paths = layout(tmp_path / 'inst', mode='portable')
+    plan = uninstall.plan_uninstall(**paths, home=home)
+    home_actions = [a for a in plan['actions'] if a['kind'] in ('unlink', 'rmdir_if_empty')
+                    and a['path'].startswith(str(home))]
+    assert home_actions and all(a['as_owner_of'] == str(home) for a in home_actions)
+    assert all('as_owner_of' not in a for a in plan['actions'] if not a.get('path', '').startswith(str(home)))
+    uninstall.apply_uninstall(plan, runner=recorder([]))
+    assert owners.count(str(home)) == len(home_actions)
+    assert not (home / '.local/bin/me-fastfetch').exists()
+
+
+def test_as_owner_of_without_root_changes_nothing(home):
+    euid = os.geteuid()
+    with fastfetch.as_owner_of(str(home)):
+        assert os.geteuid() == euid
+    with fastfetch.as_owner_of(None):
+        assert os.geteuid() == euid
+
+
 # ---------------------------------------------------------------- Engine
 @pytest.fixture
 def operator(monkeypatch, home):

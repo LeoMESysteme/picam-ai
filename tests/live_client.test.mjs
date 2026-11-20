@@ -826,3 +826,16 @@ test('confirm: letzte Stelle schwankte (±1) mit von Hand eingegebenem Wert wird
   status.setup.gegenlesen = {status: 'OK', metrics: {}};
   assert.equal(confirmModel(status).lastPlace, null);
 });
+
+test('confirm: kein Standbild genau der eingegebene Wert (letzte_stelle_nie_exakt) – nicht als Schwanken gewertet', () => {
+  const status = scene('setup_ready_warnung');
+  status.setup.reference_kind = 'eingabe';
+  const note = {code: 'letzte_stelle_schwankt', frame: 0, richtung: '+1', reference: '+ 0.4679 ', read: '+ 0.4680 '};
+  status.setup.gegenlesen = {status: 'WARNUNG', metrics: {notes: [note,
+    {code: 'letzte_stelle_nie_exakt', reference: '+ 0.4679 ', frames: [0]}],
+    tolerance: {possible: false, reason: 'letzte_stelle_nie_exakt', reference_kind: 'eingabe'}}};
+  const model = confirmModel(status);
+  assert.equal(model.lastPlace,
+    'Kein Standbild zeigt genau den eingegebenen Wert (alle ±1 in der letzten Stelle) (Standbild 1: eingegeben 0.4679, gelesen 0.4680).');
+  assert.equal(model.tolerance, null);
+});

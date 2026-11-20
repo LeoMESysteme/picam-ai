@@ -212,13 +212,43 @@ def install_atomically(source: Path, target: Path) -> None:
     install_bytes(Path(source).read_bytes(), target)
 
 
+#: Signale, die ``picam kalibrieren`` wie Strg+C behandelt: SIGTERM (Dienst-
+#: oder Sitzungsende) und SIGHUP (SSH-Verbindung getrennt). Ohne Handler
+#: beendeten sie den Prozess sofort – ohne Rückstellung der Normierung und
+#: ohne Neustart der Werkbank.
+ABORT_SIGNALS = {signal.SIGTERM: 'SIGTERM', signal.SIGHUP: 'SIGHUP'}
+ABORT_TEXT = {'SIGTERM': 'Abbruch (SIGTERM)', 'SIGHUP': 'Abbruch (Verbindung getrennt, SIGHUP)'}
+
+
+def _raise_abort(signum, _frame) -> None:
+    raise KeyboardInterrupt(ABORT_SIGNALS.get(signum, 'SIGTERM'))
+
+
 @contextlib.contextmanager
-def shielded():
-    """Strg+C und SIGTERM während des Aufräumens (Rückstellung, Dienststart)
-    aufschieben, damit es nicht halb abbricht."""
+def abort_on_signals():
+    """SIGTERM und SIGHUP für die Dauer des Ablaufs in einen KeyboardInterrupt
+    (Argument: Signalname) verwandeln, damit derselbe Aufräumpfad wie bei
+    Strg+C läuft. Danach gelten wieder die vorherigen Handler."""
     previous = {}
     try:
-        for number in (signal.SIGINT, signal.SIGTERM):
+        for number in ABORT_SIGNALS:
+            previous[number] = signal.signal(number, _raise_abort)
+    except ValueError:  # nicht im Hauptthread
+        pass
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
+@contextlib.contextmanager
+def shielded():
+    """Strg+C, SIGTERM und SIGHUP während des Aufräumens (Rückstellung,
+    Dienststart) aufschieben, damit es nicht halb abbricht."""
+    previous = {}
+    try:
+        for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             previous[number] = signal.signal(number, signal.SIG_IGN)
     except ValueError:  # nicht im Hauptthread
         pass
@@ -232,10 +262,14 @@ def shielded():
 # ------------------------------------------------------------------ Quellen (in Tests ersetzbar)
 
 def open_serial(port: str, baudrate: int, timeout: float):
+    """Port exklusiv öffnen (flock): hält ihn noch ein anderer Öffner mit
+    ``exclusive`` – etwa der Lesethread der Aufnahme, der gerade zurückstellt –,
+    scheitert das Öffnen, statt Bytes ineinanderlaufen zu lassen."""
     import serial
 
     return serial.Serial(port, baudrate=baudrate, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE,
-                         stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=False, rtscts=False, dsrdtr=False)
+                         stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=False, rtscts=False, dsrdtr=False,
+                         exclusive=True)
 
 
 def camera_holders(proc: Path = Path('/proc')) -> list[str]:
@@ -367,10 +401,19 @@ class Console:
         self.out = out or sys.stdout
         self.err = err or sys.stderr
 
-    def line(self, text: str = '', stream=None) -> None:
+    def write(self, data: str, stream=None) -> None:
+        """Roh schreiben. Nach einem Verbindungsabbruch (SIGHUP: Terminal weg,
+        EIO; Pipe zu: EPIPE) wirft eine Ausgabe nicht mehr – sonst bräche sie
+        das Aufräumen (Rückstellung, Dienststart) ab."""
         stream = stream or self.out
-        stream.write(self.style.text(text) + '\n')
-        stream.flush()
+        try:
+            stream.write(data)
+            stream.flush()
+        except (OSError, ValueError):
+            pass
+
+    def line(self, text: str = '', stream=None) -> None:
+        self.write(self.style.text(text) + '\n', stream)
 
     def mark(self, level: str, text: str, stream=None) -> None:
         self.line(f'{self.style.symbol(level)} {text}', stream)
@@ -387,6 +430,25 @@ class Console:
         self.line(self.style.paint(bar, '31;1'), self.err)
 
 
+class DeferredConsole(Console):
+    """Merkt sich Ausgaben, statt sie zu schreiben; ``replay`` gibt sie
+    danach in derselben Reihenfolge auf der echten Konsole aus. Im Aufräumen
+    laufen Rückstellung und Dienststart so vor jeder Konsolenausgabe."""
+
+    def __init__(self, console: Console):
+        super().__init__(console.style, console.out, console.err)
+        self.target = console
+        self.lines: list[tuple[bool, str]] = []
+
+    def line(self, text: str = '', stream=None) -> None:
+        self.lines.append((stream is self.err, text))
+
+    def replay(self) -> None:
+        for to_err, text in self.lines:
+            self.target.line(text, self.target.err if to_err else None)
+        self.lines.clear()
+
+
 class Progress:
     """Balken mit verstrichener Zeit (Terminal) oder eine Zeile je 10 s."""
 
@@ -400,16 +462,15 @@ class Progress:
         if self.tty:
             done = int(self.WIDTH * min(1.0, elapsed / total)) if total else self.WIDTH
             full, empty = ('#', '-') if self.console.style.ascii else ('█', '░')
-            out.write(f'\r  Aufnahme [{full * done}{empty * (self.WIDTH - done)}] {elapsed:5.0f} / {total:.0f} s')
-            out.flush()
+            self.console.write(f'\r  Aufnahme [{full * done}{empty * (self.WIDTH - done)}] '
+                               f'{elapsed:5.0f} / {total:.0f} s', out)
         elif elapsed - self.last >= 10 or elapsed >= total:
             self.last = elapsed
             self.console.line(f'  Aufnahme {elapsed:.0f} / {total:.0f} s')
 
     def finish(self) -> None:
         if self.tty:
-            self.console.out.write('\n')
-            self.console.out.flush()
+            self.console.write('\n')
 
 
 # ------------------------------------------------------------------ Profil
@@ -482,6 +543,31 @@ def probe_telegrams(port: str, baudrate: int, deps: Deps) -> tuple[list[str], st
     return lines, None
 
 
+def _byte_list(value: Any, count: int) -> bool:
+    return (isinstance(value, list) and len(value) == count
+            and all(isinstance(item, int) and not isinstance(item, bool) and 0 <= item <= 255 for item in value))
+
+
+def restore_point_problem(restore_point: Any) -> str | None:
+    """Rückstellpunkt prüfen, bevor ein Byte an den Messverstärker geht:
+    ``register.norm.daten`` genau 3 Bytes, ``register.dpoint.daten`` genau
+    1 Byte, alle ganzzahlig 0…255. Grund oder None."""
+    if not isinstance(restore_point, dict):
+        return 'kein JSON-Objekt'
+    register = restore_point.get('register')
+    if not isinstance(register, dict):
+        return 'Schlüssel „register“ fehlt'
+    for name, count in (('norm', 3), ('dpoint', 1)):
+        entry = register.get(name)
+        if not isinstance(entry, dict) or 'daten' not in entry:
+            return f'„register.{name}.daten“ fehlt'
+        if not _byte_list(entry['daten'], count):
+            unit = 'Bytes' if count > 1 else 'Byte'
+            return (f'„register.{name}.daten“ muss genau {count} {unit} (ganze Zahlen 0…255) enthalten, '
+                    f'steht dort: {json.dumps(entry["daten"], ensure_ascii=False)}')
+    return None
+
+
 def read_restore_point(port: str, baudrate: int, log_path: Path, deps: Deps, now: datetime) -> dict:
     """Normierung und Dezimalpunkt lesen (Strom kurz anhalten, Register lesen,
     Strom neu starten) und als Rückstellpunkt zurückgeben."""
@@ -501,9 +587,13 @@ def read_restore_point(port: str, baudrate: int, log_path: Path, deps: Deps, now
     for name, entry in (('norm', norm), ('dpoint', dpoint)):
         if 'daten' not in entry:
             raise CalibrationError(f'Register {name} nicht lesbar: {entry.get("fehler", "keine Antwort")}')
-    return {'gelesen_am_utc': now.isoformat(), 'port': port, 'baudrate': baudrate,
-            'hinweis': 'Von picam kalibrieren vor der Aufnahme gelesen; Rückstellwerte für norm und dpoint.',
-            'register': {'norm': norm, 'dpoint': dpoint}}
+    point = {'gelesen_am_utc': now.isoformat(), 'port': port, 'baudrate': baudrate,
+             'hinweis': 'Von picam kalibrieren vor der Aufnahme gelesen; Rückstellwerte für norm und dpoint.',
+             'register': {'norm': norm, 'dpoint': dpoint}}
+    problem = restore_point_problem(point)
+    if problem:
+        raise CalibrationError(f'Rückstellpunkt unbrauchbar gelesen: {problem}')
+    return point
 
 
 def restore_registers(port: str, baudrate: int, restore_point: dict, log_path: Path,
@@ -512,11 +602,11 @@ def restore_registers(port: str, baudrate: int, restore_point: dict, log_path: P
     from dispread.gsv2as_serial import _apply_norm_dpoint, _check_restore_point
 
     state: dict = {}
-    try:
-        norm = restore_point['register']['norm']['daten']
-        dpoint = restore_point['register']['dpoint']['daten'][0]
-    except (KeyError, IndexError, TypeError) as error:
-        return False, {'error': f'Rückstellpunkt unvollständig: {error}'}
+    problem = restore_point_problem(restore_point)
+    if problem:
+        return False, {'error': f'Rückstellpunkt ungültig: {problem}'}
+    norm = restore_point['register']['norm']['daten']
+    dpoint = restore_point['register']['dpoint']['daten'][0]
     try:
         ser = deps.open_serial(port, baudrate, 0.5)
     except Exception as error:  # noqa: BLE001
@@ -549,20 +639,32 @@ def stop_service(instance: Instance, snapshot: probes.Snapshot, deps: Deps, cons
                            echo=lambda _line: None, recheck=deps.recheck)
 
 
-def start_service(instance: Instance, deps: Deps, console: Console) -> tuple[bool, str]:
+def issue_start(instance: Instance, deps: Deps) -> tuple[bool, str, list[str]]:
+    """Startbefehl ausführen, ohne Ausgabe: (ok, Meldung, Befehlszeilen).
+    Im Aufräumen läuft das vor jeder Konsolenausgabe."""
     from . import service
 
     try:
         plan = service.plan('start', instance)
     except ValueError as error:
-        return False, str(error)
-    for line in plan.shell():
-        console.line(console.style.dim(f'  $ {line}'))
+        return False, str(error), []
     try:
         ok, message = service.execute(plan, instance, interactive=True, wait_ready=False,
                                       run=deps.service_runner, echo=lambda _line: None)
     except Exception as error:  # noqa: BLE001 - Start bleibt Pflicht, Fehler nur melden
-        return False, f'{type(error).__name__}: {error}'
+        return False, f'{type(error).__name__}: {error}', plan.shell()
+    return ok, message, plan.shell()
+
+
+def start_service(instance: Instance, deps: Deps, console: Console,
+                  issued: tuple[bool, str, list[str]] | None = None) -> tuple[bool, str]:
+    """Dienst starten (oder den schon abgesetzten Start ``issued`` melden)
+    und auf HTTPS warten."""
+    from . import service
+
+    ok, message, shell = issued if issued is not None else issue_start(instance, deps)
+    for line in shell:
+        console.line(console.style.dim(f'  $ {line}'))
     if not ok:
         return False, message
     console.line(f'  Warte bis zu {service.READY_TIMEOUT_S} s auf {instance.url or "HTTPS"} …')
@@ -773,7 +875,13 @@ def ensure_norm_restored(run_dir: Path, restore_point: dict, options: Options, d
 
 
 def calibrate(instance: Instance, options: Options, console: Console, deps: Deps | None = None) -> int:
-    deps = deps or Deps()
+    """``picam kalibrieren``. SIGTERM und SIGHUP (SSH getrennt) laufen für die
+    ganze Dauer über denselben Aufräumpfad wie Strg+C (``abort_on_signals``)."""
+    with abort_on_signals():
+        return _calibrate(instance, options, console, deps or Deps())
+
+
+def _calibrate(instance: Instance, options: Options, console: Console, deps: Deps) -> int:
     console.line(console.style.bold('Timing-Kalibrierung (Inbetriebnahme)'))
     if options.duration_s < MIN_DURATION_S:
         console.mark(probes.FAIL, f'--dauer mindestens {MIN_DURATION_S:.0f} s', console.err)
@@ -846,30 +954,42 @@ def calibrate(instance: Instance, options: Options, console: Console, deps: Deps
             record_code = deps.record(args, progress)
         finally:
             progress.finish()
-    except KeyboardInterrupt:
+    except KeyboardInterrupt as interrupt:
         aborted = True
-        failure = 'Abbruch (Strg+C)'
+        failure = ABORT_TEXT.get(interrupt.args[0] if interrupt.args else '', 'Abbruch (Strg+C)')
     except CalibrationError as error:
         failure = str(error)
     except Exception as error:  # noqa: BLE001 - Aufräumen bleibt Pflicht
         failure = f'{type(error).__name__}: {error}'
     finally:
         with shielded():
+            # Erst handeln, dann reden: Rückstellung und Startbefehl laufen vor
+            # jeder Konsolenausgabe (nach SIGHUP ist das Terminal weg; eine
+            # Ausgabe wirft dann zwar nicht mehr, s. Console.write, darf aber
+            # die beiden Pflichtschritte auch sonst nicht aufhalten).
+            norm_report = DeferredConsole(console)
+            if recorded and restore_point is not None:
+                try:
+                    norm_ok = ensure_norm_restored(run_dir, restore_point, options, deps, norm_report)
+                except Exception as error:  # noqa: BLE001
+                    norm_ok = False
+                    norm_report.loud([f'ACHTUNG: Rückstellung der Normierung nicht prüfbar: {error}',
+                                      f'Rückstellpunkt: {run_dir / "rueckstellpunkt.json"}'])
+            if not stopped and stop_attempted and not _service_up(instance, deps):
+                stopped = True  # Stopp lief trotz Fehler/Abbruch durch: trotzdem wieder starten
+            issued = issue_start(instance, deps) if stopped else None
+            # Jetzt berichten.
             if failure:
                 console.mark(probes.FAIL, failure, console.err)
             if recorded and restore_point is not None:
                 console.step('Normierung prüfen')
-                try:
-                    norm_ok = ensure_norm_restored(run_dir, restore_point, options, deps, console)
-                except Exception as error:  # noqa: BLE001
-                    norm_ok = False
-                    console.loud([f'ACHTUNG: Rückstellung der Normierung nicht prüfbar: {error}',
-                                  f'Rückstellpunkt: {run_dir / "rueckstellpunkt.json"}'])
-            if not stopped and stop_attempted and not _service_up(instance, deps):
-                stopped = True  # Stopp lief trotz Fehler/Abbruch durch: trotzdem wieder starten
+                norm_report.replay()
             if stopped:
                 console.step('Werkbank-Dienst starten')
-                service_ok, message = start_service(instance, deps, console)
+                try:
+                    service_ok, message = start_service(instance, deps, console, issued)
+                except Exception as error:  # noqa: BLE001 - Warten scheitert: nur melden
+                    service_ok, message = False, f'{type(error).__name__}: {error}'
                 if service_ok:
                     console.mark(probes.OK, message)
                 else:
@@ -1047,6 +1167,11 @@ def restore_from_file(path: Path, options: Options, console: Console, deps: Deps
     restore_point = _read_json(path)
     if restore_point is None:
         console.mark(probes.FAIL, f'{path} ist kein lesbarer Rückstellpunkt.', console.err)
+        return EXIT_FAIL
+    problem = restore_point_problem(restore_point)
+    if problem:
+        console.mark(probes.FAIL, f'{path} ist kein gültiger Rückstellpunkt: {problem} – nichts gesendet.',
+                     console.err)
         return EXIT_FAIL
     if not deps.port_exists(options.port):
         console.mark(probes.FAIL, f'Kein Adapter an {options.port}.', console.err)

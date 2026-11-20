@@ -1828,3 +1828,70 @@ def test_fortschritt_rueckruf_und_paket_vorgabeort(tmp_path):
     assert [elapsed for elapsed, _ in calls] == sorted(elapsed for elapsed, _ in calls)
     sessions = list((tmp_path / "vorgabe").glob("*/session.json"))
     assert len(sessions) == 1 and json.loads(sessions[0].read_text())["aborted"] is False
+
+
+def test_signale_beim_abschliessen_werden_aufgeschoben_und_vermerkt():
+    """Waehrend `run` auf seine Threads wartet (der Lesethread stellt dabei
+    noch die Normierung zurueck), bricht ein zweites Strg+C/SIGTERM/SIGHUP
+    das Warten nicht ab; die Signale werden vermerkt, danach gelten wieder
+    die vorherigen Handler."""
+    module = _load_sync_record_module()
+    before = {sig: signal.getsignal(sig) for sig in module._SignalsHeld.SIGNALS}
+    with module._SignalsHeld() as held:
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            os.kill(os.getpid(), sig)
+            time.sleep(0.05)
+    assert held.received == ["SIGINT", "SIGTERM", "SIGHUP"]
+    assert {sig: signal.getsignal(sig) for sig in before} == before
+
+
+def test_sighup_landet_auf_dem_abbruchpfad(monkeypatch):
+    module = _load_sync_record_module()
+    before = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    try:
+        module._install_sigterm_handler()
+        for sig, marker in ((signal.SIGHUP, "SIGHUP"), (signal.SIGTERM, "SIGTERM")):
+            with pytest.raises(KeyboardInterrupt) as caught:
+                os.kill(os.getpid(), sig)
+                time.sleep(0.5)
+            assert caught.value.args == (marker,)
+    finally:
+        for sig, handler in before.items():
+            signal.signal(sig, handler)
+
+
+def test_lesethread_oeffnet_port_exklusiv(monkeypatch):
+    """flock auf dem Port: ein zweiter exklusiver Oeffner (Rueckstellung in
+    `picam kalibrieren`) scheitert, solange der Lesethread ihn haelt."""
+    import queue as queue_module
+
+    import serial
+
+    module = _load_sync_record_module()
+    seen = {}
+
+    def fake(port, **kwargs):
+        seen.update(kwargs)
+        raise serial.SerialException("belegt")
+
+    monkeypatch.setattr(serial, "Serial", fake)
+    state = {}
+    q = queue_module.Queue()
+    module._serial_worker("/dev/nichts", 38400, q, threading.Event(), threading.Event(), state)
+    assert seen["exclusive"] is True
+    assert "belegt" in state["open_error"]
+
+
+def test_print_nach_verbindungsabbruch_wirft_nicht(monkeypatch):
+    module = _load_sync_record_module()
+
+    class Weg:
+        def write(self, _text):
+            raise OSError(5, "Input/output error")
+
+        def flush(self):
+            raise OSError(5, "Input/output error")
+
+    monkeypatch.setattr(sys, "stderr", Weg())
+    module._say("Abbruch")
+    module._print("Fertig", file=sys.stderr)

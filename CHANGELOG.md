@@ -5,6 +5,25 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-20 (nachts): **Befunde aus der unabhängigen Prüfung vor dem Release behoben.**
+  Problem/Geändert:
+  - `picam kalibrieren`: SIGHUP (SSH-Abbruch) und SIGTERM liefen ohne Aufräumen aus
+    (GSV-2AS behielt die Prüfnormierung, Werkbank blieb gestoppt). Jetzt brechen sie
+    wie Strg+C ab; das Aufräumen stellt zuerst die Normierung zurück und startet den
+    Dienst, erst danach folgen Ausgaben (die nach einem Abbruch der Sitzung scheitern
+    dürfen). `abort_reason` in `session.json` kann `SIGHUP` sein. Der GSV-Port wird
+    exklusiv geöffnet (keine verschränkten Rückstellungen), `--rueckstellen` prüft
+    die Sicherungsdatei vor dem Senden.
+  - Einrichtung mit Hand-Eingabe: Zeigt kein Standbild genau den eingegebenen Wert
+    (alle ±1 in der letzten Stelle), ist das Ergebnis WARNUNG statt OK
+    (`letzte_stelle_nie_exakt`, auch in `confirmation.json`), ohne Angebot einer
+    angepassten Toleranz; der Lauf bleibt startbar. So verdeckt die Lockerung keine
+    dauerhafte Verwechslung benachbarter Ziffern.
+  - me-fastfetch: Manifest zuerst und nach jedem Schritt, `.bashrc` muss UTF-8 sein
+    (sonst Planfehler), Deinstallation meldet Kodierungsfehler sauber und löscht
+    Dateien im Konto als dessen Eigentümer.
+  Tests: gezielte Suite 960 bestanden, Node 317, Playwright 73 – alle grün.
+
 * 2026-11-20 (spät): **Einrichtung ohne RS232: letzte Ziffer darf um eins schwanken,
   Eingabefenster verschiebbar.** Problem: Sprang der GSV-2AS bei Hand-Eingabe in der
   letzten Stelle zwischen zwei Werten, scheiterte die Einrichtung

@@ -11,9 +11,11 @@ geöffnet, und kein Dienst wird angefasst.
 
 from __future__ import annotations
 
+import errno
 import io
 import json
 import os
+import signal
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -351,6 +353,209 @@ def test_restart_failure_is_reported(tmp_path):
     h = Harness(tmp_path, wait_ready=lambda _instance: False)
     assert h.run(yes=True) == calibrate.EXIT_OK  # Kalibrierung gültig, Dienst meldet sich nur nicht
     assert 'picam start' in h.err.getvalue()
+
+
+# ------------------------------------------------------------------ Signale (SIGHUP/SIGTERM) und abgerissenes Terminal
+
+def _service_state_collect(h: Harness):
+    """Dienststatus folgt den ausgeführten stop/start-Befehlen."""
+    def collect(instance, include_setup=False, **_):
+        level = probes.OFF if h.actions() and h.actions()[-1] == 'stop' else probes.OK
+        return snapshot(service=level)(instance)
+    return collect
+
+
+def _kill(number):
+    os.kill(os.getpid(), number)
+    time.sleep(0.05)  # Python prüft Signale zwischen Bytecodes
+
+
+@pytest.mark.parametrize('number', [signal.SIGHUP, signal.SIGTERM])
+@pytest.mark.parametrize('phase', ['dienst_stoppen', 'kamera_warten', 'rueckstellpunkt', 'aufnahme'])
+def test_signal_in_any_phase_restores_and_restarts(tmp_path, phase, number):
+    before = {sig: signal.getsignal(sig) for sig in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)}
+    h = Harness(tmp_path)
+    h.deps.collect = _service_state_collect(h)
+    opened = h.gsv.open
+
+    def service(command):
+        h.services.append(command)
+        if phase == 'dienst_stoppen' and 'stop' in command:
+            _kill(number)  # Dienst ist gestoppt, Rückgabe erreicht den Aufrufer nicht mehr
+        return 0
+
+    def holders():
+        if phase == 'kamera_warten':
+            _kill(number)
+        return []
+
+    def open_serial(port, baudrate, timeout):
+        if phase == 'rueckstellpunkt' and h.gsv.opened == 1:  # 1 = Telegrammprobe
+            _kill(number)
+        return opened(port, baudrate, timeout)
+
+    def record(args, progress):
+        h.gsv.norm = [11, 22, 33]  # Sprung geschrieben, dann Signal
+        _kill(number)
+        raise AssertionError('Signal kam nicht an')
+
+    h.deps.service_runner, h.deps.camera_holders, h.deps.open_serial, h.deps.record = \
+        service, holders, open_serial, record
+    assert h.run(yes=True) == calibrate.EXIT_ABORT
+    assert h.actions() == ['stop', 'start']
+    assert h.gsv.norm == ORIGINAL_NORM and h.gsv.dpoint == ORIGINAL_DPOINT
+    if phase == 'aufnahme':
+        assert json.loads((h.run_dir / 'rueckstellung-nachgeholt.json').read_text())['ok'] is True
+    else:
+        assert all(write[0] not in (0x10, 0x11) for write in h.gsv.writes)  # nichts zu stellen
+    journal = json.loads((h.run_dir / 'lauf.json').read_text())
+    assert journal['ergebnis'] == 'abgebrochen'
+    assert signal.Signals(number).name in journal['grund']
+    assert not h.target.exists()
+    assert {sig: signal.getsignal(sig) for sig in before} == before  # Handler zurückgestellt
+
+
+class _HungUpStream(io.StringIO):
+    """Terminal nach SIGHUP: jede Ausgabe scheitert mit EIO."""
+
+    def __init__(self):
+        super().__init__()
+        self.broken = False
+
+    def write(self, text):
+        if self.broken:
+            raise OSError(errno.EIO, 'Input/output error')
+        return super().write(text)
+
+    def flush(self):
+        if self.broken:
+            raise OSError(errno.EIO, 'Input/output error')
+
+
+def test_hung_up_console_does_not_skip_restore_or_restart(tmp_path):
+    h = Harness(tmp_path)
+    out, err = _HungUpStream(), _HungUpStream()
+    h.console = calibrate.Console(cli.Style(out, color=False), out=out, err=err)
+
+    def record(args, progress):
+        h.gsv.norm = [11, 22, 33]
+        out.broken = err.broken = True
+        raise KeyboardInterrupt('SIGHUP')
+
+    h.deps.record = record
+    assert h.run(yes=True) == calibrate.EXIT_ABORT
+    assert h.gsv.norm == ORIGINAL_NORM
+    assert h.actions() == ['stop', 'start']
+    journal = json.loads((h.run_dir / 'lauf.json').read_text())
+    assert journal['normierung_zurueckgestellt'] is True and journal['dienst_neu_gestartet'] is True
+    assert 'SIGHUP' in journal['grund']
+
+
+def test_cleanup_acts_before_any_output(tmp_path):
+    h = Harness(tmp_path)
+    events: list[str] = []
+
+    class Spy(io.StringIO):
+        def write(self, text):
+            events.append('ausgabe')
+            return super().write(text)
+
+    out = Spy()
+    h.console = calibrate.Console(cli.Style(out, color=False), out=out, err=out)
+    opened = h.gsv.open
+
+    def open_serial(port, baudrate, timeout):
+        events.append('port')
+        return opened(port, baudrate, timeout)
+
+    def service(command):
+        events.append(command[-2])
+        return 0
+
+    def record(args, progress):
+        h.gsv.norm = [11, 22, 33]
+        events.clear()
+        raise KeyboardInterrupt
+
+    h.deps.open_serial, h.deps.service_runner, h.deps.record = open_serial, service, record
+    assert h.run(yes=True) == calibrate.EXIT_ABORT
+    first_output = events.index('ausgabe')
+    assert 'port' in events[:first_output] and 'start' in events[:first_output]
+    assert h.gsv.norm == ORIGINAL_NORM
+    text = out.getvalue()
+    assert text.index('Abbruch (Strg+C)') < text.index('zweiter Versuch') < text.index('Dienst läuft')
+
+
+def test_shielded_covers_sighup():
+    with calibrate.shielded():
+        assert signal.getsignal(signal.SIGHUP) == signal.SIG_IGN
+        assert signal.getsignal(signal.SIGTERM) == signal.SIG_IGN
+        assert signal.getsignal(signal.SIGINT) == signal.SIG_IGN
+
+
+def test_open_serial_is_exclusive(monkeypatch):
+    import serial
+
+    seen = {}
+
+    def fake(port, **kwargs):
+        seen.update(kwargs, port=port)
+        return object()
+
+    monkeypatch.setattr(serial, 'Serial', fake)
+    calibrate.open_serial('/dev/nichts', 38400, 0.5)
+    assert seen['exclusive'] is True
+
+
+def test_exclusive_open_refuses_second_opener():
+    """pyserial ``exclusive=True`` (flock) wirkt auf einem Pseudo-Terminal:
+    solange der Lesethread den Port hält, scheitert die Rückstellung beim
+    Öffnen, statt Bytes einzustreuen."""
+    import serial
+
+    master, slave = os.openpty()
+    try:
+        first = serial.Serial(os.ttyname(slave), 38400, timeout=0.1, exclusive=True)
+        try:
+            with pytest.raises(serial.SerialException):
+                serial.Serial(os.ttyname(slave), 38400, timeout=0.1, exclusive=True)
+        finally:
+            first.close()
+    finally:
+        os.close(master)
+        os.close(slave)
+
+
+# ------------------------------------------------------------------ Rückstellpunkt prüfen
+
+@pytest.mark.parametrize('point, reason', [
+    ({}, '„register“ fehlt'),
+    ({'register': {'dpoint': {'daten': [1]}}}, 'register.norm.daten'),
+    ({'register': {'norm': {'daten': [80, 27]}, 'dpoint': {'daten': [1]}}}, 'genau 3 Bytes'),
+    ({'register': {'norm': {'daten': [80, 27, 228, 0]}, 'dpoint': {'daten': [1]}}}, 'genau 3 Bytes'),
+    ({'register': {'norm': {'daten': [80, 27, 256]}, 'dpoint': {'daten': [1]}}}, '0…255'),
+    ({'register': {'norm': {'daten': [80, -1, 228]}, 'dpoint': {'daten': [1]}}}, '0…255'),
+    ({'register': {'norm': {'daten': [80, 27.0, 228]}, 'dpoint': {'daten': [1]}}}, '0…255'),
+    ({'register': {'norm': {'daten': '80,27,228'}, 'dpoint': {'daten': [1]}}}, 'genau 3 Bytes'),
+    ({'register': {'norm': {'daten': ORIGINAL_NORM}, 'dpoint': {'daten': [1, 2]}}}, 'genau 1 Byte'),
+    ({'register': {'norm': {'daten': ORIGINAL_NORM}, 'dpoint': {'daten': [True]}}}, 'genau 1 Byte'),
+    ({'register': {'norm': {'daten': ORIGINAL_NORM}, 'dpoint': {'daten': 1}}}, 'genau 1 Byte'),
+])
+def test_restore_from_file_refuses_invalid_point_without_sending(tmp_path, point, reason):
+    h = Harness(tmp_path)
+    path = tmp_path / 'rueckstellpunkt.json'
+    path.write_text(json.dumps(point))
+    assert calibrate.restore_from_file(path, calibrate.Options(yes=True), h.console, h.deps) == calibrate.EXIT_FAIL
+    assert h.gsv.opened == 0 and h.gsv.writes == []
+    assert 'kein gültiger Rückstellpunkt' in h.err.getvalue() and reason in h.err.getvalue()
+    ok, detail = calibrate.restore_registers('/dev/x', 38400, point, tmp_path / 'log.jsonl', h.deps)
+    assert ok is False and 'ungültig' in detail['error'] and h.gsv.opened == 0
+
+
+def test_restore_point_problem_accepts_read_point_and_rejects_non_object():
+    good = {'register': {'norm': {'daten': ORIGINAL_NORM}, 'dpoint': {'daten': ORIGINAL_DPOINT}}}
+    assert calibrate.restore_point_problem(good) is None
+    assert calibrate.restore_point_problem([1, 2, 3]) == 'kein JSON-Objekt'
 
 
 # ------------------------------------------------------------------ Voraussetzungen

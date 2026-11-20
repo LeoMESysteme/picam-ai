@@ -283,31 +283,39 @@ def apply_uninstall(plan, runner=subprocess.run, progress=None):
             raise UninstallError(f'{path} steht nicht im Plan')
         step(action['text'])
         try:
-            if action['kind'] == 'command':
-                runner(action['argv'], check=True, capture_output=True, text=True, timeout=COMMAND_TIMEOUT_S)
-            elif action['kind'] == 'unlink':
-                path.unlink(missing_ok=True)
-            elif action['kind'] == 'rmtree':
-                if path.is_symlink():
-                    raise UninstallError(f'{path} wurde zum Symlink; abgebrochen')
-                if path.exists():
-                    shutil.rmtree(path)
-            elif action['kind'] == 'bashrc_block':
-                backup = fastfetch.remove_block(path)
-                if backup:
-                    action = dict(action, backup=str(backup))
-            elif action['kind'] == 'rmdir_if_empty':
-                try:
-                    path.rmdir()
-                except OSError:
-                    action = dict(action, skipped='nicht leer')
-            else:
-                raise UninstallError(f'Unbekannter Schritt {action["kind"]!r}')
-        except (OSError, subprocess.SubprocessError) as error:
+            with fastfetch.as_owner_of(action.get('as_owner_of')):
+                action = _run_action(action, path, runner)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            # ValueError: u. a. UnicodeDecodeError einer .bashrc, die seit dem Plan nicht mehr UTF-8 ist.
             raise UninstallError(f'{action["text"]} fehlgeschlagen: {error}. Bereits erledigt: '
                                  + (', '.join(item['text'] for item in done) or 'nichts')) from error
         done.append(action)
     return dict(current, applied=True, done=done)
+
+
+def _run_action(action, path, runner):
+    """Einen Planschritt ausführen; Rückgabe: Schritt, ggf. mit Zusatz (Sicherung, übersprungen)."""
+    if action['kind'] == 'command':
+        runner(action['argv'], check=True, capture_output=True, text=True, timeout=COMMAND_TIMEOUT_S)
+    elif action['kind'] == 'unlink':
+        path.unlink(missing_ok=True)
+    elif action['kind'] == 'rmtree':
+        if path.is_symlink():
+            raise UninstallError(f'{path} wurde zum Symlink; abgebrochen')
+        if path.exists():
+            shutil.rmtree(path)
+    elif action['kind'] == 'bashrc_block':
+        backup = fastfetch.remove_block(path)
+        if backup:
+            action = dict(action, backup=str(backup))
+    elif action['kind'] == 'rmdir_if_empty':
+        try:
+            path.rmdir()
+        except OSError:
+            action = dict(action, skipped='nicht leer')
+    else:
+        raise UninstallError(f'Unbekannter Schritt {action["kind"]!r}')
+    return action
 
 
 def parser():

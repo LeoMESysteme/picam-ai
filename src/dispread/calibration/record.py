@@ -469,6 +469,10 @@ def _serial_worker(
                 xonxoff=False,
                 rtscts=False,
                 dsrdtr=False,
+                # flock: ein zweiter Oeffner mit exclusive=True (Rueckstellung
+                # in `picam kalibrieren`) scheitert, solange dieser Thread
+                # den Port haelt, statt Bytes einzustreuen.
+                exclusive=True,
             )
         except Exception as exc:  # noqa: BLE001 - an den Aufrufer weiterreichen
             state["open_error"] = f"{type(exc).__name__}: {exc}"
@@ -1099,6 +1103,10 @@ def _json_default(value: Any) -> Any:
 #: KeyboardInterrupt) lief durch den sauberen Abbruchpfad. SIGTERM wird hier
 #: bewusst auf denselben Pfad umgelenkt statt einen eigenen zu bauen.
 _SIGTERM_MARKER = "SIGTERM"
+#: Ebenso SIGHUP (SSH-Verbindung getrennt): ohne Handler beendete er den
+#: Prozess mitten in der Aufnahme, ohne Rueckstellung der Normierung.
+_SIGHUP_MARKER = "SIGHUP"
+_ABORT_SIGNALS = {signal.SIGTERM: _SIGTERM_MARKER, signal.SIGHUP: _SIGHUP_MARKER}
 
 
 def _estimate_staging_need(args: argparse.Namespace, camera_settings: CameraSettings | None) -> dict[str, Any]:
@@ -1227,10 +1235,62 @@ def _finish_staging(work_dir: Path, output_dir: Path, staging: dict[str, Any]) -
 
 
 def _install_sigterm_handler() -> None:
-    def _handle_sigterm(signum, frame):  # noqa: ARG001 - Signatur von signal.signal vorgegeben
-        raise KeyboardInterrupt(_SIGTERM_MARKER)
+    """SIGTERM und SIGHUP auf den Abbruchpfad von Strg+C umlenken
+    (KeyboardInterrupt mit dem Signalnamen als Argument)."""
+    def _handle_abort(signum, frame):  # noqa: ARG001 - Signatur von signal.signal vorgegeben
+        raise KeyboardInterrupt(_ABORT_SIGNALS.get(signum, "SIGTERM"))
 
-    signal.signal(signal.SIGTERM, _handle_sigterm)
+    for signum in _ABORT_SIGNALS:
+        signal.signal(signum, _handle_abort)
+
+
+class _SignalsHeld:
+    """SIGINT/SIGTERM/SIGHUP waehrend des Abschliessens aufschieben.
+
+    Waehrend `run` auf seine Threads wartet, stellt der serielle Lesethread
+    noch die Normierung zurueck. Ein zweites Strg+C (oder SIGTERM/SIGHUP)
+    durfte das Warten bisher abbrechen; der Aufrufer (`picam kalibrieren`)
+    oeffnete dann fuer seinen zweiten Rueckstellversuch den Port, waehrend der
+    Lesethread noch schrieb - Bytes beider Seiten liefen ineinander. Die
+    Signale werden hier nur vermerkt (`received`) und nach dem Warten als
+    Abbruch gewertet. Ausserhalb des Hauptthreads wirkungslos."""
+
+    SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+    def __init__(self) -> None:
+        self.received: list[str] = []
+        self._previous: dict[int, Any] = {}
+
+    def _note(self, signum, frame) -> None:  # noqa: ARG002 - Signatur von signal.signal vorgegeben
+        self.received.append(signal.Signals(signum).name)
+
+    def __enter__(self) -> _SignalsHeld:
+        try:
+            for signum in self.SIGNALS:
+                self._previous[signum] = signal.signal(signum, self._note)
+        except ValueError:  # nicht im Hauptthread
+            pass
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        for signum, handler in self._previous.items():
+            signal.signal(signum, handler)
+        self._previous.clear()
+
+
+def _print(*args: Any, **kwargs: Any) -> None:
+    """`print`, das nach einem Verbindungsabbruch (SIGHUP, Terminal weg:
+    EIO) nicht wirft - eine Ausgabe darf den Abbruch- und Abschlusspfad
+    nicht mehr unterbrechen."""
+    try:
+        print(*args, **kwargs)
+    except (OSError, ValueError):
+        pass
+
+
+def _say(text: str) -> None:
+    """Meldung auf stderr (siehe `_print`)."""
+    _print(text, file=sys.stderr)
 
 
 def run(
@@ -1443,16 +1503,19 @@ def run(
                 progress(min(time.monotonic() - start_mono, args.duration), args.duration)
     except KeyboardInterrupt as exc:
         aborted = True
-        if exc.args and exc.args[0] == _SIGTERM_MARKER:
-            abort_reason = "SIGTERM"
-            print("\nAbbruch (SIGTERM) - schreibe bereits aufgezeichnete Daten vollstaendig ab.", file=sys.stderr)
+        if exc.args and exc.args[0] in (_SIGTERM_MARKER, _SIGHUP_MARKER):
+            abort_reason = exc.args[0]
+            _say(f"\nAbbruch ({abort_reason}) - schreibe bereits aufgezeichnete Daten vollstaendig ab.")
         else:
             abort_reason = "KeyboardInterrupt (Ctrl-C)"
-            print("\nAbbruch (Ctrl-C) - schreibe bereits aufgezeichnete Daten vollstaendig ab.", file=sys.stderr)
+            _say("\nAbbruch (Ctrl-C) - schreibe bereits aufgezeichnete Daten vollstaendig ab.")
     except Exception as exc:  # noqa: BLE001 - Sitzung trotzdem sauber abschliessen
         aborted = True
         abort_reason = f"{type(exc).__name__}: {exc}"
-        traceback.print_exc(file=sys.stderr)
+        try:
+            traceback.print_exc(file=sys.stderr)
+        except (OSError, ValueError):
+            pass
     finally:
         elapsed_s = time.monotonic() - start_mono
         stop_event.set()
@@ -1465,10 +1528,21 @@ def run(
         # JOIN_TIMEOUT_S ist grosszuegig bemessen (--norm-schedule laesst im
         # finally-Block des Lesethreads noch die Rueckstellung laufen; die
         # Kamera kann bis zu `wait=2.0` in `capture_request` haengen).
-        frame_acq_thread.join(timeout=JOIN_TIMEOUT_S)
-        frame_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
-        serial_thread.join(timeout=JOIN_TIMEOUT_S)
-        serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
+        # Signale bis dahin aufschieben (`_SignalsHeld`): der Lesethread
+        # stellt im finally-Block noch die Normierung zurueck.
+        with _SignalsHeld() as held:
+            frame_acq_thread.join(timeout=JOIN_TIMEOUT_S)
+            frame_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
+            serial_thread.join(timeout=JOIN_TIMEOUT_S)
+            serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
+        if held.received and not aborted:
+            aborted = True
+            abort_reason = f"{held.received[0]} beim Abschliessen"
+        if serial_thread.is_alive():
+            # Lesethread haengt noch (z.B. in der Rueckstellung): nicht
+            # verschweigen, der Aufrufer darf den Port dann nicht anfassen.
+            serial_state.setdefault("restore_verification", {
+                "error": f"Lesethread nach {JOIN_TIMEOUT_S:.0f} s noch aktiv (Rueckstellung unbestaetigt)"})
 
         # Zweite Versatzmessung nach dem Join - die Differenz zu
         # `clock_offset_start_ns` zeigt einen Suspend waehrend der Aufnahme
@@ -1583,35 +1657,35 @@ def run(
             session_json.write_text(session_text)
 
     if serial_state.get("read_error"):
-        print(f"Warnung: serielles Lesen beendet mit Fehler: {serial_state['read_error']}", file=sys.stderr)
+        _print(f"Warnung: serielles Lesen beendet mit Fehler: {serial_state['read_error']}", file=sys.stderr)
     if acquisition_error:
-        print(f"FEHLER: Bildaufnahme: {acquisition_error}", file=sys.stderr)
+        _print(f"FEHLER: Bildaufnahme: {acquisition_error}", file=sys.stderr)
 
     if serial_writer_state.get("count", 0) == 0:
-        print(
+        _print(
             "WARNUNG: In der gesamten Aufzeichnung wurde kein einziges Telegramm "
             f"empfangen (Dauer={args.duration}s, Port={args.port!r}, Baudrate={args.baudrate}). "
             "serial.jsonl ist leer - das ist eine Meldung, kein stiller Erfolg.",
             file=sys.stderr,
         )
     if frame_acq_state.get("frames_dropped_queue_full", 0) > 0:
-        print(
+        _print(
             f"WARNUNG: {frame_acq_state['frames_dropped_queue_full']} Bild(er) verworfen, weil die "
             f"Schreiber-Warteschlange voll war (--frame-queue-size {args.frame_queue_size}).",
             file=sys.stderr,
         )
     if frame_writer_state.get("frames_dropped_write_failed", 0) > 0:
-        print(
+        _print(
             f"WARNUNG: {frame_writer_state['frames_dropped_write_failed']} Bild(er) verworfen, weil "
             "das Schreiben der Bilddatei fehlschlug (Ziel voll?).",
             file=sys.stderr,
         )
     if serial_state.get("commands_write_error"):
-        print(f"WARNUNG: commands.jsonl unvollstaendig: {serial_state['commands_write_error']}", file=sys.stderr)
+        _print(f"WARNUNG: commands.jsonl unvollstaendig: {serial_state['commands_write_error']}", file=sys.stderr)
     staging_error = staging.get("error") if staging is not None else None
     staging_failed = staging_error is not None
     if staging_failed:
-        print(
+        _print(
             f"FEHLER: Kopieren aus der Zwischenablage nach {output_dir} fehlgeschlagen: "
             f"{staging_error}. Die Aufnahme liegt vollstaendig unter {work_dir} - "
             "vor einem Neustart des Pi sichern.",
@@ -1631,7 +1705,7 @@ def run(
         status_word = "FEHLER (keine Bilder, siehe acquisition_error)"
     else:
         status_word = "vollstaendig"
-    print(
+    _print(
         f"Fertig: {frame_writer_state.get('frames_recorded', 0)} Bilder, "
         f"{serial_writer_state.get('count', 0)} Telegrammzeilen, "
         f"{status_word} -> {output_dir}"

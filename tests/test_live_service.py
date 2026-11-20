@@ -3865,3 +3865,48 @@ def test_confirm_records_last_digit_flicker_evidence(tmp_path, proposal, use_tol
     if use_tolerance:
         assert "bis auf die letzte Stelle (±1) unverändert" in confirmation["reader_tolerance"]["hinweis"]
         assert confirmation["reader_tolerance"]["anzeige_unveraendert"]["letzte_stelle_schwankt"] is True
+
+
+def test_never_exact_manual_value_warns_records_note_and_does_not_block_run(tmp_path, proposal):
+    """Eingegebener Wert, alle Standbilder gelesen, keins genau (alle ±1):
+    Gegenlesen WARNUNG mit Grund, Quittung beim Bestaetigen, Beleg
+    `letzte_stelle_nie_exakt` in confirmation.json, kein gesperrter Lauf."""
+    import json
+
+    from dispread import setup_checks
+    from dispread.live.service import run_block_reason
+
+    flicker = {"code": "letzte_stelle_schwankt", "frame": 0, "richtung": "+1",
+               "reference": "+ 0.4679 ", "read": "+ 0.4680 "}
+    never = {"code": "letzte_stelle_nie_exakt", "reference": "+ 0.4679 ", "frames": [0]}
+    metrics = {"frames": 1, "read_count": 1, "rejection_reasons": {}, "contradictions": [],
+               "notes": [flicker, never], "hinweis": setup_checks.NEVER_EXACT_TOLERANCE,
+               "tolerance": {"possible": False, "reason": "letzte_stelle_nie_exakt", "reference_kind": "eingabe"}}
+    reason = setup_checks.never_exact_hint([flicker])
+    proposal["setup_checks"].update(overall="WARNUNG")
+    proposal["setup_checks"]["checks"]["gegenlesen"] = {"status": "WARNUNG", "metrics": metrics, "reason": reason}
+    assert run_block_reason(proposal) is None
+    # Mit Widerspruch oder ungelesenem Standbild bleibt die Sperre.
+    blocked = json.loads(json.dumps(proposal))
+    blocked["setup_checks"]["checks"]["gegenlesen"]["metrics"]["read_count"] = 0
+    assert run_block_reason(blocked).startswith("Lauf gesperrt")
+
+    def runner(*, session_dir, **kwargs):
+        (session_dir / "setup").mkdir(parents=True, exist_ok=True)
+        return proposal
+
+    service = LiveService(FakeOwner(), tmp_path, setup_runner=runner, reference_present=lambda: False)
+    service.start_setup(cell_text="+0.4679")
+    assert _wait_state(service, {"setup_ready", "setup_failed"}) == "setup_ready"
+    setup = service.status()["setup"]
+    assert setup["check_reasons"]["gegenlesen"] == reason
+    assert setup["gegenlesen"]["metrics"]["notes"] == [flicker, never]
+    with pytest.raises(LiveError):
+        service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True,
+                        acknowledge_warning=False)
+    service.confirm(session_id=service.status()["session_id"], confirmed_by="Operator", format_checked=True,
+                    acknowledge_warning=True)
+    status = service.status()
+    confirmation = json.loads((tmp_path / status["session_id"] / "confirmation.json").read_text())
+    assert confirmation["reference_notes"] == [flicker, never]
+    assert confirmation["run_block"] is None and confirmation["warning_acknowledged"] is True

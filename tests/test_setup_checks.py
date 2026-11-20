@@ -851,15 +851,21 @@ def _scripted_reader(monkeypatch, read_texts):
 
 @pytest.mark.parametrize('reference,reads,status,directions', [
     ('+ 0.4679 ', ['+ 0.4679 '], 'OK', []),
-    ('+ 0.4679 ', ['+ 0.4680 '], 'OK', ['+1']),             # letzte Stelle +1 mit Uebertrag
-    ('+ 0.4679 ', ['+ 0.4678 '], 'OK', ['-1']),
-    ('+ 1.0000 ', ['+ 0.9999 '], 'OK', ['-1']),             # Uebertrag ueber alle Nachkommastellen
-    ('+ 9.9999 ', ['+10.0000 '], 'OK', ['+1']),             # Leerzelle wird Ziffer, Punkt bleibt in Zelle 3
+    # Mindestens ein Standbild genau, die anderen nur letzte Stelle ±1: OK mit Beleg.
+    ('+ 0.4679 ', ['+ 0.4679 ', '+ 0.4680 '], 'OK', ['+1']),  # letzte Stelle +1 mit Uebertrag
+    ('+ 0.4679 ', ['+ 0.4678 ', '+ 0.4679 '], 'OK', ['-1']),
+    ('+ 1.0000 ', ['+ 1.0000 ', '+ 0.9999 '], 'OK', ['-1']),  # Uebertrag ueber alle Nachkommastellen
+    ('+ 9.9999 ', ['+10.0000 ', '+ 9.9999 '], 'OK', ['+1']),  # Leerzelle wird Ziffer, Punkt bleibt in Zelle 3
+    # Kein Standbild genau, alle ±1: Schwanken nicht belegt - WARNUNG (letzte_stelle_nie_exakt).
+    ('+ 0.4679 ', ['+ 0.4680 '], 'WARNUNG', ['+1']),
+    ('+ 0.4679 ', ['+ 0.4678 '], 'WARNUNG', ['-1']),
+    ('+ 1.0000 ', ['+ 0.9999 '], 'WARNUNG', ['-1']),
+    ('+ 9.9999 ', ['+10.0000 '], 'WARNUNG', ['+1']),
+    ('+ 0.4679 ', ['+ 0.4680 ', '+ 0.4680 '], 'WARNUNG', ['+1', '+1']),
     ('+ 9.9999 ', ['+100.000 '], 'FEHLER', []),             # Punkt wandert: kein Schritt der letzten Stelle
     ('+ 0.4679 ', ['+ 0.4681 '], 'FEHLER', []),             # zwei Einheiten
     ('+ 0.4679 ', ['+ 0.4579 '], 'FEHLER', []),             # andere als die letzte Stelle
     ('+ 0.4679 ', ['+ 0.468? '], 'FEHLER', []),             # ungelesene Zelle: keine Nachsicht
-    ('+ 0.4679 ', ['+ 0.4679 ', '+ 0.4680 '], 'OK', ['+1']),
     ('+ 0.4679 ', ['+ 0.4678 ', '+ 0.4680 '], 'FEHLER', []),  # Spannweite 2 ist kein Schwanken
     ('+ 0.467? ', ['+ 0.4678 '], 'OK', []),                 # '?' maskiert wie bisher
     ('+ 0.467? ', ['+ 0.4680 '], 'FEHLER', []),             # mit '?' keine Zahlennachsicht
@@ -870,18 +876,68 @@ def test_manual_reference_tolerates_last_digit_flicker(monkeypatch, tmp_path, re
                                          reference_kind='eingabe')
     assert result.status == status
     notes = result.metrics.get('notes', [])
-    assert [note['richtung'] for note in notes] == directions
+    flicker = [note for note in notes if note['code'] == 'letzte_stelle_schwankt']
+    assert [note['richtung'] for note in flicker] == directions
     if directions:
         assert result.metrics['contradictions'] == []
-        assert result.reason.startswith(setup_checks.LAST_PLACE_HINT + ' (Standbild')
-        assert all(note['code'] == 'letzte_stelle_schwankt' and note['reference'] == reference for note in notes)
-        assert notes[-1]['read'] == reads[notes[-1]['frame']]
-        assert 'hinweis' not in result.metrics
+        assert result.metrics['read_count'] == len(reads)
+        assert all(note['reference'] == reference for note in flicker)
+        assert flicker[-1]['read'] == reads[flicker[-1]['frame']]
         assert json.loads(json.dumps(result.to_dict()))['metrics']['notes'] == notes
+    if status == 'OK' and directions:
+        assert notes == flicker
+        assert result.reason.startswith(setup_checks.LAST_PLACE_HINT + ' (Standbild')
+        assert 'hinweis' not in result.metrics and 'tolerance' not in result.metrics
+    elif status == 'WARNUNG':
+        assert notes[-1] == {'code': 'letzte_stelle_nie_exakt', 'reference': reference,
+                             'frames': [note['frame'] for note in flicker]}
+        assert result.reason.startswith(setup_checks.NEVER_EXACT_HINT + ' (Standbild 1: eingegeben')
+        assert result.reason.endswith('Prüfen, ob die Anzeige wirklich schwankt – sonst Wert neu eingeben.')
+        tolerance = result.metrics['tolerance']
+        assert (tolerance['possible'], tolerance['reason']) == (False, 'letzte_stelle_nie_exakt')
+        assert result.metrics['hinweis'] == setup_checks.NEVER_EXACT_TOLERANCE
     else:
         assert result.reason is None
     if status == 'FEHLER':
         assert result.metrics['rejection_reasons'].get('zelle_widerspricht_referenz')
+
+
+def test_single_still_one_off_is_warning_not_ok(monkeypatch, tmp_path):
+    """Pruefbericht 2026-11-20: ein Standbild +0.4680 gegen eingegebene +0.4679
+    war OK. Ohne ein einziges genau passendes Standbild ist das WARNUNG."""
+    setup_checks = _scripted_reader(monkeypatch, ['+ 0.4680 '])
+    result = setup_checks.diagnose_reader([(display(), '+ 0.4679 ')], QUAD, tmp_path / 't', 'sha',
+                                         reference_kind='eingabe')
+    assert result.status == 'WARNUNG'
+    assert result.reason == ('Kein Standbild zeigt genau den eingegebenen Wert (alle ±1 in der letzten Stelle) '
+                             '(Standbild 1: eingegeben 0.4679, gelesen 0.4680). '
+                             'Prüfen, ob die Anzeige wirklich schwankt – sonst Wert neu eingeben.')
+
+
+def test_never_exact_after_tolerance_retest_offers_no_tolerance(monkeypatch, tmp_path):
+    """Ungelesene Standbilder: die Gegenprobe der angepassten Toleranz liest
+    alle, aber keins genau (alle ±1) - keine angepasste Toleranz."""
+    from types import SimpleNamespace
+
+    from dispread import setup_checks
+
+    def factory(*args, d_max_factor=1.0):
+        def read(*_):
+            cells = [{'text': ch, 'best': ch, 'd_best': .5, 'd_second': 2, 'reason': None} for ch in '+0.60973 ']
+            accepted = d_max_factor != 1
+            cells[7].update(text='3' if accepted else None, d_best=2.2, d_second=3.5,
+                            reason=None if accepted else 'zelle_unbekannt')
+            return SimpleNamespace(diagnostics={'cells': cells, 'blank_cells_ok': True,
+                                                'reject_reason': None if accepted else 'zelle_unbekannt'})
+        return SimpleNamespace(read=read, _t=SimpleNamespace(d_max=1.92, margin_min=.93))
+
+    monkeypatch.setattr(setup_checks.DotMatrixReader, 'from_file', factory)
+    result = setup_checks.diagnose_reader([(display(), '+0.60972 ')] * 2, QUAD, tmp_path / 't', 'sha',
+                                         reference_kind='eingabe')
+    assert result.status == 'WARNUNG'
+    tolerance = result.metrics['tolerance']
+    assert (tolerance['possible'], tolerance['reason']) == (False, 'letzte_stelle_nie_exakt')
+    assert 'notes' not in tolerance
 
 
 def test_serial_reference_has_no_last_digit_leniency(monkeypatch, tmp_path):
@@ -890,3 +946,15 @@ def test_serial_reference_has_no_last_digit_leniency(monkeypatch, tmp_path):
                                          reference_kind='seriell')
     assert result.status == 'FEHLER'
     assert 'notes' not in result.metrics
+
+
+def test_confirm_page_uses_the_same_last_place_texts():
+    """Die Werkbank (confirm.js) nennt die Belege mit denselben Texten wie der Server."""
+    from pathlib import Path
+
+    from dispread import setup_checks
+
+    script = (Path(__file__).parents[1] / 'src/dispread/workbench/static/live/setup/confirm.js').read_text()
+    assert f"'{setup_checks.LAST_PLACE_HINT}'" in script
+    assert f"'{setup_checks.NEVER_EXACT_HINT}'" in script
+    assert f"'{setup_checks.NEVER_EXACT_CODE}'" in script

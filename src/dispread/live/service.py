@@ -86,6 +86,15 @@ def _tolerance_possible(metrics: dict) -> bool:
     return (metrics.get("tolerance") or {}).get("possible") is True and not metrics.get("contradictions")
 
 
+def _never_exact_only(metrics: dict) -> bool:
+    """WARNUNG nur, weil kein Standbild den eingegebenen Wert genau zeigte."""
+    frames = metrics.get("frames")
+    return (any(isinstance(note, dict) and note.get("code") == "letzte_stelle_nie_exakt"
+                for note in metrics.get("notes", []))
+            and not metrics.get("contradictions")
+            and isinstance(frames, int) and frames > 0 and metrics.get("read_count") == frames)
+
+
 def run_hint_reason(proposal: dict | None) -> str | None:
     """Nicht sperrender Hinweis (18.11., Leonhard): Standard bleibt waehlbar, wenn die
     angepasste Toleranz die Standbilder liest. Der Leser lehnt Unlesbares weiter ab;
@@ -127,6 +136,10 @@ def run_block_reason(proposal: dict | None) -> str | None:
         return None
     metrics = check.get("metrics", {})
     if _tolerance_possible(metrics):
+        return None
+    if _never_exact_only(metrics):
+        # Alle Standbilder gelesen, keins genau (alle ±1): WARNUNG mit Quittung
+        # beim Bestaetigen, kein gesperrter Lauf (setup_checks.NEVER_EXACT_CODE).
         return None
     hint = f" {metrics['hinweis']}" if metrics.get("hinweis") else ""
     if metrics.get("rejection_reasons", {}).get("zelle_widerspricht_referenz") and metrics.get("contradictions"):

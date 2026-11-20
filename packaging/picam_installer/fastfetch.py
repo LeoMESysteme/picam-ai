@@ -141,6 +141,17 @@ def _read_manifest(home: Path):
     return data
 
 
+def read_bashrc(path: Path) -> str:
+    """``.bashrc`` streng als UTF-8 lesen; sonst ValueError mit Grund (nichts geändert)."""
+    if not path.is_file():
+        return ''
+    try:
+        return path.read_bytes().decode('utf-8')
+    except UnicodeDecodeError as error:
+        raise ValueError(f'{NAME}: {path} ist nicht UTF-8 (Byte {error.start}); nichts geändert. '
+                         'Datei prüfen oder me-fastfetch weglassen.') from error
+
+
 def plan(home, files, *, package_present, can_install_package):
     """Schreibfreier Plan der Komponente (JSON-fähig)."""
     home = Path(home)
@@ -163,7 +174,7 @@ def plan(home, files, *, package_present, can_install_package):
     check_home_path(home, bashrc)
     if bashrc.exists() and not bashrc.is_file():
         raise ValueError(f'{NAME}: {bashrc} ist keine Datei; nichts geändert')
-    text = bashrc.read_text(encoding='utf-8', errors='replace') if bashrc.is_file() else ''
+    text = read_bashrc(bashrc)
     if package_present:
         package = 'vorhanden'
     else:
@@ -275,6 +286,16 @@ def apply(home, files, *, uid, gid, runner, step=lambda _text: None, install_pac
         current = plan(home, files, package_present=True, can_install_package=False)
         manifest = _read_manifest(home) or {'component': NAME, 'schema': 1, 'files': {}, 'backups': []}
         manifest.setdefault('backups', [])
+        manifest['package_installed_by_picam'] = bool(manifest.get('package_installed_by_picam')
+                                                       or result['package_installed'])
+
+        def save():
+            # Nach jedem Schritt (und vorab): scheitert ein späterer Schritt,
+            # kennt die Deinstallation trotzdem alles bisher Geschriebene.
+            manifest['backups'] = sorted(set(manifest['backups']) | set(result['backups']))
+            _write(home / MANIFEST, (json.dumps(manifest, indent=2, ensure_ascii=False) + '\n').encode(), 0o644)
+
+        save()
         states = {entry['path']: entry['state'] for entry in current['files']}
         for path, (data, mode) in render(files, home).items():
             state = states[str(path)]
@@ -286,22 +307,23 @@ def apply(home, files, *, uid, gid, runner, step=lambda _text: None, install_pac
                 backup = _backup_name(path)
                 os.rename(path, backup)
                 result['backups'].append(str(backup))
+                save()
             _write(path, data, mode)
             manifest['files'][str(path)] = sha256(data)
             result['written'].append(str(path))
+            save()
         bashrc = Path(current['bashrc']['path'])
         state = current['bashrc']['state']
         if state in ('fehlt', 'veraltet'):
-            text = bashrc.read_text(encoding='utf-8') if bashrc.is_file() else ''
+            text = read_bashrc(bashrc)
+            manifest['bashrc'] = str(bashrc)
+            save()
             backup = _rewrite(bashrc, with_block(text), 'vor-me-fastfetch')
             if backup:
                 result['backups'].append(str(backup))
             result['written'].append(str(bashrc))
         manifest['bashrc'] = str(bashrc) if state != 'fremd' else manifest.get('bashrc')
-        manifest['backups'] = sorted(set(manifest['backups']) | set(result['backups']))
-        manifest['package_installed_by_picam'] = bool(manifest.get('package_installed_by_picam')
-                                                       or result['package_installed'])
-        _write(home / MANIFEST, (json.dumps(manifest, indent=2, ensure_ascii=False) + '\n').encode(), 0o644)
+        save()
     result.update(applied=True, bashrc_state=state)
     return result
 
@@ -323,7 +345,8 @@ def removal(home, *, remove_package=False):
         if not path.exists():
             continue
         if path.is_file() and sha256(path.read_bytes()) == digest:
-            actions.append({'kind': 'unlink', 'path': path_text, 'text': f'{NAME}: {path.name} entfernen'})
+            actions.append({'kind': 'unlink', 'path': path_text, 'text': f'{NAME}: {path.name} entfernen',
+                            'as_owner_of': str(home)})
             remove.append(path_text)
         else:
             keep.append({'path': path_text, 'reason': 'seit der Installation geändert'})
@@ -332,14 +355,22 @@ def removal(home, *, remove_package=False):
     if bashrc.is_file():
         text = bashrc.read_text(encoding='utf-8', errors='replace')
         if BEGIN in text and END in text:
-            actions.append({'kind': 'bashrc_block', 'path': str(bashrc),
-                            'text': f'{NAME}: markierten Block aus .bashrc entfernen (mit Sicherung)'})
+            try:
+                read_bashrc(bashrc)
+            except ValueError:
+                keep.append({'path': str(bashrc), 'reason': 'nicht UTF-8; markierten me-fastfetch-Block von Hand '
+                                                            'entfernen'})
+            else:
+                actions.append({'kind': 'bashrc_block', 'path': str(bashrc),
+                                'text': f'{NAME}: markierten Block aus .bashrc entfernen (mit Sicherung)'})
     manifest_path = str(home / MANIFEST)
-    actions.append({'kind': 'unlink', 'path': manifest_path, 'text': f'{NAME}: Manifest entfernen'})
+    actions.append({'kind': 'unlink', 'path': manifest_path, 'text': f'{NAME}: Manifest entfernen',
+                    'as_owner_of': str(home)})
     remove.append(manifest_path)
     for relative in OWN_DIRS:
         directory = str(home / relative)
-        actions.append({'kind': 'rmdir_if_empty', 'path': directory, 'text': f'{NAME}: {relative} entfernen, falls leer'})
+        actions.append({'kind': 'rmdir_if_empty', 'path': directory, 'text': f'{NAME}: {relative} entfernen, falls leer',
+                        'as_owner_of': str(home)})
         remove.append(directory)
     for backup in manifest.get('backups') or []:
         if isinstance(backup, str) and Path(backup).exists():
@@ -356,13 +387,25 @@ def removal(home, *, remove_package=False):
             'needs_root': bool(remove_package and manifest.get('package_installed_by_picam'))}
 
 
+@contextmanager
+def as_owner_of(path):
+    """Als root mit der Kennung des Eigentümers von ``path`` (Home des Bedienerkontos)
+    arbeiten, damit Symlinks im Home nirgends hinführen, wo das Konto nicht schreiben darf."""
+    if path is None or os.geteuid() != 0:
+        yield
+        return
+    info = Path(path).stat()
+    with as_user(info.st_uid, info.st_gid):
+        yield
+
+
 def remove_block(path: Path):
     """Markierten Block entfernen; vorher Sicherung. Rückgabe: Sicherungspfad oder None."""
     if path.is_symlink():
         raise ValueError(f'{path} ist ein Symlink; nicht geändert')
     info = path.stat()
     with as_user(info.st_uid, info.st_gid):
-        text = path.read_text(encoding='utf-8')
+        text = read_bashrc(path)
         changed = without_block(text)
         if changed == text:
             return None
