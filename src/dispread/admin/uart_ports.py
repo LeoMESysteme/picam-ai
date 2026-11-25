@@ -307,7 +307,7 @@ class UartPorts:
         for link in sorted((self.dev_root / 'serial/by-id').glob('*')):
             if link.is_symlink() and link.exists():
                 by_id.setdefault(link.resolve(), []).append(self._logical(link))
-        debug = self.dev_root / 'serial0'
+        debug = self.dev_root / 'ttyAMA10'          # serial0 zeigt je nach Pi woanders hin
         result = []
         for path in devices:
             resolved = path.resolve()

@@ -110,6 +110,21 @@ def test_debug_alias_is_never_mapped_to_uart0(uart):
             uart.plan_change(output=port)
 
 
+def test_serial0_pointing_to_data_port_does_not_reserve_it(uart):
+    """raspi01 25.11.: /dev/serial0 -> ttyAMA0; der Dienst brach mit „Debugport ist reserviert“ ab."""
+    from dispread.hardware_ports import debug_port, validate_port_pair
+
+    add_uart(uart, 'uart0', 'ttyAMA0', alias=True)
+    (uart.dev_root / 'serial0').symlink_to(uart.dev_root / 'ttyAMA0')
+    (uart.dev_root / 'ttyAMA10').touch()
+    data = str(uart.dev_root / 'ttyAMA0')
+    assert not debug_port(data, dev_root=str(uart.dev_root))
+    assert debug_port(str(uart.dev_root / 'ttyAMA10'), dev_root=str(uart.dev_root))
+    assert debug_port(str(uart.dev_root / 'serial0'), dev_root=str(uart.dev_root))   # Verweis bleibt verboten
+    validate_port_pair('/dev/ttyAMA0', '/dev/ttyUSB0')                                  # echter Pi: kein Fehler
+    assert not any(device.reserved for device in uart.inventory() if device.path.endswith('ttyAMA0'))
+
+
 def test_inventory_prefers_usb_by_id_and_reports_visible_holders(uart):
     stable = add_usb(uart, 'ttyACM3')
     choice, = uart.reference_choices()

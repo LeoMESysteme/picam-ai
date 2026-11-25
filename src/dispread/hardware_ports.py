@@ -22,16 +22,23 @@ def same_port(left: str, right: str) -> bool:
     return stat.S_ISCHR(a.st_mode) and stat.S_ISCHR(b.st_mode) and a.st_rdev == b.st_rdev
 
 
-def debug_port(port: str) -> bool:
+def debug_port(port: str, dev_root: str = '/dev') -> bool:
+    """Reserviert ist nur der 3-Pin-Debug-Header ``ttyAMA10``.
+
+    ``serial0`` ist ein Verweis, dessen Ziel je nach Pi wechselt (raspi06: ttyAMA10,
+    raspi01: ttyAMA0, 25.11.). Als Portname ist der Verweis mehrdeutig und deshalb
+    verboten; sein Ziel ist es nicht – sonst gälte der Datenport ttyAMA0 als Debugport.
+    """
     from pathlib import Path
 
-    return (Path(port).name in {'serial0', 'ttyAMA10'}
-            or any(same_port(port, reserved) for reserved in ('/dev/serial0', '/dev/ttyAMA10')))
+    return (Path(port).name in {'serial0', 'serial1', 'ttyAMA10'}
+            or same_port(port, str(Path(dev_root) / 'ttyAMA10')))
 
 
 def validate_port_pair(output: str, reference: str) -> None:
     if debug_port(output) or debug_port(reference):
-        raise ValueError('Debugport ist reserviert (/dev/serial0, /dev/ttyAMA10)')
+        raise ValueError('Debugport ist reserviert (/dev/ttyAMA10); /dev/serial0 ist nur ein Verweis – '
+                         'den echten Gerätenamen angeben')
     if same_port(output, reference):
         raise ValueError('Ausgang und Referenz müssen verschiedene Ports verwenden')
 
