@@ -4652,6 +4652,46 @@ nicht mit GSVmulti vermischen. Diagnosebelege mit Manifest im Repo archivieren,
 damit die Fortsetzung nicht von ignoriertem var/ oder Chat-Anhängen abhängt.
 
 
+## 2026-11-05 — Neue Workbench zur Ansicht mit StreamCam gestartet
+
+**Ziel:** Auf Nutzerwunsch die implementierte neue Oberfläche mit echtem
+Kamerabild ansehen. Zunächst separate Simulation auf Port 8082 gestartet;
+danach ausdrücklich auf die StreamCam umgestellt.
+
+**Aufbau:** Pi raspi06, Redesign-Worktree `feat/werkbank-redesign` bei
+`dbd8b19`, Benutzerdienst `dispread-redesign-preview.service`,
+`https://100.122.154.35:8082/live`, bestehende TLS-Dateien und Linux-Anmeldung.
+Eigene Datenverzeichnisse `var/workbench-preview`, `var/live-preview`,
+Steuersocket `/tmp/dispread-redesign-preview/control.sock`.
+Die alte Werkbank `dispread-werkbank-r13.service` auf Port 8081 besaß die
+StreamCam. Ihr Status war `idle`, ohne Sitzung oder Lauf; kein
+`var/RECORDING_IN_PROGRESS`. Alten Dienst und Simulation sauber gestoppt,
+neue Oberfläche ohne `--simulate` gestartet.
+
+**Beobachtung:** Status bestätigt `simulate=false`, Kamera laufend, ohne
+Fehler oder Stillstand, Quelle Logitech StreamCam `046d:0893` an
+`/dev/video0`, USB 3, 1920×1080 YUYV, angeforderte 30 fps.
+Login antwortet HTTP 200. Keine Einrichtung, Referenzaufzeichnung oder
+Messung gestartet. Der Kamerastart verwendet `apply_controls=False`.
+Automatischer Fokus, Belichtung und Weißabgleich waren vor und nach dem
+Wechsel aktiv. Gain und Weißabgleichswert unterscheiden sich zwischen
+den Schnappschüssen; bei aktiven Automatiken sind das keine festen
+Einrichtungswerte. Keine Regler manuell gesetzt.
+
+**Diagnose:** Vorher-/Nachherstatus und vollständige V4L2-Abfragen unter
+`var/diagnostics/werkbank-streamcam-20261105/` gesichert.
+Dies belegt den Betriebswechsel und die aktive Bildquelle; keine
+Hardware-Abnahme, gemessene Vorschauleistung oder Latenzaussage.
+
+**Abschluss am selben Tag:** Auf Nutzerwunsch neue Workbench mit
+`systemctl --user stop dispread-redesign-preview.service` beendet.
+Nachprüfung: `ActiveState=inactive`, `SubState=dead`;
+`fuser /dev/video0 /dev/video1` ohne Besitzer (Exit 1). Alte Werkbank
+nicht wieder gestartet. Abschlussdiagnose unter
+`var/diagnostics/werkbank-streamcam-20261105/stop-check.txt`.
+
+---
+
 ## 2026-11-06 — T13 vorbereitet: echte neue Werkbank
 
 Leonhard hat die Hardware-Abnahme beauftragt und Raumlicht, eingeschaltetes
@@ -4810,6 +4850,228 @@ protokollierten Fokusstartwerte. Eine kontrollierte Messreihe und reale
 Startabnahme stehen aus.
 
 
+## 2026-11-11 — Einrichtungsabbruch bei der Rasterstartsuche
+
+**Anlass:** Nutzer meldet einen gerade gescheiterten Einrichtungslauf.
+**Aufbau:** Bestehender Dienst `dispread-werkbank-bruecke` auf `08ac9b9`,
+StreamCam/GSV-2AS; ausschließlich Status und gespeicherte Diagnose des
+Versuchs `live-20261111T154459Z` gelesen. Keine Hardware oder Kameraregler
+angefasst, kein neuer Live-Lauf ausgelöst.
+
+**Beobachtung:** Fokus und Belichtung waren abgeschlossen. Das Standbild zeigt
+ein lesbares Plus und scharfe Ziffern; die pauschale Empfehlung „näher heran“
+ist hier nicht durch eine zu kleine Anzeige belegt. Die Rastersuche nimmt
+zunächst eine Gehäusestruktur links außerhalb der Grünfläche als Plus-Anker.
+Alle verfeinerten Startlagen werden verworfen. Auch eine engere Hinweisbox
+und reine Offline-Versuche zur Begrenzung der Anker liefern noch keinen Fit.
+
+**Deutung:** Fehler in der Rasterstartsuche reproduziert, vollständige Ursache
+und sichere Korrektur weiterhin offen. Keine EXE nötig, um den Fehler zu
+reproduzieren; er entsteht vor dem Ausgabepfad. Keine Gütegrenze gelockert,
+kein Dienst verändert. Zahlen in [VALIDATION](VALIDATION.md), Klärung
+[OQ-69](open-questions.md#oq-69); Originalkopie und Auswertung lokal unter
+`var/diagnostics/raster-20261111-live-154459Z/`.
+
+## 2026-11-11 — Weitere Aufstellung und dauerhafte Sicherung der Einrichtungsfehler
+
+**Auftrag:** Nutzer hat die Anzeige anders aufgestellt, erneut keinen nutzbaren
+Einrichtungsausgang erreicht und verlangt Belege für spätere Korrekturen,
+auch wenn der physische Aufbau nicht mehr existiert.
+
+**Vorgehen:** Alle vorhandenen Setup-Dateien der relevanten Rasterversuche und
+der neuen Aufstellung kopiert; zusätzlich den frühen Fokusabbruch als Kontext
+aufgenommen. Live-Status nur lesend abgefragt. Zustand und Vorschlag stimmen
+in der gesicherten Vorschlagsrevision überein. Quellcode aus dem sauberen
+laufenden Commit `08ac9b9` einschließlich Tests/Skripten, Laufzeitversionen,
+Reglerrückmeldungen und historische Diagnose eingefroren. Quelle-Datei-Zuordnung,
+SHA-256-Manifest, ZIP und Offline-Rezept liegen zusammen im
+[Belegpaket](quellen/setup-failures-2026-11-11.md), außerhalb des ignorierten `var/`.
+
+**Beobachtung:** In der neuen Aufstellung `live-20261111T155557Z` ist das Raster
+gültig; die Ablehnung betrifft die Nachführung: zu wenig verteilte Bereiche
+und keine Reserve. Gesicherter Vorschlag ist bereits manuell bearbeitet;
+Änderungsliste enthält auch abgelehnte Ergänzungen. Dieser Fall wird getrennt
+von `keine_startlage` und `startlage_mehrdeutig` geführt (OQ-70 gegenüber OQ-69).
+Alle vier erhaltenen Standbilder und das Verteilungs-Gate liefern offline
+die protokollierten Ergebnisse erneut; Zahlen in [VALIDATION](VALIDATION.md).
+
+**Grenzen:** Rohbilder der Mittelbildstapel, acht Stabilitäts-Einzelbilder,
+die überschriebenen Standbilder früherer Suchversuche und eine eigene
+ursprüngliche automatische Vorschlagsrevision sind nicht dauerhaft vorhanden.
+Das vorhandene Mittelbild erlaubt keine Rekonstruktion zeitlicher Effekte.
+Diese Lücken bleiben im Paket ausdrücklich benannt. Spätere Regressionen
+müssen zwischen statischer Geometrie und fehlender Zeitfolge unterscheiden.
+Keine Kameraeinstellung, kein Dienst und kein Anwendungscode verändert;
+keinen neuen Live-Lauf gestartet. Eine Fehlerkorrektur war nicht Auftrag
+dieser Sicherung und wird durch die Archivprüfungen nicht behauptet.
+
+
+## 2026-11-11 — Prioritärer Bedienfehler im fehlerhaften Einrichtungsvorschlag
+
+**Nutzerbeobachtung:** Nach dem jüngsten Einrichtungsfehler bietet die Seite
+Bestätigen an, der Server lehnt korrekt ab; Abbrechen und Neu einrichten
+fehlen. Nutzer stuft dies als echten Bug mit hoher Priorität ein.
+
+**Eingrenzung:** Zustand `setup_ready` mit Gesamturteil `FEHLER`. Die
+Titelleiste bietet dort nur Bestätigen; das Bestätigungsmodell prüft das
+Fehlerurteil nicht. Das Backend sperrt Bestätigen korrekt, akzeptiert Abbruch
+aber nur während `setup_running`. Das erklärt die Sackgasse; die korrekte
+Messfreigabesperre ist nicht zu lockern.
+
+**Sicherung:** Nutzerbericht, hohe Priorität, Korrekturanforderungen und
+ausführbares Offline-Rezept dem [Belegpaket](quellen/setup-failures-2026-11-11.md)
+hinzugefügt. Originale UI-Funktionen und Service-Vorbedingungen reproduzieren
+den Zustand mit unverändertem Quellstand und ohne Hardwarezugriff. Zahlen
+in [VALIDATION](VALIDATION.md), Wiedereinstieg im TODO zuerst über OQ-71.
+Keinen Code-Fix oder Dienstwechsel in dieser Dokumentationsaufgabe behaupten.
+
+
+## 2026-11-11 — Workbench auf ausdrücklichen Nutzerwunsch neu gestartet
+
+**Auftrag:** „starte die workbench neu“. Vor dem Neustart lesend geprüft:
+`setup_ready`, kein Messlauf, keine laufende Diagnosekopie. Vorherzustand
+samt Kamerarückmeldungen und Startparametern gesichert.
+
+**Eingriff:** `systemctl --user restart dispread-werkbank-bruecke.service`,
+mit vorhandenen Parametern und Quellstand aus `bruecke-run`. Kein Code-Fix,
+kein Einrichtungs- oder Messlauf ausgelöst.
+
+**Nachprüfung:** Neuer Prozess PID 3321848, Dienst active/running, Zustand
+idle; echte StreamCam läuft ohne gemeldeten Kamerafehler oder Stillstand.
+Login HTTP 200, Live-Seite unangemeldet HTTP 302. Nutzer kann die Seite
+neu laden und eine neue Einrichtung beginnen. Diagnose vor/nach dem
+Neustart unter `var/diagnostics/workbench-restart-20261111/`.
+Die dokumentierten Fehler OQ-69/OQ-70/OQ-71 sind dadurch nicht behoben.
+
+
+## 2026-11-11 — Oberfläche verzögert, weitere Abbrüche und Betriebs-Worktree geprüft
+
+**Anlass:** Nutzer meldet langsamere Einrichtung/verzögerte UI bei flüssigem
+Kamerafeed, danach erneuten Abbruch und optischen Fokusrückfall. Zugleich
+Nachfrage, ob die neueste Workbench im richtigen Worktree läuft.
+
+**Befunde:** Beide neuen Sitzungen `161702Z` und `161955Z` finden nach einem
+ersten Fehlversuch ein Raster, scheitern anschließend an der Kantenprüfung
+für Zelle 7. Bild, Regler und Fehler gesichert. Offline-Diagnose des ersten
+Falles reproduziert die Ablehnung. Die Prüfung betrifft Hintergrund-
+Helligkeitsschritte und ist nicht als bloßer Schärfefehler zu bezeichnen.
+Die UI-Verzögerung während des tatsächlichen Einrichtens ist durch schnelle
+lokale Antworten nach dem Abbruch weder erklärt noch widerlegt.
+
+**Worktreeprüfung:** Dienst arbeitet tatsächlich mit `bruecke-run/08ac9b9`.
+Passender Interpreter, Prozessumgebung und Arbeitsordner lösen die Module
+auch dort auf; kein bloß aus dem Verzeichnisnamen abgeleiteter Befund.
+Neustart hat den alten Betriebsstand neu geladen, keinen neueren Zweig
+übernommen. Neuere Nachführungs-/Brückenarbeit in `bruecke-ui` fehlt im
+Dienst, weitere uncommittete Arbeit wurde nicht ausgerollt. Fokusdateien in
+run/ui/takt/ux sind jedoch identisch; bekannte R13-9/R13-12-Korrekturen
+bereits enthalten. Optischer Rückfall bei unverändertem Rücklesewert 60
+bleibt ungeklärt. Kameraneustart nach Fokus-Endprüfung ist eine zu prüfende
+Grenze, keine bereits bewiesene Ursache.
+
+**Sicherung:** [Zusatzarchiv](quellen/setup-followup-2026-11-11.md), Zahlen in
+[VALIDATION](VALIDATION.md); OQ-72/OQ-73/OQ-74 angelegt. Keine Kameraeinstellung,
+kein neuer Setup-/Messlauf und kein weiterer Neustart durch diese Diagnose.
+
+
+## 2026-11-11 — Weitere neue Aufstellung für spätere autonome Claude-Korrektur
+
+**Auftrag:** Nutzer hat erneut in neuer Aufstellung eingerichtet, meldet
+Fehlschlag und möchte alles für Claude erhalten, auch ohne später noch
+bestehenden physischen Aufbau. Keine Agentensitzung beauftragt oder gestartet;
+eine ausführbare und dokumentierte Übergabe im Repository abgelegt.
+
+**Sicherung:** Sitzung `live-20261111T162902Z` beim ersten Statusabruf noch
+in der Rastersuche, bei Dateisicherung mit drei Mal `keine_startlage`
+beendet. Alle vier vorhandenen Setup-Originale plus beobachtete Dateiversionen,
+Status, exakter sauberer Betriebsquellstand, Test-/Skriptkopie,
+Laufzeitumgebung und Vorlagen/Timing eingefroren. Eigenes Archiv unter
+`docs/quellen/`, getrennt von den unveränderten vorherigen Paketen.
+[Beschreibung und Rezept](quellen/setup-new-position-2026-11-11-162902.md).
+
+**Beobachtung:** Die LCD-Anzeige liegt im erhaltenen Bild oberhalb der festen
+Fokus-ROI; automatische Grünkontur und Fokusfenster haben keine Überlappung.
+Fokus-Endprüfung ist dennoch als erfolgreich protokolliert. Das begrenzt
+hier die Aussage über LCD-Schärfe, beweist aber ohne Bild vom Fokuszeitpunkt
+keine bestimmte Ursache der Rasterablehnung. Offline-Suche reproduziert
+`keine_startlage`. Zahlen und Grenzen in [VALIDATION](VALIDATION.md).
+
+**Übergabe:** [Auftrag an Claude](superpowers/handoffs/2026-11-11-einrichtungsfehler-an-claude.md)
+bündelt OQ-71 mit hoher Priorität, Raster-/Fokus-/Nachführ-/Kanten-/UI-Fälle,
+alle drei Belegpakete, Original- versus aktuelle Quellstände und erforderliche
+Regressionen. Fehlende Rohbilder, Stabilitätsproben und Fokus-Vorher-/
+Nachherbilder ausdrücklich benannt; keine vollständige zeitliche oder
+physische Abnahme vorgetäuscht. Keine Kameraregler oder Dienste geändert,
+keinen neuen Setup-/Messlauf ausgelöst, keine Fehlerkorrektur ausgerollt.
+
+
+## 2026-11-11 — Kritischer Workbench-Blocker, positive Gegenproben und Ausfalllogs
+
+**Auftrag:** Nutzer betrachtet wiederholte Einrichtungsfehler, Fokusrückfall,
+Bedien-Sackgasse und Verbindungsunterbrechung als kritischen Blocker für
+Bridge/EXE, ausführliche Tests und Kaulitz-Teilabnahme. Rückkehr Freitag,
+2026-11-13; Claude soll nach Limit-Reset zuerst diese Fehler bearbeiten.
+[Priorität und Abschlusskriterien](WORKBENCH_BLOCKER.md),
+[ausführlicher Auftrag](superpowers/handoffs/2026-11-11-einrichtungsfehler-an-claude.md).
+Keine Fehlerbehebung oder vollständige Abnahme in dieser Sicherung behauptet.
+
+**Aufbau:** Nutzer stellte das Gerät mehrfach anders auf. Drei danach
+bestätigte Einrichtungen `164508Z`, `165234Z`, `165754Z` als positive
+Gegenproben erhalten; WARNUNG jeweils bestätigt, kein FEHLER freigegeben.
+Jeweils vorhandene Original-PNGs, Profile, Vorschläge und Bestätigungen
+kopiert. Sechs ältere Geometriekontrollen vom SSD-Entwicklungsbestand
+zusätzlich gesichert. Alle drei aktuellen statischen Replays und sechs
+historische Geometrietests bestanden; Zahlen in [VALIDATION](VALIDATION.md).
+
+**Laufkontext:** `164508Z/run-01` lief laut Nutzer gut durch; 75,9823 % der
+3.843 Auditdatensätze VALID, ohne Trackingverlust. Direkte UART-Ausgabe,
+kein Windows-EXE-Empfangsnachweis. `165234Z/run-01` mit 28 Trackingverlusten
+war laut späterer Nutzerklärung absichtlich nur gestartet und abgebrochen,
+um nach Aufstellungswechsel wieder einrichten zu können. Ein direkter
+Knopf fehlt auch nach bestätigter Einrichtung. Vorläufige Einordnung als
+eigenständiger Trackingfehler zurückgenommen, OQ-76 geklärt; OQ-71 erweitert.
+`165754Z` bestätigt, bei Sicherung ohne Lauf. Versehentlicher Zellentext mit
+„hatte“ ebenfalls als Fehleingabe geklärt, kein zusätzlicher belegter Bug.
+
+**Ausfall:** Nutzer meldet Bild und Verbindung ungefähr sieben Sekunden weg.
+Logs sofort lesend kontrolliert und gesichert: Dienst lief weiter, keine
+belegbare Neustartursache. App-/Kerneljournal als Text und JSON, Netzwerk,
+Dienst-/Kamerastatus und erfolglose Druck-/Firmwareabfragen erhalten.
+Netzereignisse und frühere USB-Warnungen nicht ohne Zeitzuordnung als
+Ursache ausgeben. [Logarchiv](quellen/workbench-outage-2026-11-11.md), OQ-75.
+
+**Wiederherstellbarkeit:** Unveränderter Betriebsstand `08ac9b9` samt
+Quellen/Tests in Belegpaketen; separate Snapshots der uncommitteten
+Workbench-/EXE-Kandidaten sowie passive Dateiversionen gesichert.
+[Kontextarchiv](quellen/workbench-recovery-context-2026-11-11.md).
+Betriebs-Worktree nicht geändert, keinen neuen Kamera-/Messlauf ausgelöst.
+Diese Sicherung liefert statische Regressionen; fehlende Rohstapel,
+Stabilitätsproben und Fokus-Vorher-/Nachherbilder bleiben ausdrücklich offen.
+
+
+## 2026-11-11 — Weitere fehlgeschlagene Aufstellung und Fokusbeobachtung 170836Z
+
+**Auftrag und Aufbau:** Nutzer hat erneut umgestellt/eingerichtet, meldet
+wieder schlechter gewählten Fokus und Fehler. Vier vorhandene Setupdateien,
+kompletter Status, Fokus-/Reglerdaten und Betriebsquellstand gesichert.
+[Eigenes Archiv](quellen/setup-focus-failure-2026-11-11-170836.md).
+
+**Beobachtung:** Raster beim ersten Versuch erfolgreich; Kantenprüfung
+meldet Zellen 14/15. Offline 155/155 Punkte und Kantenurteil reproduziert:
+Leerzelle 14 Fehler (Stufe 11), Leerzelle 15 Warnung (Stufe 7), gemeinsame
+Meldung nennt beide. Das ist ein anderer Befund als frühere Zahlzelle 7.
+Fokusprüfung laut Protokoll bestanden, spätere Rückmeldung unverändert 56;
+optische Unschärfemeldung bleibt OQ-74. Fehlende Fokusbildfolge verhindert
+einen unabhängigen Nachweis des Übergangs nach Kameraneustart.
+
+**Weiteres Vorgehen:** Nutzer fragt nach weiteren Aufstellungen.
+Vorerst genug unterschiedliche statische Fehlerfälle und positive Kontrollen
+für autonome Arbeit vorhanden. Falls Hardwareergänzung nötig, gezielt
+Fokusbilder vor/nach Übernahme aufzeichnen. Keine weitere zufällige
+Aufstellung als Voraussetzung verlangt; keinen neuen Kameralauf gestartet.
+
+---
+
 ## 2026-11-13 — Leerzellgrenze und Rasterstart offline
 
 **Ziel und Aufbau:** Isolierte A1-Änderung an eingefrorener Quellkopie,
@@ -4867,6 +5129,49 @@ paralleler Last und wurde zwischenzeitlich mit `SIGSTOP` pausiert und mit
 30 vollständige, hashgeprüfte Ergebniszeilen und keine Fehlerzeilen; der
 Warteprozess meldete nach der Pause Exit 143 und ist kein Erfolgsnachweis.
 
+
+## 2026-11-13 — Glass-Site: Firefox-Last und Desktop-Steuerung
+
+Anlass: Nutzer meldet starke Verzögerungen in Firefox; Aussehen und Gefühl
+haben ausdrücklich höchste Priorität. Untersucht wurde ausschließlich die
+separate Glass-Site, ohne Kamera, Messpfad oder laufende Dienste anzufassen.
+Vorher zeichnete sie die gesamte Punktwolke permanent hinter großen Flächen
+mit echter Hintergrundweichzeichnung. Native Kapitelbuttons reagierten nicht
+auf Enter, weil die Auswahl ausschließlich über die Gestenbehandlung lief.
+
+Lokaler Vergleich mit Firefox 155.0, Linux ARM64, Xvfb und llvmpipe,
+1.366 × 768, Zeitbasis `performance.now()`. Zunächst den Glasfilter isoliert
+abgeschaltet: Callback-Median 287,62 → 151,74 ms. Diese Variante wurde wegen
+der gewünschten Optik verworfen. Stattdessen werden die Szene nur während
+Bedienung/Übergängen gezeichnet und ihre Rasterauflösung während Bewegung
+vorübergehend verringert; im Stillstand wird die scharfe Fassung einmal
+gezeichnet. Echte Glasweichzeichnung, Punktdichte, Verbindungen, Farben,
+Schriften, Übergänge und Lichtreflexe bleiben erhalten. Desktop erhält native
+Buttons und einen zugänglichen Schieberegler; Gesten blockieren Browserzoom
+und Textauswahl nicht mehr. Fehlendes WebGL verhindert die Statistikansichten
+nicht mehr.
+
+Der abschließende Vergleich beseitigt die ständige Hintergrundlast; Zahlen
+und Grenzen stehen in `VALIDATION.md` im gleichnamigen Abschnitt. Übergänge
+bleiben unter Softwaregrafik aufwendig; der Test belegt keine 60 FPS auf dem
+Rechner des Nutzers. Prüfrezepte und Rohdaten liegen im `qa/`-Verzeichnis der
+Site. Bestehende fremde Änderungen im Hauptrepository wurden erhalten.
+
+
+### 13.11.2026 — Glass-Punktwolke: Auflösungsabsenkung zurückgenommen
+
+Nutzer beanstandet die sichtbar unscharfe Punktwolke. Nachweis mit DPR 2:
+Bewegungsbild 715 × 494 statt 2.200 × 1.520 Pixel. Auch die Begrenzung im
+Stillstand reduzierte auf hochauflösenden Monitoren die tatsächlichen Pixel.
+Darum feste Gerätepixelauflösung bis zur realen GPU-Grenze, kein Umschalten
+zwischen niedriger und hoher Qualität. Der Shader vergrößert entfernte
+Punkte nicht mehr künstlich zu weichen Flecken. Kantenglättung, Farben,
+Punktanzahl, Glasflächen und Zeichenpause im Stillstand bleiben erhalten.
+Sichtprüfung der Structure-Ansicht mit DPR 2 bestätigt klar abgegrenzte
+Punkte. Das nimmt mögliche Performance-Gewinne durch Unterabtastung bewusst
+zurück; die explizite Schärfeanforderung des Nutzers hat Vorrang.
+
+---
 
 ## 2026-11-18 — Fokusblockade und Rahmennachführung { #workbench-2026-11-18 }
 

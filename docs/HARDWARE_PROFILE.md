@@ -5,7 +5,8 @@
 > IMX500 und sind historisch (`docs/project_history.md`, 2026-09-25).
 
 Gerät `raspi06`. Rechner- und IMX500-Bestand unten: Stand 2026-09-07;
-aktuelle StreamCam-Sitzung: 2026-10-21. Speicherplatz- und Paketangaben
+letzte protokollierte StreamCam-Einrichtung: 2026-10-21; Vorschau-Wechsel:
+2026-11-05. Speicherplatz- und Paketangaben
 sind datierte Schnappschüsse, keine laufende Zustandsanzeige.
 
 ## Datenorte: Produkt und Entwicklung (2026-11-04)
@@ -57,6 +58,21 @@ Rücklesewerte und Originalbilder liegen im lokalen Schnappschuss
 `var/diagnostics/workbench-20261118-streamprobe/`. Der Diagnosestrom wurde
 anschließend geschlossen. Die Einstellungen gelten für diese Probe.
 [Versuchsaufbau und Ergebnis](lab_journal.md#workbench-2026-11-18).
+
+## StreamCam-Vorschau (2026-11-05)
+
+Auf Nutzerwunsch übernimmt die neue Workbench (`feat/werkbank-redesign`,
+`dbd8b19`) die Kamera unter `https://100.122.154.35:8082/live`.
+Benutzerdienst `dispread-redesign-preview.service`, ohne Simulation;
+bisheriger Kamerabesitzer `dispread-werkbank-r13.service` auf Port 8081 nach
+geprüftem Leerlauf gestoppt. StreamCam `/dev/video0`, USB 3 mit 5000 Mbit/s,
+1920×1080 YUYV bei angeforderten 30 Bildern/s. Keine Einrichtung und kein
+Messlauf gestartet; Kamera beim Öffnen ohne Regleränderungen
+(`apply_controls=False`). Vor-/Nachdiagnose:
+`var/diagnostics/werkbank-streamcam-20261105/`. Das ist ein Betriebswechsel,
+keine Hardware-Abnahme oder Messung der tatsächlichen Bildrate.
+Anschließend auf Nutzerwunsch geschlossen: neuer Dienst `inactive/dead`,
+StreamCam laut `fuser` freigegeben; alte Werkbank blieb gestoppt.
 
 ## T13-Einrichtung (2026-11-06)
 

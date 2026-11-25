@@ -84,3 +84,10 @@ Modell-Konfidenz ist ohne Kalibriermessung keine Fehlerwahrscheinlichkeit.
   Treiberstart samt PnP-Fehlercode einbeziehen; ein vorhandenes Setup oder
   ein erfolgreicher Installationsaufruf genügt nicht
   ([OQ-49](docs/open-questions.md#oq-49)).
+
+USER ENTRIES (Alles unter dieser Zeile ist nur vom user. Kein Agent darf unter dieser Zeile schreiben. User Entries sollten regelmäßig in die oberen Notes aufgenommen werden.)
+
+* setup tui (einfacher step by step install von picam-ai)
+* anbindung an das me dashboard (so das man von dort aus auf die workbench/live-messpfad kommt)
+* cli (über diesen soll man im terminal einstellungen vornehmen und sehen können. bsp. systemd autostart, aktueller status, web ui link für localhost, internes netzwerk, tailscale, start/stop, usw...). soll neben dem web ui das go-to werden was konfiguration und einstellungen, usw.. betrifft. (wird/soll sehr umfangreich werden)
+* hilfs animationen in der workbench (bsp: kamera wird als zu schräg erkannt -> pop-up mit einer animation wo die kamera von einem seitlichen winkel in einen frontalen winkel wechselt)

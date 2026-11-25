@@ -1,6 +1,6 @@
 # picam-Konsole 2: Dashboard und Tabs (Design)
 
-Stand 2026-11-20. Quelle: Wunschliste `tui-user-wishes.md` von Leonhard,
+Stand 2026-11-20. Quelle: Wunschliste [`tui-user-wishes.md`](../../quellen/tui-user-wishes.md) von Leonhard,
 Entscheidungen im Chat vom 20.11. mittags. Ersetzt die Bereichsliste links
 durch eine Tab-Leiste oben. Gestaltung nach dem `tui-design`-Skill.
 

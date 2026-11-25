@@ -264,6 +264,28 @@ oder Geräte folgt nicht. Die Offline-Gegenproben stehen im
 
 ---
 
+## 2026-11-13 — Glass-Site: Originaloptik vor Effekt-Abbau
+
+Für die separate Glass-Site wurde nach einem Firefox-Vergleich entschieden,
+die echte Hintergrundweichzeichnung sowie die vollständige Punktwolke zu
+behalten. Abschalten des Glasfilters war schneller, widersprach aber der
+expliziten Priorität des Nutzers für Aussehen und Gefühl. Optimiert werden
+stattdessen Zeichenpausen im Stillstand, zeitweise reduzierte Auflösung nur
+des 3D-Hintergrunds und native Desktop-Bedienung. SVG-Diagramme und Texte
+bleiben davon unabhängig. Belege: `docs/VALIDATION.md` vom selben Tag sowie
+`sites/glass-copy-20261113/qa/optimization-notes.json` (die Site liegt nicht
+im Repo, siehe Sicherung unter `/mnt/ssd/picam-dev/backup-worktrees-20261125/`).
+
+**Ergänzung 13.11.2026 — Schärfe vor adaptiver Hintergrundauflösung:** Nach
+Nutzerbefund wird die vorübergehende Auflösungsabsenkung der Glass-Site
+verworfen. Physische Gerätepixel bleiben während Bewegung und Stillstand
+maßgeblich, begrenzt nur von der GPU. Künstliche Tiefenunschärfe der Punkte
+entfällt ebenfalls. Zeichenpause und Desktop-Steuerung bleiben bestehen;
+Glasflächen und Daten werden nicht verändert. Beleg: Glass-Nachprüfung in
+`docs/VALIDATION.md` und `sites/glass-copy-20261113/qa/sharpness.cjs`.
+
+---
+
 ## 2026-11-11 — Session-Format je Lauf statt globaler Vorlagenaktivierung
 
 **Problem:** Die globale Aktivierung aus dem vorigen Katalogauftrag passt
