@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# WLAN-Waechter des Pi (docs/HOST_NETZWERK.md).
+#
+# NetworkManager gibt eine WLAN-Verbindung endgueltig auf, wenn nach einem
+# AP-Ausfall der 4-Way-Handshake in einen Timeout laeuft: wpa_supplicant
+# meldet WRONG_KEY, NM fragt einen Secret-Agent nach einem neuen Schluessel,
+# headless antwortet keiner, nach 2 min "no-secrets" -> Autoconnect gesperrt
+# bis zum Reboot (13.11.2026: 6 h offline). Dieser Waechter laeuft per Timer
+# jede Minute und holt die Verbindung zurueck, sobald wlan0 THRESHOLD
+# Pruefungen hintereinander nicht verbunden war.
+#
+# Handelt nur auf NM-Geraetezustaende "nicht verbunden" (30..120 ausser 100).
+# "unmanaged" (10) und "unavailable" (20, z. B. Funk aus) werden nur
+# protokolliert: das ist eine bewusste Einstellung oder ein Treiberproblem,
+# das ein "connection up" nicht loest. Ein aktiver Access-Point-Modus
+# (MEhub-Setup) zaehlt als verbunden und bleibt unangetastet.
+set -uo pipefail
+
+IFACE="${WLAN_IFACE:-wlan0}"
+CON="${WLAN_CONNECTION:-me-systeme-1}"
+THRESHOLD="${WLAN_MISS_THRESHOLD:-3}"
+STATE_FILE="${WLAN_STATE_FILE:-/run/picam-wlan-watchdog.misses}"
+DRY_RUN="${WLAN_DRY_RUN:-0}"
+
+raw="$(nmcli -t -g GENERAL.STATE device show "$IFACE" 2>/dev/null || true)"
+code="${raw%% *}"
+
+reset_misses() { rm -f "$STATE_FILE"; }
+
+case "$code" in
+    100)
+        if [[ -f "$STATE_FILE" ]]; then
+            echo "$IFACE wieder verbunden."
+            reset_misses
+        fi
+        exit 0 ;;
+    10|20)
+        echo "$IFACE: Zustand '$raw' - kein Eingriff (unmanaged/unavailable)."
+        reset_misses
+        exit 0 ;;
+    ''|*[!0-9]*)
+        echo "$IFACE: Zustand nicht lesbar ('$raw') - kein Eingriff."
+        exit 0 ;;
+esac
+
+misses=0
+[[ -f "$STATE_FILE" ]] && misses="$(cat "$STATE_FILE" 2>/dev/null || echo 0)"
+[[ "$misses" =~ ^[0-9]+$ ]] || misses=0
+misses=$((misses + 1))
+
+if (( misses < THRESHOLD )); then
+    echo "$IFACE nicht verbunden ('$raw'), Pruefung $misses/$THRESHOLD."
+    echo "$misses" > "$STATE_FILE"
+    exit 0
+fi
+
+echo "$IFACE seit $misses Pruefungen nicht verbunden ('$raw') - starte '$CON' neu."
+reset_misses
+if [[ "$DRY_RUN" == 1 ]]; then
+    echo "DRY-RUN: nmcli --wait 60 connection up id $CON ifname $IFACE"
+    exit 0
+fi
+if nmcli --wait 60 connection up id "$CON" ifname "$IFACE"; then
+    echo "'$CON' aktiviert."
+else
+    echo "'$CON' konnte nicht aktiviert werden (naechster Versuch nach $THRESHOLD Pruefungen)."
+fi
+exit 0

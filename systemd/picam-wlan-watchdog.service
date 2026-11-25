@@ -1,0 +1,15 @@
+[Unit]
+Description=WLAN-Waechter: haengende NetworkManager-WLAN-Verbindung zurueckholen
+Documentation=file:/home/me-systeme/picam-ai/docs/HOST_NETZWERK.md
+After=NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=oneshot
+# Verbindungsname und Schwelle nur hier aendern (Skriptvorgaben sind Rueckfall).
+Environment=WLAN_IFACE=wlan0
+Environment=WLAN_CONNECTION=me-systeme-1
+Environment=WLAN_MISS_THRESHOLD=3
+ExecStart=/usr/local/lib/picam-wlan-watchdog/run
+TimeoutStartSec=90
+Nice=10

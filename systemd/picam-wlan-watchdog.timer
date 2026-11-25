@@ -1,0 +1,11 @@
+[Unit]
+Description=WLAN-Waechter jede Minute pruefen
+Documentation=file:/home/me-systeme/picam-ai/docs/HOST_NETZWERK.md
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
