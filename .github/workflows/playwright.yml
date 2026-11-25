@@ -23,7 +23,10 @@ jobs:
       run: npm ci --no-audit --no-fund
     - name: Install Playwright Browsers
       run: npx playwright install --only-shell chromium
+    # Ohne piwheels aus /etc/pip.conf, Begründung in docs.yml.
     - name: Doku-Werkzeuge installieren
+      env:
+        PIP_CONFIG_FILE: /dev/null
       run: |
         python3 -m venv .venv-docs
         .venv-docs/bin/pip install -r requirements-docs.txt

@@ -21,7 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # /etc/pip.conf (Raspberry Pi OS) nennt piwheels als Zusatzindex. piwheels
+      # baut nur 32-Bit-ARM-Wheels, nützt diesem aarch64-Pi also nichts, und sein
+      # Proxy bricht TLS-Handshakes oft nach 5 s ab (2026-11-11: 46 % Abbrüche,
+      # Installation 3,5–5 min statt 12 s). Alle Pakete gibt es auf PyPI.
       - name: Doku-Werkzeuge installieren
+        env:
+          PIP_CONFIG_FILE: /dev/null
         run: |
           python3 -m venv .venv-docs
           .venv-docs/bin/pip install --quiet -r requirements-docs.txt
