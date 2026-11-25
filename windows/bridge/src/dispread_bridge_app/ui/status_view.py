@@ -1,7 +1,7 @@
 """Betriebsansicht: Zustand oben, Journal darunter."""
 from __future__ import annotations
 
-from PySide6.QtCore import QAbstractListModel, QEvent, QModelIndex, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractListModel, QEvent, QModelIndex, QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -295,8 +295,7 @@ class JournalModel(QAbstractListModel):
         self._rebuild()
 
     def add_first(self, entry: JournalEntry) -> None:
-        self._all.insert(0, entry)
-        self._rebuild()
+        self.sync([entry, *self._all])
 
     def set_only_faults(self, on: bool) -> None:
         self.only_faults = on
@@ -310,8 +309,7 @@ class JournalModel(QAbstractListModel):
     def fault_count(self) -> int:
         return sum(1 for e in self._all if e.fault)
 
-    def _rebuild(self) -> None:
-        self.beginResetModel()
+    def _build_rows(self) -> list:
         rows, last = [], None
         for e in self._all:
             if self.only_faults and not e.fault:
@@ -320,8 +318,42 @@ class JournalModel(QAbstractListModel):
                 rows.append(e.day)
                 last = e.day
             rows.append(e)
-        self._rows = rows
+        return rows
+
+    def _rebuild(self) -> None:
+        self.beginResetModel()
+        self._rows = self._build_rows()
         self.endResetModel()
+
+    def sync(self, entries) -> tuple[int, int] | None:
+        """Gleicht das Journal mit dem Controller ab, ohne Reset: nur geänderte Zeilen werden eingefügt,
+        ersetzt (dataChanged) oder hinten abgeschnitten. Gibt (Zeile, Zeilenänderung) der Einfüge-/Löschstelle
+        zurück, ``None`` wenn sich nichts geändert hat."""
+        self._all = list(entries)
+        old, new = self._rows, self._build_rows()
+        if old == new:
+            return None
+        p = 0
+        limit = min(len(old), len(new))
+        while p < limit and old[p] == new[p]:
+            p += 1
+        s = 0
+        while s < limit - p and old[len(old) - 1 - s] == new[len(new) - 1 - s]:
+            s += 1
+        old_mid, new_mid = len(old) - p - s, len(new) - p - s
+        c = min(old_mid, new_mid)
+        if old_mid > new_mid:
+            self.beginRemoveRows(QModelIndex(), p + c, p + old_mid - 1)
+            self._rows = old[:p + c] + old[p + old_mid:]
+            self.endRemoveRows()
+        elif new_mid > old_mid:
+            self.beginInsertRows(QModelIndex(), p + c, p + new_mid - 1)
+            self._rows = old[:p + c] + new[p + c:p + new_mid] + old[p + old_mid:]
+            self.endInsertRows()
+        self._rows = new
+        if c:
+            self.dataChanged.emit(self.index(p), self.index(p + c - 1))
+        return p + c, new_mid - old_mid
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._rows)
@@ -416,6 +448,27 @@ class JournalView(QListView):
         self.setItemDelegate(JournalDelegate(self))
         self.setAccessibleName('Ereignisjournal')
         self._key_focus = False
+
+    def sync_entries(self, entries) -> None:
+        """Journal abgleichen und dabei die Leseposition halten: oben bleibt man oben (neue Zeile sichtbar),
+        weiter unten bleibt die gerade gelesene Zeile an ihrem Platz."""
+        model = self.model()
+        bar = self.verticalScrollBar()
+        anchor = off = None
+        if bar.value() > 0:
+            idx = self.indexAt(QPoint(4, 1))
+            if idx.isValid():
+                anchor, off = idx.row(), self.visualRect(idx).top()
+        change = model.sync(entries)
+        if change is None or anchor is None:
+            return
+        at, delta = change
+        if anchor >= at:
+            anchor = max(0, min(anchor + delta, model.rowCount() - 1))
+        self.doItemsLayout()
+        idx = model.index(anchor)
+        if idx.isValid():
+            bar.setValue(bar.value() + self.visualRect(idx).top() - off)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -567,6 +620,7 @@ class StatusView(QWidget):
         sl.setContentsMargins(2, 2, 2, 2)
         sl.setSpacing(0)
         self.seg_all, self.seg_faults = SegButton('Alle'), SegButton('Störungen')
+        self.seg_faults.setAccessibleName('Störungen')
         self.seg_all.setObjectName('seg_all')
         self.seg_faults.setObjectName('seg_faults')
         for b in (self.seg_all, self.seg_faults):
@@ -584,9 +638,11 @@ class StatusView(QWidget):
         self.count_label = QLabel()
         self.count_label.setProperty('secondary', True)
         self.count_label.setProperty('caption', True)
+        self.count_label.setWordWrap(True)             # schmal: umbrechen statt dem Segment die Breite zu nehmen
+        self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.count_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         seg_row.addWidget(seg)
-        seg_row.addStretch(1)
-        seg_row.addWidget(self.count_label)
+        seg_row.addWidget(self.count_label, 1)
         jl.addLayout(seg_row)
         self.model = JournalModel()
         self.journal = JournalView()
@@ -693,9 +749,12 @@ class StatusView(QWidget):
         self.version_label.setText(texts.version_label(ctx.version))
         self.channel_label.setText(ctx.channel or '')
         self.channel_label.setVisible(bool(ctx.channel))
-        if ctx.pi_name != self._pi_name or self.model.total == 0:
-            self.model.set_entries(ctx.journal)
+        if ctx.pi_name != self._pi_name:
+            self.model.set_entries(ctx.journal)          # anderer Pi: anderes Journal, von oben
+            self.journal.verticalScrollBar().setValue(0)
             self._pi_name = ctx.pi_name
+        else:
+            self.journal.sync_entries(ctx.journal)       # sonst nur Unterschiede, ohne Reset und Scrollsprung
         self._update_counts()
         self._set_tab_order()
         self.fit_chips()
@@ -704,6 +763,8 @@ class StatusView(QWidget):
         n = self.model.total
         pi = f' · {self._pi_name}' if self._pi_name and self._pi_name != 'Prüfstand 2' else ''
         self.count_label.setText(f'{n} Einträge{pi}')
+        faults = self.model.fault_count
+        self.seg_faults.setText(f'Störungen {faults}' if faults else 'Störungen')
         empty = self.model.rowCount() == 0
         self.empty_label.setText(texts.NO_FAULTS if self.model.only_faults and self.model.total else texts.NO_EVENTS)
         self.empty_frame.setVisible(empty)

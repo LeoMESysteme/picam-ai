@@ -28,7 +28,18 @@ from .port import ControllerPort
 from .settings_window import SessionState, SettingsWindow, session_default_name, session_mode_port
 from .setup_view import SetupView
 from .status_view import StatusView
-from .tool_windows import ExportWindow, InfoContent, ToolWindow, build_chip_detail, build_lock, build_paired
+from .tool_windows import (
+    ExportWindow,
+    InfoContent,
+    ToolWindow,
+    build_chip_detail,
+    build_lock,
+    build_paired,
+    chip_structure,
+    chip_values,
+    paired_structure,
+    paired_values,
+)
 from .widgets import button
 
 REFRESH_INTERVAL_MS = 200
@@ -480,7 +491,8 @@ class MainWindow(QWidget):
         if view is None:
             return
         win.setWindowTitle(f'{view.name} – {texts.APP_TITLE}')
-        win.set_content(('chip', view), lambda body: build_chip_detail(view, body, self._tool_action))
+        win.set_content(chip_structure(view), lambda body: build_chip_detail(view, body, self._tool_action),
+                        values=chip_values(view))
 
     def _tool_action(self, aid: str) -> None:
         self.do_action(aid)
@@ -497,19 +509,17 @@ class MainWindow(QWidget):
 
     def _fill_paired(self, win: ToolWindow, c) -> None:
         locked = self._locked(c, self.controller.worker_status())
-        win.set_content(('paired', c.paired, c.pi_id, locked),
-                        lambda body: build_paired(c, body, self._tool_action, locked))
+        win.set_content(paired_structure(c, locked),
+                        lambda body: build_paired(c, body, self._tool_action, locked), values=paired_values(c))
 
     def _show_details(self) -> None:
         win = self.tool_window('info', f'{texts.INFO} – {texts.APP_TITLE}')
         self._fill_info(win, self.controller.context())
         win.present()
 
-    def _info_key(self, c) -> tuple:
-        return ('info', c.version, c.channel, c.protocol, c.run_id, c.pi_id)
-
     def _fill_info(self, win: ToolWindow, c) -> None:
-        win.set_content(self._info_key(c), lambda body: InfoContent(c, body, self._tool_action))
+        win.set_content(InfoContent.structure(c), lambda body: InfoContent(c, body, self._tool_action).refresh,
+                        values=InfoContent.values(c))
 
     def _show_export(self) -> None:
         win = self.tool_window('export', f'{texts.EXPORT_LOGS} – {texts.APP_TITLE}', ExportWindow)

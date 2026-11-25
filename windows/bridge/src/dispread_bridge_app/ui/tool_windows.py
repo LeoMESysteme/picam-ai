@@ -119,6 +119,8 @@ class ToolWindow(QDialog):
         self.content: QWidget | None = None
         self.body: QVBoxLayout | None = None
         self._key = object()
+        self._values = None
+        self._refresh: Callable | None = None
         self._graveyard: list = []
         self._new_content()
 
@@ -136,24 +138,41 @@ class ToolWindow(QDialog):
         self.body.setSpacing(12)
         self.scroll.setWidget(self.content)
 
-    def set_content(self, key, build: Callable[[QVBoxLayout], None]) -> bool:
-        """Baut den Inhalt nur neu, wenn sich die Daten geändert haben (Kopierhäkchen, Auswahl bleiben)."""
+    def set_content(self, key, build: Callable[[QVBoxLayout], Callable | None], values=None) -> bool:
+        """Baut den Inhalt nur bei geändertem Aufbau (``key``) neu; Kopierhäkchen und Auswahl bleiben.
+
+        ``build`` darf eine Funktion ``refresh(values)`` liefern. Ändern sich bei gleichem Aufbau nur die
+        ``values`` (Zähler, Zeiten), tauscht sie nur die Texte der vorhandenen Widgets aus: kein Neuaufbau,
+        kein Flackern. Ohne ``refresh`` gehört alles Veränderliche in den Schlüssel (Neuaufbau)."""
         if key == self._key:
+            if values is None or values == self._values:
+                return False
+            self._values = values
+            if self._refresh is not None:
+                self._refresh(values)
+                self._fit(only_if_changed=True)
             return False
-        self._key = key
+        self._key, self._values = key, values
         bar = self.scroll.verticalScrollBar()
         pos = bar.value()
-        self._new_content()
-        build(self.body)
-        self.body.addStretch(1)
-        self._fit()
+        # Tausch und Einpassen unsichtbar: ohne Zwischenbild (leeres Fenster, Größensprung).
+        self.setUpdatesEnabled(False)
+        try:
+            self._new_content()
+            self._refresh = build(self.body)
+            self.body.addStretch(1)
+            self._fit(only_if_changed=True)
+            bar.setValue(pos)
+        finally:
+            self.setUpdatesEnabled(True)
         QTimer.singleShot(0, lambda: bar.setValue(pos))        # Bildlaufposition bleibt über einen Neuaufbau
         if self.isVisible():                      # neue Kinder zeigt Qt erst verzögert: danach erneut einpassen
-            QTimer.singleShot(0, self._fit)
+            QTimer.singleShot(0, lambda: self._fit(only_if_changed=True))
         return True
 
-    def _fit(self) -> None:
-        """Höhe nach Inhalt (heightForWidth, nach dem Polieren der Stile), höchstens Bildschirmhöhe − 48 px."""
+    def _fit(self, only_if_changed: bool = False) -> None:
+        """Höhe nach Inhalt (heightForWidth, nach dem Polieren der Stile), höchstens Bildschirmhöhe − 48 px.
+        ``only_if_changed``: nicht anfassen, wenn die Höhe schon stimmt (kein Resize, kein Neulayout)."""
         if self.content is None:
             return
         width = max(self.MIN_W, self.width() if self.isVisible() else 380)
@@ -167,7 +186,10 @@ class ToolWindow(QDialog):
         if not self.foot.isHidden():
             h += self.foot.sizeHint().height()
         screen = self._available()
-        self.resize(width, min(h + 2, max(200, screen.height() - self.SCREEN_MARGIN)))
+        target = min(h + 2, max(200, screen.height() - self.SCREEN_MARGIN))
+        if only_if_changed and self.isVisible() and (self.width(), self.height()) == (width, target):
+            return
+        self.resize(width, target)
         self._clamp()
 
     SCREEN_MARGIN = 48          # Fensterhöhe höchstens verfügbare Bildschirmhöhe − 48 px (Titelleiste, Rand)
@@ -219,39 +241,61 @@ class ToolWindow(QDialog):
 
 
 # ---------------------------------------------------------------- Inhalte
-def build_chip_detail(view: texts.ChipView, body: QVBoxLayout, on_action: Callable[[str], None]) -> None:
+def chip_structure(view: texts.ChipView) -> tuple:
+    """Alles, was beim Kachel-Detailfenster den Aufbau bestimmt. Die reinen Texte (Zähler, Untertitel,
+    Werte) gehören nicht dazu: sie ändern sich je Takt und werden in ``build_chip_detail`` nur getauscht."""
+    return ('chip', view.key, view.tone, bool(view.sub), bool(texts.CHIP_HELP.get(view.key)),
+            view.warn == texts.SINGLE_CHANNEL_WARNING, bool(view.warn), bool(view.hint),
+            tuple((k, v in texts.EMPTY_VALUES) for k, v in view.details), view.actions)
+
+
+def chip_values(view: texts.ChipView) -> tuple:
+    return (view.name, view.word, view.sub, view.warn, view.hint, tuple(v for _, v in view.details))
+
+
+def build_chip_detail(view: texts.ChipView, body: QVBoxLayout, on_action: Callable[[str], None]) -> Callable:
+    """Baut das Detailfenster einer Kachel; liefert ``refresh(chip_values)`` für Textänderungen bei gleichem Aufbau."""
     head = QHBoxLayout()
     head.setSpacing(8)
     icon = QLabel()
     icon.setPixmap(theme.icon_pixmap(texts.CHIP_ICON.get(view.key, 'info'), 'text', 20))
     head.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
-    head.addWidget(label(view.name, 'title'), 1)
+    name_label = label(view.name, 'title')
+    head.addWidget(name_label, 1)
     body.addLayout(head)
     st = QHBoxLayout()
     st.setSpacing(8)
     st.addWidget(StateIcon(view.tone, 16), 0, Qt.AlignmentFlag.AlignTop)
     col = QVBoxLayout()
     col.setSpacing(2)
-    col.addWidget(label(view.word, 'body_strong'))
+    word_label = label(view.word, 'body_strong')
+    col.addWidget(word_label)
+    sub_label = None
     if view.sub:
-        col.addWidget(label(view.sub, 'caption'))
+        sub_label = label(view.sub, 'caption')
+        col.addWidget(sub_label)
     st.addLayout(col, 1)
     body.addLayout(st)
     help_text = texts.CHIP_HELP.get(view.key, '')
     if help_text:
         body.addWidget(label(help_text))
+    warn_label = None
     if view.warn == texts.SINGLE_CHANNEL_WARNING:
         body.addWidget(badge_row(Badge(texts.BADGE_SINGLE_CHANNEL, view.warn, name='chip_warn')))
     elif view.warn:                      # z. B. „Session passt nicht“: Achtung mit Satz, kein Abzeichen
         row = QHBoxLayout()
         row.setSpacing(8)
         row.addWidget(StateIcon('warn', 16), 0, Qt.AlignmentFlag.AlignTop)
-        row.addWidget(label(view.warn), 1)
+        warn_label = label(view.warn)
+        row.addWidget(warn_label, 1)
         body.addLayout(row)
+    fields: list[ValueField] = []
     if view.details:
         box, inner = section('Werte')
         for k, v in view.details:
-            inner.addWidget(field(k, v))
+            f = field(k, v)
+            fields.append(f)
+            inner.addWidget(f)
         body.addWidget(box)
     for text_, aid, enabled, reason in view.actions:
         b = button(text_, name='tool_action')
@@ -261,8 +305,24 @@ def build_chip_detail(view: texts.ChipView, body: QVBoxLayout, on_action: Callab
             body.addWidget(label(reason, 'caption'))
         b.clicked.connect(lambda _=False, a=aid: on_action(a))
         body.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
+    hint_label = None
     if view.hint:
-        body.addWidget(label(view.hint, 'caption'))
+        hint_label = label(view.hint, 'caption')
+        body.addWidget(hint_label)
+
+    def refresh(values: tuple) -> None:
+        name, word, sub, warn, hint, detail_values = values
+        name_label.setText(name)
+        word_label.setText(word)
+        if sub_label is not None:
+            sub_label.setText(sub)
+        if warn_label is not None:
+            warn_label.setText(warn)
+        if hint_label is not None:
+            hint_label.setText(hint)
+        for f, v in zip(fields, detail_values, strict=False):
+            f.set_value(v, format_fingerprint(v) if f.name_label.text().startswith('TLS') else None)
+    return refresh
 
 
 def build_lock(body: QVBoxLayout) -> None:
@@ -276,10 +336,20 @@ def build_lock(body: QVBoxLayout) -> None:
     body.addWidget(label(texts.LOCK_TEXT))
 
 
-def build_paired(ctx, body: QVBoxLayout, on_action: Callable[[str], None], locked: bool | None = None) -> None:
-    """``locked``: Wechsel gesperrt (Übertragung läuft); ohne Angabe gilt ``ctx.switch_locked``."""
+def paired_structure(ctx, locked: bool) -> tuple:
+    return ('paired', tuple((name, pi_id) for name, pi_id, _ in ctx.paired), ctx.pi_id, locked)
+
+
+def paired_values(ctx) -> tuple:
+    return tuple(when for _, _, when in ctx.paired)
+
+
+def build_paired(ctx, body: QVBoxLayout, on_action: Callable[[str], None], locked: bool | None = None) -> Callable:
+    """``locked``: Wechsel gesperrt (Übertragung läuft); ohne Angabe gilt ``ctx.switch_locked``.
+    Liefert ``refresh(paired_values)`` für wechselnde Zeitangaben („zuletzt vor 2 Stunden“)."""
     body.addWidget(label(texts.PAIRED_TITLE, 'title'))
     free = not (ctx.switch_locked if locked is None else locked)
+    when_labels: list[QLabel | None] = []
     for name, pi_id, when in ctx.paired:
         card = QFrame()
         card.setProperty('section', True)
@@ -287,7 +357,9 @@ def build_paired(ctx, body: QVBoxLayout, on_action: Callable[[str], None], locke
         lay.setContentsMargins(14, 10, 8, 12)
         lay.setSpacing(6)
         lay.addWidget(label(name, 'body_strong'))
-        lay.addWidget(label(texts.CURRENT_PI if pi_id == ctx.pi_id else when, 'caption'))
+        when_label = label(texts.CURRENT_PI if pi_id == ctx.pi_id else when, 'caption')
+        when_labels.append(None if pi_id == ctx.pi_id else when_label)
+        lay.addWidget(when_label)
         lay.addWidget(field('Pi-ID', pi_id))
         if pi_id != ctx.pi_id:
             b = button(texts.SWITCH_PI, name='switch_pi')
@@ -300,26 +372,49 @@ def build_paired(ctx, body: QVBoxLayout, on_action: Callable[[str], None], locke
         body.addWidget(card)
     body.addWidget(label(texts.PI_SWITCH_NOTE, 'caption'))
 
+    def refresh(whens: tuple) -> None:
+        for lab, when in zip(when_labels, whens, strict=False):
+            if lab is not None:
+                lab.setText(when)
+    return refresh
+
 
 class InfoContent:
-    """Info: nur „Über“ (Version, Kanal, Protokoll, Lauf-ID, Pi-ID); alles Einstellbare steht in den Einstellungen."""
+    """Info: nur „Über“ (Version, Kanal, Protokoll, Lauf-ID, Pi-ID); alles Einstellbare steht in den Einstellungen.
+
+    Aufbau und Werte getrennt: ändert sich nur ein Wert (z. B. neue Lauf-ID), tauscht ``refresh`` den Text im
+    vorhandenen Feld; ein Feld, das neu auftaucht oder verschwindet, ändert ``structure`` und baut neu."""
+
+    @staticmethod
+    def structure(ctx) -> tuple:
+        return ('info', bool(ctx.version), bool(ctx.channel), bool(ctx.protocol), bool(ctx.run_id), bool(ctx.pi_id))
+
+    @staticmethod
+    def values(ctx) -> tuple:
+        return (ctx.version or '–', ctx.channel or '', ctx.protocol or '–', ctx.run_id or '', ctx.pi_id or '')
 
     def __init__(self, ctx, body: QVBoxLayout, on_action: Callable[[str], None]):
         body.addWidget(label(texts.APP_TITLE, 'title'))
         box, inner = section(texts.INFO_ABOUT)
-        inner.addWidget(field('Version', ctx.version or '–'))
-        if ctx.channel:
-            inner.addWidget(field('Kanal', ctx.channel, copy=False))
-        inner.addWidget(field('Protokoll', ctx.protocol or '–'))
-        if ctx.run_id:
-            inner.addWidget(field('Lauf-ID', ctx.run_id))
-        if ctx.pi_id:
-            inner.addWidget(field('Pi-ID', ctx.pi_id))
+        v = self.values(ctx)
+        self.fields: dict[int, ValueField] = {}
+        inner_fields = [(0, 'Version', v[0], None), (1, 'Kanal', v[1], False), (2, 'Protokoll', v[2], None),
+                        (3, 'Lauf-ID', v[3], None), (4, 'Pi-ID', v[4], None)]
+        for i, name, val, copy in inner_fields:
+            if i in (1, 3, 4) and not val:
+                continue
+            f = field(name, val, copy=copy)
+            self.fields[i] = f
+            inner.addWidget(f)
         body.addWidget(box)
         b = button(texts.INFO_OPEN_SETTINGS, name='open_settings')
         b.clicked.connect(lambda: on_action('open_settings'))
         body.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
         body.addWidget(label(texts.ICON_CREDIT, 'caption'))
+
+    def refresh(self, values: tuple) -> None:
+        for i, f in self.fields.items():
+            f.set_value(values[i])
 
 
 class ExportWindow(ToolWindow):
@@ -423,4 +518,5 @@ class ExportWindow(ToolWindow):
 
 
 __all__ = ['ToolWindow', 'ExportWindow', 'InfoContent', 'build_chip_detail', 'build_lock', 'build_paired',
+           'chip_structure', 'chip_values', 'paired_structure', 'paired_values',
            'field', 'label', 'note_line', 'section']

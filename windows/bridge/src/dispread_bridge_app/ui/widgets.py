@@ -699,6 +699,17 @@ class ValueField(QFrame):
             outer.addWidget(self.box)
         self.name_label.setVisible(bool(label))
 
+    def set_value(self, value: str, display: str | None = None) -> None:
+        """Wert austauschen, ohne das Feld neu zu bauen: Kopierhäkchen, Fokus und Auswahl bleiben. Ob das Feld
+        kopierbar ist (leerer Wert = nicht), entscheidet der Aufbau; wechselt das, baut der Aufrufer neu."""
+        if value == self.value:
+            return
+        self.value = value
+        self.value_label.setText(display if display is not None else _breakable(value))
+        self.value_label.setAccessibleName(f'{self.name_label.text()}: {value}')
+        if self._copyable:
+            self.box.setAccessibleName(f'{self.name_label.text()}: {value} – {texts.COPY_TIP}')
+
     def _idle_icon(self, active: bool) -> None:
         """Kopiersymbol nur bei Hover/Fokus sichtbar (Platz bleibt reserviert, der Text springt nicht)."""
         if self._reset.isActive():
