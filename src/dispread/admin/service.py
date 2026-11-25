@@ -32,10 +32,16 @@ class Plan:
     note: str | None = None
     force: bool = False
 
-    def shell(self) -> list[str]:
+    def argv(self, interactive: bool = True) -> list[list[str]]:
+        if interactive:
+            return self.commands
+        return [['sudo', '-n', *command[1:]] if command[:1] == ['sudo'] else command
+                for command in self.commands]
+
+    def shell(self, interactive: bool = True) -> list[str]:
         import shlex
 
-        return [shlex.join(command) for command in self.commands]
+        return [shlex.join(command) for command in self.argv(interactive)]
 
 
 def _privileged(instance: Instance, command: list[str]) -> list[str]:
@@ -80,7 +86,8 @@ def current_blocker(instance: Instance) -> str | None:
 
 def execute(plan_: Plan, instance: Instance, interactive: bool = True, wait_ready: bool = True,
             run=None, echo=print, recheck=None) -> tuple[bool, str]:
-    """Plan ausführen. ``interactive``: Terminal geerbt (sudo kann fragen).
+    """Plan ausführen. Interaktiv erbt der Befehl das Terminal. Andernfalls
+    läuft sudo mit ``-n`` und der Standardrunner ohne Standardeingabe.
 
     Vor Stopp/Neustart wird die Laufsperre unmittelbar vor dem ersten Befehl
     erneut geprüft: zwischen Anzeige und Bestätigung kann ein Lauf begonnen haben.
@@ -91,7 +98,7 @@ def execute(plan_: Plan, instance: Instance, interactive: bool = True, wait_read
         blocker = (recheck or (lambda: current_blocker(instance)))()
         if blocker:
             return False, f'Gesperrt: {blocker}'
-    for command in plan_.commands:
+    for command in plan_.argv(interactive):
         echo('$ ' + ' '.join(command))
         try:
             if run is not None:
@@ -99,7 +106,8 @@ def execute(plan_: Plan, instance: Instance, interactive: bool = True, wait_read
             elif interactive:
                 code = subprocess.call(command)
             else:
-                code = subprocess.run(command, capture_output=True, text=True, timeout=COMMAND_TIMEOUT_S).returncode
+                code = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                      timeout=COMMAND_TIMEOUT_S).returncode
         except (OSError, subprocess.TimeoutExpired) as error:
             return False, f'Befehl nicht abgeschlossen ({error}): {" ".join(command)}'
         if code != 0:

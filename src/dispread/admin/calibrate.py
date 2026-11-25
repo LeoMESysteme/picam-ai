@@ -40,14 +40,16 @@ import math
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Protocol
 
 from dispread.camera_settings import STREAMCAM_USB_ID
 from dispread.gsv2as_serial import REFERENCE_BAUDRATE, REFERENCE_PORT
@@ -156,12 +158,16 @@ def _user() -> str:
     return os.environ.get('SUDO_USER') or getpass.getuser()
 
 
+def _service_running(snapshot: probes.Snapshot) -> bool:
+    fact = snapshot.facts.get('dienst')
+    return fact is not None and fact.level in (probes.OK, probes.WARN)
+
+
 def _service_up(instance: Instance, deps: Deps) -> bool:
     try:
-        fact = deps.collect(instance, include_setup=False).facts.get('dienst')
+        return _service_running(deps.collect(instance, include_setup=False))
     except Exception:  # noqa: BLE001 - unbekannt: lieber Start versuchen
         return False
-    return fact is not None and fact.level in (probes.OK, probes.WARN)
 
 
 def _adopt_owner(path: Path, reference: Path, recursive: bool = True) -> None:
@@ -217,7 +223,17 @@ def install_atomically(source: Path, target: Path) -> None:
 #: beendeten sie den Prozess sofort – ohne Rückstellung der Normierung und
 #: ohne Neustart der Werkbank.
 ABORT_SIGNALS = {signal.SIGTERM: 'SIGTERM', signal.SIGHUP: 'SIGHUP'}
-ABORT_TEXT = {'SIGTERM': 'Abbruch (SIGTERM)', 'SIGHUP': 'Abbruch (Verbindung getrennt, SIGHUP)'}
+ABORT_TEXT = {'SIGTERM': 'Abbruch (SIGTERM)', 'SIGHUP': 'Abbruch (Verbindung getrennt, SIGHUP)',
+              'konsole': 'Abbruch in der Konsole'}
+
+
+class _ConsoleAbort(KeyboardInterrupt):
+    """Kooperativer Abbruch über Deps.cancelled."""
+
+
+def _check_cancelled(deps: Deps) -> None:
+    if deps.cancelled():
+        raise _ConsoleAbort('konsole')
 
 
 def _raise_abort(signum, _frame) -> None:
@@ -228,14 +244,15 @@ def _raise_abort(signum, _frame) -> None:
 def abort_on_signals():
     """SIGTERM und SIGHUP für die Dauer des Ablaufs in einen KeyboardInterrupt
     (Argument: Signalname) verwandeln, damit derselbe Aufräumpfad wie bei
-    Strg+C läuft. Danach gelten wieder die vorherigen Handler."""
+    Strg+C läuft. Im Hauptthread gelten danach wieder die vorherigen Handler.
+    In Worker-Threads bleibt die Signalbehandlung beim Hauptthread."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
     previous = {}
     try:
         for number in ABORT_SIGNALS:
             previous[number] = signal.signal(number, _raise_abort)
-    except ValueError:  # nicht im Hauptthread
-        pass
-    try:
         yield
     finally:
         for number, handler in previous.items():
@@ -245,14 +262,14 @@ def abort_on_signals():
 @contextlib.contextmanager
 def shielded():
     """Strg+C, SIGTERM und SIGHUP während des Aufräumens (Rückstellung,
-    Dienststart) aufschieben, damit es nicht halb abbricht."""
+    Dienststart) im Hauptthread ignorieren, damit es nicht halb abbricht."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
     previous = {}
     try:
         for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             previous[number] = signal.signal(number, signal.SIG_IGN)
-    except ValueError:  # nicht im Hauptthread
-        pass
-    try:
         yield
     finally:
         for number, handler in previous.items():
@@ -303,13 +320,18 @@ def record_args(argv: list[str]):
     return record.parse_args(argv)
 
 
-def run_record(args, progress) -> int:
+def run_record(args, progress, *, out=None, err=None) -> int:
     from dispread.calibration import record
 
-    return record.run(args, progress=progress)
+    return record.run(args, progress=progress, out=out, err=err)
 
 
 def run_analysis(recording: Path, profile: Path, out_dir: Path) -> dict:
+    """Offset-Analyse synchron im aufrufenden Thread ausführen.
+
+    Die Analyse bietet keinen Abbruch-Callback. Ein Konsolenabbruch wird
+    vor und nach diesem Aufruf berücksichtigt. Strg+C wirkt im Hauptthread.
+    """
     from dispread.calibration import offset
 
     args = offset.build_arg_parser().parse_args([str(recording), '--profile', str(profile), '--out', str(out_dir)])
@@ -356,6 +378,8 @@ class Deps:
     isatty: Callable[[], bool] = lambda: sys.stdin.isatty()
     out: Any = None
     err: Any = None
+    cancelled: Callable[[], bool] = lambda: False
+    service_interactive: bool = True
 
 
 @dataclass
@@ -393,6 +417,27 @@ class Preflight:
         return [check for check in self.checks if not check.ok]
 
 
+@dataclass(frozen=True)
+class Result:
+    outcome: str
+    exit_code: int
+    reason: str | None = None
+    run_dir: Path | None = None
+    metrics: tuple[tuple[str, str], ...] = ()
+    norm_restored: bool | None = None
+    service_restarted: bool | None = None
+
+
+class ProgressReporter(Protocol):
+    def __call__(self, elapsed: float, total: float) -> None: ...
+
+    def finish(self) -> None: ...
+
+
+StepKey = Literal['dienst_stop', 'kamera', 'rueckstellpunkt', 'aufnahme', 'normierung',
+                  'dienst_start', 'pruefen', 'auswertung', 'bauen']
+
+
 class Console:
     """Fortschrittsausgabe mit den Zeichen von ``picam`` (Style aus cli)."""
 
@@ -400,6 +445,7 @@ class Console:
         self.style = style
         self.out = out or sys.stdout
         self.err = err or sys.stderr
+        self.last_result: Result | None = None
 
     def write(self, data: str, stream=None) -> None:
         """Roh schreiben. Nach einem Verbindungsabbruch (SIGHUP: Terminal weg,
@@ -418,9 +464,32 @@ class Console:
     def mark(self, level: str, text: str, stream=None) -> None:
         self.line(f'{self.style.symbol(level)} {text}', stream)
 
-    def step(self, text: str) -> None:
+    def step(self, text: str, *, key: StepKey | None = None) -> None:
         self.line()
         self.line(self.style.bold(text))
+
+    def progress(self, tty: bool) -> ProgressReporter:
+        return Progress(self, tty)
+
+    def checks(self, pre: Preflight) -> None:
+        width = max((len(check.label) for check in pre.checks), default=0)
+        for check in pre.checks:
+            self.mark(probes.OK if check.ok else probes.FAIL, f'{check.label:<{width}}  {check.text}')
+
+    def plan(self, title: str, lines: list[str]) -> None:
+        self.line()
+        self.line(self.style.bold(title))
+        for line in lines:
+            self.line(line)
+
+    def confirm(self, title: str, lines: list[str], expected: str | None, *, deps: Deps) -> bool:
+        """``expected=None`` steht für Ja/Nein, sonst gilt das genaue Bestätigungswort."""
+        prompt = f'\n{title} [j/N] ' if expected is None else f'Tippe „{expected}“ zum Übernehmen: '
+        try:
+            answer = deps.ask(prompt).strip()
+        except EOFError:
+            return False
+        return answer.lower() in ('j', 'ja', 'y', 'yes') if expected is None else answer == expected
 
     def loud(self, lines: list[str]) -> None:
         bar = '!' * 72
@@ -428,6 +497,11 @@ class Console:
         for text in lines:
             self.line(self.style.paint(text, '31;1'), self.err)
         self.line(self.style.paint(bar, '31;1'), self.err)
+
+
+def _complete(console: Console, outcome: str, code: int, *, reason: str | None = None, **details) -> int:
+    console.last_result = Result(outcome, code, reason=reason, **details)
+    return code
 
 
 class DeferredConsole(Console):
@@ -528,6 +602,7 @@ def probe_telegrams(port: str, baudrate: int, deps: Deps) -> tuple[list[str], st
     try:
         deadline = deps.monotonic() + TELEGRAM_PROBE_S
         while deps.monotonic() < deadline and len(lines) < TELEGRAM_MIN_LINES:
+            _check_cancelled(deps)
             raw = ser.readline()
             text = raw.decode('ascii', 'replace').strip() if raw else ''
             if text:
@@ -625,17 +700,51 @@ def restore_registers(port: str, baudrate: int, restore_point: dict, log_path: P
 
 # ------------------------------------------------------------------ Dienst
 
+def sudo_needed(instance: Instance, snapshot: probes.Snapshot) -> bool:
+    """Prüfen, ob der vorgesehene Dienststopp sudo braucht."""
+    from . import service
+
+    if instance.unit is None or not _service_running(snapshot):
+        return False
+    plan = service.plan('stop', instance, snapshot)
+    return plan.blocker is None and any(cmd[:1] == ['sudo'] for cmd in plan.commands)
+
+
+def sudo_cached() -> bool:
+    """Kann sudo im aktuellen Sitzungskontext ``true`` ohne Passwort ausführen?"""
+    code, _, _ = probes.run_command(['sudo', '-n', 'true'])
+    return code == 0
+
+
+def sudo_validate(password: str, *, run=None) -> tuple[bool, str]:
+    """sudo-Authentifizierung per Standardeingabe für diese Sitzung auffrischen."""
+    if any(char in password for char in ('\n', '\r', '\0')):
+        return False, 'sudo erwartet ein einzeiliges Passwort.'
+    run = run or subprocess.run
+    try:
+        done = run(['sudo', '-S', '-p', '', '-v'], input=password + '\n', text=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)
+    except subprocess.TimeoutExpired:
+        return False, 'Zeitlimit bei der sudo-Authentifizierung erreicht.'
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return False, 'sudo-Authentifizierung konnte nicht ausgeführt werden.'
+    if done.returncode != 0:
+        return False, f'sudo-Authentifizierung fehlgeschlagen (Exit {done.returncode}).'
+    return True, ''
+
+
 def stop_service(instance: Instance, snapshot: probes.Snapshot, deps: Deps, console: Console) -> tuple[bool, str]:
     from . import service
 
     plan = service.plan('stop', instance, snapshot)
     if plan.blocker:
         return False, f'Gesperrt: {plan.blocker}'
-    for line in plan.shell():
+    for line in plan.shell(deps.service_interactive):
         console.line(console.style.dim(f'  $ {line}'))
-    if any(command and command[0] == 'sudo' for command in plan.commands):
+    if deps.service_interactive and any(command[:1] == ['sudo'] for command in plan.commands):
         console.line('  sudo fragt gegebenenfalls nach dem Passwort.')
-    return service.execute(plan, instance, interactive=True, wait_ready=False, run=deps.service_runner,
+    return service.execute(plan, instance, interactive=deps.service_interactive, wait_ready=False,
+                           run=deps.service_runner,
                            echo=lambda _line: None, recheck=deps.recheck)
 
 
@@ -649,11 +758,11 @@ def issue_start(instance: Instance, deps: Deps) -> tuple[bool, str, list[str]]:
     except ValueError as error:
         return False, str(error), []
     try:
-        ok, message = service.execute(plan, instance, interactive=True, wait_ready=False,
+        ok, message = service.execute(plan, instance, interactive=deps.service_interactive, wait_ready=False,
                                       run=deps.service_runner, echo=lambda _line: None)
     except Exception as error:  # noqa: BLE001 - Start bleibt Pflicht, Fehler nur melden
-        return False, f'{type(error).__name__}: {error}', plan.shell()
-    return ok, message, plan.shell()
+        return False, f'{type(error).__name__}: {error}', plan.shell(deps.service_interactive)
+    return ok, message, plan.shell(deps.service_interactive)
 
 
 def start_service(instance: Instance, deps: Deps, console: Console,
@@ -695,6 +804,7 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
 
     result = Preflight()
     add = result.checks.append
+    _check_cancelled(deps)
     target = _calibration_target(instance)
     # Instanz
     if instance.kind == 'none' or target is None or not instance.live_data:
@@ -704,8 +814,7 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
     # Dienst und Lauf
     snapshot = deps.collect(instance, include_setup=False)
     result.snapshot = snapshot
-    service_fact = snapshot.facts.get('dienst')
-    result.service_running = service_fact is not None and service_fact.level in (probes.OK, probes.WARN)
+    result.service_running = _service_running(snapshot)
     blocker = snapshot.stop_blocker
     if instance.unit is None and result.service_running:
         add(Check('Dienst', False, 'Werkbank läuft ohne Dienstmanager (portabel) – erst von Hand beenden'))
@@ -715,6 +824,7 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
         add(Check('Dienst', True, 'läuft, wird für die Aufnahme gestoppt' if result.service_running
                   else 'gestoppt'))
     # Schreibrechte
+    _check_cancelled(deps)
     folder = _existing_parent(target.parent)
     if os.access(folder, os.W_OK | os.X_OK):
         add(Check('Ablage', True, str(target.parent / 'runs')))
@@ -728,6 +838,7 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
         add(Check('Ablage', False, f'keine Schreibrechte auf {folder} – als {owner} oder mit sudo ausführen '
                                    '(sudo picam kalibrieren)'))
     # Profil
+    _check_cancelled(deps)
     if options.profile is not None:
         info, problem = load_profile(options.profile)
         profile = options.profile if problem is None else None
@@ -741,6 +852,7 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
         result.profile, result.profile_info = profile, info
         add(Check('Einrichtung', True, f'{profile} (bestätigt {_local(info["confirmed_at_utc"])})'))
     # Kamera
+    _check_cancelled(deps)
     camera = deps.usb_camera()
     if camera is None:
         add(Check('Kamera', False, f'StreamCam {STREAMCAM_USB_ID} nicht gefunden – an einen blauen USB-3-Port '
@@ -751,6 +863,7 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
     else:
         add(Check('Kamera', True, f'StreamCam {STREAMCAM_USB_ID} an USB 3'))
     # Adapter und Telegramme
+    _check_cancelled(deps)
     if not deps.port_exists(options.port):
         add(Check('RS232-Adapter', False, f'kein Adapter an {options.port} – USB-RS232-Adapter stecken und mit '
                                           'dem RS232-Ausgang des Messverstärkers verbinden'))
@@ -761,6 +874,7 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
         else:
             add(Check('RS232-Adapter', True, f'{options.port}, {options.baudrate} Baud, Telegramm „{lines[-1]}“'))
     # Plan und Speicher (nur mit Profil)
+    _check_cancelled(deps)
     if result.profile is not None:
         result.seed = options.seed if options.seed is not None else int(deps.now().timestamp())
         result.schedule = plan_factors(_n_steps(options.duration_s, options.hold_s), result.seed)
@@ -782,15 +896,13 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
 
 
 def print_checks(preflight_: Preflight, console: Console) -> None:
-    width = max(len(check.label) for check in preflight_.checks)
-    for check in preflight_.checks:
-        console.mark(probes.OK if check.ok else probes.FAIL, f'{check.label:<{width}}  {check.text}')
+    console.checks(preflight_)
 
 
-def print_plan(instance: Instance, options: Options, pre: Preflight, console: Console) -> None:
+def print_plan(instance: Instance, options: Options, pre: Preflight, console: Console) -> list[str]:
     target = _calibration_target(instance)
     downtime = math.ceil((options.duration_s + 90) / 60)
-    console.step(f'Plan (Werkbank etwa {downtime} min nicht erreichbar)' if pre.service_running else 'Plan')
+    title = f'Plan (Werkbank etwa {downtime} min nicht erreichbar)' if pre.service_running else 'Plan'
     steps = []
     if pre.service_running:
         steps.append('Werkbank-Dienst stoppen (gibt die Kamera frei)')
@@ -804,16 +916,18 @@ def print_plan(instance: Instance, options: Options, pre: Preflight, console: Co
         steps.append('Werkbank-Dienst wieder starten (auch bei Abbruch)')
     steps.append(f'Auswerten (Versatz δ, Schutzabstand M), prüfen und nach {target} übernehmen – '
                  'nur wenn das Ergebnis gültig ist')
-    for index, text in enumerate(steps, 1):
-        console.line(f'  {index}. {text}')
-    console.line()
-    console.line('  Während der Aufnahme Kamera und Anzeige nicht bewegen und nichts vor die Anzeige halten.')
-    console.line('  Die Anzeige springt zwischen stark skalierten Werten – das ist gewollt und wird danach '
-                 'zurückgestellt.')
-    console.line(f'  Rohdaten bleiben unter {target.parent / "runs"} (etwa {pre.estimate_bytes >> 20} MiB).')
+    lines = [f'  {index}. {text}' for index, text in enumerate(steps, 1)]
+    lines += [
+        '',
+        '  Während der Aufnahme Kamera und Anzeige nicht bewegen und nichts vor die Anzeige halten.',
+        '  Die Anzeige springt zwischen stark skalierten Werten – das ist gewollt und wird danach zurückgestellt.',
+        f'  Rohdaten bleiben unter {target.parent / "runs"} (etwa {pre.estimate_bytes >> 20} MiB).',
+    ]
     if target.exists():
-        console.line('  Die vorhandene Kalibrierung wird nur bei gültigem Ergebnis ersetzt; eine Kopie bleibt in '
+        lines.append('  Die vorhandene Kalibrierung wird nur bei gültigem Ergebnis ersetzt; eine Kopie bleibt in '
                      'der Ablage.')
+    console.plan(title, lines)
+    return lines
 
 
 def explain_not_detected(result: dict, console: Console) -> None:
@@ -875,35 +989,57 @@ def ensure_norm_restored(run_dir: Path, restore_point: dict, options: Options, d
 
 
 def calibrate(instance: Instance, options: Options, console: Console, deps: Deps | None = None) -> int:
-    """``picam kalibrieren``. SIGTERM und SIGHUP (SSH getrennt) laufen für die
-    ganze Dauer über denselben Aufräumpfad wie Strg+C (``abort_on_signals``)."""
+    """Messen und ``console.last_result`` setzen.
+
+    Im Hauptthread nutzen SIGTERM und SIGHUP den Aufräumpfad von Strg+C.
+    Worker fragen ``deps.cancelled`` kooperativ ab. Rückstellung und Dienststart
+    laufen zu Ende. Die synchrone Auswertung läuft ebenfalls zu Ende, bevor
+    ein währenddessen angeforderter Abbruch die Übernahme verhindert.
+    """
+    console.last_result = None
     with abort_on_signals():
-        return _calibrate(instance, options, console, deps or Deps())
+        try:
+            return _calibrate(instance, options, console, deps or Deps())
+        except _ConsoleAbort:
+            reason = ABORT_TEXT['konsole']
+            console.mark(probes.FAIL, reason, console.err)
+            return _complete(console, 'abgebrochen', EXIT_ABORT, reason=reason)
 
 
 def _calibrate(instance: Instance, options: Options, console: Console, deps: Deps) -> int:
+    def step(text: str, *, key: StepKey) -> None:
+        _check_cancelled(deps)
+        console.step(text, key=key)
+        _check_cancelled(deps)
+
+    _check_cancelled(deps)
     console.line(console.style.bold('Timing-Kalibrierung (Inbetriebnahme)'))
     if options.duration_s < MIN_DURATION_S:
-        console.mark(probes.FAIL, f'--dauer mindestens {MIN_DURATION_S:.0f} s', console.err)
-        return EXIT_BLOCKED
+        reason = f'--dauer mindestens {MIN_DURATION_S:.0f} s'
+        console.mark(probes.FAIL, reason, console.err)
+        return _complete(console, 'gesperrt', EXIT_BLOCKED, reason=reason)
     pre = preflight(instance, options, deps)
+    _check_cancelled(deps)
     print_checks(pre, console)
+    _check_cancelled(deps)
     if pre.problems:
         console.line()
         console.mark(probes.FAIL, 'Kalibrierung nicht möglich – nichts geändert.', console.err)
-        return EXIT_BLOCKED
-    print_plan(instance, options, pre, console)
+        reason = '\n'.join(f'{check.label}: {check.text}' for check in pre.problems)
+        return _complete(console, 'gesperrt', EXIT_BLOCKED, reason=reason)
+    plan_lines = print_plan(instance, options, pre, console)
+    _check_cancelled(deps)
     if not options.yes:
         if not deps.isatty():
-            console.line('Keine Rückfrage möglich (kein Terminal); mit --yes bestätigen.', console.err)
-            return EXIT_ABORT
-        try:
-            answer = deps.ask('\nJetzt kalibrieren? [j/N] ')
-        except EOFError:
-            answer = ''
-        if answer.strip().lower() not in ('j', 'ja', 'y', 'yes'):
-            console.line('Abgebrochen, nichts geändert.', console.err)
-            return EXIT_ABORT
+            reason = 'Keine Rückfrage möglich (kein Terminal); mit --yes bestätigen.'
+            console.line(reason, console.err)
+            return _complete(console, 'abgebrochen', EXIT_ABORT, reason=reason)
+        confirmed = console.confirm('Jetzt kalibrieren?', plan_lines, None, deps=deps)
+        _check_cancelled(deps)
+        if not confirmed:
+            reason = 'Abgebrochen, nichts geändert.'
+            console.line(reason, console.err)
+            return _complete(console, 'abgebrochen', EXIT_ABORT, reason=reason)
 
     target = _calibration_target(instance)
     assert target is not None and pre.profile is not None
@@ -923,37 +1059,47 @@ def _calibrate(instance: Instance, options: Options, console: Console, deps: Dep
     norm_ok: bool | None = None
     service_ok: bool | None = None
     failure: str | None = None
-    progress = Progress(console, deps.isatty() and getattr(console.out, 'isatty', lambda: False)())
+    progress: ProgressReporter | None = None
     try:
         if pre.service_running:
-            console.step('Werkbank-Dienst stoppen')
+            step('Werkbank-Dienst stoppen', key='dienst_stop')
             stop_attempted = True
             ok, message = stop_service(instance, pre.snapshot, deps, console)
             if not ok:
                 raise CalibrationError(f'Dienst nicht gestoppt: {message}')
             stopped = True
             console.mark(probes.OK, message)
-        console.step('Kamera freigeben')
+        step('Kamera freigeben', key='kamera')
         deadline = deps.monotonic() + CAMERA_FREE_TIMEOUT_S
         while holders := deps.camera_holders():
+            _check_cancelled(deps)
             if deps.monotonic() > deadline:
                 raise CalibrationError(f'Kamera nach {CAMERA_FREE_TIMEOUT_S:.0f} s noch belegt: {", ".join(holders)}')
             deps.sleep(0.5)
+            _check_cancelled(deps)
         console.mark(probes.OK, 'Kamera frei.')
-        console.step('Rückstellpunkt lesen')
+        step('Rückstellpunkt lesen', key='rueckstellpunkt')
         restore_point = read_restore_point(options.port, options.baudrate, run_dir / 'register-vorher.jsonl',
                                            deps, deps.now())
         _write_json(run_dir / 'rueckstellpunkt.json', restore_point)
         console.mark(probes.OK, f"norm {restore_point['register']['norm']['daten']}, "
                                 f"dpoint {restore_point['register']['dpoint']['daten']} gesichert.")
-        console.step(f'Aufnahme ({options.duration_s:.0f} s, {len(pre.schedule)} Normierungssprünge)')
+        step(f'Aufnahme ({options.duration_s:.0f} s, {len(pre.schedule)} Normierungssprünge)', key='aufnahme')
         args = deps.record_args([*pre.record_argv, '--output', str(run_dir / 'aufnahme'),
                                  '--restore-point', str(run_dir / 'rueckstellpunkt.json')])
+        progress = console.progress(deps.isatty() and getattr(console.out, 'isatty', lambda: False)())
+
+        def on_progress(elapsed: float, total: float) -> None:
+            _check_cancelled(deps)
+            progress(elapsed, total)
+
+        _check_cancelled(deps)
         recorded = True
-        try:
-            record_code = deps.record(args, progress)
-        finally:
-            progress.finish()
+        if deps.record is run_record:
+            record_code = run_record(args, on_progress, out=console.out, err=console.err)
+        else:
+            record_code = deps.record(args, on_progress)
+        _check_cancelled(deps)
     except KeyboardInterrupt as interrupt:
         aborted = True
         failure = ABORT_TEXT.get(interrupt.args[0] if interrupt.args else '', 'Abbruch (Strg+C)')
@@ -979,13 +1125,18 @@ def _calibrate(instance: Instance, options: Options, console: Console, deps: Dep
                 stopped = True  # Stopp lief trotz Fehler/Abbruch durch: trotzdem wieder starten
             issued = issue_start(instance, deps) if stopped else None
             # Jetzt berichten.
+            if progress is not None:
+                try:
+                    progress.finish()
+                except Exception as error:  # noqa: BLE001 - Ergebnis und Dienststatus trotzdem melden
+                    failure = failure or f'{type(error).__name__}: {error}'
             if failure:
                 console.mark(probes.FAIL, failure, console.err)
             if recorded and restore_point is not None:
-                console.step('Normierung prüfen')
+                console.step('Normierung prüfen', key='normierung')
                 norm_report.replay()
             if stopped:
-                console.step('Werkbank-Dienst starten')
+                console.step('Werkbank-Dienst starten', key='dienst_start')
                 try:
                     service_ok, message = start_service(instance, deps, console, issued)
                 except Exception as error:  # noqa: BLE001 - Warten scheitert: nur melden
@@ -1000,146 +1151,187 @@ def _calibrate(instance: Instance, options: Options, console: Console, deps: Dep
     journal.update({'aufnahme_exit': record_code, 'normierung_zurueckgestellt': norm_ok,
                     'dienst_neu_gestartet': service_ok if stopped else None})
 
-    def finish(outcome: str, code: int, **extra) -> int:
+    def finish(outcome: str, code: int, *, metrics: list[tuple[str, str]] | None = None, **extra) -> int:
         journal.update({'ergebnis': outcome, 'beendet_utc': deps.now().isoformat(), **extra})
         _write_json(run_dir / 'lauf.json', journal)
         _adopt_owner(run_dir, target.parent)
+        reason = extra.get('grund')
         if norm_ok is False and code == EXIT_OK:
             code = EXIT_FAIL
+            reason = 'Rückstellung der Normierung nicht bestätigt.'
         console.line()
         console.line(console.style.dim(f'Protokoll und Rohdaten: {run_dir}'))
-        return code
+        return _complete(console, outcome, code, reason=reason, run_dir=run_dir, metrics=tuple(metrics or ()),
+                         norm_restored=norm_ok, service_restarted=service_ok if stopped else None)
 
     if failure or record_code is None:
         return finish('abgebrochen' if aborted else 'fehler', EXIT_ABORT if aborted else EXIT_FAIL,
                       grund=failure)
-    console.step('Aufnahme prüfen')
-    session = _read_json(run_dir / 'aufnahme' / 'session.json') or {}
-    if session.get('aborted'):
-        console.mark(probes.FAIL, 'Aufnahme abgebrochen – an der Kalibrierung wurde nichts geändert.', console.err)
-        return finish('abgebrochen', EXIT_ABORT, grund=session.get('abort_reason'))
-    if record_code != 0:
-        console.mark(probes.FAIL, f'Aufnahme fehlgeschlagen (Exit {record_code}): '
-                                  f'{session.get("acquisition_error") or "siehe Meldungen oben"}', console.err)
-        return finish('fehler', EXIT_FAIL, grund=f'Aufnahme Exit {record_code}')
-    if not session.get('serial_lines_recorded') or not session.get('frames_recorded'):
-        console.mark(probes.FAIL, f'Aufnahme unvollständig: {session.get("frames_recorded", 0)} Bilder, '
-                                  f'{session.get("serial_lines_recorded", 0)} Telegramme.', console.err)
-        return finish('fehler', EXIT_FAIL, grund='Aufnahme unvollständig')
-    console.mark(probes.OK, f'{session["frames_recorded"]} Bilder, {session["serial_lines_recorded"]} Telegramme.')
-
-    console.step('Auswertung (kann einige Minuten dauern)')
     try:
-        result = deps.analyse(run_dir / 'aufnahme', pre.profile, run_dir / 'offset-analyse')
-    except KeyboardInterrupt:
-        console.mark(probes.FAIL, 'Auswertung abgebrochen – nichts geändert.', console.err)
-        return finish('abgebrochen', EXIT_ABORT, grund='Auswertung abgebrochen')
-    except Exception as error:  # noqa: BLE001 - jeder Auswertungsfehler: nichts übernehmen
-        console.mark(probes.FAIL, f'Auswertung fehlgeschlagen: {error} – nichts geändert.', console.err)
-        return finish('fehler', EXIT_FAIL, grund=f'Auswertung: {error}')
-    detected = [p for p in result.get('populations', []) if p.get('detected') and p.get('M_s') is not None]
-    for population in result.get('populations', []):
-        if population.get('detected') and population.get('M_s') is not None:
-            console.mark(probes.OK, f'{population["population"]}: {population["n_qualifying"]} Wechsel, '
-                                    f'δ {population["delta_s"] * 1000:+.0f} ms, M {population["M_s"] * 1000:.0f} ms')
-    if not detected:
-        explain_not_detected(result, console)
-        return finish('nicht erkannt', EXIT_FAIL, bericht=result.get('_out_json'))
+        step('Aufnahme prüfen', key='pruefen')
+        session = _read_json(run_dir / 'aufnahme' / 'session.json') or {}
+        if session.get('aborted'):
+            reason = session.get('abort_reason')
+            if reason == 'konsole':
+                raise _ConsoleAbort(reason)
+            console.mark(probes.FAIL, 'Aufnahme abgebrochen – an der Kalibrierung wurde nichts geändert.', console.err)
+            return finish('abgebrochen', EXIT_ABORT, grund=reason)
+        if record_code != 0:
+            console.mark(probes.FAIL, f'Aufnahme fehlgeschlagen (Exit {record_code}): '
+                                      f'{session.get("acquisition_error") or "siehe Meldungen oben"}', console.err)
+            return finish('fehler', EXIT_FAIL, grund=f'Aufnahme Exit {record_code}')
+        if not session.get('serial_lines_recorded') or not session.get('frames_recorded'):
+            console.mark(probes.FAIL, f'Aufnahme unvollständig: {session.get("frames_recorded", 0)} Bilder, '
+                                      f'{session.get("serial_lines_recorded", 0)} Telegramme.', console.err)
+            return finish('fehler', EXIT_FAIL, grund='Aufnahme unvollständig')
+        console.mark(probes.OK, f'{session["frames_recorded"]} Bilder, {session["serial_lines_recorded"]} Telegramme.')
 
-    console.step('Kalibrierung bauen und prüfen')
-    from dispread.calibration.build import build_calibration
+        analysis_step = 'Auswertung (kann einige Minuten dauern)'
+        if threading.current_thread() is not threading.main_thread():
+            analysis_step = 'Auswertung (kann einige Minuten dauern und ist währenddessen nicht abbrechbar)'
+        step(analysis_step, key='auswertung')
+        try:
+            result = deps.analyse(run_dir / 'aufnahme', pre.profile, run_dir / 'offset-analyse')
+        except KeyboardInterrupt:
+            console.mark(probes.FAIL, 'Auswertung abgebrochen – nichts geändert.', console.err)
+            return finish('abgebrochen', EXIT_ABORT, grund='Auswertung abgebrochen')
+        except Exception as error:  # noqa: BLE001 - jeder Auswertungsfehler: nichts übernehmen
+            _check_cancelled(deps)
+            console.mark(probes.FAIL, f'Auswertung fehlgeschlagen: {error} – nichts geändert.', console.err)
+            return finish('fehler', EXIT_FAIL, grund=f'Auswertung: {error}')
+        _check_cancelled(deps)
+        detected = [p for p in result.get('populations', []) if p.get('detected') and p.get('M_s') is not None]
+        for population in result.get('populations', []):
+            if population.get('detected') and population.get('M_s') is not None:
+                console.mark(probes.OK, f'{population["population"]}: {population["n_qualifying"]} Wechsel, '
+                                        f'δ {population["delta_s"] * 1000:+.0f} ms, M {population["M_s"] * 1000:.0f} ms')
+        if not detected:
+            explain_not_detected(result, console)
+            return finish('nicht erkannt', EXIT_FAIL, grund='Keine Population erkannt.', bericht=result.get('_out_json'))
 
-    candidate = run_dir / CALIBRATION_FILE
-    camera = pre.profile_info.get('usb_id', STREAMCAM_USB_ID)
-    try:
-        build_calibration([Path(result['_out_json'])], candidate, camera_usb_id=camera,
-                          measured_at_utc=started.isoformat())
-        calibration, problem = validate_file(candidate, camera)
-        if problem:
-            raise ValueError(problem)
-    except (ValueError, OSError, KeyError) as error:
-        console.mark(probes.FAIL, f'Ergebnis ungültig: {error} – nichts geändert.', console.err)
-        return finish('ungueltig', EXIT_FAIL, grund=str(error))
-    assert calibration is not None
-    for label, text in describe(calibration, candidate):
-        console.line(f'  {label:<16} {text}')
-    note = import_note_path(target)
-    try:
-        if target.exists():
-            shutil.copy2(target, run_dir / 'vorherige-kalibrierung.json')
-        install_atomically(candidate, target)
-    except OSError as error:
-        console.mark(probes.FAIL, f'Übernehmen nach {target} fehlgeschlagen: {error}', console.err)
-        return finish('fehler', EXIT_FAIL, grund=f'Übernehmen: {error}')
-    if note.exists():
-        with contextlib.suppress(OSError):
-            shutil.move(str(note), run_dir / 'vorheriger-import.json')
-    console.mark(probes.OK, f'Kalibrierung übernommen: {target}')
-    return finish('installiert', EXIT_OK, kalibrierung=calibration.to_dict(), sha256=sha256_file(target))
+        step('Kalibrierung bauen und prüfen', key='bauen')
+        from dispread.calibration.build import build_calibration
+
+        candidate = run_dir / CALIBRATION_FILE
+        camera = pre.profile_info.get('usb_id', STREAMCAM_USB_ID)
+        try:
+            build_calibration([Path(result['_out_json'])], candidate, camera_usb_id=camera,
+                              measured_at_utc=started.isoformat())
+            calibration, problem = validate_file(candidate, camera)
+            if problem:
+                raise ValueError(problem)
+        except (ValueError, OSError, KeyError) as error:
+            console.mark(probes.FAIL, f'Ergebnis ungültig: {error} – nichts geändert.', console.err)
+            return finish('ungueltig', EXIT_FAIL, grund=str(error))
+        assert calibration is not None
+        _check_cancelled(deps)
+        metrics = describe(calibration, candidate)
+        for label, text in metrics:
+            console.line(f'  {label:<16} {text}')
+        note = import_note_path(target)
+        try:
+            if target.exists():
+                shutil.copy2(target, run_dir / 'vorherige-kalibrierung.json')
+            _check_cancelled(deps)
+            install_atomically(candidate, target)
+        except OSError as error:
+            console.mark(probes.FAIL, f'Übernehmen nach {target} fehlgeschlagen: {error}', console.err)
+            return finish('fehler', EXIT_FAIL, grund=f'Übernehmen: {error}', metrics=metrics)
+        if note.exists():
+            with contextlib.suppress(OSError):
+                shutil.move(str(note), run_dir / 'vorheriger-import.json')
+        console.mark(probes.OK, f'Kalibrierung übernommen: {target}')
+        return finish('installiert', EXIT_OK, metrics=metrics, kalibrierung=calibration.to_dict(),
+                      sha256=sha256_file(target))
+    except _ConsoleAbort:
+        reason = ABORT_TEXT['konsole']
+        console.mark(probes.FAIL, reason, console.err)
+        return finish('abgebrochen', EXIT_ABORT, grund=reason)
 
 
 # ------------------------------------------------------------------ Prüfen, Importieren, Rückstellen
 
 def check_file(instance: Instance, path: Path | None, console: Console) -> int:
+    """Datei prüfen und ``console.last_result`` setzen."""
+    console.last_result = None
     target = _calibration_target(instance)
     path = Path(path) if path else target
     if path is None:
-        console.mark(probes.FAIL, 'Kein Kalibrierpfad konfiguriert; Datei angeben.', console.err)
-        return EXIT_FAIL
+        reason = 'Kein Kalibrierpfad konfiguriert; Datei angeben.'
+        console.mark(probes.FAIL, reason, console.err)
+        return _complete(console, 'fehler', EXIT_FAIL, reason=reason)
     calibration, problem = validate_file(path)
-    if calibration is not None:
-        for label, text in describe(calibration, path):
-            console.line(f'  {label:<16} {text}')
+    metrics = tuple(describe(calibration, path)) if calibration is not None else ()
+    for label, text in metrics:
+        console.line(f'  {label:<16} {text}')
     if problem:
         console.mark(probes.FAIL, f'Ungültig: {problem}', console.err)
-        return EXIT_FAIL
+        return _complete(console, 'ungueltig', EXIT_FAIL, reason=problem, metrics=metrics)
     active = target is not None and path.resolve() == target.resolve()
     console.mark(probes.OK, 'Gültig' + (' (aktive Kalibrierung).' if active else '.'))
     if not active and target is not None:
         console.line(f'  Übernehmen: picam kalibrieren --import {path}')
-    return EXIT_OK
+    return _complete(console, 'gueltig', EXIT_OK, metrics=metrics)
 
 
 def import_file(instance: Instance, source: Path, console: Console, deps: Deps | None = None,
                 yes: bool = False) -> int:
-    deps = deps or Deps()
+    """Datei nach Bestätigung importieren und ``console.last_result`` setzen."""
+    console.last_result = None
+    try:
+        return _import_file(instance, source, console, deps or Deps(), yes)
+    except _ConsoleAbort:
+        reason = ABORT_TEXT['konsole']
+        console.mark(probes.FAIL, reason, console.err)
+        return _complete(console, 'abgebrochen', EXIT_ABORT, reason=reason)
+
+
+def _import_file(instance: Instance, source: Path, console: Console, deps: Deps, yes: bool) -> int:
+    _check_cancelled(deps)
     target = _calibration_target(instance)
     if target is None:
-        console.mark(probes.FAIL, 'Kein Kalibrierpfad konfiguriert (keine installierte Werkbank).', console.err)
-        return EXIT_BLOCKED
+        reason = 'Kein Kalibrierpfad konfiguriert (keine installierte Werkbank).'
+        console.mark(probes.FAIL, reason, console.err)
+        return _complete(console, 'gesperrt', EXIT_BLOCKED, reason=reason)
     source = Path(source)
     calibration, problem = validate_file(source)
-    if calibration is not None:
-        for label, text in describe(calibration, source):
-            console.line(f'  {label:<16} {text}')
+    metrics = tuple(describe(calibration, source)) if calibration is not None else ()
+    for label, text in metrics:
+        console.line(f'  {label:<16} {text}')
+    _check_cancelled(deps)
     if problem:
         console.mark(probes.FAIL, f'Nicht importiert: {problem}', console.err)
-        return EXIT_FAIL
+        return _complete(console, 'ungueltig', EXIT_FAIL, reason=problem, metrics=metrics)
     assert calibration is not None
     if source.resolve() == target.resolve():
         console.mark(probes.OK, 'Das ist bereits die aktive Kalibrierung.')
-        return EXIT_OK
+        return _complete(console, 'bereits aktiv', EXIT_OK, metrics=metrics)
     snapshot = deps.collect(instance, include_setup=False)
+    _check_cancelled(deps)
     if snapshot.run_active:
-        console.mark(probes.FAIL, 'Gesperrt: Lauf oder Einrichtung aktiv – erst in der Werkbank beenden.',
-                     console.err)
-        return EXIT_BLOCKED
+        reason = 'Lauf oder Einrichtung aktiv – erst in der Werkbank beenden.'
+        console.mark(probes.FAIL, f'Gesperrt: {reason}', console.err)
+        return _complete(console, 'gesperrt', EXIT_BLOCKED, reason=reason, metrics=metrics)
     console.line()
     console.mark(probes.WARN, IMPORT_WARNING)
-    console.line(f'  Ziel: {target}' + (' (vorhandene Datei wird ersetzt, Kopie bleibt)' if target.exists() else ''))
+    target_line = f'Ziel: {target}' + (' (vorhandene Datei wird ersetzt, Kopie bleibt)' if target.exists() else '')
+    console.line(f'  {target_line}')
     if not yes:
         if not deps.isatty():
-            console.line('Keine Rückfrage möglich (kein Terminal); mit --yes bestätigen.', console.err)
-            return EXIT_ABORT
-        try:
-            answer = deps.ask(f'Tippe „{IMPORT_CONFIRM_WORD}“ zum Übernehmen: ')
-        except EOFError:
-            answer = ''
-        if answer.strip() != IMPORT_CONFIRM_WORD:
-            console.line('Nicht importiert.', console.err)
-            return EXIT_ABORT
+            reason = 'Keine Rückfrage möglich (kein Terminal); mit --yes bestätigen.'
+            console.line(reason, console.err)
+            return _complete(console, 'abgebrochen', EXIT_ABORT, reason=reason, metrics=metrics)
+        confirmed = console.confirm('Kalibrierung importieren?', [IMPORT_WARNING, target_line],
+                                    IMPORT_CONFIRM_WORD, deps=deps)
+        _check_cancelled(deps)
+        if not confirmed:
+            reason = 'Nicht importiert.'
+            console.line(reason, console.err)
+            return _complete(console, 'abgebrochen', EXIT_ABORT, reason=reason, metrics=metrics)
     now = deps.now()
     digest = sha256_file(source)
+    backup = None
+    _check_cancelled(deps)
     if target.exists():
         backup = target.parent / 'runs' / (now.strftime('%Y%m%dT%H%M%SZ') + '-import')
         backup.mkdir(parents=True, exist_ok=True)
@@ -1152,14 +1344,15 @@ def import_file(instance: Instance, source: Path, console: Console, deps: Deps |
             'kamera': calibration.camera_usb_id, 'gemessen_am_utc': calibration.measured_at_utc,
             'hinweis': IMPORT_WARNING}
     try:
+        _check_cancelled(deps)
         install_atomically(source, target)
         install_bytes((json.dumps(note, indent=2, ensure_ascii=False) + '\n').encode('utf-8'),
                       import_note_path(target))
     except OSError as error:
         console.mark(probes.FAIL, f'Import fehlgeschlagen: {error}', console.err)
-        return EXIT_FAIL
+        return _complete(console, 'fehler', EXIT_FAIL, reason=str(error), run_dir=backup, metrics=metrics)
     console.mark(probes.OK, f'Importiert nach {target} (Herkunft: {import_note_path(target)}).')
-    return EXIT_OK
+    return _complete(console, 'importiert', EXIT_OK, run_dir=backup, metrics=tuple(describe(calibration, target)))
 
 
 def restore_from_file(path: Path, options: Options, console: Console, deps: Deps | None = None) -> int:

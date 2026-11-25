@@ -1237,6 +1237,9 @@ def _finish_staging(work_dir: Path, output_dir: Path, staging: dict[str, Any]) -
 def _install_sigterm_handler() -> None:
     """SIGTERM und SIGHUP auf den Abbruchpfad von Strg+C umlenken
     (KeyboardInterrupt mit dem Signalnamen als Argument)."""
+    if threading.current_thread() is not threading.main_thread():
+        return
+
     def _handle_abort(signum, frame):  # noqa: ARG001 - Signatur von signal.signal vorgegeben
         raise KeyboardInterrupt(_ABORT_SIGNALS.get(signum, "SIGTERM"))
 
@@ -1265,11 +1268,9 @@ class _SignalsHeld:
         self.received.append(signal.Signals(signum).name)
 
     def __enter__(self) -> _SignalsHeld:
-        try:
+        if threading.current_thread() is threading.main_thread():
             for signum in self.SIGNALS:
                 self._previous[signum] = signal.signal(signum, self._note)
-        except ValueError:  # nicht im Hauptthread
-            pass
         return self
 
     def __exit__(self, *exc_info) -> None:
@@ -1288,9 +1289,9 @@ def _print(*args: Any, **kwargs: Any) -> None:
         pass
 
 
-def _say(text: str) -> None:
+def _say(text: str, err=None) -> None:
     """Meldung auf stderr (siehe `_print`)."""
-    _print(text, file=sys.stderr)
+    _print(text, file=sys.stderr if err is None else err)
 
 
 def run(
@@ -1298,12 +1299,18 @@ def run(
     *,
     default_output_root: Path | None = None,
     progress: Callable[[float, float], None] | None = None,
+    out=None,
+    err=None,
 ) -> int:
     """Aufnahme ausfuehren. `default_output_root`: Ort fuer `--output`-lose
     Aufrufe (Vorgabe `DEFAULT_OUTPUT_ROOT`). `progress(elapsed_s, duration_s)`
-    wird waehrend der Aufnahme etwa einmal je Sekunde aufgerufen (nur
-    Anzeige; ohne Rueckruf wartet der Hauptthread wie bisher am Stueck)."""
+    wird waehrend der Aufnahme etwa einmal je Sekunde aufgerufen. Ein dort
+    geworfener KeyboardInterrupt beendet die Aufnahme ueber den regulaeren
+    Aufraeumpfad. ``out`` und ``err`` leiten Ausgaben fuer eingebettete Aufrufe
+    um. Signal-Handler installiert nur der Hauptthread."""
     _install_sigterm_handler()
+    out = sys.stdout if out is None else out
+    err = sys.stderr if err is None else err
 
     # Kameraprofil VOR jedem Kamerazugriff laden - liest nur die JSON-Datei,
     # oeffnet weder Kamera noch Port. `--camera-settings` ist bei --source
@@ -1314,7 +1321,7 @@ def run(
         try:
             camera_settings = load_camera_settings(args.camera_settings)
         except (OSError, ValueError) as exc:
-            print(f"Fehler: --camera-settings {args.camera_settings} konnte nicht geladen werden: {exc}", file=sys.stderr)
+            _print(f"Fehler: --camera-settings {args.camera_settings} konnte nicht geladen werden: {exc}", file=err)
             return 1
         camera_device = str(args.camera_device) if args.camera_device is not None else None
         # I-1 final-review.md: mit gedrosseltem LESEN (Sleep im Aufnahme-
@@ -1325,11 +1332,11 @@ def run(
         # aber eine Drosselung, wenn er --frame-rate explizit angibt. Deshalb
         # klare Ablehnung statt eines stillschweigend wirkungslosen Werts.
         if args.frame_rate > camera_settings.fps:
-            print(
+            _print(
                 f"Fehler: --frame-rate {args.frame_rate} ist groesser als die Kamera-fps "
                 f"{camera_settings.fps} aus --camera-settings {args.camera_settings} - "
                 "die Ausduennung waere wirkungslos.",
-                file=sys.stderr,
+                file=err,
             )
             return 2
 
@@ -1344,13 +1351,13 @@ def run(
     work_dir = output_dir
     if args.staging_root is not None:
         if output_dir.exists() and any(output_dir.iterdir()):
-            print(f"Fehler: --output {output_dir} ist nicht leer - mit --staging-root nur in ein leeres Ziel.",
-                  file=sys.stderr)
+            _print(f"Fehler: --output {output_dir} ist nicht leer - mit --staging-root nur in ein leeres Ziel.",
+                   file=err)
             return 1
         need = _estimate_staging_need(args, camera_settings)
         capacity_error = _check_staging_capacity(args.staging_root, need)
         if capacity_error is not None:
-            print(f"Fehler: {capacity_error} Keine Aufnahme gestartet.", file=sys.stderr)
+            _print(f"Fehler: {capacity_error} Keine Aufnahme gestartet.", file=err)
             return 1
         work_dir = Path(tempfile.mkdtemp(prefix="sync-record-", dir=args.staging_root))
         staging = {
@@ -1374,20 +1381,20 @@ def run(
         if staging is not None:
             _finish_staging(work_dir, output_dir, staging)
             if staging["error"] is not None:
-                print(f"FEHLER: Kopieren aus der Zwischenablage: {staging['error']} "
-                      f"(liegt noch unter {work_dir})", file=sys.stderr)
+                _print(f"FEHLER: Kopieren aus der Zwischenablage: {staging['error']} "
+                       f"(liegt noch unter {work_dir})", file=err)
         return 1
 
     commands_jsonl: Path | None = None
     restore_point: dict | None = None
     if args.norm_schedule is not None:
         if not args.restore_point.is_file():
-            print(f"Fehler: Rueckstellpunkt-Datei nicht gefunden: {args.restore_point}", file=sys.stderr)
+            _print(f"Fehler: Rueckstellpunkt-Datei nicht gefunden: {args.restore_point}", file=err)
             return _abort_before_recording()
         try:
             restore_point = json.loads(args.restore_point.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            print(f"Fehler: Rueckstellpunkt-Datei {args.restore_point} ist kein gueltiges JSON: {exc}", file=sys.stderr)
+            _print(f"Fehler: Rueckstellpunkt-Datei {args.restore_point} ist kein gueltiges JSON: {exc}", file=err)
             return _abort_before_recording()
         commands_jsonl = work_dir / "commands.jsonl"
 
@@ -1431,26 +1438,26 @@ def run(
     serial_thread.start()
 
     if not ready_event.wait(timeout=READY_TIMEOUT_S):
-        print(
+        _print(
             f"Fehler: serieller Lesethread meldete sich nicht innerhalb {READY_TIMEOUT_S}s",
-            file=sys.stderr,
+            file=err,
         )
         stop_event.set()
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
         serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
         return _abort_before_recording()
     if serial_state["open_error"]:
-        print(
+        _print(
             f"Fehler: serieller Port {args.port!r} konnte nicht geoeffnet werden: "
             f"{serial_state['open_error']}",
-            file=sys.stderr,
+            file=err,
         )
         stop_event.set()
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
         serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
         return _abort_before_recording()
     if serial_state.get("schedule_error"):
-        print(f"Fehler: {serial_state['schedule_error']}", file=sys.stderr)
+        _print(f"Fehler: {serial_state['schedule_error']}", file=err)
         stop_event.set()
         serial_thread.join(timeout=JOIN_TIMEOUT_S)
         serial_writer_thread.join(timeout=WRITER_DRAIN_JOIN_TIMEOUT_S)
@@ -1485,7 +1492,7 @@ def run(
 
     try:
         # Die eigentliche Aufnahme laeuft komplett in den beiden Threads
-        # oben - dieser Hauptthread wartet nur auf das Dauerende oder ein
+        # oben - der aufrufende Thread wartet nur auf das Dauerende oder ein
         # Signal (SIGINT/SIGTERM landen hier als KeyboardInterrupt, siehe
         # `_install_sigterm_handler`, genau wie zuvor bei der blockierenden
         # Bildschleife).
@@ -1503,17 +1510,17 @@ def run(
                 progress(min(time.monotonic() - start_mono, args.duration), args.duration)
     except KeyboardInterrupt as exc:
         aborted = True
-        if exc.args and exc.args[0] in (_SIGTERM_MARKER, _SIGHUP_MARKER):
+        if exc.args and isinstance(exc.args[0], str) and exc.args[0]:
             abort_reason = exc.args[0]
-            _say(f"\nAbbruch ({abort_reason}) - schreibe bereits aufgezeichnete Daten vollstaendig ab.")
+            _say(f"\nAbbruch ({abort_reason}) - schreibe bereits aufgezeichnete Daten vollstaendig ab.", err)
         else:
             abort_reason = "KeyboardInterrupt (Ctrl-C)"
-            _say("\nAbbruch (Ctrl-C) - schreibe bereits aufgezeichnete Daten vollstaendig ab.")
+            _say("\nAbbruch (Ctrl-C) - schreibe bereits aufgezeichnete Daten vollstaendig ab.", err)
     except Exception as exc:  # noqa: BLE001 - Sitzung trotzdem sauber abschliessen
         aborted = True
         abort_reason = f"{type(exc).__name__}: {exc}"
         try:
-            traceback.print_exc(file=sys.stderr)
+            traceback.print_exc(file=err)
         except (OSError, ValueError):
             pass
     finally:
@@ -1657,31 +1664,31 @@ def run(
             session_json.write_text(session_text)
 
     if serial_state.get("read_error"):
-        _print(f"Warnung: serielles Lesen beendet mit Fehler: {serial_state['read_error']}", file=sys.stderr)
+        _print(f"Warnung: serielles Lesen beendet mit Fehler: {serial_state['read_error']}", file=err)
     if acquisition_error:
-        _print(f"FEHLER: Bildaufnahme: {acquisition_error}", file=sys.stderr)
+        _print(f"FEHLER: Bildaufnahme: {acquisition_error}", file=err)
 
     if serial_writer_state.get("count", 0) == 0:
         _print(
             "WARNUNG: In der gesamten Aufzeichnung wurde kein einziges Telegramm "
             f"empfangen (Dauer={args.duration}s, Port={args.port!r}, Baudrate={args.baudrate}). "
             "serial.jsonl ist leer - das ist eine Meldung, kein stiller Erfolg.",
-            file=sys.stderr,
+            file=err,
         )
     if frame_acq_state.get("frames_dropped_queue_full", 0) > 0:
         _print(
             f"WARNUNG: {frame_acq_state['frames_dropped_queue_full']} Bild(er) verworfen, weil die "
             f"Schreiber-Warteschlange voll war (--frame-queue-size {args.frame_queue_size}).",
-            file=sys.stderr,
+            file=err,
         )
     if frame_writer_state.get("frames_dropped_write_failed", 0) > 0:
         _print(
             f"WARNUNG: {frame_writer_state['frames_dropped_write_failed']} Bild(er) verworfen, weil "
             "das Schreiben der Bilddatei fehlschlug (Ziel voll?).",
-            file=sys.stderr,
+            file=err,
         )
     if serial_state.get("commands_write_error"):
-        _print(f"WARNUNG: commands.jsonl unvollstaendig: {serial_state['commands_write_error']}", file=sys.stderr)
+        _print(f"WARNUNG: commands.jsonl unvollstaendig: {serial_state['commands_write_error']}", file=err)
     staging_error = staging.get("error") if staging is not None else None
     staging_failed = staging_error is not None
     if staging_failed:
@@ -1689,7 +1696,7 @@ def run(
             f"FEHLER: Kopieren aus der Zwischenablage nach {output_dir} fehlgeschlagen: "
             f"{staging_error}. Die Aufnahme liegt vollstaendig unter {work_dir} - "
             "vor einem Neustart des Pi sichern.",
-            file=sys.stderr,
+            file=err,
         )
 
     # Bug 1: Exit 4 (und das "FEHLER"-Wort statt "vollstaendig") ist speziell
@@ -1708,7 +1715,8 @@ def run(
     _print(
         f"Fertig: {frame_writer_state.get('frames_recorded', 0)} Bilder, "
         f"{serial_writer_state.get('count', 0)} Telegrammzeilen, "
-        f"{status_word} -> {output_dir}"
+        f"{status_word} -> {output_dir}",
+        file=out,
     )
     if staging_failed:
         return EXIT_STAGING_COPY_FAILED

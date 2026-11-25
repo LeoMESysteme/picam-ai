@@ -9,6 +9,27 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-25 — Kalibrierung aus einem Konsolenworker
+
+**Problem.** Das pausierte Terminal war für Fortschritt und Passwortabfrage
+zuständig. Die Textual-Konsole benötigt dafür Daten aus dem Kalibrierungsablauf.
+
+**Entscheidung.** Der Worker verwendet denselben Kalibrierungsablauf wie der
+Einzelbefehl. Die `Console` liefert Rückmeldungen und nimmt Bestätigungen entgegen.
+Ein kooperativer Abbruch erreicht den vorhandenen `KeyboardInterrupt`-Pfad des
+Recorders. Der Recorder stellt die gesicherten Register zurück und gibt seine
+Quellen frei. Danach prüft der Kalibrierungsablauf die Rückstellung und setzt den
+Dienststart ab. Für Systemdienste kann die Konsole sudo vorab authentifizieren und
+Stoppen und Starten ohne weitere Passwortabfrage ausführen.
+
+**Alternativen.** Ein eigener Konsolenablauf hätte die Reihenfolge von
+Rückstellung und Dienststart dupliziert. Ein beendbarer Auswertungsprozess hätte
+eine eigene Verwaltung für Prozess und Zwischendateien gebraucht. Die Auswertung
+bleibt synchron und ein anstehender Abbruch verhindert danach die Übernahme.
+
+**Offen.** Freigabe und Wiederanlauf auf einem System-Pi verifizieren.
+[OQ-79](open-questions.md#oq-79).
+
 ## 2026-11-18 — Lesbarkeit am Laufstart prüfen
 
 **Problem.** Das Schärfeverhältnis reagiert auf den Helligkeits- und

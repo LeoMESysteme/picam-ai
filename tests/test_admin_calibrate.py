@@ -16,9 +16,13 @@ import io
 import json
 import os
 import signal
+import subprocess
+import threading
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from test_display_offset import _write_session_profile
@@ -295,6 +299,137 @@ def test_ctrl_c_during_recording_restores_and_restarts(tmp_path):
     assert h.gsv.norm == ORIGINAL_NORM
     assert h.actions() == ['stop', 'start']
     assert json.loads((h.run_dir / 'lauf.json').read_text())['ergebnis'] == 'abgebrochen'
+
+
+def test_worker_cancellation_restores_and_restarts_with_real_recorder(tmp_path, monkeypatch):
+    import numpy as np
+    import serial
+
+    from dispread.calibration import record
+    from dispread.records import Timestamp
+
+    cancelled = threading.Event()
+    recording = threading.Event()
+    camera_closed = threading.Event()
+    gsv = FakeGsv()
+    connections = []
+
+    class Serial(FakeSerial):
+        def readline(self):
+            time.sleep(0.01)
+            return super().readline()
+
+    def open_serial(*args, **kwargs):
+        port = Serial(gsv)
+        connections.append(port)
+        return port
+
+    class Camera:
+        def __init__(self, settings, device=None):
+            self.image = np.zeros((36, 64, 3), dtype=np.uint8)
+
+        def open(self):
+            pass
+
+        def frames(self):
+            while True:
+                yield SimpleNamespace(image=self.image, capture_timestamp=Timestamp.now_monotonic())
+                time.sleep(0.025)
+
+        def close(self):
+            camera_closed.set()
+
+        def describe(self):
+            return {'usb_id': '046d:0893'}
+
+    class Progress(calibrate.Progress):
+        def __call__(self, elapsed, total):
+            recording.set()
+
+    h = Harness(tmp_path, record=calibrate.run_record, open_serial=open_serial, cancelled=cancelled.is_set)
+    h.console.progress = lambda tty: Progress(h.console, tty)
+    monkeypatch.setattr(serial, 'Serial', open_serial)
+    monkeypatch.setattr(record, 'UvcSource', Camera)
+    monkeypatch.setattr(record, '_check_staging_capacity', lambda *_: None)
+    resumed_with_cleanup = []
+
+    def service(command):
+        if 'start' in command:
+            resumed_with_cleanup.append((gsv.norm == ORIGINAL_NORM, gsv.dpoint == ORIGINAL_DPOINT,
+                                         camera_closed.is_set(), all(port.closed for port in connections)))
+        return h._service(command)
+
+    h.deps.service_runner = service
+    codes = []
+    worker = threading.Thread(target=lambda: codes.append(h.run(yes=True)), daemon=True)
+    worker.start()
+    try:
+        assert recording.wait(10)
+        assert gsv.norm != ORIGINAL_NORM
+    finally:
+        cancelled.set()
+        worker.join(15)
+    assert codes == [calibrate.EXIT_ABORT]
+    assert h.actions() == ['stop', 'start']
+    assert resumed_with_cleanup == [(True, True, True, True)]
+    assert len(connections) == 3  # Telegrammprobe, Rückstellpunkt, Aufnahme mit eigener Rückstellung
+    session = json.loads((h.run_dir / 'aufnahme' / 'session.json').read_text())
+    assert session['aborted'] and session['abort_reason'] == 'konsole'
+    assert session['restore_verification']['matches_restore_point']
+    assert 'Fertig:' in h.out.getvalue()
+    assert 'Abbruch (konsole)' in h.err.getvalue()
+    result = h.console.last_result
+    assert result == calibrate.Result('abgebrochen', calibrate.EXIT_ABORT, 'Abbruch in der Konsole', h.run_dir,
+                                      norm_restored=True, service_restarted=True)
+    assert json.loads((h.run_dir / 'lauf.json').read_text())['ergebnis'] == 'abgebrochen'
+    assert not h.target.exists()
+
+
+def test_worker_signal_contexts_are_noops(monkeypatch):
+    from dispread.calibration import record
+
+    calls = []
+    monkeypatch.setattr(signal, 'signal', lambda *args: calls.append(args))
+
+    def run():
+        with calibrate.abort_on_signals(), calibrate.shielded(), record._SignalsHeld():
+            record._install_sigterm_handler()
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    worker.join()
+    assert not calls
+
+
+def test_cancellation_while_waiting_for_camera_restarts_service(tmp_path):
+    cancelled = threading.Event()
+    h = Harness(tmp_path, camera_holders=lambda: ['4711 (python3)'],
+                cancelled=cancelled.is_set, sleep=lambda _s: cancelled.set())
+    assert h.run(yes=True) == calibrate.EXIT_ABORT
+    assert h.actions() == ['stop', 'start']
+    assert h.console.last_result.reason == 'Abbruch in der Konsole'
+    assert h.gsv.opened == 1  # nur Telegrammprobe
+
+
+def test_worker_cancellation_during_analysis_prevents_installation(tmp_path):
+    cancelled = threading.Event()
+    h = Harness(tmp_path, cancelled=cancelled.is_set)
+
+    def analyse(recording, profile, out_dir):
+        assert h.actions() == ['stop', 'start']
+        assert 'nicht abbrechbar' in h.text
+        cancelled.set()
+        return report(out_dir, recording)
+
+    h.deps.analyse = analyse
+    codes = []
+    worker = threading.Thread(target=lambda: codes.append(h.run(yes=True)))
+    worker.start()
+    worker.join(5)
+    assert codes == [calibrate.EXIT_ABORT]
+    assert h.console.last_result.outcome == 'abgebrochen'
+    assert h.console.last_result.run_dir == h.run_dir
+    assert not h.target.exists()
 
 
 def test_aborted_session_counts_as_abort(tmp_path):
@@ -612,6 +747,97 @@ def test_short_duration_refused(tmp_path):
     assert h.run(yes=True, duration_s=10) == calibrate.EXIT_BLOCKED
 
 
+def test_console_hooks_receive_checks_plan_confirmation_and_step_keys(tmp_path):
+    h = Harness(tmp_path)
+    events = []
+
+    class Reporter:
+        def __call__(self, elapsed, total):
+            events.append((elapsed, total))
+
+        def finish(self):
+            events.append('progress_finished')
+
+    class Console(calibrate.Console):
+        def checks(self, pre):
+            assert pre.service_running and not pre.problems
+            events.append('checks')
+
+        def plan(self, title, lines):
+            assert 'Werkbank' in title and any('Normierungssprünge' in line for line in lines)
+            self.plan_lines = lines
+            events.append('plan')
+
+        def confirm(self, title, lines, expected, *, deps):
+            assert title == 'Jetzt kalibrieren?' and lines == self.plan_lines and expected is None
+            events.append('confirm')
+            return True
+
+        def step(self, text, *, key=None):
+            events.append(key)
+
+        def progress(self, tty):
+            assert not tty
+            events.append('progress')
+            return Reporter()
+
+    h.console = Console(h.console.style, out=h.out, err=h.err)
+    h.deps.ask = lambda _prompt: pytest.fail('Terminalrückfrage trotz Console.confirm')
+    assert h.run() == calibrate.EXIT_OK
+    assert events == [
+        'checks', 'plan', 'confirm', 'dienst_stop', 'kamera', 'rueckstellpunkt', 'aufnahme',
+        'progress', (60.0, 180.0), (180.0, 180.0), 'progress_finished',
+        'normierung', 'dienst_start', 'pruefen', 'auswertung', 'bauen',
+    ]
+    result = h.console.last_result
+    assert result.outcome == 'installiert' and result.run_dir == h.run_dir
+    assert result.norm_restored and result.service_restarted
+    assert dict(result.metrics)['Versatz δ'] == '97,0 ms'
+    assert dict(result.metrics)['Schutzabstand M'] == '271,6 ms'
+
+
+@pytest.mark.parametrize('interactive', [True, False])
+def test_system_service_sudo_only_uses_noninteractive_flag_when_requested(tmp_path, monkeypatch, interactive):
+    h = Harness(tmp_path, service_interactive=interactive)
+    h.instance = replace(h.instance, kind='system', scope='system')
+    monkeypatch.setattr(calibrate.os, 'geteuid', lambda: 1000)
+    assert calibrate.sudo_needed(h.instance, snapshot()(h.instance))
+    assert not calibrate.sudo_needed(h.instance, snapshot(service=probes.OFF)(h.instance))
+    assert not calibrate.sudo_needed(h.instance, snapshot(state='running')(h.instance))
+    user_instance = replace(h.instance, kind='user', scope='user')
+    assert not calibrate.sudo_needed(user_instance, snapshot()(user_instance))
+    assert h.run(yes=True) == calibrate.EXIT_OK
+    prefix = ['sudo'] if interactive else ['sudo', '-n']
+    assert h.services == [[*prefix, 'systemctl', action, INSTALLED_UNIT] for action in ('stop', 'start')]
+    assert ('sudo fragt' in h.text) == interactive
+
+
+def test_sudo_cached_uses_noninteractive_probe(monkeypatch):
+    calls = []
+    monkeypatch.setattr(probes, 'run_command', lambda argv: (calls.append(argv) or 0, '', ''))
+    assert calibrate.sudo_cached()
+    assert calls == [['sudo', '-n', 'true']]
+
+
+def test_sudo_validate_passes_password_only_over_stdin():
+    password = 'sudu-Test $ ; ä'
+
+    def run(argv, **kwargs):
+        assert argv == ['sudo', '-S', '-p', '', '-v']
+        assert kwargs.pop('input') == password + '\n'
+        assert kwargs.pop('timeout') > 0
+        assert kwargs == {'text': True, 'stdout': subprocess.DEVNULL, 'stderr': subprocess.DEVNULL, 'check': False}
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert calibrate.sudo_validate(password, run=run) == (True, '')
+
+    def timeout(argv, **kwargs):
+        raise subprocess.TimeoutExpired(argv, kwargs['timeout'], output=password, stderr=password)
+
+    ok, message = calibrate.sudo_validate(password, run=timeout)
+    assert not ok and 'Zeitlimit' in message and password not in message
+
+
 # ------------------------------------------------------------------ Prüfen und Importieren
 
 def make_file(path: Path, camera='046d:0893') -> Path:
@@ -670,6 +896,35 @@ def test_import_without_terminal_needs_yes(tmp_path):
     source = make_file(tmp_path / 'gut.json')
     assert calibrate.import_file(h.instance, source, h.console, h.deps) == calibrate.EXIT_ABORT
     assert calibrate.import_file(h.instance, source, h.console, h.deps, yes=True) == calibrate.EXIT_OK
+
+
+def test_worker_can_check_and_confirm_import(tmp_path):
+    h = Harness(tmp_path)
+    source = make_file(tmp_path / 'import.json')
+    prompts = []
+
+    class Console(calibrate.Console):
+        def confirm(self, title, lines, expected, *, deps):
+            prompts.append((title, lines, expected))
+            return True
+
+    console = Console(h.console.style, out=h.out, err=h.err)
+    results = []
+
+    def run():
+        calibrate.check_file(h.instance, source, console)
+        results.append(console.last_result)
+        calibrate.import_file(h.instance, source, console, h.deps)
+        results.append(console.last_result)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    worker.join(5)
+    assert [result.outcome for result in results] == ['gueltig', 'importiert']
+    assert dict(results[0].metrics)['Datei'] == str(source)
+    assert dict(results[1].metrics)['Datei'] == str(h.target)
+    assert prompts == [('Kalibrierung importieren?', [calibrate.IMPORT_WARNING, f'Ziel: {h.target}'], 'importieren')]
+    assert h.target.read_bytes() == source.read_bytes()
 
 
 def test_restore_from_file(tmp_path):

@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Kalibrierungs-Backend für die Konsole.** Die Kalibrierung kann
+  aus einem Worker-Thread laufen. Ein Konsolenabbruch während der Aufnahme nutzt
+  den Aufräumpfad von Strg+C, inklusive Rückstellung und Dienststart. Nach der
+  synchronen Auswertung wird eine anstehende Stornierung vor der Übernahme
+  berücksichtigt. Vorprüfung, Ablaufplan, Dialogdaten, Schrittkennungen,
+  Fortschritt und Ergebnis sind für die Konsole zugänglich. Systemdienste können
+  mit einer zuvor eingeholten sudo-Freigabe ohne Terminalabfrage laufen.
+
 * 2026-11-20 (nachts): **Befunde aus der unabhängigen Prüfung vor dem Release behoben.**
   Problem/Geändert:
   - `picam kalibrieren`: SIGHUP (SSH-Abbruch) und SIGTERM liefen ohne Aufräumen aus

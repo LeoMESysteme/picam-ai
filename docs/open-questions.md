@@ -72,6 +72,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-75](#oq-75) | — | offen | Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus? |
 | [OQ-77](#oq-77) | — | offen | Was verursacht die drei UART-Timeouts beim Anmelden der Windows-Brücke? |
 | [OQ-78](#oq-78) | — | offen | Warum bricht die Rahmennachführung im Lauf vom 18.11. ein? |
+| [OQ-79](#oq-79) | — | offen | Reicht die sudo-Freigabe für Stopp und Wiederanlauf aus der Konsole? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3855,3 +3856,19 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   `100000Z` 25 %. Offen bleibt, warum auch bei gutem Licht einzelne Läufe
   (11.11. `103604Z`, 13.11. `111848Z`) 24–31 % verloren; die Verluste
   kommen dort in Schüben.
+
+<span id="oq-79"></span>
+
+## OQ-79 — Reicht die sudo-Freigabe für Stopp und Wiederanlauf aus der Konsole?
+
+* **Status:** offen · **Zuständig:** ME-Systeme
+* **Befund (2026-11-25):** Der Kalibrierworker kann `sudo -S -p '' -v` für
+  denselben Prozesskontext nutzen. Die nachfolgenden Dienstbefehle nutzen
+  `sudo -n`. Die installierte sudoers-Regel bestimmt, ob die Freigabe bis zum
+  Wiederanlauf gilt. Die Durchläufe mit Dienst-Fakes decken die Befehle
+  und den Aufräumpfad ab.
+* **Günstigstes Experiment:** Auf einem installierten System-Pi als
+  Bedienerkonto einmal regulär kalibrieren und einmal während der Aufnahme
+  abbrechen. In beiden Fällen die Rückstellung und den HTTPS-Wiederanlauf
+  prüfen. Die wirksame sudoers-Regel für dieses Konto festhalten.
+* **Zielort:** [Validierung](VALIDATION.md) und [Laborjournal](lab_journal.md).
