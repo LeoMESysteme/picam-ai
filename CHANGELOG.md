@@ -5,6 +5,7 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Einstellungen: Eingabefelder mit Navigations- und Bearbeitungszustand.** Beim Öffnen des Tabs schrieb Tippen sofort in den Port (`focus_first` fokussierte das Feld); jetzt wechseln ↑/↓ zwischen Feldern und Knöpfen, Enter bzw. Mausklick bearbeitet, Enter übernimmt, Esc verwirft (zweites Esc zum Dashboard) — `admin/edit_input.py`.
 * 2026-11-25: **Wartungsabläufe für die Verwaltungskonsole.** Der Update-Worker
   meldet Vorbereitung, Neustart und gegebenenfalls den Rückweg. Nach einem
   erfolgreichen Update nennt er den Startpfad der neuen Konsole. Die

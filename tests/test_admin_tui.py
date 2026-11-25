@@ -307,6 +307,7 @@ def test_config_change_writes_after_confirmation(tmp_path):
         await pilot.pause(0.3)
         port = app.query_one('#cfg-port', Input)
         assert app.focused is port
+        await pilot.press('enter')  # Navigationszustand -> Bearbeiten
         port.value = '8443'
         await pilot.press('enter')
         await pilot.pause(0.3)
@@ -328,7 +329,7 @@ def test_q_in_input_is_text_not_quit(tmp_path):
         await pilot.press('c')
         await pilot.pause(0.2)
         app.query_one('#cfg-bridge_name', Input).focus()
-        await pilot.press('end', 'q', '3')
+        await pilot.press('enter', 'end', 'q', '3')
         await pilot.pause(0.1)
         assert app.is_running and app.query_one('#cfg-bridge_name', Input).value == 'aq3'
         assert app.current == 'einstellungen'

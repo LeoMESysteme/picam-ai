@@ -14,6 +14,7 @@ from textual.containers import Vertical
 from textual.widgets import Button, Checkbox, Input, Static
 
 from .. import probes
+from ..edit_input import EDIT_HINT, EditInput, NavCheckbox
 from ..ui import MUTED, Action, Confirmation, ConfirmScreen
 from ..widgets import (
     ActionBar,
@@ -96,9 +97,9 @@ class EinstellungenView(TabView):
             field = Vertical(classes='field')
             field.compose_add_child(Static(label, classes='field-label'))
             if key == 'bridge_discovery':
-                field.compose_add_child(Checkbox('angekündigt', value=bool(current), id=f'cfg-{key}'))
+                field.compose_add_child(NavCheckbox('angekündigt', value=bool(current), id=f'cfg-{key}'))
             else:
-                field.compose_add_child(Input(value='' if current is None else str(current), id=f'cfg-{key}',
+                field.compose_add_child(EditInput(value='' if current is None else str(current), id=f'cfg-{key}',
                                               placeholder='nicht gesetzt'))
             field.compose_add_child(Static(risk_text(level, risk), classes='field-risk'))
             box.mount(field)
@@ -120,7 +121,8 @@ class EinstellungenView(TabView):
         else:
             intro = fields([('Datei', value(inst.config), True)], width, label_w=8)
         self.query_one('#cfg-intro', Static).update(intro)
-        self.query_one('#cfg-help', Static).update(hint.fitted(width))
+        self._hint = hint
+        self._show_hint(width)
         config = value(inst.config) if inst.config else join(value(None), '  Startbefehl des Dienstes')
         rows = [('Konfiguration', config, True),
                 ('Adresse', value(inst.url), True),
@@ -133,7 +135,22 @@ class EinstellungenView(TabView):
                   help_line('Die Adresse wird nur bei einer Neuinstallation gewählt.'))
         self.sync_buttons()
 
+    def _show_hint(self, width: int | None = None) -> None:
+        """Hilfezeile: beim Bearbeiten eines Feldes der Tastenhinweis, sonst die Standardzeile."""
+        card = self.query_one('#cfg-values')
+        width = width or self.card_width(card)
+        editing = any(f.editing for f in self.query(EditInput))
+        text = help_line(EDIT_HINT) if editing else getattr(self, '_hint', None)
+        if text is not None:
+            self.query_one('#cfg-help', Static).update(text.fitted(width))
+
+    @on(EditInput.EditingChanged)
+    def _editing_changed(self, event: EditInput.EditingChanged) -> None:
+        event.stop()
+        self._show_hint()
+
     def focus_first(self) -> None:
+        """Erster Fokus im Navigationszustand (Feld markiert, Tippen schreibt nichts)."""
         for widget in self.query('#cfg-port'):
             widget.focus()
 
