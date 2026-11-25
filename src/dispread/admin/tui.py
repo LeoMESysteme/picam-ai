@@ -213,8 +213,10 @@ class PicamApp(App[int]):
     def __init__(self, instance: Instance, collect=probes.collect, journal_source=None,
                  service_runner=None, auto_refresh: bool = True, intro: bool = False,
                  socket_request=None, metrics_source=None, storage_source=None, network_source=None,
-                 popups: bool = True):
+                 popups: bool = True, onboarding: str | None = None):
         super().__init__()
+        #: None = nie von selbst, 'auto' = beim ersten Start (Marke fehlt), 'force' = jetzt (--onboarding)
+        self._onboarding = onboarding
         self.instance = instance
         self._collect = collect
         self._journal_source = journal_source
@@ -303,6 +305,18 @@ class PicamApp(App[int]):
             self.set_interval(NETWORK_REFRESH_S, self._network_worker)
         self._storage_worker()
         self._network_worker()
+        from .views.onboarding_screen import should_start
+
+        if self._onboarding == 'force' or (self._onboarding == 'auto' and should_start(self.instance)):
+            self._onboarding = None
+            self.call_after_refresh(self.open_onboarding)
+
+    def open_onboarding(self) -> None:
+        """Einrichtungsassistent (Konto & Adresse, Kamera & Fokus, Timing-Kalibrierung) öffnen."""
+        from .views.onboarding_screen import OnboardingScreen
+
+        if not any(isinstance(screen, OnboardingScreen) for screen in self.screen_stack):
+            self.push_screen(OnboardingScreen(self.instance))
 
     # ------------------------------------------------------------ Tabs
     def view(self, tab_id: str | None = None):
@@ -1053,8 +1067,8 @@ def intro_wanted(flag: bool = True) -> bool:
     return flag and os.environ.get('PICAM_INTRO', '1').strip().lower() not in ('0', 'nein', 'no', 'off', 'aus')
 
 
-def run(instance: Instance, intro: bool = True) -> int:
-    app = PicamApp(instance, intro=intro_wanted(intro))
+def run(instance: Instance, intro: bool = True, onboarding: str | None = 'auto') -> int:
+    app = PicamApp(instance, intro=intro_wanted(intro), onboarding=onboarding)
     result = app.run()
     return 0 if result is None else int(result)
 

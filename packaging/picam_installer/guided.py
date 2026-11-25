@@ -16,11 +16,14 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
 import json
 import os
 import re
 import shlex
+import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -255,6 +258,19 @@ def plan_lines(result, mode, link, extra=()):
     return [f'{path:<{width}}  {text}' for path, text in rows]
 
 
+def plan_rows(result, link, extra=()):
+    """Planzeilen als Karte: (Beschriftung, Pfad); me-fastfetch-Zeilen mit ihrem Text dahinter."""
+    paths = result['paths']
+    rows = [('Programm', paths['prefix'] + '/releases/' + result['release_id']),
+            ('Daten', paths['data']), ('Konfiguration', paths['config'])]
+    if paths.get('unit'):
+        rows.append(('Dienst', f'{paths["unit"]} (Start erst nach Rückfrage)'))
+    if link:
+        rows.append(('Befehl picam', str(link)))
+    rows += [('me-fastfetch', f'{path}: {text}') for path, text in extra]
+    return rows
+
+
 def link_target(mode, owner):
     if mode == 'system':
         return Path('/usr/local/bin/picam')
@@ -318,20 +334,19 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
             info = probe_system(python, runner=runner)
         version = '.'.join(map(str, info.version))
         system_ok = info.system == 'Linux' and info.version >= (3, 13)
-        out.rule('System')
-        out.status('ok' if system_ok else 'fail', 'Betriebssystem',
-                   f'{info.os_id} {info.os_version} · {info.machine} · Python {version}')
+        hardware = engine.hardware_id_available()
+        out.card('System', [
+            ('Betriebssystem', f'{info.os_id} {info.os_version} · {info.machine} · Python {version}',
+             'ok' if system_ok else 'fail'),
+            ('Dienstverwaltung', 'systemd' if info.systemd else 'kein systemd – nur portable Installation',
+             'ok' if info.systemd else 'warn'),
+            ('Pi-Kennung', 'vorhanden (Windows-Brücke möglich)' if hardware else 'fehlt – Werkbank ohne Brücke',
+             'ok' if hardware else 'warn')])
         if not system_ok:
             out.line('    Die Werkbank braucht Linux mit Python 3.13 (Raspberry Pi OS 13 „Trixie“).')
             return 1
-        out.status('ok' if info.systemd else 'warn', 'Dienstverwaltung',
-                   'systemd' if info.systemd else 'kein systemd – nur portable Installation')
-        hardware = engine.hardware_id_available()
-        out.status('ok' if hardware else 'warn', 'Pi-Kennung',
-                   'vorhanden (Windows-Brücke möglich)' if hardware else 'fehlt – Werkbank ohne Brücke')
 
         # 2. Release
-        out.rule('Release')
         source = given.source or find_source(root, Path.cwd())
         if source is None:
             out.status('ask', 'Archiv', 'kein picam-*.tar.gz gefunden')
@@ -344,16 +359,20 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
 
         with out.task('Archiv prüfen', quiet=True):
             bundle = load_source(source, sha)
-        out.status('ok', 'Archiv', f'{Path(source).name} · Release {bundle.release_id}')
         with out.task('Debian-Pakete prüfen', quiet=True):
             missing = engine.missing_packages(bundle, runner) if info.apt else []
             fastfetch_present = fastfetch.package_installed(runner) if info.apt else True
+        rows = [('Archiv', f'{Path(source).name} · Release {bundle.release_id}', 'ok')]
         if missing:
-            out.status('warn', 'Pakete', f'{len(missing)} fehlen: ' + ', '.join(missing))
+            rows.append(('Pakete', f'{len(missing)} fehlen: ' + ', '.join(missing), 'warn'))
         else:
-            out.status('ok', 'Pakete', 'alle Debian-Pakete vorhanden' if info.apt else 'kein apt – manuell prüfen')
-        if info.missing_modules and not missing:
-            out.status('fail', 'Python-Module', ', '.join(info.missing_modules))
+            rows.append(('Pakete', 'alle Debian-Pakete vorhanden' if info.apt else 'kein apt – manuell prüfen',
+                         'ok'))
+        failed = bool(info.missing_modules and not missing)
+        if failed:
+            rows.append(('Python-Module', ', '.join(info.missing_modules), 'fail'))
+        out.card('Release', rows)
+        if failed:
             return 1
 
         # 3. Fragen
@@ -426,9 +445,13 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
         link = link_target(mode, owner)
         if link is not None and (link.exists() or link.is_symlink()):
             link = None
-        out.rule('Plan')
-        for line in plan_lines(plan, mode, link, fastfetch_rows(component) if component else ()):
-            out.line('  ' + line)
+        extra = fastfetch_rows(component) if component else ()
+        if out.live:
+            out.card('Plan', plan_rows(plan, link, extra), hint=f'Werkbank danach unter {plan["url"]}')
+        else:
+            out.rule('Plan')
+            for line in plan_lines(plan, mode, link, extra):
+                out.line('  ' + line)
         if missing:
             out.line('  ' + out.dim('vorher: apt-get install ' + ' '.join(missing)))
         for note in (component or {}).get('notes', []):
@@ -436,7 +459,8 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
                 out.line('  ' + out.dim(note))
         if component and not ui.menus and given.fastfetch is None:
             out.line('  ' + out.dim('me-fastfetch ist optional: abwählen mit --without-fastfetch'))
-        out.line('  ' + out.dim(f'Werkbank danach unter {plan["url"]}'))
+        if not out.live:
+            out.line('  ' + out.dim(f'Werkbank danach unter {plan["url"]}'))
         out.line()
         if not ui.confirm('Installieren?'):
             out.line('  Abgebrochen, nichts geändert.')
@@ -455,7 +479,7 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
             execvp('sudo', ['sudo', sys.executable, '-c', bootstrap, package_root] + flags)
             return 1  # nur erreicht, wenn execvp ersetzt wurde (Tests)
         return apply(args, out=out, input_=input_, runner=runner, installer=installer, ui=ui,
-                     package_missing=not fastfetch_present)
+                     package_missing=not fastfetch_present, execvp=execvp)
     except KeyboardInterrupt:
         out.line()
         out.line('  Abgebrochen.')
@@ -486,7 +510,7 @@ def ask_account(ui):
 
 
 def apply(args, out=None, input_=None, runner=subprocess.run, installer=engine.install, ui=None,
-          package_missing=None):
+          package_missing=None, execvp=os.execvp):
     """Installation ausführen, danach Befehl verlinken und optional Dienst starten."""
     out = out or Out()
     ui = ui or make_ui(out, input_)
@@ -539,24 +563,120 @@ def apply(args, out=None, input_=None, runner=subprocess.run, installer=engine.i
                     started = True
                 else:
                     out.status('warn', 'Dienst', 'gestartet, antwortet aber noch nicht – picam logs')
-    out.rule('Nächste Schritte')
-    steps = []
-    if not started and args.mode != 'portable':
-        steps.append('Dienst starten: picam start')
-    if args.mode == 'portable':
-        steps.append('Starten: ' + shlex.join(result.get('start_command', [])))
-    steps += [f'Im Browser öffnen: {result["url"]}',
-              f'Anmelden mit Benutzer „{args.user}“ und dem Linux-Passwort dieses Kontos '
-              f'(dasselbe wie für SSH; ändern mit: sudo passwd {args.user})',
-              'Auf Windows dem Zertifikat vertrauen: ' + paths['data'] + '/workbench/tls/cert.pem',
-              'Offene Einrichtung durchgehen (Kamera, UART, Kalibrierung): ' + (
-                  'picam setup' if args.mode != 'portable' else
-                  f'{paths["prefix"]}/current/.venv/bin/picam --config {paths["config"]}')]
-    if component and component.get('applied') and component.get('package') == 'fehlt':
-        steps.append('Für me-fastfetch das Paket nachinstallieren: sudo apt-get install fastfetch')
-    for index, step in enumerate(steps, 1):
-        out.line(f'  {index}. {step}')
+    cert = Path(paths['data']) / 'workbench/tls/cert.pem'
+    onboarding = start_command(args, owner, venv_picam, paths)
+    shown = ('picam --onboarding' if args.mode != 'portable' else shlex.join(onboarding))
+    if out.live:
+        summary(out, args, result, paths, cert, started, shown)
+    else:
+        steps = []
+        if not started and args.mode != 'portable':
+            steps.append('Dienst starten: picam start')
+        if args.mode == 'portable':
+            steps.append('Starten: ' + shlex.join(result.get('start_command', [])))
+        steps += [f'Im Browser öffnen: {result["url"]}',
+                  f'Anmelden mit Benutzer „{args.user}“ und dem Linux-Passwort dieses Kontos '
+                  f'(dasselbe wie für SSH; ändern mit: sudo passwd {args.user})',
+                  'Auf Windows dem Zertifikat vertrauen: ' + str(cert),
+                  'Einrichtung abschließen (Konto & Adresse, Kamera & Fokus, Timing-Kalibrierung): ' + shown]
+        if component and component.get('applied') and component.get('package') == 'fehlt':
+            steps.append('Für me-fastfetch das Paket nachinstallieren: sudo apt-get install fastfetch')
+        out.rule('Nächste Schritte')
+        for index, step in enumerate(steps, 1):
+            out.line(f'  {index}. {step}')
+    if component and component.get('applied') and component.get('package') == 'fehlt' and out.live:
+        out.line('  ' + out.dim('Für me-fastfetch das Paket nachinstallieren: sudo apt-get install fastfetch'))
+    offer_start(out, ui, owner, onboarding, execvp)
     return 0
+
+
+def cert_fingerprint(path):
+    """SHA-256 des Zertifikats in Zweiergruppen („AB:CD:…“) oder None."""
+    try:
+        text = Path(path).read_text(encoding='ascii', errors='ignore')
+        block = re.search(r'-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----', text, re.S)
+        digest = hashlib.sha256(ssl.PEM_cert_to_DER_cert(block.group(0))).hexdigest().upper() if block else None
+    except (OSError, ValueError):
+        return None
+    return ':'.join(digest[i:i + 2] for i in range(0, len(digest), 2)) if digest else None
+
+
+def start_command(args, owner, venv_picam, paths):
+    """Befehl der neuen Konsole mit Einrichtungsassistent (immer der Befehl dieser Installation)."""
+    command = [str(venv_picam), '--onboarding']
+    if args.mode == 'portable':
+        command += ['--config', str(paths['config'])]
+    return command
+
+
+def run_as_operator(command, owner, euid=None, which=None):
+    """Argumentliste, die ``command`` als Bediener startet (nicht als root), oder None."""
+    euid = os.geteuid() if euid is None else euid
+    which = which or shutil.which
+    if euid == owner.pw_uid:
+        return list(command)
+    if euid != 0:
+        return None  # anderes Konto ohne root: nicht umschalten
+    if which('sudo'):
+        return ['sudo', '-u', owner.pw_name, '-H', *command]
+    if which('runuser'):
+        return ['runuser', '-u', owner.pw_name, '--', 'env', f'HOME={owner.pw_dir}', *command]
+    return None
+
+
+def summary(out, args, result, paths, cert, started, shown):
+    """Abschlusskarte: Adresse, Anmeldung mit Konto und Passwort, Zertifikat, Einrichtung."""
+    rows = [('Werkbank', result['url'], 'ok' if started else 'warn' if args.mode != 'portable' else 'off'),
+            ('Anmeldung', f'Benutzer „{args.user}“ mit dem Linux-Passwort dieses Kontos'),
+            ('Passwort', f'dasselbe wie für SSH; ändern mit: sudo passwd {args.user}')]
+    digest = cert_fingerprint(cert)
+    rows.append(('Zertifikat', 'selbstsigniert: im Browser einmal vertrauen', 'warn'))
+    if digest:
+        half = len(digest) // 2 + 1
+        rows += [('SHA-256', digest[:half - 1]), ('', digest[half:])]
+    rows.append(('Datei', str(cert)))
+    if not started:
+        rows.append(('Dienst', 'noch nicht gestartet: picam start' if args.mode != 'portable'
+                     else 'manuell starten', 'warn'))
+    rows.append(('Einrichtung', f'Konto, Kamera, Kalibrierung: {shown}', 'warn'))
+    out.card('Fertig', rows, badge='ok', hint='Fingerabdruck und die weiteren Schritte zeigt picam --onboarding.')
+
+
+def offer_start(out, ui, owner, command, execvp=os.execvp, which=None):
+    """Enter startet die Konsole mit Einrichtung (als Bediener, ersetzt diesen Prozess), q bleibt im Terminal.
+
+    Gefragt wird nur in einem echten Terminal (Menüs); sonst nur der Befehl genannt.
+    """
+    argv = run_as_operator(command, owner, which=which)
+    if not getattr(ui, 'menus', False) or argv is None:
+        if argv is None and getattr(ui, 'menus', False):
+            out.line('  ' + out.dim('Als dieses Konto später starten: ' + shlex.join(command)))
+        return False
+    chip = lambda key: out.style(f' {key} ', fg='accent', bg='band', bold=True) if out.color else f'{key}:'  # noqa: E731
+    out.line()
+    out.line(f'  {chip("Enter")} picam starten und Einrichtung abschließen  {out.dim(out.sym["dot"])}  '
+             f'{chip("q")} im Terminal bleiben')
+    with ui.keymode(out) as fd:
+        while True:
+            try:
+                key = ui.read(fd)
+            except KeyboardInterrupt:
+                key = 'q'
+            if key == 'enter':
+                go = True
+                break
+            if key in ('q', 'Q', 'esc'):
+                go = False
+                break
+    if not go:
+        out.line('  ' + out.dim('Später: ' + shlex.join(command)))
+        return False
+    out.write('\033[?25h')
+    try:
+        execvp(argv[0], argv)
+    except OSError as error:
+        out.status('warn', 'Start', f'nicht möglich ({error}); später: {shlex.join(command)}')
+    return True
 
 
 def guided_apply_main(argv):

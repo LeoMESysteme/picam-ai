@@ -63,9 +63,9 @@ def test_cli_accepts_no_intro(monkeypatch):
 
     seen = {}
     monkeypatch.setattr(cli, 'discover', lambda *_: Instance(kind='dev', unit='u', scope='user'))
-    def run(instance, intro=True):
-        seen['intro'] = intro
+    def run(instance, intro=True, onboarding=None):
+        seen['intro'], seen['onboarding'] = intro, onboarding
         return 0
     monkeypatch.setattr(tui, 'run', run)
     assert cli.main(['tui', '--no-intro']) == 0
-    assert seen['intro'] is False
+    assert seen['intro'] is False and seen['onboarding'] == 'auto'

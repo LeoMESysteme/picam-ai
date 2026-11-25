@@ -141,6 +141,7 @@ class EinstellungenView(TabView):
         inst = self.app.instance
         actions = [Action('p', 'Änderung prüfen …', self.check, icon='check',
                           blocked=None if inst.config else 'keine config.toml (Entwicklungsbetrieb)')]
+        actions.append(Action('e', 'Einrichtung erneut …', self.app.open_onboarding, icon='setup'))
         actions.append(Action('x', 'Deinstallieren …', self.app.start_uninstall, icon='remove',
                               blocked=self.app.uninstall_blocker()))
         return actions

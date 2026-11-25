@@ -2,8 +2,12 @@
 
 Nur Standardbibliothek (``termios`` für Tasten), keine Produktimporte.
 
-* ``Out`` schreibt Statuszeilen; Farbe nur im Terminal und ohne ``NO_COLOR``,
-  ASCII-Zeichen ohne UTF-8 oder mit ``NO_COLOR``.
+* ``Out`` schreibt Statuszeilen, Abschnittsbänder, Karten (abgestufter Hintergrund)
+  und Abzeichen (OK/WARNUNG/FEHLER/AUS) in der Formsprache der picam-Konsole
+  (Palette „Schiefer“, Truecolor; ``PICAM_COLORS=256|16`` oder ``TERM=linux``
+  rechnen herunter). Farbe nur im Terminal und ohne ``NO_COLOR``, ASCII-Zeichen
+  ohne UTF-8 oder mit ``NO_COLOR``; ohne Terminal einfache Zeilen. Nie benutzt
+  werden ✔ ⚙ ⏸ ⏹ ℹ (verrutschen im Windows-Terminal über SSH).
 * ``Menus`` fragt mit Pfeiltasten (↑/↓, j/k), Enter, Leertaste, Ziffern und
   Esc/q. Nur wenn stdin und stdout ein Terminal sind und ``TERM`` nicht
   ``dumb`` ist; sonst nimmt ``guided`` die bisherige Texteingabe.
@@ -23,6 +27,7 @@ import select
 import shutil
 import signal
 import sys
+import textwrap
 import threading
 import time
 from contextlib import contextmanager
@@ -37,14 +42,27 @@ TEAL = '38;2;0;181;175'
 TEAL_DIM = '38;2;27;79;76'
 TEAL_BRIGHT = '1;38;2;119;231;219'
 FLASH = '1;97'
+#: Palette „Schiefer“ der Konsole (dispread.admin.ui), als Hex für Truecolor/256/16.
+PALETTE = {
+    'canvas': '#2c343e', 'surface': '#333c47', 'raised': '#3c4753', 'band': '#242b33', 'line': '#4b5764',
+    'text': '#dde3e9', 'soft': '#c0c9d2', 'muted': '#adb7c2',
+    'accent': '#45c9be', 'accent_strong': '#62d6cb', 'on_accent': '#0e1b1c', 'accent_deep': '#137a73',
+    'ok': '#97d9ae', 'warn': '#eec977', 'fail': '#f69e94', 'off': '#adb7c2',
+    'tint_ok': '#32463d', 'tint_warn': '#4a4230', 'tint_fail': '#4d3639', 'tint_off': '#3a434e',
+    'tint_info': '#2c4b4f', 'inset': '#21272f', 'select_bg': '#225a57', 'select_fg': '#f2fbfa',
+}
+BADGES = {'ok': ('OK', 'ok', 'tint_ok'), 'warn': ('WARNUNG', 'warn', 'tint_warn'),
+          'fail': ('FEHLER', 'fail', 'tint_fail'), 'off': ('AUS', 'off', 'tint_off')}
 CODES = {'ok': '32', 'warn': '33', 'fail': '31', 'step': TEAL, 'ask': TEAL, 'set': TEAL}
 
 UTF8 = {'ok': '✓', 'warn': '▲', 'fail': '✗', 'step': '›', 'ask': '?', 'set': '›', 'pointer': '▸',
         'on': '●', 'off': '○', 'arrow': '→', 'spin': '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏', 'full': '█',
-        'eighths': ' ▏▎▍▌▋▊▉', 'track': '─', 'keys': '↑↓', 'dot': '·'}
+        'eighths': ' ▏▎▍▌▋▊▉', 'track': '─', 'keys': '↑↓', 'dot': '·',
+        'idle': '○', 'card': '◆', 'edge': '▌', 'help': '›'}
 ASCII = {'ok': '+', 'warn': '!', 'fail': 'x', 'step': '-', 'ask': '?', 'set': '>', 'pointer': '>',
          'on': '[x]', 'off': '[ ]', 'arrow': '->', 'spin': '|/-\\', 'full': '#',
-         'eighths': None, 'track': '.', 'keys': 'Pfeile', 'dot': '-'}
+         'eighths': None, 'track': '.', 'keys': 'Pfeile', 'dot': '-',
+         'idle': '-', 'card': '#', 'edge': '|', 'help': '>'}
 
 LOGO = (
     '####  ####   ####   ##################',
@@ -78,9 +96,70 @@ class Caps:
         self.live = _isatty(stream) and not dumb
         self.interactive = self.live and stdin is not None and _isatty(stdin) and termios is not None
         self.color = self.live and not no_color
+        self.depth = color_depth(env)
         encoding = (getattr(stream, 'encoding', None) or '').lower().replace('-', '')
         locale = ''.join(env.get(name, '') for name in ('LC_ALL', 'LC_CTYPE', 'LANG')).upper().replace('-', '')
         self.utf8 = not no_color and ('utf8' in encoding or 'UTF8' in locale)
+
+
+def color_depth(env):
+    """``'true'`` (Vorgabe wie in der Konsole, auch ohne COLORTERM über SSH), ``'256'`` oder ``'16'``."""
+    wanted = (env.get('PICAM_COLORS') or '').strip().lower()
+    if wanted in ('16', '8'):
+        return '16'
+    if wanted == '256':
+        return '256'
+    if wanted in ('truecolor', '24bit', 'true', '16m'):
+        return 'true'
+    return '16' if env.get('TERM') == 'linux' else 'true'
+
+
+def hex_rgb(color):
+    color = color.lstrip('#')
+    return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
+
+
+def _index256(r, g, b):
+    if abs(r - g) < 8 and abs(g - b) < 8:  # Grautreppe
+        gray = round((r - 8) / 10) if r > 8 else 0
+        if 0 <= gray <= 23:
+            return 232 + gray
+    return 16 + 36 * round(r / 51) + 6 * round(g / 51) + round(b / 51)
+
+
+def _index16(r, g, b):
+    return (r > 127) | ((g > 127) << 1) | ((b > 127) << 2), max(r, g, b) > 200
+
+
+def color_code(kind, rgb, depth):
+    """SGR-Teil für Vorder-(``fg``) oder Hintergrund (``bg``); mit 16 Farben gibt es keinen Hintergrund."""
+    base = 38 if kind == 'fg' else 48
+    if depth == 'true':
+        return f'{base};2;{rgb[0]};{rgb[1]};{rgb[2]}'
+    if depth == '256':
+        return f'{base};5;{_index256(*rgb)}'
+    if kind == 'bg':
+        return ''
+    index, bright = _index16(*rgb)
+    return str((90 if bright else 30) + index)
+
+
+def downgrade(code, depth):
+    """Truecolor-Teile einer SGR-Folge (``38;2;r;g;b``) auf die Farbtiefe des Terminals umrechnen."""
+    if depth == 'true' or ';2;' not in code:
+        return code
+    parts, out, index = code.split(';'), [], 0
+    while index < len(parts):
+        if parts[index] in ('38', '48') and parts[index + 1:index + 2] == ['2'] and index + 4 < len(parts):
+            rgb = tuple(int(v) for v in parts[index + 2:index + 5])
+            piece = color_code('fg' if parts[index] == '38' else 'bg', rgb, depth)
+            if piece:
+                out.append(piece)
+            index += 5
+        else:
+            out.append(parts[index])
+            index += 1
+    return ';'.join(out)
 
 
 def visible(text):
@@ -110,6 +189,7 @@ class Out:
         self.caps = Caps(self.stream, stdin if stdin is not None else sys.stdin, env)
         self.color = self.caps.color if color is None else bool(color)
         self.sym = UTF8 if self.caps.utf8 else ASCII
+        self.depth = self.caps.depth
         self.lock = threading.RLock()
 
     @property
@@ -117,7 +197,35 @@ class Out:
         return self.caps.live
 
     def paint(self, text, code):
-        return f'\033[{code}m{text}\033[0m' if self.color and code else text
+        if not (self.color and code):
+            return text
+        return f'\033[{downgrade(code, self.depth)}m{text}\033[0m'
+
+    def style(self, text, fg=None, bg=None, bold=False, dim=False, italic=False):
+        """Text mit Palettenfarben (Namen aus ``PALETTE``); ohne Farbe unverändert."""
+        if not self.color or not text:
+            return text
+        codes = (['1'] if bold else []) + (['2'] if dim else []) + (['3'] if italic else [])
+        if fg:
+            codes.append(color_code('fg', hex_rgb(PALETTE[fg]), self.depth))
+        if bg:
+            codes.append(color_code('bg', hex_rgb(PALETTE[bg]), self.depth))
+        codes = [c for c in codes if c]
+        return f'\033[{";".join(codes)}m{text}\033[0m' if codes else text
+
+    def badge(self, kind, pad=False):
+        """Zustand als Abzeichen: Zeichen + Wort auf getönter Fläche (ohne Farbe ``[OK]``)."""
+        word, tone, tint = BADGES[kind]
+        if not self.color:
+            return f'[{word}]'
+        mark = self.sym['idle' if kind == 'off' else kind]
+        return self.style(f' {mark} {word.ljust(7) if pad else word} ', fg=tone, bg=tint)
+
+    def columns(self):
+        return max(40, shutil.get_terminal_size((80, 24)).columns)
+
+    def card_width(self):
+        return max(36, min(100, self.columns() - 4))
 
     def write(self, text):
         with self.lock:
@@ -132,17 +240,78 @@ class Out:
         self.line(self.paint(text, '1'))
 
     def rule(self, text):
-        """Abschnittstitel mit Linie, z. B. ``── Angaben ──────``."""
+        """Abschnittsband (Konsolen-Kopf: Zeichen + TITEL auf dunklem Band); ohne Terminal eine Titelzeile."""
         if not self.live:
             return self.title(text)
-        width = min(72, shutil.get_terminal_size((80, 24)).columns - 2)
-        track = self.sym['track']
-        head = f'{track * 2} {text} '
+        width = self.card_width()
+        band = f' {self.sym["card"]} {text.upper()}'
         self.line()
-        self.line(self.paint(head, '1') + self.paint(track * max(0, width - len(head)), TEAL_DIM))
+        if not self.color:
+            self.line(self.paint(f'{self.sym["track"] * 2} {text} ', '1')
+                      + self.sym['track'] * max(0, width - len(text) - 4))
+            return
+        head = self.style(f' {self.sym["card"]} ', fg='accent', bg='band') + self.style(
+            text.upper(), fg='soft', bg='band', bold=True)
+        self.line('  ' + head + self.style(' ' * max(0, width - visible(band) - 1), bg='band'))
 
     def status(self, kind, label, text):
+        if self.live and self.color and kind in BADGES:
+            return self.line(f'  {self.badge(kind, True)} {label:<15} {text}')
         self.line(f'  {self.paint(self.sym[kind], CODES[kind])} {label:<16} {text}')
+
+    def card(self, title, rows=(), badge=None, hint=None):
+        """Karte der Konsole: Kopf (Zeichen, TITEL, Abzeichen rechts), Zeilen, eine Hilfezeile.
+
+        ``rows``: (Beschriftung, Text[, Stufe]); ``Stufe`` ok|warn|fail|off setzt ein Abzeichen vor
+        den Text. Im Terminal mit abgestuftem Hintergrund und Randstreifen, sonst Titel und
+        Statuszeilen wie bisher.
+        """
+        rows = [tuple(row) + (None,) * (3 - len(row)) for row in rows]
+        if not self.live:
+            self.rule(title)
+            for label, text, kind in rows:
+                if kind:
+                    self.status(kind, label, text)
+                else:
+                    self.line(f'  {label:<16} {text}'.rstrip())
+            if hint:
+                self.line('  ' + self.dim(hint))
+            return
+        width = self.card_width()
+        inner = width - 2  # Randstreifen + Leerzeichen
+        sym = self.sym
+        edge = self.style(sym['edge'], fg='accent', bg='surface') + self.style(' ', bg='surface')
+
+        def line(parts, plain):
+            pad = max(0, inner - plain)
+            self.line('  ' + edge + ''.join(parts) + self.style(' ' * pad, bg='surface'))
+
+        self.line()
+        head = f'{sym["card"]} {title.upper()}'
+        right = self.badge(badge) if badge else ''
+        gap = max(1, inner - len(head) - (visible(right) if right else 0) - 1)
+        parts = [self.style(f'{sym["card"]} ', fg='accent', bg='surface'),
+                 self.style(title.upper(), fg='soft', bg='surface', bold=True)]
+        if right:
+            parts += [self.style(' ' * gap, bg='surface'), right]
+        line(parts, len(head) + (gap + visible(right) if right else 0))
+        label_w = min(18, max([len(label) for label, _, _ in rows] + [8]) + 1)
+        lead = 12 if any(kind for _, _, kind in rows) else 0  # Breite eines Abzeichens samt Lücke
+        for label, text, kind in rows:
+            mark = (self.badge(kind, True) + self.style(' ', bg='surface') if kind
+                    else self.style(' ' * lead, bg='surface'))
+            room = max(12, inner - label_w - lead - 1)
+            pieces = textwrap.wrap(str(text), room, break_long_words=True, break_on_hyphens=False) or ['']
+            for number, piece in enumerate(pieces):
+                head = self.style(label.ljust(label_w)[:label_w] if not number else ' ' * label_w,
+                                  fg='muted', bg='surface')
+                lead_part = mark if not number else self.style(' ' * lead, bg='surface')
+                line([head, lead_part, self.style(piece, fg='text', bg='surface')], label_w + lead + len(piece))
+        if hint:
+            text = f'{sym["help"]} {hint}'
+            if len(text) > inner - 1:
+                text = text[:inner - 4] + '...'
+            line([self.style(text, fg='muted', bg='surface', italic=True)], len(text))
 
     def step(self, text):
         self.line(f'  {self.paint(self.sym["step"], TEAL)} {text}')
@@ -286,6 +455,11 @@ class Menus:
     def _hint(self, *parts):
         return '    ' + self.out.dim(f' {self.out.sym["dot"]} '.join(parts))
 
+    def _selected(self, text):
+        """Gewählte Zeile wie in der Konsole: Auswahlfläche (Teal) über die Kartenbreite."""
+        room = max(len(text) + 2, min(self.out.card_width(), 72))
+        return '    ' + self.out.style((' ' + text).ljust(room), fg='select_fg', bg='select_bg', bold=True)
+
     def answered(self, label, text):
         self.out.line(f'  {self.out.paint(self.out.sym["set"], TEAL)} {label:<16} {self.out.paint(text, "1")}')
 
@@ -315,6 +489,9 @@ class Menus:
             for index, (name, detail) in enumerate(rows):
                 number = f'{index + 1} ' if numbered else ''
                 current = index == state['index']
+                if current and self.out.color:
+                    lines.append(self._selected(f'{sym["pointer"]} {number}{name:<{width}}  {detail}'))
+                    continue
                 pointer = self.out.paint(sym['pointer'], TEAL) if current else ' '
                 title = self.out.paint(f'{number}{name:<{width}}', TEAL_BRIGHT if current else '')
                 lines.append(f'    {pointer} {title}  {self.out.dim(detail)}'.rstrip())
@@ -354,6 +531,10 @@ class Menus:
             lines = [self._question(label)]
             for index, (key, name, detail, _) in enumerate(items):
                 current = index == state['index']
+                if current and self.out.color:
+                    box = sym['on'] if key in chosen else sym['off']
+                    lines.append(self._selected(f'{sym["pointer"]} {box} {name:<{width}}  {detail}'))
+                    continue
                 pointer = self.out.paint(sym['pointer'], TEAL) if current else ' '
                 mark = self.out.paint(sym['on'], TEAL) if key in chosen else self.out.dim(sym['off'])
                 title = self.out.paint(f'{name:<{width}}', TEAL_BRIGHT if current else '')

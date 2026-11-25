@@ -39,6 +39,34 @@ schalten es ab); lange Schritte zeigen Drehzeichen mit Laufzeit, die
 Installation eine Schrittliste mit ✓/✗ und Gesamtbalken. Ohne Terminal,
 mit `TERM=dumb` oder in Skripten bleibt die einfache Texteingabe.
 
+**Aussehen und Ende.** Der Installer benutzt die Formsprache der Konsole:
+Abschnittsbänder, Karten mit abgestuftem Hintergrund und Abzeichen
+(OK/WARNUNG/FEHLER/AUS) in der Palette „Schiefer“ (24-Bit-Farben auch ohne
+`COLORTERM`; `PICAM_COLORS=256|16` oder `TERM=linux` rechnen herunter,
+`NO_COLOR` und Terminals ohne UTF-8 geben `[OK]` und ASCII-Zeichen). Die Zeichen
+✔ ⚙ ⏸ ⏹ ℹ kommen nie vor (sie verrutschen im Windows-Terminal über SSH). Am Ende
+zeigt die Karte „Fertig“ die Adresse der Werkbank, die Anmeldung (das Linux-Konto
+des Bedieners mit seinem Passwort, dasselbe wie für SSH; ändern mit
+`sudo passwd KONTO`) und das selbstsignierte Zertifikat mit SHA-256-Fingerabdruck.
+Danach: **Enter** startet `picam --onboarding` (der neue Befehl dieser Installation,
+per `exec`; läuft der Installer als root, als Bediener über `sudo -u KONTO -H`,
+ersatzweise `runuser`), **q** bleibt im Terminal. Ohne Terminal, mit `TERM=dumb`
+oder in Skripten wird nichts gefragt, der Befehl steht nur im Text.
+
+**Einrichtungsassistent (Onboarding).** Die Konsole öffnet beim ersten Start einer
+installierten Werkbank einen Assistenten mit drei Schritten und
+Fortschrittsleiste: **Konto & Adresse** (Adresse der Werkbank, Anmeldung mit
+Linux-Konto und Passwort, Zertifikat im Browser vertrauen mit Fingerabdruck),
+**Kamera & Fokus** (StreamCam erkannt, USB 3, 1920×1080; Bild und Fokus in der
+Werkbank unter `/live` prüfen; Kamera neu verbinden) und **Timing-Kalibrierung**
+(Stand, Erklärung, Kalibrierbildschirm wie im Tab Kamera mit `m`; ohne Adapter
+oder bei laufender Werkbank steht der Sperrgrund da). Weiter, Zurück und
+Überspringen sind Knöpfe (`←`/`→`/Tab wechseln, Enter löst aus, `Esc`
+schließt). Der Assistent ändert nichts selbst. Jeder Abschluss, auch `Esc`,
+legt die Marke `onboarding.json` im Datenordner der Werkbank ab (ersatzweise
+`~/.config/picam/`); danach startet er nicht mehr von selbst. Erneut öffnen:
+`picam --onboarding` oder in den Einstellungen „Einrichtung erneut“ (`e`).
+
 **Optionale Komponente me-fastfetch** (standardmäßig an, im Menü
 abwählbar, `--with-fastfetch`/`--without-fastfetch`): ME-Logo mit
 Systemübersicht beim SSH-Login des Bedienkontos. Installiert das Paket
@@ -85,6 +113,7 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam update --source ARCHIV` / `--rollback` | neue Version mit Rückweg, siehe unten |
 | `picam aufraeumen [--tage N]` | alte Läufe auflisten, nach Rückfrage löschen |
 | `picam setup` | offene Einrichtungspunkte nacheinander, Befehle einzeln nach Rückfrage |
+| `picam --onboarding` | Konsole mit dem Einrichtungsassistenten (Konto & Adresse, Kamera & Fokus, Timing-Kalibrierung) |
 | `picam kalibrieren [--pruefen \| --import DATEI]` | Timing-Kalibrierung bei der Inbetriebnahme (USB-RS232-Adapter vorübergehend), siehe unten |
 | `picam url` | Adresse der Werkbank |
 

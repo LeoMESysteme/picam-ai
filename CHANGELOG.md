@@ -5,6 +5,7 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Installer in der Formsprache der Konsole, Enter startet picam mit Einrichtungsassistent.** `packaging/picam_installer/tui.py`/`guided.py`: Bänder, Karten, Abzeichen (Palette „Schiefer“, Rückfall 256/16 Farben, NO_COLOR/ASCII), Abschlusskarte mit Adresse, Konto/Passwort und Zertifikat-Fingerabdruck, am Ende Enter = `picam --onboarding` als Bediener (`sudo -u … -H`), q = bleiben, ohne Terminal keine Frage; neuer Bildschirm `views/onboarding_screen.py` (3 Schritte, Marke `onboarding.json`, `picam --onboarding`, Einstellungen `e`).
 * 2026-11-25: **Kalibrierung läuft in der Konsole statt im Terminal.** Neuer
   Bildschirm `views/kalibrieren_screen.py` (Kamera-Tab, `m` und `p`): Vorprüfung,
   Plan mit Bestätigung, Schrittliste, Aufnahmebalken, Protokoll, Ergebnis, roter

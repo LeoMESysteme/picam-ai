@@ -218,7 +218,7 @@ def test_guided_menu_flow_with_fastfetch_deselected(env, monkeypatch):  # noqa: 
     monkeypatch.setattr(guided, 'operator_accounts', lambda: ['labor', 'gast'])
     (env.tmp / 'home').mkdir()
     texts = iter(['', str(env.tmp / 'p')])  # Port übernehmen, Ordner
-    ui, out = menus('3', 'enter', 'enter', 'space', 'enter', 'j', input_=lambda _p: next(texts))
+    ui, out = menus('3', 'enter', 'enter', 'space', 'enter', 'j', 'q', input_=lambda _p: next(texts))
     calls = []
     code = guided.run([], ui=ui, out=out, runner=fake_runner(), installer=fake_installer(calls),
                       installer_root=env.tmp)

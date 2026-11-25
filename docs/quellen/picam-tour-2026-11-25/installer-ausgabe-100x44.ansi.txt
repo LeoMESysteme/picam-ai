@@ -1,0 +1,53 @@
+
+  [38;2;69;201;190m[48;2;36;43;51m ◆ [1m[38;2;192;201;210mPICAM INSTALLIEREN[0m[48;2;36;43;51m                                                                              [49m
+[2m  Prüft zuerst, fragt dann wenige Angaben ab und installiert erst nach Bestätigung.[0m
+
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;69;201;190m◆ [1m[38;2;192;201;210mSYSTEM[0m[48;2;51;60;71m                                                                                          [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mBetriebssystem   [38;2;151;217;174m[48;2;50;70;61m ✓ OK      [39m[48;2;51;60;71m [38;2;221;227;233mdebian 13 · aarch64 · Python 3.13.5[39m                                  [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mDienstverwaltung [38;2;151;217;174m[48;2;50;70;61m ✓ OK      [39m[48;2;51;60;71m [38;2;221;227;233msystemd[39m                                                              [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mPi-Kennung       [38;2;151;217;174m[48;2;50;70;61m ✓ OK      [39m[48;2;51;60;71m [38;2;221;227;233mvorhanden (Windows-Brücke möglich)[39m                                   [49m
+
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;69;201;190m◆ [1m[38;2;192;201;210mRELEASE[0m[48;2;51;60;71m                                                                                         [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mArchiv   [38;2;151;217;174m[48;2;50;70;61m ✓ OK      [39m[48;2;51;60;71m [38;2;221;227;233mpicam-1.1.0.tar.gz · Release 1.1.0-rc-de628ad[39m                                [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mPakete   [38;2;151;217;174m[48;2;50;70;61m ✓ OK      [39m[48;2;51;60;71m [38;2;221;227;233malle Debian-Pakete vorhanden[39m                                                 [49m
+
+  [38;2;69;201;190m[48;2;36;43;51m ◆ [1m[38;2;192;201;210mANGABEN[0m[48;2;36;43;51m                                                                                         [49m
+  [38;2;0;181;175m›[39m Installationsart [1mBenutzerdienst[0m
+  [38;2;0;181;175m›[39m Dienstkonto (Anmeldung an der Werkbank) [1mlabor[0m
+  [38;2;0;181;175m›[39m Adresse (Windows → Pi, steht im Zertifikat) [1m192.168.10.42[0m
+  [38;2;0;181;175m›[39m Port             [1m8080[0m
+
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;69;201;190m◆ [1m[38;2;192;201;210mPLAN[0m[48;2;51;60;71m                                                                                            [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mProgramm      [38;2;221;227;233m/opt/picam/releases/1.1.0-rc-de628ad[39m                                                [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mDaten         [38;2;221;227;233m/var/lib/picam[39m                                                                      [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mKonfiguration [38;2;221;227;233m/etc/picam/config.toml[39m                                                              [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mDienst        [38;2;221;227;233m/etc/systemd/system/picam-werkbank.service (Start erst nach Rückfrage)[39m              [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mBefehl picam  [38;2;221;227;233m/tmp/tmpu02wkht0/home/.local/bin/picam[39m                                              [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [3m[38;2;173;183;194m› Werkbank danach unter https://192.168.10.42:8080/live[0m[48;2;51;60;71m                                           [49m
+
+  [38;2;0;181;175m›[39m Installieren?    [1mJa[0m
+
+  [38;2;69;201;190m[48;2;36;43;51m ◆ [1m[38;2;192;201;210mINSTALLATION[0m[48;2;36;43;51m                                                                                    [49m
+  [32m✓[39m Zielverzeichnisse anlegen  [2m0.5 s[0m
+  [32m✓[39m Release entpacken  [2m0.5 s[0m
+  [32m✓[39m Python-Umgebung bauen  [2m0.5 s[0m
+  [32m✓[39m Selbsttest  [2m0.5 s[0m
+  [32m✓[39m Konfiguration schreiben  [2m0.5 s[0m
+  [32m✓[39m Zertifikat erzeugen  [2m0.5 s[0m
+  [32m✓[39m Dienst aktivieren  [2m0.5 s[0m
+    [38;2;0;181;175m████████████████████████████[39m  8/8 [2m· 3.5 s[0m
+  [38;2;151;217;174m[48;2;50;70;61m ✓ OK      [39m[49m Installiert     Release 1.1.0-rc-de628ad
+
+  [38;2;0;181;175m›[39m Dienst jetzt starten und beim Booten automatisch starten? [1mJa[0m
+  [38;2;151;217;174m[48;2;50;70;61m ✓ OK      [39m[49m Dienst          läuft, https://192.168.10.42:8080/live antwortet
+
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;69;201;190m◆ [1m[38;2;192;201;210mFERTIG[0m[48;2;51;60;71m                                                                                   [38;2;151;217;174m[48;2;50;70;61m ✓ OK [39m[48;2;51;60;71m [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mWerkbank    [38;2;151;217;174m[48;2;50;70;61m ✓ OK      [39m[48;2;51;60;71m [38;2;221;227;233mhttps://192.168.10.42:8080/live[39m                                           [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mAnmeldung   [39m            [38;2;221;227;233mBenutzer „labor“ mit dem Linux-Passwort dieses Kontos[39m                     [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mPasswort    [39m            [38;2;221;227;233mdasselbe wie für SSH; ändern mit: sudo passwd labor[39m                       [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mZertifikat  [38;2;238;201;119m[48;2;74;66;48m ▲ WARNUNG [39m[48;2;51;60;71m [38;2;221;227;233mselbstsigniert: im Browser einmal vertrauen[39m                               [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mDatei       [39m            [38;2;221;227;233m/var/lib/picam/workbench/tls/cert.pem[39m                                     [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [38;2;173;183;194mEinrichtung [38;2;238;201;119m[48;2;74;66;48m ▲ WARNUNG [39m[48;2;51;60;71m [38;2;221;227;233mKonto, Kamera, Kalibrierung: picam --onboarding[39m                           [49m
+  [38;2;69;201;190m[48;2;51;60;71m▌[39m [3m[38;2;173;183;194m› Der Fingerabdruck steht auch in der Konsole (Tab Zertifikat).[0m[48;2;51;60;71m                                   [49m
+
+  [1m[38;2;69;201;190m[48;2;36;43;51m Enter [0m picam starten und Einrichtung abschließen  [2m·[0m  [1m[38;2;69;201;190m[48;2;36;43;51m q [0m im Terminal bleiben
