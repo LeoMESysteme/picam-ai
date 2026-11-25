@@ -4975,3 +4975,22 @@ Population, δ, M), Dauer der Auswertung und Laufordner liegen auf raspi01 unter
 **Wunsch daraus:** Kalibrierung in der Konsole statt im Terminal; umgesetzt in
 `fbd7be0` (eigener Bildschirm, Abbruch, sudo-Passwort in der Konsole),
 am Pi noch nicht gelaufen ([OQ-79](open-questions.md#oq-79)).
+
+## 2026-11-25 (abends) — raspi01: rc-eaa4ad8 mit den Konsolen-Bildschirmen
+
+**Durchgeführt von:** Leonhard (Rückmeldung im Chat).
+
+**Verlauf:** Das Update auf `rc-6183cb1` scheiterte: Der Dienst brach mit
+„Debugport ist reserviert (/dev/serial0, /dev/ttyAMA10)“ ab, weil `/dev/serial0` auf
+raspi01 auf `ttyAMA0` zeigt (auf raspi06 auf `ttyAMA10`) und die neue Portprüfung das
+Ziel von `serial0` als Debugport wertete. `picam update` schaltete nach 60 s
+automatisch auf `rc-de628ad` zurück (Rückweg hat getragen). Behoben in `ffeab2a`
+(reserviert ist nur `ttyAMA10`). Zusätzlich: Absturz beim Beenden mit q
+(`de52fdb`) und hängende Hervorhebung in den Einstellungen (`eaa4ad8`).
+
+**Beobachtung:** `rc-eaa4ad8` läuft; Kalibrierung, Zertifikat, Update und die übrigen
+Konsolen-Bildschirme funktionieren laut Leonhard („funktioniert alles“).
+
+**Schluss:** Releasetests starten seitdem auch den Dienst der neuen Version und prüfen
+die HTTPS-Antwort. Ein Pi mit `serial0 → ttyAMA0` ist im Test nachgebildet, nicht am
+Entwicklungs-Pi.

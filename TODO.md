@@ -14,17 +14,14 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 ## Übergabe (Stand 25.11. abends)
 
-Branch `feat/picam-admin` (gepusht). **Releasekandidat:**
-`~/picam-releases/picam-rc-6183cb1.tar.gz`, SHA-256
-`e511009cba1c87e795b71d4f2a5ddcac62cd7ec561f0c2924ec5d625e15561b7` (nicht dirty).
-Neu gegenüber `rc-de628ad`: Konsole mit eigenen Bildschirmen für Update (Schritte,
-Rückweg, Neustart der Konsole), Deinstallation (Vorschau in der Konsole, formatierte
-Rückfrage „deinstallieren“ im Terminal), Zertifikat erneuern (auch Brückenidentität;
-danach `pi.dispread` in jede Brücke laden) und UART-Ports (Pinwahl, Pi-5-UARTs,
-config.txt-Diff, Pi-Neustart nur von Hand, [OQ-80](docs/open-questions.md#oq-80));
-Einstellungen mit Navigations-/Bearbeitungszustand; Installer in Konsolen-Optik, Enter →
-Onboarding (Konto & Adresse, Kamera & Fokus, Timing-Kalibrierung); Pi-Name live in der
-Brücke (ab 1.1.0, Brücke 1.0.0 ignoriert das Feld).
+Gemergt nach `master` und `feat/integration` (Fast-Forward, Leonhards OK 25.11.).
+**Releasekandidat:** `~/picam-releases/picam-rc-eaa4ad8.tar.gz`, SHA-256
+`14cb39ba4eabd0f7be8d541da0484430883c9f862223995b50843ac776cae548` (nicht dirty), auf
+raspi01 installiert und von Leonhard geprüft (Kalibrierung, Zertifikat, Update u. a.).
+Enthält: Konsolen-Bildschirme für Update, Deinstallation, Zertifikat, UART-Ports;
+Einstellungen mit Navigations-/Bearbeitungszustand; Installer-Optik + Onboarding;
+Pi-Name live in der Brücke (ab 1.1.0); Fixe für `serial0 → ttyAMA0` (raspi01), Beenden
+mit q und hängende Hervorhebung.
 
 **Prüfstand 25.11. abends (`6183cb1`):** Pi-Suite mit Entwicklungsdaten 5146 bestanden,
 27 übersprungen, 2 xfailed; Playwright Werkbank 73/73, Doku 153/154 – offen:
@@ -57,13 +54,9 @@ zwei USB-RS232-Adapter mit Nullmodemkabel; vorher Dauertest. Details unten.
 1. **raspi06:** Der Entwicklungsdienst `dispread-werkbank-bruecke` ist seit
    20.11. 15:00 gestoppt (regulär, nicht durch Claude; vorher 14:46 Stopp/14:48
    Start – vermutlich Konsolentest). Nicht autonom neu gestartet.
-2. **raspi01:** Update auf `rc-6183cb1` (jetzt direkt im Konsolen-Bildschirm Update). Prüfen:
-   Kalibrierung in der Konsole (einmal ganz, einmal Abbruch in der Aufnahme: Passwortfeld,
-   Normierung zurückgestellt, Dienst wieder da, [OQ-79](docs/open-questions.md#oq-79)),
-   Deinstallations-Vorschau (nicht bestätigen), Zertifikat erneuern + Profil neu in die Brücke,
-   UART-Pinwahl bis zur Prüfseite (echter Wechsel auf uart2/uart4 mit Neustart: eigener Test,
-   [OQ-80](docs/open-questions.md#oq-80)), Einstellungen per Tastatur, Pi-Name ändern → Brücke 1.1.0.
-   Frische Installation zeigt Installer-Optik und Enter → Onboarding.
+2. **raspi01:** ~~Update und Konsolen-Bildschirme~~ erledigt (25.11. abends, `rc-eaa4ad8`).
+   Offen: echter UART-Wechsel auf uart2/uart4 mit Neustart ([OQ-80](docs/open-questions.md#oq-80)),
+   frische Installation mit Onboarding.
 3. **Werkbank ohne RS232 am Aufbau:** geführte Eingabe (Kästchen, verschiebbares
    Fenster) und Schwanken ±1 der letzten Stelle mit echtem GSV prüfen.
 4. **Entscheidungen:** Versionsnummer/Tag (VERSION steht auf `0.1.0.dev0`, Releases
