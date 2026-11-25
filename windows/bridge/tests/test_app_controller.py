@@ -366,6 +366,7 @@ def test_adapter_selection_change_disappearance_return_are_exported_without_seri
         c.list_ports()
         c._diag_flush()
         exported = c._diag.export()
+        assert [(e.title, e.sub) for e in c.context().journal if e.fault] == [('USB-Adapter fehlt', 'COM9')]
         rows = [r for r in map(json.loads, exported.splitlines()) if r.get('kind') == 'adapter']
         assert [r['code'] for r in rows] == [
             'adapter_selected', 'adapter_changed', 'adapter_disappeared', 'adapter_returned']
@@ -394,6 +395,7 @@ def test_selected_virtual_port_disappears_and_returns_without_duplicate_events(t
         c.list_ports()
         c._diag_flush()
         rows = list(map(json.loads, c._diag.export().splitlines()))
+        assert [(e.title, e.sub) for e in c.context().journal if e.fault] == [('Port fehlt', 'COM4')]
         assert [r['code'] for r in rows] == ['port_pair_selected', 'port_pair_changed',
                                              'port_disappeared', 'port_returned']
         assert rows[-1]['port'] == rows[-2]['port'] == 'COM4'
@@ -610,12 +612,99 @@ def test_journal_counter_line_updates_in_place_and_is_bounded(tmp_path):
     c = make(tmp_path)
     for _ in range(1000):
         c._emit(_ev('written'))
-    j = c.context().journal
-    assert len(j) == 1 and j[0].title == 'Demo: 1000 Werte weitergegeben'
-    for _ in range(1000):
         c._emit(_ev('idle'))
         c._emit(_ev('failed'))
-    assert len(c.context().journal) <= 500
+    j = c.context().journal
+    assert len(j) == 3 and j[-1].title == 'Demo: 1000 Werte weitergegeben'
+
+
+def test_connection_outage_counts_retries_and_reports_duration(tmp_path):
+    from dispread.bridge.types import BridgeEvent
+
+    time = [10.]
+    c = make(tmp_path, clock=lambda: time[0])
+
+    def emit(kind, code, **detail):
+        c._emit(BridgeEvent(kind, code, None, None, detail))
+
+    emit('connection', 'connection_interrupted')
+    emit('recovering', 'connection_unavailable')
+    for _ in range(10):
+        emit('connection', 'tailscale_running')
+        emit('connection', 'network_unavailable', peer='backoff')
+    faults = [e for e in c.context().journal if e.fault]
+    assert [(e.title, e.sub) for e in faults] == [
+        ('Verbindung unterbrochen', '10 fehlgeschlagene Verbindungsversuche · Netzwerk nicht erreichbar')]
+    assert len(c.context().journal) == 2
+    time[0] += 4
+    emit('connection', 'authenticated')
+    emit('connection', 'disconnected')
+    disconnected, recovered, *_ = c.context().journal
+    assert (disconnected.title, disconnected.fault) == ('Verbindung beendet', False)
+    assert (recovered.title, recovered.duration, recovered.fault) == ('Verbindung wieder da', '4 s', False)
+
+
+def test_first_failed_connect_then_user_disconnect_resets_outage(tmp_path):
+    from dispread.bridge.types import BridgeEvent
+
+    c = make(tmp_path)
+    for code in ('backoff', 'backoff', 'disconnected', 'connecting', 'authenticated'):
+        c._emit(BridgeEvent('connection', code, None, None, {}))
+    entries = c.context().journal
+    assert entries[0].title == 'Pi verbunden (Identität geprüft)'
+    assert [e.title for e in entries if e.fault] == ['Pi antwortet nicht']
+
+
+def test_connection_retry_retains_specific_cause_of_link_loss(tmp_path):
+    from dispread.bridge.types import BridgeEvent
+
+    c = make(tmp_path)
+    c._emit(BridgeEvent('connection', 'connection_interrupted', None, None, {'reason': 'uart_timeout'}))
+    c._emit(BridgeEvent('connection', 'connection_lost', None, None, {'peer': 'backoff'}))
+    (entry,) = c.context().journal
+    assert entry.fault and 'Pi am UART antwortet nicht' in entry.sub
+
+
+def test_tick_journal_keeps_one_line_per_counter_and_run(tmp_path):
+    from dispread.bridge.types import BridgeEvent
+
+    c = make(tmp_path)
+    for run_id in ('a', 'b'):
+        for count in (1, 2, 7):
+            c._emit(BridgeEvent('tick_stats', 'tick_stats', run_id, None,
+                                {'ticks_filled': count, 'ticks_invalid': count + 1, 'ticks_written': 10}))
+            c._emit(_ev('written'))
+        c._emit(BridgeEvent('tick_disturbed', 'tick_gap_unfilled', run_id, None, {}))
+    faults = [e.title for e in c.context().journal if e.fault]
+    assert faults == ['Takt gestört', '8 ungültige Takte', '7 Takte aufgefüllt'] * 2
+
+
+def test_tick_journal_adds_fresh_worker_counts_to_same_run(tmp_path):
+    from dispread.bridge.types import BridgeEvent
+
+    c = make(tmp_path)
+    first = BridgeEvent('tick_stats', 'tick_stats', 'same-run', None, {'ticks_filled': 5})
+    c._emit(first)
+    c._emit(BridgeEvent('connection', 'disconnected', None, None, {}))
+    c._emit(BridgeEvent('connection', 'connecting', None, None, {}))
+    c._emit(BridgeEvent('connection', 'authenticated', 'same-run', None, {}))
+    c._emit(BridgeEvent('tick_stats', 'tick_stats', 'same-run', None, {'ticks_filled': 2}))
+    assert [e.title for e in c.context().journal if e.fault] == ['7 Takte aufgefüllt']
+
+
+@pytest.mark.parametrize('code,title', [
+    ('failed', 'COM-Weitergabe fehlgeschlagen'),
+    ('unconfirmed', 'Quittung an den Pi unbestätigt'),
+    ('omitted', 'Wert ausgelassen'),
+    ('expired', 'Zeitbudget abgelaufen'),
+])
+def test_repeated_exchange_faults_keep_one_counted_line(tmp_path, code, title):
+    c = make(tmp_path)
+    for _ in range(8):
+        c._emit(_ev(code))
+        c._emit(_ev('written'))
+    faults = [e for e in c.context().journal if e.fault]
+    assert len(faults) == 1 and faults[0].title == title and '8 Vorkommnisse' in faults[0].sub
 
 
 def test_repeated_idle_is_one_journal_line(tmp_path):
@@ -625,7 +714,7 @@ def test_repeated_idle_is_one_journal_line(tmp_path):
     assert [e.title for e in c.context().journal] == ['Wartet auf Messlauf']
     c._emit(_ev('written'))
     c._emit(_ev('idle'))
-    assert len(c.context().journal) == 3
+    assert len(c.context().journal) == 2
 
 
 def test_diagnostics_export_contains_flushed_summary(tmp_path, identity):

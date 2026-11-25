@@ -1,6 +1,7 @@
 """Wahrheitsregeln der Texte, ohne Qt-Fenster."""
 from dataclasses import replace
 
+import pytest
 from dispread_bridge_app.readiness import Readiness
 from dispread_bridge_app.ui import texts
 from dispread_bridge_app.ui.fake import STATES
@@ -198,4 +199,23 @@ def test_unknown_new_output_value_stays_unknown():
 
 def test_omitted_exchange_journal_entry():
     e = texts.event_entry(BridgeEvent('exchange', 'omitted', None, None, {'outcome': 'omitted'}), now='10:00:00')
-    assert e.title == 'Wert ausgelassen' and e.tone == 'warn'
+    assert e.title == 'Wert ausgelassen' and e.tone == 'warn' and e.fault
+
+
+@pytest.mark.parametrize('kind,code,detail,title,fault', [
+    ('connection', 'connection_interrupted', {}, 'Verbindung unterbrochen', True),
+    ('connection', 'disconnected', {}, 'Verbindung beendet', False),
+    ('connection', 'network_unavailable', {'peer': 'backoff'}, 'Netzwerk nicht erreichbar', True),
+    ('exchange', 'failed', {}, 'COM-Weitergabe fehlgeschlagen', True),
+    ('exchange', 'unconfirmed', {}, 'Quittung an den Pi unbestätigt', True),
+    ('exchange', 'expired', {}, 'Zeitbudget abgelaufen', True),
+    ('tick_stats', 'ticks_filled', {'count': 2}, '2 Takte aufgefüllt', True),
+    ('tick_stats', 'ticks_invalid', {'count': 3}, '3 ungültige Takte', True),
+    ('tick_disturbed', 'tick_gap_unfilled', {}, 'Takt gestört', True),
+    ('adapter', 'adapter_disappeared', {}, 'USB-Adapter fehlt', True),
+    ('adapter', 'port_disappeared', {}, 'Port fehlt', True),
+    ('adapter', 'port_returned', {}, 'Port wieder verfügbar', False),
+])
+def test_live_journal_faults(kind, code, detail, title, fault):
+    entry = texts.event_entry(BridgeEvent(kind, code, None, None, detail), now='10:00:00')
+    assert (entry.title, entry.fault) == (title, fault)

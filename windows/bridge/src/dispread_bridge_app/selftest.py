@@ -50,6 +50,15 @@ def run_self_test(*, require_frozen: bool = False, create_app: bool = True) -> d
         report['build_info'] = None
         if frozen:
             errors.append(f'build_info fehlt: {type(exc).__name__}')
+    try:
+        from dispread_bridge_app.session_templates import load_session_catalog
+        load_session_catalog()
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f'Session-Vorlagen: {type(exc).__name__}: {exc}')
+    if frozen:
+        bundle = getattr(sys, '_MEIPASS', None)
+        if bundle is None or not (Path(bundle) / 'THIRD_PARTY_NOTICES.md').is_file():
+            errors.append('THIRD_PARTY_NOTICES.md fehlt im Paket')
     if create_app and report['imports'].get('PySide6.QtWidgets'):
         try:
             from PySide6.QtCore import QLibraryInfo

@@ -36,8 +36,12 @@ class _AdmissionExpired(BridgeError):
     """No COM attempt was admitted before the host request deadline."""
 
 
+class BridgeComError(BridgeError):
+    """The COM driver could not complete a write or its configuration."""
+
+
 class _TickWriteFailed(BridgeError):
-    """A tick line reached the driver call and failed; it stays ``unknown``."""
+    """A tick line could not be admitted for writing."""
 
 
 class BridgeAuditError(BridgeError):
@@ -65,7 +69,7 @@ class BridgeSession:
 
     def __init__(self, *, log=None, max_frame_age_ms=1000, timeout_s=1.0, clock=time.monotonic_ns,
                  journal=None, pi_id=None, before_write=None, admit_write=None, release_gate=None,
-                 demo_format=None, wall_clock_ns=time.time_ns, on_written=None):
+                 demo_format=None, wall_clock_ns=time.time_ns, on_written=None, on_issue=None):
         """``release_gate(link, run_id)`` (R1) bestaetigt die Pi-Testfreigabe der
         aktuellen Verbindung; ohne ihn bleiben echte Werte gesperrt.
 
@@ -92,6 +96,8 @@ class BridgeSession:
         # Local durable COM receipt, before the fallible ACK round trip. Re-ACKs
         # never invoke this callback because they do not write another value.
         self.on_written = on_written
+        # The worker needs these outcomes even when no exchange result returns.
+        self.on_issue = on_issue
         self._held = (None, None)      # (run_id, letzter geschriebener gueltiger Wert): Kanal 1 haelt ihn
         self._last_written = None
         self._tick_lock = threading.Lock()
@@ -262,10 +268,12 @@ class BridgeSession:
                 raise _AdmissionExpired("host request expired before COM admission")
             admitted = True
 
+        configured = False
         try:
             # Driver configuration can block. It MUST finish before the atomic
             # generation/stop/deadline claim; it is not itself a byte submission.
             com.write_timeout = remaining / 1_000_000_000
+            configured = True
             if self.admit_write is not None:
                 self.admit_write(link, claim)
                 if not admitted:
@@ -298,8 +306,12 @@ class BridgeSession:
                     com.reset_output_buffer()
                 except Exception:
                     pass
+            driver_failed = admitted or not configured
+            if self.on_issue is not None and driver_failed:
+                self.on_issue("failed", run_id, released)
             link.send(dict(ack, outcome="failed"))
-            raise BridgeError(f"COM: {exc}") from exc
+            error_type = BridgeComError if driver_failed else BridgeError
+            raise error_type(f"COM: {exc}") from exc
         if attempt_id is not None:
             self._finish_attempt(attempt_id, "written")
         self._last_written = key
@@ -311,6 +323,8 @@ class BridgeSession:
             link.send(dict(ack, outcome="written"))
         except Exception:
             self._event(**ack, outcome="unconfirmed", completion_stage="com_driver_write")
+            if self.on_issue is not None:
+                self.on_issue("unconfirmed", run_id, released)
             raise
         return "written"
 
@@ -385,7 +399,7 @@ class BridgeSession:
         for kind, line, data in lines:
             try:
                 outcome = self._write_tick_line(link, com, run_id, kind, line, data, started)
-            except _TickWriteFailed as exc:
+            except (_TickWriteFailed, BridgeComError) as exc:
                 self._event(**ack, outcome="failed", filled=filled, failed_seq=line.seq, error=str(exc),
                             formatter=self.tick_formatter)
                 link.send(dict(ack, outcome="failed", filled=filled))
@@ -410,6 +424,8 @@ class BridgeSession:
         except Exception:
             self._event(**ack, outcome="unconfirmed", completion_stage="com_driver_write",
                         formatter=self.tick_formatter)
+            if self.on_issue is not None:
+                self.on_issue("unconfirmed", run_id, True)
             raise
         return "written"
 
@@ -431,11 +447,13 @@ class BridgeSession:
                 raise _AdmissionExpired("host request expired before COM admission")
             admitted = True
 
+        configured = False
         try:
             remaining = self.timeout_ns - (self.clock() - started)
             if remaining <= 0:
                 raise _AdmissionExpired("host request expired before COM admission")
             com.write_timeout = remaining / 1_000_000_000
+            configured = True
             if self.admit_write is not None:
                 self.admit_write(link, claim)
                 if not admitted:
@@ -455,7 +473,11 @@ class BridgeSession:
                     com.reset_output_buffer()
                 except Exception:
                     pass
-            raise _TickWriteFailed(f"COM: {exc}") from exc
+            driver_failed = admitted or not configured
+            if self.on_issue is not None and driver_failed:
+                self.on_issue("failed", run_id, True)
+            error_type = BridgeComError if driver_failed else _TickWriteFailed
+            raise error_type(f"COM: {exc}") from exc
         self._finish_tick(attempt_id, "written")
         return "written"
 

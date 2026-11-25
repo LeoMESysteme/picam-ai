@@ -29,6 +29,33 @@ def test_spec_excludes_heavy_modules():
         assert f'"{name}"' in excludes
 
 
+def test_onefile_spec_branch_bundles_data_without_collect():
+    portable = SPEC.split("if portable:", 1)[1].split("else:", 1)[0]
+    assert "EXE(" in portable and "a.binaries, a.datas" in portable
+    assert "COLLECT(" not in portable and "exclude_binaries" not in portable
+    for name in ("Session-COM8.ucf", "vorlage-4kanal-mvv.ucf", "THIRD_PARTY_NOTICES.md"):
+        assert name in SPEC
+    assert '"--", "--portable"' in PS1
+
+
+def test_inno_search_order_and_release_preflight():
+    probes = ('${env:ProgramFiles(x86)}', '$env:ProgramFiles', '$env:LOCALAPPDATA')
+    assert [PS1.index(probe) for probe in probes] == sorted(PS1.index(probe) for probe in probes)
+    assert PS1.count("Inno Setup 6/ISCC.exe") == 3
+    preflight = PS1.index('if (-not $Inno)')
+    assert PS1.index('if ($Release) { throw', preflight) < PS1.index('"-m", "PyInstaller"')
+    assert 'winget install JRSoftware.InnoSetup' in PS1
+
+
+def test_build_self_tests_both_exes_before_publishing():
+    assert PS1.index('Test-BuiltExe $PortableExe') < PS1.index('Invoke-Checked $Inno')
+    assert PS1.index('Test-BuiltExe $OnedirExe') < PS1.index('Invoke-Checked $Inno')
+    assert '"$PackageName-portable.exe"' in PS1
+    assert "GSVmulti-Bruecke-Setup-$Version$Suffix.exe" in PS1
+    assert "-SHA256SUMS.txt" in PS1 and "Get-FileHash" in PS1
+    assert "CreateFromDirectory" not in PS1
+
+
 def test_launcher_freezes_first_and_intercepts_self_test_before_gui():
     text = (BRIDGE / "packaging/app_launcher.py").read_text(encoding="utf-8")
     assert text.index("freeze_support()") < text.index("--self-test") < text.index("dispread_bridge_app.main")
@@ -64,7 +91,18 @@ def test_setup_is_per_user_without_admin_and_keeps_user_data():
     assert not re.search(r"^[^;\n]*dispread-bridge", ISS, re.M)
     assert "Root: HKCU" in ISS and "HKLM" not in ISS
     assert ".dispread" in ISS
-    assert not re.search(r"^\[Run\]", ISS, re.M)
+
+
+def test_setup_updates_in_place_and_offers_shortcut_and_launch():
+    assert "AppId={{B3C2A3E1-5D0F-4C57-9E3A-6F1B2A7C4D18}" in ISS
+    assert "CloseApplications=force" in ISS and "RestartApplications=no" in ISS
+    assert "[Tasks]" in ISS and "Flags: unchecked" in ISS
+    assert "{userdesktop}" in ISS and "Tasks: desktopicon" in ISS
+    assert "{userprograms}" in ISS
+    run = ISS.split("[Run]\n", 1)[1].split("\n[", 1)[0]
+    assert re.search(r'^Filename: "\{app\}\\GSVmulti-Bruecke.exe"; .*Flags: postinstall nowait skipifsilent$', run, re.M)
+    assert re.search(r'^Source: .*THIRD_PARTY_NOTICES.md"; DestDir: "\{app\}"', ISS, re.M)
+    assert "PySide6" in (BRIDGE / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
 
 
 def test_build_info_is_ignored_but_not_tracked():
@@ -105,7 +143,7 @@ def test_release_build_path_is_clean_and_distinct():
     iss = (BRIDGE / "packaging" / "setup-app.iss").read_text(encoding="utf-8")
     assert "#ifdef Release" in iss and "VersionInfoVersion={#AppVersion}.0" in iss
     assert "interner Test" in iss                                    # Testbuild bleibt unveraendert
-    assert (BRIDGE / "pyproject.toml").read_text(encoding="utf-8").count('version = "1.0.0"') == 1
+    assert (BRIDGE / "pyproject.toml").read_text(encoding="utf-8").count('version = "1.1.0"') == 1
 
 
 def test_double_click_starter_bypasses_policy_only_for_this_run():

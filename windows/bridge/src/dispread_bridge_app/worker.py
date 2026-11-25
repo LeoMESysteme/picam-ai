@@ -7,7 +7,13 @@ from dataclasses import dataclass
 
 from dispread.bridge.protocol import TEST_RELEASE
 from dispread.bridge.types import BridgeEvent
-from dispread.gsv_bridge import BridgeAuditError, BridgeSession, DeliveryBlockedError, DeliveryUncertainError
+from dispread.gsv_bridge import (
+    BridgeAuditError,
+    BridgeComError,
+    BridgeSession,
+    DeliveryBlockedError,
+    DeliveryUncertainError,
+)
 
 IDLE_FIRST_S, IDLE_MAX_S = 0.05, 0.2
 # The Pi slot keeps only the latest value. Right after a value, a 50-200 ms
@@ -69,6 +75,8 @@ class BridgeWorker:
         self._released = False
         self._link = None
         self._session = None
+        self._observed_ticks = self._reported_ticks = {}
+        self._tick_report_at = float('-inf')
         self._unresolved_at_start = frozenset()
         self.demo_format = None        # Callable -> '1ch'|'4ch': Format der GSVmulti-Session fuer den Empfangstest
         self._wait = self._stop.wait   # Naht fuer Tests mit simulierter Uhr
@@ -118,10 +126,10 @@ class BridgeWorker:
         check = getattr(link, 'test_release_for', None)
         return bool(check is not None and check(run_id))
 
-    def _event(self, kind, *, strict=True, code=None, **fields):
+    def _event(self, kind, *, strict=True, code=None, run_id=None, **fields):
         with self._lock:
             released = self._released and kind not in ('recovering', 'stopped')
-        event = BridgeEvent(kind, code or fields.get('outcome') or kind, None, None,
+        event = BridgeEvent(kind, code or fields.get('outcome') or kind, run_id, None,
                             dict(version=1, provisional=True, demo_only=not released,
                                  gsv_receipt_confirmed=False,
                                  completion_stage='com_driver_write',
@@ -217,8 +225,34 @@ class BridgeWorker:
             self._released = released
         self._event('exchange', outcome='written')
 
+    def _delivery_issue(self, outcome, run_id, released):
+        with self._lock:
+            self._released = released
+        self._event('exchange', outcome=outcome, run_id=run_id)
+
+    def _publish_ticks(self, now, *, strict):
+        if self._observed_ticks.get('run_id') is not None and self._observed_ticks != self._reported_ticks:
+            self._event('tick_stats', strict=strict, **self._observed_ticks)
+            self._reported_ticks, self._tick_report_at = self._observed_ticks, now
+
+    def _report_ticks(self, session, *, flush=False, strict=True):
+        ticks = session.tick_stats()
+        run_id = ticks['run_id']
+        if run_id is None:
+            return
+        now = self._clock()
+        previous = self._observed_ticks
+        new_run = run_id != previous.get('run_id')
+        if new_run:
+            self._publish_ticks(now, strict=strict)
+        self._observed_ticks = ticks
+        if ticks['tick_disturbed'] and (new_run or not previous['tick_disturbed']):
+            self._event('tick_disturbed', code='tick_gap_unfilled', run_id=run_id, strict=strict)
+        if flush or new_run or now - self._tick_report_at >= 1.0:
+            self._publish_ticks(now, strict=strict)
+
     def _run(self):
-        com = link = None
+        com = link = session = None
         recovering = False
         idle_delay = 0.0          # adaptiver Leerlauftakt; 0 = naechster Poll sofort
         last_outcome = None
@@ -231,10 +265,10 @@ class BridgeWorker:
                 raise BridgeAuditError('audit_failed reading journal') from exc
             session = BridgeSession(journal=self.journal, pi_id=pi_id,
                                     admit_write=self._admit_write, release_gate=self._release_gate,
-                                    demo_format=self._demo_format, on_written=self._written)
+                                    demo_format=self._demo_format, on_written=self._written,
+                                    on_issue=self._delivery_issue)
             with self._lock:
                 self._session = session
-            disturbed = None
             while not self._stop.is_set():
                 try:
                     current = self.connection.data_link()
@@ -246,7 +280,11 @@ class BridgeWorker:
                         if self._stop.is_set():
                             break
                         if com is None:
-                            com = self.com_factory()
+                            try:
+                                com = self.com_factory()
+                            except Exception:
+                                self._event('connection_failed', code='com_open_failed', outcome='stopped')
+                                break
                             with self._lock:
                                 self._com = com
                         self._event('started')
@@ -262,12 +300,8 @@ class BridgeWorker:
                     # Wiederholtes idle/ended nur als Uebergang melden; alles
                     # andere (written, invalid, ...) bleibt ein Ereignis je Runde.
                     if outcome != 'written' and (outcome not in _QUIET or outcome != last_outcome or changed):
-                        self._event('exchange', outcome=outcome)
-                    ticks = session.tick_stats()
-                    if ticks['tick_disturbed'] and disturbed != ticks['run_id']:
-                        # Einmal je Lauf: Luecke ueber 50 Takte, nicht aufgefuellt.
-                        disturbed = ticks['run_id']
-                        self._event('tick_disturbed', code='tick_gap_unfilled')
+                        self._event('exchange', outcome=outcome, run_id=getattr(link, 'run_id', None))
+                    self._report_ticks(session, flush=outcome == 'ended')
                     last_outcome = outcome
                     if outcome not in _QUIET:
                         idle_delay, last_active = 0.0, self._clock()
@@ -280,6 +314,7 @@ class BridgeWorker:
                 except (DeliveryBlockedError, DeliveryUncertainError, BridgeAuditError):
                     raise
                 except Exception as error:
+                    self._report_ticks(session, flush=True)
                     if self._stop.is_set():
                         self._check_journal(recovering=True)
                         break
@@ -301,12 +336,16 @@ class BridgeWorker:
             self._event('blocked', strict=False, code='unknown_delivery', outcome='unknown')
         except BridgeAuditError:
             self._event('audit_failed', strict=False, code='audit_failed', outcome='unknown')
+        except BridgeComError:
+            self._event('connection_failed', strict=False, code='com_write_failed', outcome='stopped')
         except Exception:
             # No arbitrary exception strings: they may contain credentials/URLs.
             self._event('connection_failed', strict=False, code='connection_failed', outcome='stopped')
         finally:
             with self._admission_lock:
                 self._stop.set()
+            if session is not None:
+                self._report_ticks(session, flush=True, strict=False)
             try:
                 self.connection.disconnect()
             except Exception:
@@ -315,7 +354,7 @@ class BridgeWorker:
                 if com is not None:
                     com.close()
             except Exception:
-                self._event('connection_failed', strict=False, code='connection_failed', outcome='stopped')
+                self._event('connection_failed', strict=False, code='com_close_failed', outcome='stopped')
             with self._lock:
                 self._com = self._link = None
             self._event('stopped', strict=False)

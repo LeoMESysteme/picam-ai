@@ -30,6 +30,21 @@ bleibt synchron und ein anstehender Abbruch verhindert danach die Übernahme.
 **Offen.** Freigabe und Wiederanlauf auf einem System-Pi verifizieren.
 [OQ-79](open-questions.md#oq-79).
 
+## 2026-11-25 — Windows-Brücke als portable EXE und Benutzer-Setup
+
+Das bisherige Ordner-ZIP erforderte Entpacken und das Suchen der EXE.
+Der GUI-Bau verwendet eine gemeinsame PyInstaller-Spec für zwei Varianten.
+Damit haben beide Varianten dieselben Module, Vorlagen und Lizenzhinweise.
+Die portable Datei bündelt die Laufzeit und entpackt sie beim Start.
+Setup installiert dieselbe App als Ordnerpaket, damit die Laufzeit schon
+entpackt vorliegt und der Start über das Startmenü möglich ist.
+
+Die AppId identifiziert Updates derselben Benutzerinstallation. Inno Setup
+nutzt den Windows Restart Manager für die laufende installierte App.
+Ein fester `AppMutex` wäre ungeeignet, weil der Einzelinstanz-Mutex der
+App die SID des Windows-Benutzers enthält. Der Build und das Update müssen
+auf Windows geprüft werden.
+
 ## 2026-11-18 — Lesbarkeit am Laufstart prüfen
 
 **Problem.** Das Schärfeverhältnis reagiert auf den Helligkeits- und

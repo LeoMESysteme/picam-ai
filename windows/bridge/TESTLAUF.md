@@ -48,23 +48,29 @@ laufenden Aufnahmelaufs, Werkbank erst neu starten, wenn die Diagnosekopie aus
 
 ## B. Windows-PC vorbereiten
 
-5. **App bereitstellen.** Auf einem Windows-11-x64-PC mit Python ≥ 3.13 (x64):
-   Am einfachsten Doppelklick auf `windows\bridge\build-test.cmd` (findet Python 3.13 selbst).
+5. **App bereitstellen.** Auf einem Windows-11-x64-PC mit Python ≥ 3.13 (x64)
+   für das Setup einmalig Inno Setup 6 mit `winget install JRSoftware.InnoSetup` installieren.
+   Dann `windows\bridge\build-test.cmd` doppelklicken. Der Starter findet Python 3.13
+   selbst und sucht Inno Setup an den Standardpfaden.
    Von Hand in PowerShell im entpackten bzw. geklonten Ordner `picam-ai`:
 
    ```powershell
    $py = py -3.13 -c "import sys; print(sys.executable)"   # Pfad zum Python 3.13 x64
    powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\bridge\build-test.ps1 -Python "$py"
-   # optional mit Setup: zusätzlich  -Inno "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+   # Bei abweichender Inno-Installation zusätzlich -Inno "<Pfad>\ISCC.exe" angeben.
    ```
 
    `-ExecutionPolicy Bypass` gilt nur für diesen einen Aufruf und ändert keine
    Systemeinstellung; nötig, weil heruntergeladene unsignierte Skripte sonst
    blockiert werden. Ohne Git (ZIP-Download) steht als Quelle „unbekannt“.
-   Ergebnis in `windows\bridge\dist-test\`: ZIP (entpacken, `GSVmulti-Bruecke.exe`
-   starten) und mit `-Inno` ein Setup ohne Administratorrechte. Die Ausgabe nennt
-   Pfade und SHA-256; vergleichen Sie den Hash nach dem Kopieren auf den
-   GSVmulti-PC. **Unsigniert, unqualifiziert, nur interner Test**: Windows
+   Ausgaben in `windows\bridge\dist-test\` sind die direkt startbare
+   `GSVmulti-Bruecke-<version>-<commit12>-test-portable.exe` und, wenn Inno gefunden
+   wird, `GSVmulti-Bruecke-Setup-<version>-<commit12>-test.exe`. Die portable EXE
+   entpackt ihre Laufzeit beim Start, was etwas länger dauern kann. Setup installiert
+   ohne Administratorrechte und legt den Startmenü-Eintrag „GSVmulti-Bruecke“ an.
+   Für ein Update das neuere Setup ausführen. Vergleichen Sie die Hashes aus
+   `GSVmulti-Bruecke-<Version>-SHA256SUMS.txt` nach dem Kopieren auf den GSVmulti-PC.
+   **Unsigniert, unqualifiziert, nur interner Test.** Windows
    SmartScreen oder Virenschutz können warnen. Das ist erwartet; die IT
    entscheidet über die Freigabe.
 6. **COM-Portpaar einrichten.** Die App erzeugt keine Paare, und der Treiber ist

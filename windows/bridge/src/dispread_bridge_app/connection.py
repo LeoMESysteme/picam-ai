@@ -158,13 +158,9 @@ class _DataLink:
             return reply
         except Exception as error:
             self.failed.set()
-            self.manager._revoke(self)
-            code = getattr(error, 'code', None)
-            if not isinstance(error, ConnectionError) and isinstance(code, str):
-                # Transportcode (z. B. uart_frame_invalid) ins Diagnoseprotokoll; nur
-                # freigegebene Bezeichner erscheinen dort ungeschwaerzt.
-                self.manager._event(code)
-            if isinstance(error, ConnectionError):
+            code = error.code if isinstance(error, (TransportError, ConnectionError)) else None
+            self.manager._revoke(self, reason=code)
+            if isinstance(error, ConnectionError) or (initial and isinstance(error, TransportError)):
                 raise
             raise ConnectionError('peer_invalid' if isinstance(error, (ValueError, KeyError, TypeError))
                                   else 'connection_lost') from None
@@ -262,9 +258,9 @@ class _DataLink:
                     self._offered = None
                     return
                 raise ConnectionError('invalid_legacy_request')
-            except Exception:
+            except Exception as error:
                 self.failed.set()
-                self.manager._revoke(self)
+                self.manager._revoke(self, reason=error.code if isinstance(error, ConnectionError) else None)
                 raise
 
     def receive(self):
@@ -315,11 +311,13 @@ class ConnectionManager:
                 base = replace(base, peer='disconnected', output='unavailable', next_action='reconnect')
         return aggregate_readiness(base, None if worker is None else worker.status)
 
-    def _event(self, code, *, run_id=None, output=None, reason=None, generation=None, device=None):
+    def _event(self, code, *, run_id=None, output=None, reason=None, generation=None, device=None, peer=None):
         detail = dict(version=2, demo_only=output != 'test_release', provisional=True,
                       gsv_receipt_confirmed=False)
         if output is not None:
             detail.update(output=output, reason=reason, generation=generation)
+        if peer is not None:
+            detail['peer'] = peer
         if device is not None:
             from .port_inventory import usb_vid_pid
             detail.update(route='uart', port=device.port, usb_vid_pid=usb_vid_pid(device))
@@ -346,7 +344,7 @@ class ConnectionManager:
             self._readiness = replace(self._readiness, peer=peer, next_action=reason,
                                       adapter=adapter or self._readiness.adapter, output=output)
             run_id = link.run_id if link else None
-        self._event(action or peer, run_id=run_id, output=output, reason=reason, generation=generation)
+        self._event(action or peer, run_id=run_id, output=output, reason=reason, generation=generation, peer=peer)
 
     def _check_locked(self, link):
         if (self._link is not link or not link.valid or self._cancel.is_set()
@@ -377,14 +375,18 @@ class ConnectionManager:
                 raise ConnectionError('run_changed')
             return claim()
 
-    def _revoke(self, link):
+    def _revoke(self, link, *, reason=None):
         with self._lock:
             link.valid = False
-            if self._link is link:
+            interrupted = self._link is link
+            if interrupted:
                 self._link = None
                 self._readiness = replace(self._readiness, peer='disconnected', output='unavailable', next_action='reconnect')
         # Cleanup can involve transport/audit I/O, so it runs after metadata revoke.
         threading.Thread(target=_close, args=(link.transport,), daemon=True).start()
+        if interrupted:
+            self._event('connection_interrupted', run_id=link.run_id, output='unavailable',
+                        reason=reason, generation=link.generation, peer='disconnected')
 
     def disconnect(self):
         with self._lock:

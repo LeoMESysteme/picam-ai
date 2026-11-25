@@ -1,4 +1,4 @@
-; Installer der GUI (ohne /DRelease: interner, unsignierter Test-Installer). Nur ueber build-test.ps1 / build-release.cmd.
+﻿; Installer der GUI (ohne /DRelease: interner, unsignierter Test-Installer). Nur ueber build-test.ps1 / build-release.cmd.
 ; Benutzerinstallation ohne Administratorrechte. Kein Treiber, kein com0com, kein Autostart.
 #ifndef AppDir
   #error AppDir muss den PyInstaller-Ordner nennen
@@ -50,12 +50,27 @@ SignedUninstaller=no
 #endif
 DisableProgramGroupPage=yes
 ChangesAssociations=yes
+; Restart Manager erkennt die laufende installierte EXE. Der App-Mutex
+; enthaelt die Benutzer-SID und hat deshalb keinen festen AppMutex-Namen.
+CloseApplications=force
+RestartApplications=no
+
+[Languages]
+Name: "de"; MessagesFile: "compiler:Languages\German.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "Desktopsymbol erstellen"; Flags: unchecked
 
 [Files]
 Source: "{#AppDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#AppDir}\_internal\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{userprograms}\GSVmulti-Bruecke"; Filename: "{app}\GSVmulti-Bruecke.exe"
+Name: "{userdesktop}\GSVmulti-Bruecke"; Filename: "{app}\GSVmulti-Bruecke.exe"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\GSVmulti-Bruecke.exe"; Description: "Brücke jetzt starten"; Flags: postinstall nowait skipifsilent
 
 ; Dateizuordnung .dispread nur fuer den aktuellen Benutzer (HKCU).
 [Registry]
@@ -65,4 +80,4 @@ Root: HKCU; Subkey: "Software\Classes\GSVmulti-Bruecke.Profil\shell\open\command
 
 ; Bewusst kein [UninstallDelete]: Benutzerdaten, Journale und Zugangsdaten
 ; (%LOCALAPPDATA%\dispread-bridge u. a.) gehoeren dem Benutzer, nicht dem Installer.
-; Bewusst kein [Run]-Treiber, keine PATH-/Python-Aenderung, kein Autostart.
+; Keine Treiberinstallation, keine PATH-/Python-Aenderung, kein Autostart.

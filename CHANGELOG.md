@@ -20,6 +20,21 @@ was ist die Konsequenz.
   Fortschritt und Ergebnis sind für die Konsole zugänglich. Systemdienste können
   mit einer zuvor eingeholten sudo-Freigabe ohne Terminalabfrage laufen.
 
+* 2026-11-25: **Windows-Brücke 1.1.0: Protokoll, Störungen, Flackern, zwei EXE-Pakete.**
+  Das Protokoll fror nach den ersten Einträgen ein (`StatusView.update_from`
+  übernahm die Liste nur, solange sie leer war); es gleicht sich jetzt bei jeder
+  Aktualisierung ab, ohne Scrollsprung, und zeigt die Zahl der Störungen am
+  Segment. Detailfenster (z. B. „Weitergabe“) tauschen bei gleichem Aufbau nur
+  die Werte, statt sich je Takt neu zu bauen (Flackern).
+  Abbruch der Pi-Verbindung, fehlgeschlagene COM-Weitergabe, unbestätigte
+  Pi-Quittungen und gestörte Takte erscheinen im Störungsfilter.
+  Wiederverbindungsversuche sowie aufgefüllte und ungültige Takte werden
+  gezählt. Die Dauer einer Unterbrechung stammt aus der monotonen Windows-Uhr.
+  Der GUI-Bau liefert eine portable EXE und mit Inno Setup ein Benutzer-Setup
+  samt SHA-256-Liste. Beide App-Bauformen prüfen im Selbsttest die
+  Session-Vorlagen und die Lizenzhinweise. Windows-Bau und Update stehen
+  zur Prüfung aus.
+
 * 2026-11-20 (nachts): **Befunde aus der unabhängigen Prüfung vor dem Release behoben.**
   Problem/Geändert:
   - `picam kalibrieren`: SIGHUP (SSH-Abbruch) und SIGTERM liefen ohne Aufräumen aus
