@@ -14,7 +14,7 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 ## Übergabe (Stand 25.11. abends)
 
-**Release v1.1.0 veröffentlicht** (picam 1.1.0 + GSVmulti-Brücke 1.1.0): Tag `v1.1.0` auf
+**Aktuell: v1.1.1** (25.11. spät, Fix: Installer erbte umask 077 von get-picam.sh → „Permission denied“ auf raspi01; https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1). **Release v1.1.0 veröffentlicht** (picam 1.1.0 + GSVmulti-Brücke 1.1.0): Tag `v1.1.0` auf
 `master` (`36cf1f3`), GitHub-Release auf dem Mirror
 https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.0 mit `picam-1.1.0.tar.gz` und `.sha256`.
 Installation: `curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash`
