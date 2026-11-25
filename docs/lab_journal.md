@@ -4958,3 +4958,20 @@ bisherigen Prüfgrenzen.
 raspi01 ist noch nicht validiert, weil die Timing-Kalibrierung fehlt und der
 Laufstart ohne sie gesperrt bleibt (keine Übernahme von raspi06).
 
+
+## 2026-11-25 — raspi01: Update auf rc-51b620f und Timing-Kalibrierung
+
+**Ziel:** raspi01 mit dem Releasekandidaten `rc-51b620f` aktualisieren und die
+Timing-Kalibrierung bei der Inbetriebnahme messen (USB-RS232-Adapter vorübergehend
+am GSV-2AS).
+
+**Durchgeführt von:** Leonhard (Rückmeldung im Chat am 25.11.).
+
+**Beobachtung:** Update und `picam kalibrieren` liefen laut Leonhard ohne Befund
+(„das funktioniert alles super“). Einzelwerte der Kalibrierung (Wechsel je
+Population, δ, M), Dauer der Auswertung und Laufordner liegen auf raspi01 unter
+`/var/lib/picam/calibration/runs/` und sind hier nicht übertragen.
+
+**Wunsch daraus:** Kalibrierung in der Konsole statt im Terminal; umgesetzt in
+`fbd7be0` (eigener Bildschirm, Abbruch, sudo-Passwort in der Konsole),
+am Pi noch nicht gelaufen ([OQ-79](open-questions.md#oq-79)).
