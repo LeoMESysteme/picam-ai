@@ -15,6 +15,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from dispread.gsv2as_serial import REFERENCE_PORT
+from dispread.hardware_ports import GSV_UART_PORT
+
 from .output_state import RELEASE_BLOCK, OutputState
 from .protocol import TICK_CAPABILITY, TICK_CAPABILITY_VERSION, _identifier, _transport, decode_v2, encode_v2
 from .types import PeerHello
@@ -47,11 +50,13 @@ class Lease:
 
 class BridgeHub:
     def __init__(self, pi_id: str, audit_root: Path, *, clock=time.monotonic,
-                 identity=None, pairing_store=None, serial_opener=None, port_leases=None):
+                 identity=None, pairing_store=None, serial_opener=None, port_leases=None,
+                 output_port=GSV_UART_PORT, reference_port=REFERENCE_PORT):
         _identifier(pi_id)
         self.pi_id, self.audit_root, self.clock = pi_id, Path(audit_root), clock
         self.identity, self.pairing_store = identity, pairing_store
         self.serial_opener, self.port_leases = serial_opener, port_leases
+        self.output_port, self.reference_port = output_port, reference_port
         self._lock = threading.RLock()
         self._lease = None
         self._run_id = None
@@ -398,7 +403,8 @@ class BridgeHub:
             if self._uart is not None and self._uart.state not in ('failed', 'stopped'):
                 return self.status()
             listener = UartListener(self, self.identity, self.pairing_store,
-                                    opener=self.serial_opener, port_leases=self.port_leases)
+                                    opener=self.serial_opener, port_leases=self.port_leases,
+                                    output_port=self.output_port, reference_port=self.reference_port)
             self._uart = listener
         try:
             listener.start()

@@ -58,14 +58,16 @@ def plan_update(prefix, source, sha256=None):
 
 
 def prepare(prefix, source, sha256=None, python='/usr/bin/python3', runner=subprocess.run,
-            progress=lambda _text: None):
+            progress=lambda _text: None, *, step=None):
     """Neue Version vorbereiten, nicht aktivieren. Bei Fehler bleibt nichts zurück."""
+    if step is not None:
+        step('pruefen')
     bundle, target, state = plan_update(prefix, source, sha256)
     info = probe_system(python, runner=runner)
     if info.missing_modules:
         raise ValueError('Python-Systemmodule fehlen: ' + ', '.join(info.missing_modules))
     try:
-        prepare_release(bundle, target, info, runner, progress)
+        prepare_release(bundle, target, info, runner, progress, **({'phase': step} if step is not None else {}))
     except BaseException:
         shutil.rmtree(target, ignore_errors=True)
         raise
@@ -77,7 +79,10 @@ def _swap_link(link: Path, target: Path) -> None:
     if temporary.is_symlink() or temporary.exists():
         temporary.unlink()
     temporary.symlink_to(target)
-    os.replace(temporary, link)
+    try:
+        os.replace(temporary, link)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _release_dir(prefix: Path, release_id: str) -> Path:
@@ -99,8 +104,24 @@ def activate(prefix, release_id) -> dict:
     old = (prefix / 'current').resolve()
     if old == target.resolve():
         raise ValueError(f'Version {release_id} ist bereits aktiv')
-    _swap_link(prefix / 'current', target)
-    _swap_link(prefix / 'previous', old)
+    previous = prefix / 'previous'
+    if previous.exists() and not previous.is_symlink():
+        raise ValueError(f'{previous} ist kein Versionsverweis')
+    previous_target = previous.readlink() if previous.is_symlink() else None
+    _swap_link(previous, old)
+    try:
+        _swap_link(prefix / 'current', target)
+    except OSError as error:
+        try:
+            if previous_target is None:
+                previous.unlink()
+            else:
+                _swap_link(previous, previous_target)
+        except OSError as restore_error:
+            raise ValueError(
+                f'Umschalten fehlgeschlagen: {error}. Vorigen Versionsverweis prüfen: {restore_error}'
+            ) from restore_error
+        raise
     return {'current': release_id, 'previous': old.name}
 
 

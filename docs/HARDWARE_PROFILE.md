@@ -140,6 +140,35 @@ direkt mit RS-232 verbunden werden. Es braucht einen RS-232-/RS-485-Transceiver,
 und die galvanische Trennung ist für den Laboraufbau zu bewerten. Ein virtueller
 USB-COM-Port am Pi 5 darf nicht pauschal vorausgesetzt werden.
 
+### Pi-5-UARTs an der 40-poligen Stiftleiste
+
+Quelle: `overlays/README` auf raspi06, 25.11.2026. Die Pin-Nummern
+bezeichnen die physischen Positionen an der Stiftleiste.
+
+| UART | TX GPIO / Pin | RX GPIO / Pin | Boot-Konfiguration | Konflikt |
+| --- | --- | --- | --- | --- |
+| UART0 | 14 / 8 | 15 / 10 | `dtparam=uart0=on` oder `dtoverlay=uart0-pi5` | Serielle Konsole, wenn auf diesen Port gelegt |
+| UART1 | 0 / 27 | 1 / 28 | `dtoverlay=uart1-pi5` | ID_SD/ID_SC des HAT-EEPROM, I2C0 |
+| UART2 | 4 / 7 | 5 / 29 | `dtoverlay=uart2-pi5` | — |
+| UART3 | 8 / 24 | 9 / 21 | `dtoverlay=uart3-pi5` | SPI0 CE0/MISO bei aktivem SPI0, etwa durch `dtparam=spi=on` |
+| UART4 | 12 / 32 | 13 / 33 | `dtoverlay=uart4-pi5` | — |
+
+Die direkte GSVmulti-Ausgabe benötigt TX und die Bezugsmasse. Bei der
+bidirektionalen Windows-Brückenkopplung über UART kommt RX hinzu.
+Die `ctsrts`-Parameter bleiben aus. UART1 nur bei freiem ID_SD und ID_SC
+verwenden. GPIO arbeitet mit 3,3 V. Zum Anschluss von RS-232 ist ein
+passender Pegelwandler erforderlich.
+
+Die Instanz liest `output_port` und `reference_port` in `[workbench]` ihrer
+`config.toml`. Vorgaben bleiben `/dev/ttyAMA0` und `/dev/ttyUSB0`.
+Für weitere Header-UARTs speichert picam den Controller (etwa `uart2`)
+und bestimmt den Linux-Gerätenamen beim Dienststart aus Device Tree und sysfs.
+Bei USB-Adaptern bevorzugt picam verfügbare Pfade unter `/dev/serial/by-id/`.
+Benötigt die Auswahl eine Bootänderung, sichert picam `config.txt` als
+`config.txt.bak-<UTC>` und meldet den erforderlichen Pi-Neustart. Die
+Zuordnung zusätzlicher UARTs am Aufbau ist nach dem Boot zu prüfen
+([OQ-80](open-questions.md#oq-80)).
+
 ## Messverstärker GSV-2AS — Klemmenbelegung und Schnittstelle
 
 Quelle: ME-Systeme, „DMS Messverstärker GSV-2 Bedienungsanleitung (GSV-2LS,

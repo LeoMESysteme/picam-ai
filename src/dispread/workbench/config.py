@@ -12,13 +12,16 @@ import sys
 import tomllib
 from pathlib import Path
 
+from dispread.gsv2as_serial import REFERENCE_PORT
+from dispread.hardware_ports import GSV_UART_PORT, validate_port_pair
+
 _PATHS = {
     'data': 'directory', 'live_data': 'directory', 'socket': 'socket',
     'cert': 'file', 'key': 'file', 'bridge_directory': 'directory',
 }
 _FIELDS = frozenset(_PATHS) | {
     'host', 'port', 'pam_user', 'bridge_endpoint', 'bridge_name',
-    'bridge_discovery', 'camera', 'simulate',
+    'bridge_discovery', 'camera', 'simulate', 'output_port', 'reference_port',
 }
 # Include non-configurable serve options so argparse abbreviations stay unambiguous.
 _SERVE_OPTIONS = _FIELDS | {
@@ -70,6 +73,15 @@ def _path(value, name, base, kind):
     return path
 
 
+def validate_serial_setting(value: str, name: str) -> str:
+    _text(value, name)
+    pattern = (r'(?:uart[0-4]|/dev/ttyAMA[0-9]+)' if name == 'output_port'
+               else r'/dev/(?:tty(?:USB|ACM)[0-9]+|serial/by-id/(?!\.{1,2}$)[^/]+)')
+    if not re.fullmatch(pattern, value):
+        raise ValueError(f'{name}: ungültige serielle Schnittstelle')
+    return value
+
+
 def _workbench(values, base):
     result = {}
     for name, value in values.items():
@@ -83,6 +95,8 @@ def _workbench(values, base):
         elif name in {'simulate', 'bridge_discovery'}:
             if type(value) is not bool:
                 raise ValueError(f'{name}: TOML true/false erforderlich')
+        elif name in {'output_port', 'reference_port'}:
+            value = validate_serial_setting(value, name)
         elif name == 'bridge_endpoint':
             from dispread.bridge.protocol import MAX_ENDPOINTS, _endpoint
 
@@ -99,6 +113,9 @@ def _workbench(values, base):
         else:
             value = _text(value, name)
         result[name] = value
+    if 'output_port' in result or 'reference_port' in result:
+        validate_port_pair(result.get('output_port', GSV_UART_PORT),
+                           result.get('reference_port', REFERENCE_PORT))
     return result
 
 
@@ -121,6 +138,10 @@ def load_config(path):
     source = Path(path).resolve()
     with source.open('rb') as stream:
         config = tomllib.load(stream)
+    return parse_config(config, source.parent)
+
+
+def parse_config(config, base):
     if unknown := config.keys() - {'workbench', 'live'}:
         raise ValueError(f'unbekannte Abschnitte: {", ".join(sorted(unknown))}')
     for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration'})):
@@ -129,8 +150,8 @@ def load_config(path):
             raise ValueError(f'{section}: TOML-Tabelle erforderlich')
         if unknown := values.keys() - allowed:
             raise ValueError(f'{section}: unbekannte Schluessel: {", ".join(sorted(unknown))}')
-    workbench = _workbench(config.get('workbench', {}), source.parent)
-    live = {name: _path(value, f'live.{name}', source.parent, 'file')
+    workbench = _workbench(config.get('workbench', {}), base)
+    live = {name: _path(value, f'live.{name}', base, 'file')
             for name, value in config.get('live', {}).items()}
     return workbench, live, 'live' in config
 

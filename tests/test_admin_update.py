@@ -162,3 +162,182 @@ def test_activate_rejects_symlinked_release(prefix, tmp_path):
     (prefix / 'releases/link').symlink_to(outside)
     with pytest.raises(ValueError, match='nicht direkt'):
         inst_update.activate(prefix, 'link')
+
+
+class RecordingConsole:
+    def __init__(self):
+        self.steps = []
+        self.fractions = []
+        self.messages = []
+        self.last_result = None
+
+    def step(self, text, *, key):
+        self.steps.append(key)
+
+    def progress(self, tty):
+        return self
+
+    def __call__(self, completed, total):
+        self.fractions.append(completed / total)
+
+    def finish(self):
+        pass
+
+    def confirm(self, title, lines, expected, *, deps):
+        return True
+
+    def mark(self, level, text):
+        self.line(text)
+
+    def loud(self, lines):
+        self.messages.extend(lines)
+
+    def line(self, text):
+        self.messages.append(text)
+
+
+def test_worker_reports_update_and_restart_command(prefix, admin, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    def prepare(prefix, source, sha256, *, progress, step):
+        for key in ('pruefen', 'entpacken', 'umgebung', 'selbsttest'):
+            step(key)
+        return {'release_id': '1.1.0', 'path': str(prefix / 'releases/1.1.0'), 'from': '1.0.0'}
+
+    monkeypatch.setattr(inst_update, 'prepare', prepare)
+    monkeypatch.setattr(admin_update, 'needs_root', lambda _: False)
+    console = RecordingConsole()
+    deps = admin_update.Deps(collect=snapshot_collect({'state': 'idle'}), restart=lambda *_: True)
+    with ThreadPoolExecutor() as pool:
+        result = pool.submit(admin_update.run_update, admin, 'archive', None, console, deps).result()
+    assert result is console.last_result
+    assert (result.old_version, result.new_version, result.outcome) == ('1.0.0', '1.1.0', 'ok')
+    assert result.restart_command == str(prefix / 'current/.venv/bin/picam')
+    assert not result.rollback_triggered
+    assert console.steps == ['pruefen', 'entpacken', 'umgebung', 'selbsttest',
+                             'umschalten', 'dienst_neustart', 'bereit']
+    assert console.fractions[-1] == 1
+
+
+def test_worker_rolls_back_on_restart_exception(prefix, admin, monkeypatch):
+    def restart(instance, echo):
+        if inst_update.releases(prefix)['current'] == '1.1.0':
+            raise OSError('systemctl nicht erreichbar')
+        return True
+
+    monkeypatch.setattr(admin_update, 'needs_root', lambda _: False)
+    console = RecordingConsole()
+    deps = admin_update.Deps(collect=snapshot_collect({'state': 'idle'}), restart=restart)
+    result = admin_update.run_update(admin, None, None, console, deps, release_id='1.1.0', yes=True)
+    assert result.outcome == 'failed'
+    assert result.rollback_triggered and result.rollback_ok
+    assert 'systemctl nicht erreichbar' in result.reason
+    assert result.restart_command is None
+    assert console.steps[-1] == 'rueckweg'
+    assert inst_update.releases(prefix)['current'] == '1.0.0'
+
+
+def test_worker_cancel_before_switch_leaves_active_version(prefix, admin, monkeypatch):
+    console = RecordingConsole()
+    monkeypatch.setattr(admin_update, 'needs_root', lambda _: False)
+
+    def prepare(prefix, source, sha256, *, progress, step):
+        console.line('Vorbereitung abgeschlossen')
+        return {'release_id': '1.1.0', 'path': str(prefix / 'releases/1.1.0'), 'from': '1.0.0'}
+
+    monkeypatch.setattr(inst_update, 'prepare', prepare)
+    deps = admin_update.Deps(collect=snapshot_collect({'state': 'idle'}),
+                             cancelled=lambda: 'Vorbereitung abgeschlossen' in console.messages,
+                             restart=lambda *_: pytest.fail('kein Neustart nach Abbruch'))
+    result = admin_update.run_update(admin, 'archive', None, console, deps, yes=True)
+    assert result.outcome == 'cancelled'
+    assert inst_update.releases(prefix)['current'] == '1.0.0'
+
+
+def test_cli_update_without_source_reports_missing_release_source(admin, monkeypatch, capsys):
+    monkeypatch.setattr(cli, 'discover', lambda *_: admin)
+    monkeypatch.setattr(inst_update, 'load_source', lambda *_: pytest.fail('keine Bezugsquelle'))
+    assert cli.main(['update', '--yes']) == cli.EXIT_FAIL
+    assert 'Bezugsquelle noch nicht festgelegt – mit --source angeben' in capsys.readouterr().err
+
+
+def test_cli_update_uses_configured_source(admin, monkeypatch, capsys):
+    monkeypatch.setattr(cli, 'discover', lambda *_: admin)
+    monkeypatch.setattr(admin_update, 'needs_root', lambda _: False)
+    monkeypatch.setattr(admin_update, 'RELEASE_SOURCE', 'lokales.tar.gz')
+    monkeypatch.setattr(admin_update, 'install_update',
+                        lambda instance, source, sha256, echo: (True, source))
+    assert cli.main(['update', '--yes']) == cli.EXIT_OK
+    assert capsys.readouterr().out.strip() == 'lokales.tar.gz'
+
+
+def test_worker_recovers_when_console_closes_after_switch(prefix, admin, monkeypatch):
+    class ClosedConsole(RecordingConsole):
+        def line(self, text):
+            if inst_update.releases(prefix)['current'] == '1.1.0':
+                raise RuntimeError('Konsole geschlossen')
+            super().line(text)
+
+    monkeypatch.setattr(admin_update, 'needs_root', lambda _: False)
+    answers = iter([False, True])
+    deps = admin_update.Deps(collect=snapshot_collect({'state': 'idle'}), restart=lambda *_: next(answers))
+    result = admin_update.run_update(admin, None, None, ClosedConsole(), deps, release_id='1.1.0', yes=True)
+    assert result.rollback_ok
+    assert inst_update.releases(prefix)['current'] == '1.0.0'
+
+
+def test_privileged_update_uses_noninteractive_protocol(admin, monkeypatch):
+    import subprocess
+    from io import StringIO
+
+    console = RecordingConsole()
+    child = SimpleNamespace(stdout=iter([
+        '{"step":"pruefen"}\n',
+        '{"checkpoint":true}\n',
+        '{"result":{"outcome":"cancelled","reason":"Update abgebrochen."}}\n',
+    ]), stdin=StringIO(), wait=lambda: 130)
+
+    class Process:
+        def __init__(self, argv, **kwargs):
+            assert argv[:2] == ['sudo', '-n']
+            assert argv[-1].startswith('--source=/')
+            assert kwargs['stdin'] == subprocess.PIPE
+
+        def __enter__(self):
+            return child
+
+        def __exit__(self, *_):
+            pass
+
+    monkeypatch.setattr(admin_update, 'needs_root', lambda _: True)
+    monkeypatch.setattr(admin_update.subprocess, 'Popen', Process)
+    deps = admin_update.Deps(cancelled=lambda: bool(console.steps))
+    result = admin_update.run_update(admin, 'archive', None, console, deps, yes=True)
+    assert child.stdin.getvalue() == 'cancel\n'
+    assert result is console.last_result
+    assert result.exit_code == 130
+
+
+def test_prepare_emits_stable_phase_keys(prefix, monkeypatch):
+    from picam_installer.engine import TEMPLATE
+
+    bundle = SimpleNamespace(release_id='2.0.0', manifest={}, files={TEMPLATE: b'fake'})
+    monkeypatch.setattr(inst_update, 'load_source', lambda *_: bundle)
+    monkeypatch.setattr(inst_update, 'probe_system', lambda *_args, **_kwargs: SimpleNamespace(
+        missing_modules=(), python='/fake/python'))
+    phases = []
+    result = inst_update.prepare(prefix, 'archive', runner=lambda *_args, **_kwargs: None, step=phases.append)
+    assert result['release_id'] == '2.0.0'
+    assert phases == ['pruefen', 'entpacken', 'umgebung', 'selbsttest']
+    assert inst_update.releases(prefix)['current'] == '1.0.0'
+
+
+def test_failed_current_swap_preserves_previous(prefix):
+    make_release(prefix, '1.1.0')
+    make_release(prefix, '0.9.0')
+    (prefix / 'previous').symlink_to('releases/0.9.0')
+    (prefix / 'current.neu').mkdir()
+    with pytest.raises(OSError):
+        inst_update.activate(prefix, '1.1.0')
+    state = inst_update.releases(prefix)
+    assert (state['current'], state['previous']) == ('1.0.0', '0.9.0')

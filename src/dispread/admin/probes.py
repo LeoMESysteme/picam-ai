@@ -15,6 +15,7 @@ import grp
 import hashlib
 import os
 import pwd
+import re
 import shlex
 import shutil
 import socket
@@ -27,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from dispread.camera_settings import STREAMCAM_USB_ID
+from dispread.hardware_ports import GSV_UART_PORT, same_port, uart_devices
 
 from .instance import Instance
 
@@ -35,7 +37,7 @@ LEVEL_ORDER = {FAIL: 0, WARN: 1, UNKNOWN: 2, OFF: 3, OK: 4}
 #: Sichere Zustände für Dienststopp, wie scripts/werkbank-dienst.sh.
 STOP_SAFE_STATES = frozenset({'idle', 'setup_ready', 'setup_failed', 'confirmed', 'stopped'})
 CAMERA_USB_ID = STREAMCAM_USB_ID
-UART_DEVICE = Path('/dev/ttyAMA0')
+UART_DEVICE = Path(GSV_UART_PORT)
 BOOT_CONFIGS = (Path('/boot/firmware/config.txt'), Path('/boot/config.txt'))
 BOOT_CMDLINES = (Path('/boot/firmware/cmdline.txt'), Path('/boot/cmdline.txt'))
 TLS_WARN_DAYS = 30
@@ -542,24 +544,43 @@ def _boot_text(paths) -> tuple[Path | None, str]:
     return None, ''
 
 
-def fact_uart(device: Path = UART_DEVICE, configs=BOOT_CONFIGS, cmdlines=BOOT_CMDLINES) -> Fact:
-    config_path, config = _boot_text(configs)
+def fact_uart(device: Path = UART_DEVICE, configs=BOOT_CONFIGS, cmdlines=BOOT_CMDLINES, *,
+              output_port: str | None = None) -> Fact:
+    from .uart_ports import CHECK_AFTER_REBOOT, UARTS, read_boot_config
+
+    configured = output_port or str(device)
+    mapped = uart_devices() if output_port is not None else {}
+    if configured.startswith('uart'):
+        uart = configured
+        device = Path(mapped[uart]) if uart in mapped else None
+    elif output_port is not None:
+        device = Path(configured)
+        uart = next((key for key, port in mapped.items() if same_port(port, configured)), None)
+    else:
+        uart = 'uart0'
+    if uart is None and configured == GSV_UART_PORT:
+        uart = 'uart0'
+    config_path = next((path for path in configs if path.exists()), None)
     _, cmdline = _boot_text(cmdlines)
-    enabled = any(line.split('#', 1)[0].strip().replace(' ', '') in ('dtparam=uart0=on', 'dtparam=uart0')
-                  for line in config.splitlines())
-    console = 'console=ttyAMA0' in cmdline or 'console=serial0' in cmdline.replace('ttyAMA10', '')
-    detail = [('Gerät', f"{device} {'vorhanden' if device.exists() else 'fehlt'}"),
-              ('Bootdatei', f"dtparam=uart0=on {'gesetzt' if enabled else 'fehlt'}"
-               + (f' ({config_path})' if config_path else ''))]
-    if console:
-        detail.append(('Konsole', 'serielle Konsole auf dem Datenport'))
-    if not device.exists() or not enabled:
-        return Fact('uart', 'UART', WARN, 'nicht aktiv', detail,
-                    hint='Nur für UART-Ausgabe nötig. dtparam=uart0=on in config.txt ergänzen, dann neu booten.',
-                    command="echo 'dtparam=uart0=on' | sudo tee -a /boot/firmware/config.txt")
-    if console:
+    try:
+        boot = read_boot_config(config_path) if config_path else None
+    except (OSError, ValueError) as error:
+        return Fact('uart', 'UART', WARN, 'Bootkonfiguration nicht lesbar', [('Fehler', str(error))])
+    enabled = bool(boot and uart in boot.enabled_uarts)
+    detail = [('Ausgang', configured),
+              ('Gerät', str(device) if device and device.exists() else 'fehlt')]
+    if config_path:
+        detail.append(('Bootdatei', str(config_path)))
+    consoles = re.findall(r'(?:^|\s)console=([^,\s]+)', cmdline)
+    if device and any(same_port(str(device), '/dev/' + console) or console == device.name
+                      for console in consoles):
         return Fact('uart', 'UART', WARN, 'Konsole belegt', detail,
                     hint='Serielle Konsole abschalten (raspi-config → Interface → Serial: Login-Shell nein).')
+    if not device or not device.exists() or (uart and not enabled):
+        function = next((item for item in UARTS if item.uart == uart), None)
+        hint = (f'{function.overlay_line} in config.txt aktivieren und Pi neu starten.'
+                if function and not enabled else CHECK_AFTER_REBOOT)
+        return Fact('uart', 'UART', WARN, 'nicht aktiv', detail, hint=hint)
     return Fact('uart', 'UART', OK, 'aktiv', detail)
 
 
@@ -700,7 +721,7 @@ def collect(instance: Instance, run=run_command, live_source=None, bridge_source
         facts['netzwerk'] = fact_network(instance, run)
         facts['vorlage'] = fact_templates(instance)
         facts['kalibrierung'] = fact_calibration(instance, camera_id=_live_camera_id(live))
-        facts['uart'] = fact_uart()
+        facts['uart'] = fact_uart(output_port=instance.output_port)
         facts['konto'] = fact_groups(instance)
         linger = fact_linger(instance, run)
         if linger is not None:

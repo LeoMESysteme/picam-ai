@@ -79,6 +79,8 @@
   "reader_tolerance": null,
   "session_id": "test-session",
   "release_notice": "Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.",
+  "output_port": "/dev/ttyAMA0",
+  "output_port_managed": false,
   "camera": {
     "running": true,
     "stalled": false,

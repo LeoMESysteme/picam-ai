@@ -258,13 +258,14 @@ def plan_uninstall(*, mode, prefix, data=None, config=None, unit=None, link=None
     actions.append({'kind': 'rmdir_if_empty', 'path': str(prefix), 'text': 'Installationsort entfernen, falls leer'})
     leftovers = sorted(entry.name for entry in prefix.iterdir()
                        if entry.name not in ('releases', *CODE_ENTRIES)
-                       and not any(str(prefix / entry.name) == action['path'] for action in actions))
+                       and not any(str(entry) == action.get('path') for action in actions))
     if leftovers:
         keep.append({'path': str(prefix), 'reason': 'enthält weitere Einträge: ' + ', '.join(leftovers)})
 
     return {'applied': False, 'mode': mode, 'purge_data': bool(purge_data), 'request': request,
             'prefix': str(prefix), 'unit': unit_info, 'actions': actions, 'remove': remove, 'keep': keep,
-            'edit': edit, 'needs_root': needs_root, 'notes': notes}
+            'edit': edit, 'needs_root': needs_root, 'notes': notes,
+            'stop_service': unit_info is not None and unit_info['present']}
 
 
 def apply_uninstall(plan, runner=subprocess.run, progress=None):

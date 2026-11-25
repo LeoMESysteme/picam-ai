@@ -162,6 +162,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
     if (test && beforeTest === null) { beforeTest = choice(); setChoice('off'); }
     else if (!test && beforeTest !== null) { setChoice(beforeTest); beforeTest = null; }
     for (const el of part('output').querySelectorAll('input, select')) el.disabled = test || Boolean(running());
+    part('out-port').readOnly = Boolean(status?.output_port_managed);
   };
   part('override').addEventListener('change', () => { showError(''); syncTest(); refresh(); });
   for (const f of ['fmt-4ch', 'fmt-1ch']) part(f).addEventListener('change', () => { showError(''); showOutput(); refresh(); });
@@ -195,6 +196,7 @@ export function mountStartPopover(host, client, {onStart = null, confirm = openM
       for (const el of part('output').querySelectorAll('input, select')) el.disabled = Boolean(live);
       part('out-ro').hidden = !live;
       syncTest();
+      if (!live && next?.output_port_managed) part('out-port').value = next.output_port;
       if (live) {
         const out = status.output;
         setChoice(out.transport);

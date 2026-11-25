@@ -222,6 +222,8 @@ def cmd_update(args, instance) -> int:
     from . import update
 
     try:
+        if not (args.check or args.rollback or args.activate):
+            args.source = update.resolve_source(args.source)
         update.prefix_of(instance)
         if args.check:
             state = update.versions(instance)
@@ -449,7 +451,7 @@ def parser() -> argparse.ArgumentParser:
     config.add_argument('value', nargs='?')
     config.add_argument('--yes', '-y', action='store_true')
     upd = sub.add_parser('update', help='neue Version installieren, umschalten, neu starten (mit Rückweg)')
-    group = upd.add_mutually_exclusive_group(required=True)
+    group = upd.add_mutually_exclusive_group()
     group.add_argument('--source', help='Releasearchiv oder HTTPS-Adresse')
     group.add_argument('--rollback', action='store_true', help='zurück auf die vorige Version')
     group.add_argument('--activate', metavar='VERSION', help='vorbereitete Version aktivieren')

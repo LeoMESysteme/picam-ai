@@ -11,13 +11,14 @@ import json
 import socket
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import InitVar, asdict, dataclass
 from pathlib import Path
 
 from dispread.bridge.baud import UART_BAUD
 from dispread.bridge.output_state import RELEASE_BLOCK as RELEASE_BLOCK
 from dispread.bridge.output_state import OutputState
-from dispread.hardware_ports import GSV_UART_PORT
+from dispread.gsv2as_serial import REFERENCE_PORT
+from dispread.hardware_ports import GSV_UART_PORT, same_port, validate_port_pair
 
 MAX_MESSAGE_BYTES = 65536
 
@@ -62,11 +63,17 @@ class OutputConfig:
     tcp_port: int = 5000
     max_frame_age_ms: int = 1000
 
-    def __post_init__(self):
+    output_port: InitVar[str] = GSV_UART_PORT
+    reference_port: InitVar[str] = REFERENCE_PORT
+
+    def __post_init__(self, output_port, reference_port):
         if self.transport not in ("off", "uart", "tcp"):
             raise ValueError("Unbekannter Ausgabeweg")
-        if self.serial_port != GSV_UART_PORT:
-            raise ValueError(f"UART-Ausgang muss {GSV_UART_PORT} sein; Referenzport bleibt frei")
+        if not isinstance(self.serial_port, str) or not self.serial_port or not same_port(self.serial_port, output_port):
+            raise ValueError(f"UART-Ausgang muss {output_port} sein; Referenzport und Debugport bleiben frei")
+        validate_port_pair(self.serial_port, reference_port)
+        if self.serial_port != output_port:
+            object.__setattr__(self, "serial_port", output_port)
         if type(self.baudrate) is not int or self.baudrate != UART_BAUD:
             raise ValueError(f"Brücke benötigt {UART_BAUD} Baud")
         if type(self.tcp_port) is not int or not 1 <= self.tcp_port <= 65535:
@@ -77,13 +84,14 @@ class OutputConfig:
             raise ValueError("Frischegrenze muss 1–1000 ms sein")
 
     @classmethod
-    def from_dict(cls, raw):
+    def from_dict(cls, raw, *, output_port=GSV_UART_PORT, reference_port=REFERENCE_PORT):
         if raw is None:
-            return cls()
+            raw = {}
         if not isinstance(raw, dict):
             raise ValueError("Ausgabekonfiguration muss ein Objekt sein")
         try:
-            return cls(**raw)
+            return cls(**({"serial_port": output_port} | raw), output_port=output_port,
+                       reference_port=reference_port)
         except TypeError as exc:
             raise ValueError("Unbekannte Ausgabefelder") from exc
 

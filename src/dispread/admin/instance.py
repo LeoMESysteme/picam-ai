@@ -19,6 +19,9 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from dispread.gsv2as_serial import REFERENCE_PORT
+from dispread.hardware_ports import GSV_UART_PORT
+
 SYSTEM_CONFIG = Path('/etc/picam/config.toml')
 INSTALLED_UNIT = 'picam-werkbank.service'
 DEV_UNIT = 'dispread-werkbank-bruecke'
@@ -74,6 +77,8 @@ class Instance:
     argv: list[str] = field(default_factory=list)   # Startbefehl (dev)
     workdir: str | None = None
     problem: str | None = None   # Konfiguration unlesbar o. ä.
+    output_port: str = GSV_UART_PORT
+    reference_port: str = REFERENCE_PORT
 
     @property
     def label(self) -> str:
@@ -114,7 +119,7 @@ def _from_config(path: Path, kind: str) -> Instance:
         instance.problem = f'Konfiguration {path} nicht lesbar: {error}'
         return instance
     for name in ('host', 'port', 'socket', 'data', 'live_data', 'bridge_directory', 'pam_user',
-                 'bridge_name', 'bridge_discovery'):
+                 'bridge_name', 'bridge_discovery', 'output_port', 'reference_port'):
         if name in workbench:
             setattr(instance, name, workbench[name])
     instance.templates = str(live['templates']) if 'templates' in live else None

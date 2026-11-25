@@ -7,9 +7,15 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from dispread.defaults import BRIDGE_DIR, LIVE_DATA_DIR, SERVE_PORT, TLS_CERT, TLS_DIR, TLS_KEY, WORKBENCH_DATA_DIR
+
+if TYPE_CHECKING:
+    from dispread.admin.instance import Instance
 
 
 def default_socket():
@@ -173,10 +179,67 @@ def positive_days(value):
     return days
 
 
+@dataclass(frozen=True)
+class BridgeRenewalResult:
+    pi_id: str
+    previous_certificate_sha256: str
+    certificate_sha256: str
+    not_after_utc: str
+    backup: Path
+    certificate_export: Path | None
+    profile_url: str | None
+    profile_export_command: tuple[str, ...]
+    profile_filename: str = 'pi.dispread'
+    restart_required: bool = True
+    repair_required: bool = True
+
+
+def renew_bridge_identity(instance: Instance, *, confirmed: bool, collect=None,
+                          hardware_id=None, now=None) -> BridgeRenewalResult:
+    """Renew for the service account; the caller must restart and re-pair afterwards."""
+    from dispread.admin import probes
+    from dispread.bridge.identity import DeviceIdentity, local_hardware_id
+
+    from .config import load_config
+
+    if confirmed is not True:
+        raise ValueError('Erneuerung erfordert ausdrückliche Bestätigung (--yes). Windows-Brücken müssen neu gekoppelt werden.')
+    if instance.problem or not instance.bridge_directory:
+        raise ValueError(instance.problem or 'Keine Brückenidentität für diese Werkbank konfiguriert.')
+    collect = collect or probes.collect
+
+    def check_idle():
+        if instance.unit is None and not instance.socket:
+            raise ValueError('Erneuerung gesperrt: Laufstatus unbekannt (keine lokale Steuerung)')
+        snapshot = collect(instance, include_setup=False)
+        blocker = snapshot.stop_blocker
+        if (instance.unit is None and snapshot.live is None and instance.socket
+                and Path(instance.socket).exists()):
+            blocker = 'Laufstatus unbekannt (Steuerung nicht erreichbar)'
+        if blocker:
+            raise ValueError(f'Erneuerung gesperrt: {blocker}')
+
+    settings = load_config(Path(instance.config))[0] if instance.config else {}
+    directory = Path(instance.bridge_directory)
+    export = Path(settings['cert']) if settings.get('cert') else None
+    if export is not None and (not export.is_file() or (settings.get('key') and Path(settings['key']).is_file())):
+        export = None  # Only refresh the installer’s public export of the bridge identity.
+    result = DeviceIdentity.renew(directory, (hardware_id or local_hardware_id)(), confirmed=confirmed,
+                                  check_idle=check_idle, certificate_export=export, now=now)
+    command = [sys.executable, '-m', 'dispread.workbench.cli', 'bridge', 'export-profile',
+               '--directory', str(directory), '--output', 'pi.dispread', '--name',
+               instance.bridge_name or 'Dispread Pi']
+    endpoints = settings.get('bridge_endpoint', ())
+    if not endpoints and instance.url:
+        endpoints = (instance.url.removesuffix('/live') + '/bridge/v2',)
+    for endpoint in endpoints:
+        command.extend(['--endpoint', endpoint])
+    return BridgeRenewalResult(**asdict(result), profile_url=instance.url + '/bridge/profile' if instance.url else None,
+                               profile_export_command=tuple(command))
+
+
 def bridge_command(args):
     """Local OS-authorized provisioning/export only; never start a measurement."""
-    from dataclasses import asdict
-
     from dispread.bridge.identity import DeviceIdentity, local_hardware_id
     from dispread.bridge.pairing import PairingStore
     from dispread.bridge.protocol import parse_profile
@@ -185,7 +248,22 @@ def bridge_command(args):
     if args.action in ('prepare-uart', 'stop-uart', 'status'):
         print(json.dumps(asyncio.run(request('bridge.' + args.action, socket_path=args.socket)), indent=2))
         return
-    directory = Path(args.directory)
+    if args.action == "identity" and args.renew:
+        from dispread.admin.instance import discover
+
+        if args.host is not None or args.export_certificate is not None:
+            raise ValueError('--renew übernimmt die vorhandenen SANs und aktualisiert die konfigurierte Zertifikatkopie.')
+        if not args.yes:
+            raise ValueError('Erneuerung erfordert ausdrückliche Bestätigung (--yes). Windows-Brücken müssen neu gekoppelt werden.')
+        instance = discover(args.config)
+        if args.directory != str(BRIDGE_DIR) and (
+            not instance.bridge_directory or Path(args.directory).resolve() != Path(instance.bridge_directory).resolve()
+        ):
+            raise ValueError('--directory muss zur verwalteten Werkbank passen (--config).')
+        print(json.dumps(asdict(renew_bridge_identity(instance, confirmed=args.yes)),
+                         default=os.fspath, indent=2, ensure_ascii=False))
+        return
+    directory = Path(args.directory or BRIDGE_DIR)
     if args.action == "revoke":
         PairingStore(directory / "pairing").revoke(args.client_id)
         print("Client-Zugang widerrufen")
@@ -298,7 +376,11 @@ def parser():
         local.add_argument('--socket', default=default_socket())
     identity = bridge_sub.add_parser("identity")
     identity.add_argument("--directory", default=str(BRIDGE_DIR))
-    identity.add_argument("--provision", action="store_true", help="Neue Identitaet nur bei fehlender Einrichtung erzeugen")
+    identity.add_argument("--config", help="Werkbank-Konfiguration für die Erneuerung und Laufsperre")
+    action = identity.add_mutually_exclusive_group()
+    action.add_argument("--provision", action="store_true", help="Neue Identitaet nur bei fehlender Einrichtung erzeugen")
+    action.add_argument("--renew", action="store_true", help="Neu ausstellen und danach alle Windows-Brücken neu koppeln")
+    identity.add_argument("--yes", action="store_true", help="Neukopplung bei --renew ausdrücklich bestätigen")
     identity.add_argument("--host", help="DNS-/IP-SAN bei expliziter Erstprovisionierung; keine Erneuerung")
     identity.add_argument("--export-certificate", help="Nur oeffentliches Zertifikat exklusiv exportieren; Elternverzeichnis muss existieren")
     export = bridge_sub.add_parser("export-profile")

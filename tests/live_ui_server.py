@@ -283,6 +283,7 @@ class FakeLiveService:
             self._status = {
                 "state": "idle", "error": None, "setup": None, "run": None, "reader_tolerance": None,
                 "session_id": "test-session", "release_notice": "Validiert nur: Testaufbau",
+                "output_port": "/dev/ttyAMA0", "output_port_managed": False,
                 "camera": {"running": True, "stalled": False, "error": None, "frames": 1, "gaps": 0,
                            "source": copy.deepcopy(CAMERA_SOURCE), "last_start": None}, "diagnostic_leftovers": [],
                 "storage": {"free_bytes": 4_200_000_000, "reserve_bytes": 2_000_000_000, "level": "warn",

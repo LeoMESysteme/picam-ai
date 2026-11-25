@@ -18,6 +18,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
@@ -114,7 +115,7 @@ def _load_certificate(certificate_pem: str):
             raise ValueError("expected provisioned self-signed Pi certificate")
         key.verify(cert.signature, cert.tbs_certificate_bytes, padding.PKCS1v15(), hashes.SHA256())
         return cert
-    except (TypeError, UnicodeError) as error:
+    except (TypeError, UnicodeError, InvalidSignature) as error:
         raise ValueError("invalid certificate") from error
 
 
@@ -177,6 +178,53 @@ def local_hardware_id() -> str:
     return value.lower()
 
 
+def _hardware_digest(hardware_id: str) -> str:
+    if not isinstance(hardware_id, str) or not hardware_id.strip() or len(hardware_id) > 512:
+        raise ValueError("hardware identity required")
+    return hashlib.sha256(hardware_id.encode()).hexdigest()
+
+
+def _issue_certificate(key, name, names, now):
+    return (
+        x509.CertificateBuilder()
+        .subject_name(name).issuer_name(name).public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=5)).not_valid_after(now + timedelta(days=365))
+        .add_extension(x509.SubjectAlternativeName(names), critical=False)
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+
+
+def _validate_state(state, hardware_digest, *, allow_expired=False):
+    if not isinstance(state, dict) or set(state) != {
+        "schema", "pi_id", "hardware_sha256", "certificate_pem", "private_key_pem"
+    } or state["schema"] != 1:
+        raise ValueError("invalid stored identity; never overwritten automatically")
+    if not isinstance(state["hardware_sha256"], str) or not hmac.compare_digest(state["hardware_sha256"], hardware_digest):
+        raise IdentityConflict("hardware identity conflict; explicit local reprovisioning required")
+    cert = _load_certificate(state["certificate_pem"])
+    fingerprint = cert.fingerprint(hashes.SHA256()).hex()
+    # Renewal verifies the old pin, signature and SAN even after its validity has ended.
+    verify_certificate(state["certificate_pem"], fingerprint, state["pi_id"],
+                       now=cert.not_valid_before_utc if allow_expired else None)
+    key = serialization.load_pem_private_key(state["private_key_pem"].encode("ascii"), password=None)
+    if not isinstance(key, rsa.RSAPrivateKey) or key.public_key().public_numbers() != cert.public_key().public_numbers():
+        raise ValueError("private key and certificate mismatch")
+    return cert, fingerprint, key
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityRenewal:
+    pi_id: str
+    previous_certificate_sha256: str
+    certificate_sha256: str
+    not_after_utc: str
+    backup: Path
+    certificate_export: Path | None
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class DeviceIdentity:
     directory: Path
@@ -200,10 +248,8 @@ class DeviceIdentity:
 
     @classmethod
     def _open(cls, directory, hardware_id, *, create, host_name=None):
-        if not isinstance(hardware_id, str) or not hardware_id.strip() or len(hardware_id) > 512:
-            raise ValueError("hardware identity required")
+        digest = _hardware_digest(hardware_id)
         directory = private_directory(Path(directory))
-        digest = hashlib.sha256(hardware_id.encode()).hexdigest()
         path = directory / "identity.json"
         with identity_lock(directory):
             try:
@@ -215,20 +261,10 @@ class DeviceIdentity:
                 key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
                 pi_id = str(uuid.uuid4())
                 name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "dispread-" + pi_id)])
-                now = datetime.now(UTC)
                 names = [x509.UniformResourceIdentifier(_PI_URI + pi_id)]
                 if host_name is not None:
                     names.append(host_name)
-                cert = (
-                    x509.CertificateBuilder()
-                    .subject_name(name).issuer_name(name).public_key(key.public_key())
-                    .serial_number(x509.random_serial_number())
-                    .not_valid_before(now - timedelta(minutes=5)).not_valid_after(now + timedelta(days=365))
-                    .add_extension(x509.SubjectAlternativeName(names), critical=False)
-                    .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-                    .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
-                    .sign(key, hashes.SHA256())
-                )
+                cert = _issue_certificate(key, name, names, datetime.now(UTC))
                 state = {
                     "schema": 1, "pi_id": pi_id, "hardware_sha256": digest,
                     "certificate_pem": cert.public_bytes(serialization.Encoding.PEM).decode("ascii"),
@@ -237,24 +273,77 @@ class DeviceIdentity:
                     ).decode("ascii"),
                 }
                 _atomic_private(path, json.dumps(state).encode("utf-8"))
-            if not isinstance(state, dict) or set(state) != {
-                "schema", "pi_id", "hardware_sha256", "certificate_pem", "private_key_pem"
-            } or state["schema"] != 1:
-                raise ValueError("invalid stored identity; never overwritten automatically")
-            if not hmac.compare_digest(state["hardware_sha256"], digest):
-                raise IdentityConflict("hardware identity conflict; explicit local reprovisioning required")
-            cert = _load_certificate(state["certificate_pem"])
-            fingerprint = cert.fingerprint(hashes.SHA256()).hex()
-            verify_certificate(state["certificate_pem"], fingerprint, state["pi_id"])
+            cert, fingerprint, key = _validate_state(state, digest)
             if host_name is not None:
                 names = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
                 if host_name not in names:
                     raise ValueError("existing identity certificate does not cover requested host; "
                                      "explicit certificate renewal required, identity unchanged")
-            key = serialization.load_pem_private_key(state["private_key_pem"].encode("ascii"), password=None)
-            if not isinstance(key, rsa.RSAPrivateKey) or key.public_key().public_numbers() != cert.public_key().public_numbers():
-                raise ValueError("private key and certificate mismatch")
             return cls(directory, state["pi_id"], state["certificate_pem"], fingerprint, key)
+
+    @classmethod
+    def renew(cls, directory: Path, hardware_id: str, *, confirmed: bool, check_idle,
+              certificate_export: Path | None = None, now: datetime | None = None) -> IdentityRenewal:
+        """Renew the pinned certificate under the identity lock, keeping the ID and key."""
+        if confirmed is not True:
+            raise ValueError("Erneuerung erfordert ausdrückliche Bestätigung. Windows-Brücken müssen neu gekoppelt werden.")
+        check_idle()
+        digest = _hardware_digest(hardware_id)
+        directory = Path(directory)
+        if not directory.is_dir():
+            raise ValueError("Brückenidentität fehlt.")
+        private_directory(directory)
+        path = directory / "identity.json"
+        now = datetime.now(UTC) if now is None else now
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("certificate validity requires aware UTC wall clock")
+        now = now.astimezone(UTC)
+        with identity_lock(directory):
+            with os.fdopen(_private_fd(path, os.O_RDONLY), "rb") as stream:
+                original = stream.read()
+            state = json.loads(original)
+            old, old_pin, key = _validate_state(state, digest, allow_expired=True)
+            previous_export = None
+            if certificate_export is not None:
+                with os.fdopen(_private_fd(certificate_export, os.O_RDONLY), "rb") as stream:
+                    previous_export = stream.read()
+                export_pem = previous_export.decode("ascii")
+                exported = _load_certificate(export_pem)
+                # The copy can be ahead of identity.json after a power loss.
+                # Accept only a signed certificate for this Pi and this key.
+                verify_certificate(export_pem, exported.fingerprint(hashes.SHA256()).hex(), state["pi_id"],
+                                   now=exported.not_valid_before_utc)
+                if exported.public_key().public_numbers() != key.public_key().public_numbers():
+                    raise ValueError("Konfigurierte Zertifikatkopie gehört nicht zur Brückenidentität.")
+
+            names = old.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+            new = _issue_certificate(key, old.subject, names, now)
+            new_pin = new.fingerprint(hashes.SHA256()).hex()
+            new_pem = new.public_bytes(serialization.Encoding.PEM)
+            state["certificate_pem"] = new_pem.decode("ascii")
+            verify_certificate(state["certificate_pem"], new_pin, state["pi_id"], now=now)
+            updated = json.dumps(state).encode("utf-8")
+            check_idle()
+            backup = Path(tempfile.mkdtemp(prefix=now.strftime("backup-%Y%m%dT%H%M%SZ-"), dir=directory)) / path.name
+            _atomic_private(backup, original)
+            try:
+                if certificate_export is not None:
+                    _atomic_private(certificate_export, new_pem)
+                _atomic_private(path, updated)
+            except (OSError, KeyboardInterrupt) as error:
+                # The identity is authoritative. Restore its public copy if the
+                # identity replacement did not land, including a failed fsync of the copy.
+                try:
+                    if (certificate_export is not None and path.read_bytes() == original
+                            and certificate_export.read_bytes() != previous_export):
+                        _atomic_private(certificate_export, previous_export)
+                except OSError as restore_error:
+                    raise ValueError(f"Erneuerung fehlgeschlagen: {error}. Zertifikatkopie prüfen. "
+                                     f"Sicherung: {backup}. Rückweg: {restore_error}") from restore_error
+                raise ValueError(f"Erneuerung nicht vollständig bestätigt: {error}. "
+                                 f"Identität vor Neustart prüfen. Sicherung: {backup}") from error
+        return IdentityRenewal(state["pi_id"], old_pin, new_pin, new.not_valid_after_utc.isoformat(),
+                               backup, certificate_export)
 
     def sign_hello(self, payload: bytes) -> bytes:
         """Sign canonical_uart_hello output with RSA-PSS/SHA256, salt32."""

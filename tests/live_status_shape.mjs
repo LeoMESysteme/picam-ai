@@ -150,7 +150,7 @@ const root = fields({
   storage: fields({ free_bytes: nullable(nonnegative), reserve_bytes: nonnegative,
                     level: choice('ok', 'warn', 'error'), message: string }),
   system: fields({ cpu_percent: nullable(percentage), cpu_window_s: nonnegative }),
-  release_notice: string, session_id: nullable(string), setup: nullable(setup), profile: nullable(object),
+  release_notice: string, output_port: string, output_port_managed: boolean, session_id: nullable(string), setup: nullable(setup), profile: nullable(object),
   run_block: nullable(string), run_hint: nullable(string), test_run: nullable(object), reader_tolerance: nullable(object), run: nullable(run),
   diagnostics: fields({ enabled: boolean }), diagnose_kopie: boolean,
   diagnostic_leftovers: array(fields({ path: string, bytes: nullable(nonnegative) })),

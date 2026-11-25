@@ -255,3 +255,25 @@ def test_cli_error_is_reported_without_traceback(tmp_path, capsys):
     code = engine.main(['--uninstall', '--mode', 'portable', '--prefix', str(tmp_path / 'fehlt')])
     assert code == 1
     assert 'picam installer:' in capsys.readouterr().err
+
+
+def test_console_and_json_share_the_read_only_uninstall_plan(tmp_path, capsys):
+    from dispread.admin import uninstall as admin_uninstall
+    from dispread.admin.instance import Instance
+
+    paths = layout(tmp_path)
+    (paths['prefix'] / 'fremd').write_text('bleibt')
+    instance = Instance('system', paths['unit'].name, 'system',
+                        root=str(paths['prefix'] / 'releases/v2'), config=str(paths['config']),
+                        data=str(paths['data'] / 'workbench'))
+    before = sorted(tmp_path.rglob('*'))
+    plan = admin_uninstall.plan_uninstall(instance, unit_dir=paths['unit'].parent, link=paths['link'])
+    assert engine.main(['--uninstall', '--json', '--prefix', str(paths['prefix']), '--data', str(paths['data']),
+                        '--config', str(paths['config']), '--unit-dir', str(paths['unit'].parent),
+                        '--link', str(paths['link'])]) == 0
+    assert json.loads(capsys.readouterr().out) == plan
+    assert plan['stop_service'] and plan['needs_root']
+    assert str(paths['unit']) in plan['remove']
+    assert str(paths['data']) in {item['path'] for item in plan['keep']}
+    assert str(paths['prefix']) in {item['path'] for item in plan['keep']}
+    assert sorted(tmp_path.rglob('*')) == before

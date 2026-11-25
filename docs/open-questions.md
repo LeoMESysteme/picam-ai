@@ -73,6 +73,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-77](#oq-77) | — | offen | Was verursacht die drei UART-Timeouts beim Anmelden der Windows-Brücke? |
 | [OQ-78](#oq-78) | — | offen | Warum bricht die Rahmennachführung im Lauf vom 18.11. ein? |
 | [OQ-79](#oq-79) | — | offen | Reicht die sudo-Freigabe für Stopp und Wiederanlauf aus der Konsole? |
+| [OQ-80](#oq-80) | — | offen | Welche Gerätenamen meldet der Pi nach Aktivierung zusätzlicher Header-UARTs? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3872,3 +3873,17 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   abbrechen. In beiden Fällen die Rückstellung und den HTTPS-Wiederanlauf
   prüfen. Die wirksame sudoers-Regel für dieses Konto festhalten.
 * **Zielort:** [Validierung](VALIDATION.md) und [Laborjournal](lab_journal.md).
+
+<span id="oq-80"></span>
+
+## OQ-80 — Welche Gerätenamen meldet der Pi nach Aktivierung zusätzlicher Header-UARTs?
+
+* **Status:** offen · **Zuständig:** ME-Systeme
+* **Befund (2026-11-25):** Die Zuordnung über Controller-Knoten wurde mit
+  simulierten zusätzlichen UARTs geprüft. Auf raspi06 ist UART0 über
+  Device Tree und sysfs zugeordnet. Für zusätzliche UARTs fehlen Belege
+  nach der jeweiligen Bootänderung am Pi.
+* **Günstigstes Experiment:** Einen konfliktfreien Zusatz-UART aktivieren,
+  den Pi nach Bestätigung neu starten und seine Zuordnung in der Konsole
+  mit sysfs vergleichen. TX mit passendem Pegelwandler am Empfänger prüfen.
+* **Zielort:** [Hardwareprofil](HARDWARE_PROFILE.md#pi-5-uarts-an-der-40-poligen-stiftleiste).

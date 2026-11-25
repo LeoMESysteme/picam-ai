@@ -9,6 +9,32 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-25 — Header-UARTs als Instanzkonfiguration
+
+Der Bootparameter aktiviert einen UART-Controller. Seinen Linux-Gerätenamen
+bestimmt der Kernel. picam speichert daher für zusätzliche Header-UARTs die
+Controller-Auswahl in `config.toml` und löst sie beim Start anhand derselben
+Device-Tree-Knoten auf, auf die sysfs verweist. Ein fest gespeicherter
+`ttyAMA`-Index würde die Nummerierung vor dem Neustart voraussetzen.
+Konflikte mit SPI0 und I2C0 blockieren die Auswahl. Andere Boot-Einstellungen
+bleiben beim Aktivieren eines Ports erhalten.
+
+## 2026-11-25 — Wartung aus der Verwaltungskonsole
+
+Beim Update teilen sich Terminal und Konsolenworker die Vorbereitung,
+Umschaltung und den Rückweg. Der Worker erhält Ereignisse für dieselben
+Schritte und verwendet bei Systeminstallationen einen per sudo freigegebenen
+Unterprozess. Auswertung der bisherigen Terminalzeilen hätte die Anzeige an
+die Wortwahl des Installers gebunden. Die Vorschau für den
+Deinstallationsdialog kommt aus demselben Planer wie `install.sh --uninstall --json`.
+
+Die Brückenidentität erhält ein neu ausgestelltes Zertifikat mit derselben
+Pi-ID und demselben Schlüssel. Die Windows-Brücke bindet ihr Profil an
+den Fingerabdruck des gesamten Zertifikats. Auch mit demselben Schlüssel
+ist daher ein neues Profil und ein frisches Kopplungsangebot nötig. Die
+Erneuerung verlangt eine Bestätigung, prüft die Laufsperre und sichert die
+vorige Identität. Der Dienst übernimmt das Zertifikat beim Neustart.
+
 ## 2026-11-25 — Kalibrierung aus einem Konsolenworker
 
 **Problem.** Das pausierte Terminal war für Fortschritt und Passwortabfrage

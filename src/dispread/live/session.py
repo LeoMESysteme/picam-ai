@@ -298,6 +298,8 @@ class LiveSession:
         output_factory: Callable[..., Any] = partial(PairedOutputPublisher, hub=None),
         reference_recorder: Any = None,
         output: dict | OutputConfig | None = None,
+        output_port: str | None = None,
+        reference_port: str | None = None,
         diagnostics: bool = False,
         diagnostic_staging_root: Path = Path('/dev/shm'),
         reader_d_max_factor: float = 1.0,
@@ -327,7 +329,9 @@ class LiveSession:
         self._profile_path = Path(profile_path)
         self._config = config
         self._out_dir = Path(out_dir)
-        self._output_config = normalize_output(output.to_dict() if isinstance(output, OutputConfig) else output)
+        port_options = {'output_port': output_port, 'reference_port': reference_port}
+        self._output_config = normalize_output(output.to_dict() if isinstance(output, OutputConfig) else output,
+                                               **port_options)
         self._output_transport = self._output_config['transport']
         if test_run is not None and self._output_transport != 'off':
             raise StartRefused('Testlauf erlaubt keine externe Ausgabe')
@@ -340,12 +344,12 @@ class LiveSession:
         if self._output_transport == 'serial':
             options = {key: value for key, value in self._output_config.items()
                        if key not in ('transport', 'acknowledge_unaccepted')}
-            self._output = LiveOutput(options, self._out_dir / 'tx.jsonl')
+            self._output = LiveOutput(options, self._out_dir / 'tx.jsonl', **port_options)
         elif self._output_transport != 'off':
             # Seit der Abnahme (2026-11-13) gibt jeder echte Lauf seinen Brueckenweg frei.
             # Auf der Leitung bleibt der Marker TEST_RELEASE (Protokoll unveraendert).
             self._bridge_acknowledged = True
-            self._output = output_factory(bridge_config(self._output_config), self._out_dir,
+            self._output = output_factory(bridge_config(self._output_config, **port_options), self._out_dir,
                                           **({'release': TEST_RELEASE} if self._bridge_acknowledged else {}),
                                           **bridge_tick_options(self._output_config))
             if self._bridge_acknowledged and getattr(self._output, 'release', None) != TEST_RELEASE:

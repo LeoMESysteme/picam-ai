@@ -7,9 +7,13 @@ import stat
 import threading
 from pathlib import Path
 
+from dispread.gsv2as_serial import REFERENCE_PORT
+from dispread.hardware_ports import debug_port, same_port
+
 
 class SerialPortLease:
-    def __init__(self, directory: Path | None = None):
+    def __init__(self, directory: Path | None = None, *, reference_port=REFERENCE_PORT):
+        self.reference_port = reference_port
         self.directory = directory
         self._lock = threading.Lock()
         self._held = {}
@@ -18,14 +22,12 @@ class SerialPortLease:
         import fcntl
 
         canonical = Path(path).resolve()
-        reference = Path('/dev/ttyUSB0').resolve()
-        if canonical == reference or canonical.name == 'ttyUSB0':
+        if debug_port(path):
+            raise ValueError('debug port is reserved')
+        if same_port(path, self.reference_port):
             raise ValueError('reference port may never be opened as output')
         try:
             device = canonical.stat()
-            ref = reference.stat() if reference.exists() else None
-            if ref is not None and stat.S_ISCHR(device.st_mode) and device.st_rdev == ref.st_rdev:
-                raise ValueError('reference port may never be opened as output')
             key = f'device-{device.st_rdev}' if stat.S_ISCHR(device.st_mode) else str(canonical)
         except FileNotFoundError:
             key = str(canonical)

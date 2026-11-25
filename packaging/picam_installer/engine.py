@@ -247,9 +247,10 @@ def hardware_id_available():
         return False
 
 
-def prepare_release(bundle, release, info, runner, step=lambda _text: None):
+def prepare_release(bundle, release, info, runner, step=lambda _text: None, *, phase=lambda _key: None):
     """Neues Releaseverzeichnis: Dateien, eigene venv, Paket, Selbsttest. Gibt die venv zurueck."""
     release.mkdir(parents=True, mode=0o755)
+    phase('entpacken')
     step(f'Release {bundle.release_id} entpacken')
     for name, content in bundle.files.items():
         destination = release / name
@@ -259,6 +260,7 @@ def prepare_release(bundle, release, info, runner, step=lambda _text: None):
         destination.chmod(0o755 if name.endswith('.sh') else 0o644)
     (release / 'release.json').write_text(json.dumps(bundle.manifest, indent=2) + '\n')
     venv = release / '.venv'
+    phase('umgebung')
     step('Python-Umgebung anlegen und Paket installieren')
     checked([info.python, '-m', 'venv', '--system-site-packages', venv], runner)
     checked([venv / 'bin/python', '-m', 'pip', '--disable-pip-version-check', 'install', '--no-index',
@@ -269,6 +271,7 @@ def prepare_release(bundle, release, info, runner, step=lambda _text: None):
             + 'import hashlib; from pathlib import Path; '
             + f'assert hashlib.sha256(Path({str(release / TEMPLATE)!r}).read_bytes()).hexdigest() == '
             + repr(hashlib.sha256(bundle.files[TEMPLATE]).hexdigest()))
+    phase('selbsttest')
     step('Selbsttest: Module und Lesevorlage')
     checked([venv / 'bin/python', '-I', '-c', code], runner)
     return venv

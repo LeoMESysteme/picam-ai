@@ -5,6 +5,23 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Wartungsabläufe für die Verwaltungskonsole.** Der Update-Worker
+  meldet Vorbereitung, Neustart und gegebenenfalls den Rückweg. Nach einem
+  erfolgreichen Update nennt er den Startpfad der neuen Konsole. Die
+  Deinstallationsvorschau liefert geplante Entfernungen, verbleibende Pfade und
+  Angaben zum Dienststopp auch als JSON. Die Brückenidentität lässt sich bei
+  freier Werkbank ausdrücklich bestätigt neu ausstellen. Pi-ID und Schlüssel
+  bleiben erhalten, Windows-Brücken brauchen nach dem Dienstneustart ein neues
+  Profil und einen neuen Kopplungscode. `picam update` kann eine vorgegebene
+  Bezugsquelle verwenden. Bis sie feststeht, bleibt `--source` nötig.
+
+* 2026-11-25: **Serielle Ports pro Werkbank-Instanz konfigurierbar.** Das
+  UART-Backend kennt die TX-/RX-Pins der Pi-5-Header-UARTs, prüft Belegung
+  und SPI/I2C-Konflikte und erfasst USB-RS232-Adapter mit ihren verfügbaren
+  stabilen Gerätenamen. Der bestätigte Plan sichert und ergänzt bei Bedarf
+  `config.txt`, schreibt die Instanzkonfiguration und meldet einen
+  erforderlichen Pi-Neustart. Laufende Messungen sperren die Änderung.
+
 * 2026-11-25: **Installer in der Formsprache der Konsole, Enter startet picam mit Einrichtungsassistent.** `packaging/picam_installer/tui.py`/`guided.py`: Bänder, Karten, Abzeichen (Palette „Schiefer“, Rückfall 256/16 Farben, NO_COLOR/ASCII), Abschlusskarte mit Adresse, Konto/Passwort und Zertifikat-Fingerabdruck, am Ende Enter = `picam --onboarding` als Bediener (`sudo -u … -H`), q = bleiben, ohne Terminal keine Frage; neuer Bildschirm `views/onboarding_screen.py` (3 Schritte, Marke `onboarding.json`, `picam --onboarding`, Einstellungen `e`).
 * 2026-11-25: **Kalibrierung läuft in der Konsole statt im Terminal.** Neuer
   Bildschirm `views/kalibrieren_screen.py` (Kamera-Tab, `m` und `p`): Vorprüfung,

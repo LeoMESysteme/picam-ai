@@ -12,8 +12,9 @@ import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from dispread.gsv2as_serial import REFERENCE_PORT
 from dispread.gsv_transport import OutputConfig
-from dispread.hardware_ports import DIRECT_UART_BAUD
+from dispread.hardware_ports import DIRECT_UART_BAUD, GSV_UART_PORT, debug_port, same_port
 from dispread.live.clock import ClockLog
 from dispread.live.tick import Ticker, TickTimebase, tick_status, validate_rate
 from dispread.records import InvalidValuePolicy, TxReceipt, ValueRecord
@@ -51,10 +52,6 @@ BRIDGE_4CH_RELEASE_NOTE = (
 )
 
 
-def same_port(left: str, right: str) -> bool:
-    return Path(left).resolve() == Path(right).resolve()
-
-
 def is_reference_adapter(port: str, *, sysfs_root: Path | None = None) -> bool:
     """USB-Eltern anhand VID/PID pruefen, unabhaengig von ttyUSB-Steckreihenfolge."""
     root = SYSFS_ROOT if sysfs_root is None else Path(sysfs_root)
@@ -72,7 +69,8 @@ def is_reference_adapter(port: str, *, sysfs_root: Path | None = None) -> bool:
     return False
 
 
-def validate_output(value, *, reference_port: str | None = None, sysfs_root: Path | None = None) -> dict | None:
+def validate_output(value, *, reference_port: str | None = None,
+                    output_port: str | None = None, sysfs_root: Path | None = None) -> dict | None:
     """Vor Portzugriff pruefen; aktive Referenz und Debug bleiben gesperrt."""
     if value is None:
         return None
@@ -80,18 +78,20 @@ def validate_output(value, *, reference_port: str | None = None, sysfs_root: Pat
         if not isinstance(value, dict) or set(value) - {'port', 'baudrate', 'prefix', 'allow_reference_adapter',
                                                                'format', 'rate_hz', 'max_frame_age_ms'}:
             raise ValueError('Objekt mit Port, Baudrate und Präfix erforderlich')
-        port = value.get('port')
+        port = value.get('port', output_port)
         if not isinstance(port, str) or not port.strip() or '\x00' in port:
             raise ValueError('Port muss angegeben sein')
         allow = value.get('allow_reference_adapter', False)
         if type(allow) is not bool:
             raise ValueError('allow_reference_adapter muss bool sein')
-        if same_port(port, '/dev/serial0'):
+        if output_port and not same_port(port, output_port):
+            raise ValueError(f'Ausgangsport der Instanz ist {output_port}')
+        if debug_port(port):
             raise ValueError('Debugport ist reserviert')
-        if not allow and (same_port(port, '/dev/ttyUSB0') or is_reference_adapter(port, sysfs_root=sysfs_root)):
-            raise ValueError('Referenzadapter 067b:2303 (PL2303) ist reserviert; allow_reference_adapter erforderlich')
         if reference_port and same_port(port, reference_port):
             raise ValueError('Port ist bereits fuer Referenz/Werteplan belegt')
+        if not allow and (same_port(port, REFERENCE_PORT) or is_reference_adapter(port, sysfs_root=sysfs_root)):
+            raise ValueError('Referenzadapter 067b:2303 (PL2303) ist reserviert; allow_reference_adapter erforderlich')
         baudrate = value.get('baudrate', DIRECT_UART_BAUD)
         if type(baudrate) is not int or baudrate not in BAUDRATES:
             raise ValueError(f'Baudrate muss eine von {BAUDRATES} sein')
@@ -122,10 +122,13 @@ def validate_output(value, *, reference_port: str | None = None, sysfs_root: Pat
         raise ValueError(f'Ausgabe: {exc}') from exc
 
 
-def normalize_output(value, *, reference_port: str | None = None) -> dict:
+def normalize_output(value, *, reference_port: str | None = None,
+                     output_port: str | None = None) -> dict:
     """Gemeinsamer Vertrag; P4-3 ohne transport bleibt die Direktausgabe."""
+    port_options = {'output_port': output_port or GSV_UART_PORT,
+                    'reference_port': reference_port or REFERENCE_PORT}
     if value is None:
-        return OutputConfig.from_dict(None).to_dict()
+        return OutputConfig.from_dict(None, **port_options).to_dict()
     if not isinstance(value, dict):
         raise ValueError('Ausgabe: Ausgabekonfiguration muss ein Objekt sein')
     if 'transport' not in value and 'port' not in value:
@@ -134,19 +137,19 @@ def normalize_output(value, *, reference_port: str | None = None) -> dict:
     if transport == 'serial':
         options = {key: item for key, item in value.items()
                    if key not in ('transport', 'acknowledge_unaccepted')}
-        options = validate_output(options, reference_port=reference_port)
+        options = validate_output(options, reference_port=reference_port, output_port=output_port)
         return {'transport': 'serial', **options,
                 'acknowledge_unaccepted': value.get('acknowledge_unaccepted', False)}
     if transport not in ('off', 'uart', 'tcp'):
         raise ValueError('Unbekannter Ausgabeweg')
     if transport == 'off':
-        return OutputConfig.from_dict(value).to_dict()
+        return OutputConfig.from_dict(value, **port_options).to_dict()
     # Brueckenweg: ohne ausdrueckliche Bestaetigung bleibt er gesperrt (Lauf startet).
     acknowledged = value.get('acknowledge_unaccepted', False)
     if type(acknowledged) is not bool:
         raise ValueError('Ausgabe: acknowledge_unaccepted muss bool sein')
     options = {key: item for key, item in value.items() if key not in ('acknowledge_unaccepted', *_TICK_KEYS)}
-    result = OutputConfig.from_dict(options).to_dict()
+    result = OutputConfig.from_dict(options, **port_options).to_dict()
     # B2: Format/Takt additiv; ohne Angabe bleibt der Einkanalvertrag bytegleich.
     fmt = value.get('format', '1ch')
     if fmt not in ('1ch', '4ch'):
@@ -166,10 +169,12 @@ def normalize_output(value, *, reference_port: str | None = None) -> dict:
 _TICK_KEYS = ('format', 'rate_hz')
 
 
-def bridge_config(config: dict) -> OutputConfig:
+def bridge_config(config: dict, *, output_port=None, reference_port=None) -> OutputConfig:
     """OutputConfig ohne Bestaetigung und Taktoptionen; die gehoeren zum Lauf, nicht zur Leitung."""
     return OutputConfig.from_dict({key: item for key, item in config.items()
-                                   if key not in ('acknowledge_unaccepted', *_TICK_KEYS)})
+                                   if key not in ('acknowledge_unaccepted', *_TICK_KEYS)},
+                                  output_port=output_port or GSV_UART_PORT,
+                                  reference_port=reference_port or REFERENCE_PORT)
 
 
 def bridge_tick_options(config: dict) -> dict:
@@ -189,15 +194,18 @@ def require_output_acknowledgement(config: dict) -> None:
 
 
 class LiveOutput:
-    def __init__(self, options: dict, path: Path, *, clock_ns=time.monotonic_ns, timebase=None):
-        self._options = validate_output(options)
+    def __init__(self, options: dict, path: Path, *, clock_ns=time.monotonic_ns, timebase=None,
+                 output_port=None, reference_port=None):
+        self._port_options = {'output_port': output_port, 'reference_port': reference_port}
+        self._options = validate_output(options, **self._port_options)
         self._four_channel = self._options.get('format') == '4ch'
         self._clock_ns = clock_ns
         self._timebase = timebase
         self._ticker = None
         formatter = TickFormatter() if self._four_channel else UserDefinedFormatter(prefix=self._options['prefix'])
         self._sink = SerialSink(self._options['port'], formatter,
-                                baudrate=self._options['baudrate'], timeout=0, write_timeout=WRITE_TIMEOUT_S)
+                                baudrate=self._options['baudrate'], timeout=0, write_timeout=WRITE_TIMEOUT_S,
+                                reference_port=reference_port or REFERENCE_PORT)
         self._path = path
         self._stream = None
         self._thread = None
@@ -215,7 +223,8 @@ class LiveOutput:
         self._first_error = None
 
     def start(self, *, reference_port: str | None = None, clock_log=None) -> None:
-        validate_output(self._options, reference_port=reference_port)
+        validate_output(self._options, **(self._port_options |
+                                           {'reference_port': reference_port or self._port_options['reference_port']}))
         try:
             self._sink.open()  # Fehler vor dem ersten Leseschritt klar ablehnen.
             self._stream = self._path.open('x', encoding='utf-8')

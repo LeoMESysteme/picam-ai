@@ -6,7 +6,8 @@ import threading
 import time
 import uuid
 
-from dispread.hardware_ports import GSV_UART_PORT
+from dispread.gsv2as_serial import REFERENCE_PORT
+from dispread.hardware_ports import GSV_UART_PORT, validate_port_pair
 
 from .baud import UART_BAUD
 from .protocol import V2LineReader, canonical_uart_hello, encode_v2
@@ -14,10 +15,12 @@ from .resources import SerialPortLease
 
 
 class UartListener:
-    def __init__(self, hub, identity, store, *, opener=None, port_leases=None):
+    def __init__(self, hub, identity, store, *, opener=None, port_leases=None,
+                 output_port=GSV_UART_PORT, reference_port=REFERENCE_PORT):
         self.hub, self.identity, self.store = hub, identity, store
         self.opener = opener
-        self.ports = port_leases or SerialPortLease()
+        self.output_port, self.reference_port = output_port, reference_port
+        self.ports = port_leases or SerialPortLease(reference_port=reference_port)
         self.owner = uuid.uuid4().hex
         self._stop = threading.Event()
         self._lifecycle = threading.Lock()
@@ -50,7 +53,10 @@ class UartListener:
                 raise ValueError('UART listener already stopped')
             if self._thread is not None:
                 raise ValueError('UART listener already started')
-            port = self.ports.acquire(GSV_UART_PORT, self.owner, 'uart-listener')
+            if not self.output_port.startswith('/dev/'):
+                raise ValueError(f'{self.output_port}: Gerätenamen nach Neustart prüfen')
+            validate_port_pair(self.output_port, self.reference_port)
+            port = self.ports.acquire(self.output_port, self.owner, 'uart-listener')
             self.state = 'opening'
             thread = threading.Thread(target=self._worker, args=(port,), name='bridge-uart', daemon=True)
             try:

@@ -17,6 +17,8 @@ from aiohttp import web
 from dispread.camera_settings import preview_settings
 from dispread.frames import open_source
 from dispread.frames.uvc_source import UvcSource
+from dispread.gsv2as_serial import REFERENCE_PORT
+from dispread.hardware_ports import GSV_UART_PORT, uart_devices, validate_port_pair
 from dispread.live import LIVE_CV_THREADS, LIVE_DATA_DIR
 from dispread.live.camera import CameraOwner
 from dispread.live.service import LiveError, LiveService
@@ -295,6 +297,16 @@ async def handle_local_op(op, args, controller, live, bridge_hub=None):
 async def serve(args):
     username = service_pam_user(getattr(args, "pam_user", None))
     bridge_config, bridge_tls = bridge_service_config(args)
+    output_port = getattr(args, 'output_port', None)
+    reference_port = getattr(args, 'reference_port', None)
+    if output_port and output_port.startswith('uart'):
+        output_port = uart_devices().get(output_port, output_port)
+    validate_port_pair(output_port or GSV_UART_PORT, reference_port or REFERENCE_PORT)
+    port_options = {}
+    if output_port is not None:
+        port_options['output_port'] = output_port
+    if reference_port is not None:
+        port_options['reference_port'] = reference_port
     import signal
 
     stop = asyncio.Event()
@@ -329,13 +341,13 @@ async def serve(args):
         bridge_hub = BridgeHub(bridge_config['bridge_identity'].pi_id,
                                Path(getattr(args, 'live_data', LIVE_DATA_DIR)) / 'bridge',
                                identity=bridge_config['bridge_identity'],
-                               pairing_store=bridge_config['bridge_pairing_store'])
+                               pairing_store=bridge_config['bridge_pairing_store'], **port_options)
         bridge_config['bridge_hub'] = bridge_hub
     live_options = {}
     if getattr(args, "live_config", None) is not None:
         live_options["config"] = args.live_config
     live = LiveService(owner, Path(getattr(args, "live_data", LIVE_DATA_DIR)),
-                       simulate=args.simulate, bridge_hub=bridge_hub, **live_options)
+                       simulate=args.simulate, bridge_hub=bridge_hub, **live_options, **port_options)
     controller = Controller(args.data, args.camera, args.simulate, owner=owner)
     data = controller.snapshot()["config"]
     for name in ("width", "height", "fps"):

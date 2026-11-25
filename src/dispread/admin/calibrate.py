@@ -46,7 +46,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -391,6 +391,13 @@ class Options:
     profile: Path | None = None
     seed: int | None = None
     yes: bool = False
+
+    def for_instance(self, instance: Instance) -> Options:
+        # The existing CLI passes the historical default even when --port
+        # was omitted. Explicit non-default paths keep their override.
+        if self.port in (None, REFERENCE_PORT):
+            return replace(self, port=instance.reference_port)
+        return self
 
 
 @dataclass
@@ -817,6 +824,7 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
         plan_factors,
     )
 
+    options = options.for_instance(instance)
     result = Preflight()
     add = result.checks.append
     _check_cancelled(deps)
@@ -879,6 +887,16 @@ def preflight(instance: Instance, options: Options, deps: Deps) -> Preflight:
         add(Check('Kamera', True, f'StreamCam {STREAMCAM_USB_ID} an USB 3'))
     # Adapter und Telegramme
     _check_cancelled(deps)
+    from dispread.hardware_ports import uart_devices, validate_port_pair
+
+    output = instance.output_port
+    if output.startswith('uart'):
+        output = uart_devices().get(output, output)
+    try:
+        validate_port_pair(output, options.port)
+    except ValueError as error:
+        add(Check('RS232-Adapter', False, str(error)))
+        return result
     if not deps.port_exists(options.port):
         add(Check('RS232-Adapter', False, f'kein Adapter an {options.port} – USB-RS232-Adapter stecken und mit '
                                           'dem RS232-Ausgang des Messverstärkers verbinden'))
@@ -1012,6 +1030,7 @@ def calibrate(instance: Instance, options: Options, console: Console, deps: Deps
     ein währenddessen angeforderter Abbruch die Übernahme verhindert.
     """
     console.last_result = None
+    options = options.for_instance(instance)
     with abort_on_signals():
         try:
             return _calibrate(instance, options, console, deps or Deps())
@@ -1381,6 +1400,22 @@ def restore_from_file(path: Path, options: Options, console: Console, deps: Deps
         console.mark(probes.FAIL, f'{path} ist kein gültiger Rückstellpunkt: {problem} – nichts gesendet.',
                      console.err)
         return EXIT_FAIL
+    saved_port = restore_point.get('port')
+    if options.port in (None, REFERENCE_PORT) and saved_port is not None:
+        from dispread.hardware_ports import GSV_UART_PORT, validate_port_pair
+        from dispread.workbench.config import validate_serial_setting
+
+        try:
+            validate_serial_setting(saved_port, 'reference_port')
+            validate_port_pair(GSV_UART_PORT, saved_port)
+            if Path(saved_port).exists():
+                validate_serial_setting(str(Path(saved_port).resolve()), 'reference_port')
+        except (OSError, ValueError) as error:
+            console.mark(probes.FAIL, f'Port im Rückstellpunkt ungültig: {error}', console.err)
+            return EXIT_BLOCKED
+        options = replace(options, port=saved_port)
+    if options.port is None:
+        options = replace(options, port=REFERENCE_PORT)
     if not deps.port_exists(options.port):
         console.mark(probes.FAIL, f'Kein Adapter an {options.port}.', console.err)
         return EXIT_BLOCKED

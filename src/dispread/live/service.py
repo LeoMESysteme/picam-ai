@@ -27,6 +27,7 @@ from dispread.focus_sweep import DEFAULT_FOCUS_START
 from dispread.frames import FrameSource
 from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import normalize_cell_text
+from dispread.hardware_ports import GSV_UART_PORT
 from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
 from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
@@ -227,9 +228,13 @@ class LiveService:
         cpu_reader: Callable[[], str] | None = None,
         bridge_hub=None,
         reference_present: Callable[[], bool] | None = None,
+        output_port: str | None = None,
+        reference_port: str | None = None,
     ) -> None:
         self._owner = owner
         self._bridge_hub = bridge_hub
+        self._output_port = output_port
+        self._configured_reference = reference_port
         self._data_dir = Path(data_dir)
         self._disk_usage = disk_usage or shutil.disk_usage
         self._cpu_reader = cpu_reader or (lambda: Path('/proc/stat').read_text(encoding='ascii'))
@@ -242,7 +247,7 @@ class LiveService:
         self._source_for = source_for or (lambda settings: UvcSource(settings))
         self._serial_opener = serial_opener or self._open_serial
         # Nur Geraetepfad pruefen, nie oeffnen (der Statusabruf kommt alle 500 ms).
-        self._reference_present = reference_present or (lambda: live_setup.reference_adapter_present())
+        self._reference_present = reference_present or (lambda: live_setup.reference_adapter_present(self._reference_port))
         self._setup_runner = setup_runner or self._run_setup
         self._wall = wall or (lambda: datetime.now(UTC))
         self._monotonic = monotonic or time.monotonic
@@ -344,13 +349,17 @@ class LiveService:
             raise LiveError(f"Zu wenig Speicherplatz: {storage['free_bytes'] / 1e9:.2f} GB frei, "
                             f"{needed / 1e9:.2f} GB benoetigt. Alte Laufdaten pruefen und aufraeumen.")
 
+    @property
+    def _reference_port(self) -> str:
+        return self._configured_reference or live_setup.SERIAL_PORT
+
     def setup_reference_status(self) -> dict:
         """Ob die Einrichtung den Wert seriell vom GSV-2AS lesen kann (nur Pfadpruefung)."""
         try:
             present = bool(self._reference_present())
         except OSError:
             present = False
-        return {"serial_present": present, "port": live_setup.SERIAL_PORT}
+        return {"serial_present": present, "port": self._reference_port}
 
     def status(self, *, full: bool = False) -> dict:
         setup_reference = self.setup_reference_status()
@@ -455,6 +464,8 @@ class LiveService:
                 "error": self._error,
                 "simulate": self._simulate,
                 "setup_reference": setup_reference,
+                "output_port": self._output_port or GSV_UART_PORT,
+                "output_port_managed": self._output_port is not None,
                 "camera": self._owner.status(),
                 "release_notice": RELEASE_NOTICE,
                 "session_id": None if self._session_dir is None else self._session_dir.name,
@@ -637,7 +648,7 @@ class LiveService:
                     raise LiveError(f"Zellentext: {exc}") from exc
             elif not self.setup_reference_status()["serial_present"]:
                 # Frueh fragen statt nach Minuten Fokus/Kamera/Belichtung am Port zu scheitern.
-                raise CellTextRequired(live_setup.SERIAL_PORT)
+                raise CellTextRequired(self._reference_port)
             stem = "live-" + self._wall().strftime("%Y%m%dT%H%M%SZ")
             session_dir = self._data_dir / stem
             # Nie in einen vorhandenen Setup-Ordner schreiben: Belege verworfener
@@ -827,7 +838,7 @@ class LiveService:
     def _open_serial(self) -> Any:
         import serial
 
-        return serial.Serial(live_setup.SERIAL_PORT, live_setup.SERIAL_BAUDRATE, timeout=2.0)
+        return serial.Serial(self._reference_port, live_setup.SERIAL_BAUDRATE, timeout=2.0)
 
     def _run_setup(self, *, session_dir: Path, cell_text: str | None, report: Callable[[str], None]) -> dict:
         """Fokus -> feste Kamera -> Displaybelichtung -> Standbilder -> Vorschlag."""
@@ -957,7 +968,7 @@ class LiveService:
                     port = self._serial_opener()
                 except Exception as exc:  # noqa: BLE001
                     raise live_setup.SetupError(
-                        f"kein GSV-2AS an {live_setup.SERIAL_PORT} ({exc}) - neu einrichten und den "
+                        f"kein GSV-2AS an {self._reference_port} ({exc}) - neu einrichten und den "
                         "Wert der Anzeige von Hand eingeben (Einrichtung starten, Pfeil: Wert von Hand eingeben)"
                     ) from exc
                 def text_source(capture):
@@ -1160,8 +1171,18 @@ class LiveService:
                 raise ValueError("Werteplan braucht Referenzaufzeichnung")
             if schedule is not None and not self.setup_reference_status()["serial_present"]:
                 raise ValueError(f"Werteplan braucht den RS232-Anschluss zum GSV-2AS "
-                                 f"({live_setup.SERIAL_PORT} nicht gefunden)")
-            output = normalize_output(output, reference_port=live_setup.SERIAL_PORT if reference else None)
+                                 f"({self._reference_port} nicht gefunden)")
+            transport = output.get('transport', 'serial') if isinstance(output, dict) else None
+            if (self._output_port and not self._output_port.startswith('/dev/')
+                    and transport in ('uart', 'serial')):
+                raise ValueError(f'{self._output_port}: Gerätenamen nach Neustart prüfen')
+            port_options = {}
+            if self._output_port is not None:
+                port_options['output_port'] = self._output_port
+            if self._configured_reference is not None or self._output_port is not None:
+                port_options['reference_port'] = self._reference_port
+            output = normalize_output(output, **({'reference_port': self._reference_port}
+                                                  if reference else {}) | port_options)
             if test_override and output['transport'] != 'off':
                 raise ValueError('Testlauf erlaubt keine externe Ausgabe')
             require_output_acknowledgement(output)
@@ -1204,7 +1225,7 @@ class LiveService:
                     raise LiveError(str(exc)) from exc
                 if output['transport'] != 'uart':
                     # Anderer Weg gewaehlt: einen noch offenen UART-Empfang der Bruecke
-                    # freigeben, sonst haelt er /dev/ttyAMA0 (13.11.2026, C-10: UART direkt
+                    # freigeben, sonst haelt er den Datenport (13.11.2026, C-10: UART direkt
                     # scheiterte an „serial port occupied“). Kein Lauf und keine Demo
                     # laufen mehr, die Reservierung oben schliesst beides aus.
                     try:
@@ -1284,14 +1305,14 @@ class LiveService:
                     focus_check = None
                 try:
                     recorder = (ReferenceRecorder(self._serial_opener, out_dir / "reference.jsonl",
-                                                  norm_schedule=schedule, port=live_setup.SERIAL_PORT) if reference else None)
+                                                  norm_schedule=schedule, port=self._reference_port) if reference else None)
                     session = LiveSession(
                         self._owner, profile_path, self._config, out_dir, test_run=test_run,
                         reader_d_max_factor=(self._reader_tolerance or {}).get("factor", 1.0),
                         reader_tolerance=self._reader_tolerance,
                         reference_recorder=recorder,
                         diagnostics=diagnostics, diagnostic_staging_root=self._diagnostic_staging_root,
-                        **({'output': output} if output['transport'] != 'off' else {}),
+                        **({'output': output, **port_options} if output['transport'] != 'off' else {}),
                         **({'output_factory': output_factory} if output['transport'] in ('tcp', 'uart') else {}),
                     )
                     session.bridge_run_id = run_id

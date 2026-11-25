@@ -24,6 +24,7 @@ import threading
 import time
 from time import monotonic
 
+from dispread.gsv2as_serial import REFERENCE_PORT
 from dispread.hardware_ports import DIRECT_UART_BAUD
 from dispread.records import InvalidValuePolicy, TxReceipt, ValueRecord, ValueStatus
 from dispread.sink import SinkHealth
@@ -86,6 +87,7 @@ class SerialSink:
         baudrate: int = DIRECT_UART_BAUD,
         timeout: float = 1.0,
         write_timeout: float = 1.0,
+        reference_port: str = REFERENCE_PORT,
     ) -> None:
         if not math.isfinite(write_timeout) or write_timeout <= 0:
             raise ValueError('write_timeout muss positiv und begrenzt sein')
@@ -98,7 +100,7 @@ class SerialSink:
 
         from dispread.bridge.resources import SerialPortLease
 
-        self._port_lease = SerialPortLease()
+        self._port_lease = SerialPortLease(reference_port=reference_port)
         self._port_owner = uuid.uuid4().hex
         self._serial = None
         self._lock = threading.Lock()
