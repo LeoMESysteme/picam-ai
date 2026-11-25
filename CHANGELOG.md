@@ -3,6 +3,10 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 1.1.0 — 2026-11-25 (erster Release mit Installer in einer Zeile)
+
+* picam 1.1.0 und GSVmulti-Brücke 1.1.0. Installation: `curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash`; Update: `picam update`. Enthält alle Einträge seit Version 1.0 (19.11.) aus dem Abschnitt darunter: Verwaltung `picam` mit Konsole, geführter Installer mit Onboarding, Timing-Kalibrierung bei der Inbetriebnahme, Update mit Rückweg, Deinstallation, Zertifikat, UART-Ports, Einrichtung ohne RS232, Brücke 1.1.0. Auf raspi01 geprüft (25.11., Leonhard).
+
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
 * 2026-11-25: **Versionierte Pi-Releases vom öffentlichen Mirror.** `get-picam.sh`
