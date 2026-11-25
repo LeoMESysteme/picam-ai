@@ -14,6 +14,7 @@ from dataclasses import asdict, replace
 from dispread.bridge.discovery import TailscaleStatus, tailscale_status
 from dispread.bridge.identity import verify_certificate
 from dispread.bridge.protocol import (
+    PI_NAME_CAPABILITY,
     TEST_RELEASE,
     TICK_CAPABILITY,
     TICK_CAPABILITY_VERSION,
@@ -21,6 +22,7 @@ from dispread.bridge.protocol import (
     decode_v2,
     encode_v2,
     parse_profile,
+    pi_display_name,
 )
 from dispread.bridge.types import BridgeEvent, BridgeProfile
 
@@ -47,6 +49,7 @@ class _DataLink:
     def __init__(self, manager, transport, mode, generation):
         self.manager, self.transport, self.mode, self.generation = manager, transport, mode, generation
         self.lease_id = self.run_id = None
+        self.pi_name = None
         self.run_format = self._declared_run_format = None
         self.renewed_at = 0
         self.valid = False
@@ -181,6 +184,7 @@ class _DataLink:
             reply = self._exchange(request, initial=True)
             if reply['type'] != 'hello':
                 raise ConnectionError('peer_invalid')
+            self.pi_name = pi_display_name(reply['capabilities'].get(PI_NAME_CAPABILITY))
 
     def heartbeat(self):
         with self._operation:
@@ -311,13 +315,16 @@ class ConnectionManager:
                 base = replace(base, peer='disconnected', output='unavailable', next_action='reconnect')
         return aggregate_readiness(base, None if worker is None else worker.status)
 
-    def _event(self, code, *, run_id=None, output=None, reason=None, generation=None, device=None, peer=None):
+    def _event(self, code, *, run_id=None, output=None, reason=None, generation=None, device=None, peer=None,
+               pi_name=None):
         detail = dict(version=2, demo_only=output != 'test_release', provisional=True,
                       gsv_receipt_confirmed=False)
         if output is not None:
             detail.update(output=output, reason=reason, generation=generation)
         if peer is not None:
             detail['peer'] = peer
+        if peer == 'authenticated':
+            detail['pi_name'] = pi_name
         if device is not None:
             from .port_inventory import usb_vid_pid
             detail.update(route='uart', port=device.port, usb_vid_pid=usb_vid_pid(device))
@@ -344,7 +351,9 @@ class ConnectionManager:
             self._readiness = replace(self._readiness, peer=peer, next_action=reason,
                                       adapter=adapter or self._readiness.adapter, output=output)
             run_id = link.run_id if link else None
-        self._event(action or peer, run_id=run_id, output=output, reason=reason, generation=generation, peer=peer)
+            pi_name = link.pi_name if link else None
+        self._event(action or peer, run_id=run_id, output=output, reason=reason, generation=generation, peer=peer,
+                    pi_name=pi_name)
 
     def _check_locked(self, link):
         if (self._link is not link or not link.valid or self._cancel.is_set()

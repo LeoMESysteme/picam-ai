@@ -19,7 +19,16 @@ from dispread.gsv2as_serial import REFERENCE_PORT
 from dispread.hardware_ports import GSV_UART_PORT
 
 from .output_state import RELEASE_BLOCK, OutputState
-from .protocol import TICK_CAPABILITY, TICK_CAPABILITY_VERSION, _identifier, _transport, decode_v2, encode_v2
+from .protocol import (
+    PI_NAME_CAPABILITY,
+    TICK_CAPABILITY,
+    TICK_CAPABILITY_VERSION,
+    _identifier,
+    _transport,
+    decode_v2,
+    encode_v2,
+    pi_display_name,
+)
 from .types import PeerHello
 
 HEARTBEAT_INTERVAL_S = 1
@@ -51,12 +60,13 @@ class Lease:
 class BridgeHub:
     def __init__(self, pi_id: str, audit_root: Path, *, clock=time.monotonic,
                  identity=None, pairing_store=None, serial_opener=None, port_leases=None,
-                 output_port=GSV_UART_PORT, reference_port=REFERENCE_PORT):
+                 output_port=GSV_UART_PORT, reference_port=REFERENCE_PORT, pi_name=None):
         _identifier(pi_id)
         self.pi_id, self.audit_root, self.clock = pi_id, Path(audit_root), clock
         self.identity, self.pairing_store = identity, pairing_store
         self.serial_opener, self.port_leases = serial_opener, port_leases
         self.output_port, self.reference_port = output_port, reference_port
+        self._pi_name = pi_display_name(pi_name)
         self._lock = threading.RLock()
         self._lease = None
         self._run_id = None
@@ -219,12 +229,15 @@ class BridgeHub:
     def _hello(self, lease, request_id):
         hello = self.prepare(lease.transport, lease.client_id, lease=lease)
         lease.release = hello.release
+        # dut_output bleibt False: Testfreigabe ist keine Abnahme.
+        capabilities = dict(heartbeat_interval_s=1, lease_timeout_s=5, dut_output=False)
+        if self._pi_name is not None:
+            capabilities[PI_NAME_CAPABILITY] = self._pi_name
         return dict(version=2, type='hello', request_id=request_id, pi_id=self.pi_id,
                     client_id=lease.client_id, lease_id=lease.lease_id, run_id=hello.run_id,
                     protocol_version=2, transport=lease.transport, state=hello.state,
                     release_block=hello.release_block,
-                    # dut_output bleibt False: Testfreigabe ist keine Abnahme.
-                    capabilities=dict(heartbeat_interval_s=1, lease_timeout_s=5, dut_output=False),
+                    capabilities=capabilities,
                     permissions=['readiness', 'demo'],
                     # Additiv (R1): nur gesendet, wenn freigegeben; alte Clients
                     # lehnen das unbekannte Feld ab und bleiben so ohne Ausgabe.

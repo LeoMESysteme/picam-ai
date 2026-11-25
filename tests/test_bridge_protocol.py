@@ -8,6 +8,7 @@ from dispread.bridge.protocol import (
     decode_v2,
     encode_v2,
     parse_profile,
+    pi_display_name,
 )
 
 
@@ -240,6 +241,11 @@ def hello(**changes):
     return {**dict(version=2, type="hello", request_id="r", pi_id="pi-test", client_id="pc-1",
                    protocol_version=2, transport="uart", run_id="run-1", state="ready", release_block=None,
                    capabilities={}, permissions=[], lease_id="lease-1"), **changes}
+
+
+@pytest.mark.parametrize('name', ['', '   ', 'Labor\nSüd', 'Labor\u202eSüd', 'x' * 257, 12, None])
+def test_invalid_display_names_are_ignored(name):
+    assert pi_display_name(name) is None
 
 
 def test_hello_and_idle_release_marker_is_optional_exact_and_unblocked():

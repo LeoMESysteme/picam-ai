@@ -341,7 +341,8 @@ async def serve(args):
         bridge_hub = BridgeHub(bridge_config['bridge_identity'].pi_id,
                                Path(getattr(args, 'live_data', LIVE_DATA_DIR)) / 'bridge',
                                identity=bridge_config['bridge_identity'],
-                               pairing_store=bridge_config['bridge_pairing_store'], **port_options)
+                               pairing_store=bridge_config['bridge_pairing_store'],
+                               pi_name=bridge_config.get('bridge_name'), **port_options)
         bridge_config['bridge_hub'] = bridge_hub
     live_options = {}
     if getattr(args, "live_config", None) is not None:

@@ -14,7 +14,7 @@ from dataclasses import asdict
 from aiohttp import WSMsgType, web
 
 from .pairing import PairingError
-from .protocol import MAX_MESSAGE_BYTES, decode_v2, encode_v2, parse_profile
+from .protocol import MAX_MESSAGE_BYTES, PI_NAME_CAPABILITY, decode_v2, encode_v2, parse_profile, pi_display_name
 from .types import BridgeProfile
 
 PUBLIC_PATHS = frozenset({"/bridge/v2", "/bridge/v2/pair"})
@@ -113,6 +113,9 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
         BridgeProfile(1, identity.pi_id, name, identity.certificate_pem, identity.fingerprint, tuple(endpoints), 2)
     )
     parse_profile(json.dumps(public_profile).encode())
+    capabilities = dict(protocol_version=2, dut_output=False, heartbeat_interval_s=1, lease_timeout_s=5)
+    if (pi_name := pi_display_name(name)) is not None:
+        capabilities[PI_NAME_CAPABILITY] = pi_name
     hub = hub if hub is not None else UnconfiguredHub()
     limiter = _SourceLimit()
     connections = set()
@@ -342,8 +345,7 @@ def add_bridge_routes(app, identity, pairing_store, hub, authorize_operator, *, 
                 state=readiness.state,
                 release_block=readiness.release_block,
                 lease_id=lease_id,
-                capabilities={"protocol_version": 2, "dut_output": False,
-                              "heartbeat_interval_s": 1, "lease_timeout_s": 5},
+                capabilities=capabilities,
                 permissions=["readiness", "demo"],
                 **({"release": readiness.release} if readiness.release else {}),
                 **hub.output_format_fields(lease),

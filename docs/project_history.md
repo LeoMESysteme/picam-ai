@@ -9,6 +9,16 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-25 — Pi-Name im Brücken-Hello
+
+Die Windows-Brücke erhält `bridge_name` bei jeder authentifizierten
+Netzwerk- oder UART-Verbindung als `capabilities.pi_name`. Ein zusätzliches
+Hello-Feld würde bei Brücke 1.0.0 eine Aushandlung erfordern, weil ihr Decoder
+unbekannte Felder ablehnt. Innerhalb von `capabilities` akzeptiert der
+Decoder zusätzliche Einträge. Die Brücke speichert den gemeldeten Namen
+zusammen mit dem Profil in ihren Einstellungen und nutzt bei einem Hello
+ohne Namen wieder den Profilnamen.
+
 ## 2026-11-25 — Header-UARTs als Instanzkonfiguration
 
 Der Bootparameter aktiviert einen UART-Controller. Seinen Linux-Gerätenamen

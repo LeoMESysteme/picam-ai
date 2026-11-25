@@ -50,7 +50,7 @@ def ready(tmp_path, identity):
         opened.append((args, kwargs))
         return wire
     hub = BridgeHub(identity.pi_id, tmp_path / 'audit', identity=identity, pairing_store=store,
-                    serial_opener=opener, port_leases=SerialPortLease(tmp_path / 'locks'))
+                    serial_opener=opener, port_leases=SerialPortLease(tmp_path / 'locks'), pi_name='Prüfstand Süd')
     assert opened == []
     hub.prepare_uart()
     assert opened[0][1]["baudrate"] == 460800
@@ -88,6 +88,13 @@ def test_uart_pinned_nonce_auth_before_lease_and_fragmented_demo(ready, identity
                    state='idle', release_block=None, capabilities={}, permissions=[]))
     hello = wire.receive()
     assert hello['type'] == 'hello' and hello['lease_id']
+    assert hello['capabilities']['pi_name'] == 'Prüfstand Süd'
+    # 37f0bee (v1.0.0): _BASE + _FIELDS['hello']; capabilities only has to be a dict.
+    required = {'version', 'type', 'request_id', 'pi_id', 'client_id', 'protocol_version',
+                'transport', 'run_id', 'state', 'release_block', 'capabilities', 'permissions'}
+    optional = {'lease_id', 'nonce', 'signature', 'release', 'output_format'}
+    assert required <= hello.keys() <= required | optional
+    assert isinstance(hello['capabilities'], dict)
     wire.send(base(identity, 'demo_request', transport='uart', run_id=None, count=2, rate_hz=1))
     demo = wire.receive()
     assert demo['type'] == 'hello' and demo['run_id']

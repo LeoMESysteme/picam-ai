@@ -4,14 +4,18 @@ import asyncio
 import ssl
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 import pytest
 from aiohttp import web
 
+from dispread.bridge.hub import BridgeHub
 from dispread.bridge.identity import DeviceIdentity
 from dispread.bridge.pairing import PairingStore
 from dispread.bridge.protocol import decode_v2, encode_v2, parse_profile
+from dispread.bridge.routes import add_bridge_routes
 from dispread.bridge.types import PeerHello
 from dispread.workbench.server import make_app
 
@@ -67,7 +71,6 @@ def identity(tmp_path_factory):
 async def service(tmp_path, identity, *, tls=True, configured_hub=True, real_hub=False):
     store = PairingStore(tmp_path / "pairing")
     if real_hub:
-        from dispread.bridge.hub import BridgeHub
         hub = BridgeHub(identity.pi_id, tmp_path / 'audit', identity=identity, pairing_store=store)
     else:
         hub = FakeHub(identity.pi_id)
@@ -134,6 +137,35 @@ async def connect(client, base, store, identity):
     await ws.send_str(encode_v2(hello(identity)).decode())
     response = decode_v2((await ws.receive_str(timeout=1)).encode())
     return ws, response
+
+
+def test_network_hello_announces_configured_pi_name(tmp_path, identity, monkeypatch):
+    store = PairingStore(tmp_path / 'pairing')
+    token = store.redeem_offer(store.create_offer('network'), 'client-a', 'network')
+    hub = BridgeHub(identity.pi_id, tmp_path / 'audit')
+    app = web.Application()
+    add_bridge_routes(app, identity, store, hub, lambda request: True, name='Prüfstand Süd')
+    handler = next(route.handler for route in app.router.routes()
+                   if route.method == 'GET' and route.resource.canonical == '/bridge/v2')
+    ws = MagicMock(closed=False)
+    ws.prepare, ws.close, ws.send_str = AsyncMock(), AsyncMock(), AsyncMock()
+    ws.receive = AsyncMock(return_value=SimpleNamespace(
+        type=aiohttp.WSMsgType.TEXT, data=encode_v2(hello(identity)).decode()))
+    monkeypatch.setattr(web, 'WebSocketResponse', lambda **kwargs: ws)
+
+    async def run_inline(operation, *args):
+        return operation(*args)
+
+    monkeypatch.setattr(asyncio, 'to_thread', run_inline)
+    request = SimpleNamespace(secure=True, query_string='', headers={'Authorization': f'Bearer {token}'})
+    try:
+        asyncio.run(handler(request))
+        ws.send_str.assert_awaited_once()
+        response = decode_v2(ws.send_str.await_args.args[0].encode())
+        assert response['type'] == 'hello'
+        assert response['capabilities']['pi_name'] == 'Prüfstand Süd'
+    finally:
+        hub.close()
 
 
 def test_profile_offers_and_revoke_require_operator_and_csrf(tmp_path, identity):
@@ -652,6 +684,7 @@ def test_real_hub_wss_idle_run_resync_demo_and_lease_exclusion(tmp_path, identit
                 await ws.send_str(encode_v2(hello(identity)).decode())
                 first = decode_v2((await ws.receive(timeout=1)).data.encode())
                 assert first['run_id'] is None and first['state'] == 'output_off'
+                assert first['capabilities']['pi_name'] == 'Labor'
                 async with client.ws_connect(base + '/bridge/v2', headers=headers) as duplicate:
                     await duplicate.send_str(encode_v2(hello(identity)).decode())
                     conflict = decode_v2((await duplicate.receive(timeout=1)).data.encode())

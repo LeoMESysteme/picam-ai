@@ -1,9 +1,12 @@
 """Identity/lease and generation tests use the actual reviewed Pi hub."""
+import json
 import threading
 import time
-from dataclasses import replace
+from dataclasses import asdict, replace
+from unittest.mock import Mock
 
 import pytest
+from dispread_bridge_app.app_controller import AppController
 from dispread_bridge_app.connection import ConnectionError, ConnectionManager
 from dispread_bridge_app.devices import WindowsDevices
 from dispread_bridge_app.types import DeviceInfo
@@ -121,6 +124,50 @@ def connected(manager):
     manager.connect('network')
     wait_for(lambda: manager.snapshot().peer == 'authenticated')
     return manager.data_link()
+
+
+def test_pi_name_follows_reconnect_is_saved_offline_and_falls_back_for_older_pi(tmp_path, profile):
+    hubs = [BridgeHub(profile.pi_id, tmp_path / f'audit-{i}', pi_name=name)
+            for i, name in enumerate((None, 'Prüfstand Nord', 'Prüfstand Süd', 'Prüfstand Süd', None))]
+    factory = Factory(hubs[0])
+    app_dir = tmp_path / 'app'
+    app = AppController(app_dir, protector=Mock(), transport_factory=factory, list_ports=lambda: ['COM4', 'COM5'],
+                        com_factory=lambda _: Mock(), network_diagnostics=lambda: None)
+
+    def restart_pi(hub):
+        factory.hub = hub
+        factory.transports[-1].close()
+        wait_for(lambda: app.snapshot().peer == 'authenticated' and factory.transports[-1].hub is hub)
+
+    def names():
+        return [(row.title, row.tone) for row in app.context().journal if row.title.startswith('Pi heißt jetzt ')]
+
+    try:
+        app.set_port_pair('COM4', 'COM5')
+        app.load_profile(json.dumps(asdict(profile)).encode())
+        app.connect('network')
+        wait_for(lambda: app.snapshot().peer == 'authenticated')
+        assert app.context().pi_name == 'Pi'
+        assert names() == []
+        restart_pi(hubs[1])
+        wait_for(lambda: app.context().pi_name == 'Prüfstand Nord')
+        restart_pi(hubs[2])
+        wait_for(lambda: app.context().pi_name == 'Prüfstand Süd')
+        restart_pi(hubs[3])
+        assert names() == [('Pi heißt jetzt Prüfstand Süd', 'info'), ('Pi heißt jetzt Prüfstand Nord', 'info')]
+        reopened = AppController(app_dir, list_ports=lambda: ['COM4', 'COM5'])
+        try:
+            assert reopened.context().pi_name == 'Prüfstand Süd'
+        finally:
+            reopened.request_exit(True)
+        restart_pi(hubs[4])
+        wait_for(lambda: app.context().pi_name == 'Pi')
+        app.disconnect()
+        assert app.context().pi_name == 'Pi'
+    finally:
+        app.request_exit(True)
+        for hub in hubs:
+            hub.close()
 
 
 def test_stable_link_and_atomic_admission_reject_revoked_generation(setup):

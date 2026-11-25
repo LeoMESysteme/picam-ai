@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dispread.bridge.baud import UART_BAUD
-from dispread.bridge.protocol import parse_profile
+from dispread.bridge.protocol import parse_profile, pi_display_name
 from dispread.bridge.types import BridgeEvent, BridgeProfile
 
 from . import session_templates
@@ -209,6 +209,7 @@ class AppController:
         self._paired_cached: dict[str, bool] = {}   # je Weg (network | uart): Zugangsdaten gelten je Transport
         # persistiert
         self._profile: BridgeProfile | None = None
+        self._reported_pi_name: str | None = None
         self._route: str | None = None
         self._route_mode: str | None = None
         self._configured_modes: set[str] = set()
@@ -430,6 +431,8 @@ class AppController:
                 self._pair = PortPair('manual', pair['bridge_port'], pair['gsv_port'], False)
         except (ValueError, KeyError, TypeError):
             self._profile = self._pair = None
+        if self._profile is not None:
+            self._reported_pi_name = pi_display_name(data.get('reported_pi_name'))
         self._route = data.get('route') if data.get('route') in ('network', 'uart') else None
         self._route_mode = data.get('route_mode')
         if self._route_mode not in MODES:
@@ -483,6 +486,7 @@ class AppController:
             profile = asdict(replace(self._profile, pairing_offer=None))   # Angebot nie speichern
             profile['endpoints'] = list(profile['endpoints'])
         data = dict(version=STATE_VERSION, client_id=self.client_id, profile=profile, route=self._route,
+                    reported_pi_name=self._reported_pi_name,
                     endpoint=self._endpoint, adapter_id=self._adapter_id, route_mode=self._route_mode,
                     configured_modes=sorted(self._configured_modes), adapter_port=self._adapter_port,
                     session_path=self._session_path, session_port=self._session_port, sessions=self._sessions,
@@ -506,9 +510,11 @@ class AppController:
                     self._subs.remove(callback)
         return unsubscribe
 
-    def _emit(self, event: BridgeEvent, *, adapter_epoch=None) -> None:
-        """Nie werfen, nie blockieren: ein Fehler hier darf den Worker nicht in audit_failed treiben."""
+    def _emit(self, event: BridgeEvent, *, adapter_epoch=None, bound_profile=None) -> None:
+        """Fehler in der Ereignisbehandlung dürfen den Worker nicht in audit_failed treiben."""
         if event.kind == 'connection' and event.code == 'authenticated':
+            if 'pi_name' in event.detail:
+                self._remember_pi_name(event.detail['pi_name'], adapter_epoch, bound_profile)
             self._refresh_pairing()
         if event.kind == 'connection' and event.code == 'adapter_opening':
             # Reconnect can follow the same USB adapter to a new COM number.
@@ -547,6 +553,22 @@ class AppController:
                 cb(event)
             except Exception:
                 pass
+
+    def _remember_pi_name(self, value, adapter_epoch, bound_profile) -> None:
+        pi_name = pi_display_name(value)
+        with self._lock:
+            if (bound_profile is None or self._profile is not bound_profile or adapter_epoch != self._adapter_epoch
+                    or pi_name == self._reported_pi_name):
+                return
+            previous_name = self._reported_pi_name or bound_profile.name
+            self._reported_pi_name = pi_name
+            if pi_name is not None and pi_name != previous_name:
+                now = datetime.now().strftime('%H:%M:%S')
+                self._journal_row(JournalEntry(now, f'Pi heißt jetzt {pi_name}', tone='info'))
+            try:
+                self._save_state()
+            except OSError:
+                pass  # Die authentifizierte Verbindung und der Name im Speicher bleiben nutzbar.
 
     # ------------------------------------------------------------ Diagnose-Schreiber
     def _diag_context(self):
@@ -794,6 +816,9 @@ class AppController:
         with self._lock:
             self._setup_revision += 1
             self._offer = profile.pairing_offer          # nur im Speicher
+            if (self._profile is None or self._profile.pi_id != profile.pi_id
+                    or self._profile.certificate_sha256 != profile.certificate_sha256):
+                self._reported_pi_name = None
             self._profile = replace(profile, pairing_offer=None)
             self._candidates = ()
             if self._endpoint not in profile.endpoints:
@@ -1048,8 +1073,10 @@ class AppController:
             if self._network_diagnostics is not None:
                 kwargs['network_diagnostics'] = self._network_diagnostics
             epoch = self._adapter_epoch
+            bound_profile = self._profile
             manager = self._manager_factory(self._profile_for_connect(mode), self.client_id, self._credentials,
-                                            self._devices, emit=lambda event: self._emit(event, adapter_epoch=epoch),
+                                            self._devices, emit=lambda event: self._emit(
+                                                event, adapter_epoch=epoch, bound_profile=bound_profile),
                                             **kwargs)
             worker = self._worker_factory(manager, self._com_open, self._journal_open(), self._emit)
             if hasattr(worker, 'demo_format'):
@@ -1390,7 +1417,6 @@ class AppController:
 
     def context(self) -> UiContext:
         r, w = self.snapshot(), self.worker_status()
-        p, pair = self._profile, self._pair
         variant, data = self._variant(r, w)
         authenticated = r.peer == 'authenticated'
         run_id = None
@@ -1406,12 +1432,13 @@ class AppController:
         demo = authenticated and r.output == 'demo_only'
         test_release = authenticated and r.output == 'test_release'
         with self._lock:
+            p, pair = self._profile, self._pair
             template = self._context_session_template()
             journal = tuple(self._entries)
             com_issue = self._com_issue if demo else None
             data = dict(data, notice=self._notice)
             return UiContext(
-                pi_name=p.name if p else None, route=route, run_id=run_id,
+                pi_name=self._reported_pi_name or (p.name if p else None), route=route, run_id=run_id,
                 mode='operate' if (self._setup_done or self._overview) else 'setup',
                 setup=SetupState(self._step, variant, data),
                 dut_locked=True,                         # Freigabe-Sperrzustand wird nicht gefuehrt; Ausgabeart traegt test_release/demo

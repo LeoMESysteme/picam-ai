@@ -16,6 +16,8 @@ from dispread.sink.protocol.userdefined_4ch import checked_value_text
 MAX_MESSAGE_BYTES = 65536
 MAX_PROFILE_BYTES = 16384
 MAX_ENDPOINTS = 8
+PI_NAME_CAPABILITY = "pi_name"
+MAX_PI_NAME_LENGTH = 256
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 _TOKEN = re.compile(r"(?:[A-Za-z0-9_-]{43}|[0-9a-f]{64})\Z")
 _BASE = {"version", "type", "request_id", "pi_id", "client_id"}
@@ -89,6 +91,13 @@ _TRACE_FIELDS = {
 
 def _reject_constant(value):
     raise ValueError(f"non-finite JSON constant: {value}")
+
+
+def pi_display_name(value: object) -> str | None:
+    """Accept a bounded, printable name from configuration or a peer's Hello."""
+    if isinstance(value, str) and len(value) <= MAX_PI_NAME_LENGTH and value.isprintable() and value.strip():
+        return value
+    return None
 
 
 def _object(pairs):
@@ -224,7 +233,7 @@ def parse_profile(raw: bytes) -> BridgeProfile:
     if type(obj["protocol_version"]) is not int or obj["protocol_version"] != 2:
         raise ValueError("unsupported protocol version")
     _identifier(obj["pi_id"])
-    _text(obj["name"], maximum=256)
+    _text(obj["name"], maximum=MAX_PI_NAME_LENGTH)
     pem = obj["certificate_pem"]
     if (
         not isinstance(pem, str)
