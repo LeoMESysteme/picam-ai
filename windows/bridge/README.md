@@ -299,7 +299,7 @@ Nur unter Linux geprüft, keine Windows-Abnahme.
 ## Release bauen (1.1.0)
 
 Voraussetzung: Windows-11-x64-PC mit Python ≥ 3.13 x64, Git-Arbeitsbaum **ohne nicht eingecheckte
-Änderungen** (der Release-Build verweigert sonst, damit der Commit eindeutig ist). Die Version steht
+Änderungen** (der Release-Build verweigert sonst, damit der Commit eindeutig ist) oder ein unverändertes Download-ZIP des Branches vom Server: Dort steht der Commit in `packaging/source-commit.txt` (export-subst); Änderungen nach dem Entpacken kann der Bau nicht erkennen. Die Version steht
 in `pyproject.toml` und `src/dispread_bridge_app/__init__.py` (beide gleich halten).
 Auf dem Build-PC einmalig Inno Setup 6 installieren.
 
