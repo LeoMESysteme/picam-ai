@@ -28,6 +28,7 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
+from textual.css.query import NoMatches
 from textual.widgets import ContentSwitcher, Input, Static, Tab, Tabs
 
 from . import probes, uninstall
@@ -240,6 +241,7 @@ class PicamApp(App[int]):
         self.log_lines: list = []
         self._log_thread: threading.Thread | None = None
         self._log_process: subprocess.Popen | None = None
+        self._log_closing = False
         self._alerted: dict[str, tuple[str, str]] = {}
         self._spin = 0
         self._spinner_timer = None
@@ -953,8 +955,10 @@ class PicamApp(App[int]):
         """Protokoll lesen; endet still, wenn die Konsole beendet wird (raspi01: Exception beim Beenden)."""
         try:
             self._read_journal()
-        except (RuntimeError, ValueError, OSError):
-            # App schon beendet (call_from_thread) oder Pipe beim Beenden geschlossen.
+        except Exception:  # noqa: BLE001 - Hintergrundfaden darf beim Beenden nie etwas ausgeben
+            # Beim Beenden kann jede Stufe scheitern: call_from_thread (App weg), Pipe zu oder
+            # die Tabs sind schon abgebaut (NoMatches, raspi01 25.11.). Eine Ausgabe auf stderr
+            # während des Herunterfahrens brach Python mit „Fatal Python error“ ab.
             return
 
     def _read_journal(self) -> None:
@@ -975,7 +979,7 @@ class PicamApp(App[int]):
         stream = self._log_process.stdout
         batch: list = []
         last = time.monotonic()
-        while True:
+        while not self._log_closing:
             ready = select.select([stream], [], [], 0.25)[0]
             if ready:
                 raw = stream.readline()
@@ -990,7 +994,7 @@ class PicamApp(App[int]):
             if batch and (not ready or time.monotonic() - last > 0.25):
                 self.call_from_thread(self._add_logs, batch)
                 batch, last = [], time.monotonic()
-        if batch:
+        if batch and not self._log_closing:
             self.call_from_thread(self._add_logs, batch)
 
     def log_row(self, line) -> Table:
@@ -1005,10 +1009,15 @@ class PicamApp(App[int]):
         self._add_logs([line])
 
     def _add_logs(self, lines: list) -> None:
+        if self._log_closing:
+            return
         self.log_lines.extend(lines)
         if len(self.log_lines) > LOG_LIMIT:
             del self.log_lines[: len(self.log_lines) - LOG_LIMIT]
-        dashboard, protokoll = self.view('dashboard'), self.view('protokoll')
+        try:
+            dashboard, protokoll = self.view('dashboard'), self.view('protokoll')
+        except NoMatches:  # Konsole wird gerade abgebaut
+            return
         for line in lines[-LOG_LIMIT:]:
             row = self.log_row(line)
             dashboard.add_log(row)
@@ -1026,6 +1035,7 @@ class PicamApp(App[int]):
         self.exit(0)
 
     def _stop_log(self) -> None:
+        self._log_closing = True
         process = self._log_process
         if process is not None and process.poll() is None:
             process.terminate()

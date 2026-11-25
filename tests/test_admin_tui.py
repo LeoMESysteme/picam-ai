@@ -460,3 +460,26 @@ def test_down_moves_between_focusable_elements_in_tab_body():
         await pilot.pause(0.2)
         assert app.focused is first
     drive(check, instance=admin_fakes.INSTANCE)
+
+
+def test_log_lines_during_shutdown_are_dropped_silently():
+    """raspi01 25.11.: Beim Beenden kamen Protokollzeilen, als die Tabs schon abgebaut waren
+    (NoMatches im Hintergrundfaden, danach „Fatal Python error“). Jetzt still verworfen."""
+    async def test(app, pilot):
+        main = app.main_screen
+        for view_id in ('dashboard', 'protokoll'):
+            await main.query_one(f'#{view_id}').remove()
+        app._add_logs([LogLine('23:59:59', 'info', 'kommt beim Beenden an')])   # wirft nicht
+        app._stop_log()
+        app._add_logs([LogLine('23:59:59', 'info', 'nach dem Stopp')])
+        assert all(line.text != 'nach dem Stopp' for line in app.log_lines)
+    drive(test)
+
+
+def test_log_reader_thread_never_raises_on_shutdown(monkeypatch):
+    async def test(app, pilot):
+        def boom():
+            raise LookupError('beliebiger Fehler beim Abbau')
+        monkeypatch.setattr(app, '_read_journal', boom)
+        app._log_reader()                         # endet still, ohne Ausgabe auf stderr
+    drive(test)
