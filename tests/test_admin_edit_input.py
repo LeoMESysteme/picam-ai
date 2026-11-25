@@ -1,6 +1,7 @@
 """Eingabefeld mit Navigations- und Bearbeitungszustand (Einstellungen)."""
 
 from test_admin_tui import ConfirmScreen, drive, text_of
+from textual.color import Color
 from textual.widgets import Button, Checkbox
 
 from dispread.admin.edit_input import EditInput
@@ -108,4 +109,62 @@ def test_edit_hint_shows_while_editing(tmp_path):
         await pilot.press('escape')
         await pilot.pause(0.1)
         assert 'Enter übernehmen' not in text_of(app.query_one('#cfg-help'))
+    drive(check, instance=settings(tmp_path))
+
+
+def _marked(app):
+    """Felder, die sichtbar hervorgehoben sind: gefüllter Akzent (Navigieren) oder Feldfarbe des Fokus."""
+    variables = app.get_css_variables()
+    field = Color.parse(variables['picam-field'])
+    return [w.id for w in app.query(EditInput) if w.styles.background != field and w.styles.background.a]
+
+
+def _only_focused_marked(app):
+    focused = app.focused
+    marked = _marked(app)
+    flagged = [w.id for w in app.query(EditInput) if w.has_focus]
+    if isinstance(focused, EditInput):
+        assert marked == [focused.id] and flagged == [focused.id], (marked, flagged)
+    else:
+        assert marked == [] and flagged == [], (marked, flagged)
+
+
+def test_only_focused_element_is_highlighted_after_every_focus_change(tmp_path):
+    async def check(app, pilot):
+        port, name = await open_tab(app, pilot)
+        _only_focused_marked(app)
+        await pilot.press('down')  # Navigieren: ↓
+        _only_focused_marked(app)
+        await pilot.press('enter', 'down')  # Bearbeiten, ↓ bleibt im Feld
+        assert app.focused is name and name.editing
+        _only_focused_marked(app)
+        await pilot.press('enter')  # übernehmen (Bestätigungsdialog) und zurück
+        await pilot.pause(0.3)
+        if isinstance(app.screen, ConfirmScreen):
+            await pilot.press('escape')
+            await pilot.pause(0.2)
+        await pilot.press('enter', 'escape')  # Bearbeiten, Esc verwirft
+        _only_focused_marked(app)
+        await pilot.press('up')
+        assert app.focused is port
+        _only_focused_marked(app)
+        await pilot.press('down', 'down')  # Kontrollkästchen
+        assert isinstance(app.focused, Checkbox)
+        _only_focused_marked(app)
+        await pilot.press('down')  # Knopf
+        assert isinstance(app.focused, Button)
+        _only_focused_marked(app)
+        await pilot.click('#cfg-bridge_name')  # Mausklick: Bearbeiten
+        await pilot.pause(0.1)
+        _only_focused_marked(app)
+        await pilot.click('#cfg-port')  # Mausklick auf anderes Feld
+        await pilot.pause(0.1)
+        assert name.has_focus is False
+        _only_focused_marked(app)
+        await pilot.press('escape')
+        await pilot.press('d')  # Tab-Wechsel und zurück
+        await pilot.pause(0.2)
+        await pilot.press('c')
+        await pilot.pause(0.3)
+        _only_focused_marked(app)
     drive(check, instance=settings(tmp_path))

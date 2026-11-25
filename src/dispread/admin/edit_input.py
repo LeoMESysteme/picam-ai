@@ -67,12 +67,15 @@ class EditInput(Input):
         self._style_state()
         self.post_message(self.EditingChanged(self, False))
 
-    def _style_state(self) -> None:
-        """Navigieren: gefüllt wie ein fokussierter Knopf; Bearbeiten: Feldfläche mit Akzentbalken."""
+    def _style_state(self, focused: bool | None = None) -> None:
+        """Navigieren: gefüllt wie ein fokussierter Knopf; Bearbeiten: Feldfläche mit Akzentbalken.
+
+        ``focused`` überschreibt ``has_focus``: im Blur-Ereignis meldet Textual noch den alten Fokus, das Feld
+        würde sonst die Markierung neu setzen und behielte sie nach dem Fokuswechsel."""
         styles = self.styles
         for rule in ('background', 'color', 'text_style', 'border_left'):
             styles.clear_rule(rule)
-        if not self.has_focus:
+        if not (self.has_focus if focused is None else focused):
             return
         variables = self.app.get_css_variables()
         accent = variables.get('picam-accent-strong', '#3d9be9')
@@ -148,7 +151,7 @@ class EditInput(Input):
     def _on_blur(self, event: events.Blur) -> None:
         self.stop_edit(keep=False)
         super()._on_blur(event)
-        self._style_state()
+        self._style_state(focused=False)
 
     def _on_paste(self, event: events.Paste) -> None:
         if self.editing:
