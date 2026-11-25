@@ -12,15 +12,28 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
-## Übergabe (Stand 25.11.)
+## Übergabe (Stand 25.11. abends)
 
 Branch `feat/picam-admin` (gepusht). **Releasekandidat:**
-`~/picam-releases/picam-rc-de628ad.tar.gz`, SHA-256
-`9fd1d312c780b81b3677712e873a6e70afed3a6c6b3cf886827460a556220823` (nicht dirty).
-Enthält gegenüber `rc-51b620f` (auf raspi01 installiert und kalibriert, 25.11.):
-Kalibrierung als Bildschirm der Konsole (Kamera-Tab `m`/`p`, sudo-Passwort und Abbruch
-in der Konsole; `picam kalibrieren` im Terminal bleibt) und die Windows-Brücke 1.1.0
-(Branch `feat/bruecke-1.1`, eingemergt).
+`~/picam-releases/picam-rc-6183cb1.tar.gz`, SHA-256
+`e511009cba1c87e795b71d4f2a5ddcac62cd7ec561f0c2924ec5d625e15561b7` (nicht dirty).
+Neu gegenüber `rc-de628ad`: Konsole mit eigenen Bildschirmen für Update (Schritte,
+Rückweg, Neustart der Konsole), Deinstallation (Vorschau in der Konsole, formatierte
+Rückfrage „deinstallieren“ im Terminal), Zertifikat erneuern (auch Brückenidentität;
+danach `pi.dispread` in jede Brücke laden) und UART-Ports (Pinwahl, Pi-5-UARTs,
+config.txt-Diff, Pi-Neustart nur von Hand, [OQ-80](docs/open-questions.md#oq-80));
+Einstellungen mit Navigations-/Bearbeitungszustand; Installer in Konsolen-Optik, Enter →
+Onboarding (Konto & Adresse, Kamera & Fokus, Timing-Kalibrierung); Pi-Name live in der
+Brücke (ab 1.1.0, Brücke 1.0.0 ignoriert das Feld).
+
+**Prüfstand 25.11. abends (`6183cb1`):** Pi-Suite mit Entwicklungsdaten 5146 bestanden,
+27 übersprungen, 2 xfailed; Playwright Werkbank 73/73, Doku 153/154 – offen:
+`docs-site.spec.ts:837` Roadmap-Mausrad scheitert reproduzierbar, Roadmap/Theme seit dem
+grünen Lauf vom 20.11. unverändert (Wiki-Bereich, nicht angefasst); Node 329/330 (der eine,
+`workbench_client.test.mjs`, scheiterte schon vorher); Brückensuite 799; ruff sauber;
+strenger Doku-Build ohne Befund. Releasetest portabel: Installation, `picam status`,
+Konsole im PTY. Hinweis: Fehlt die Kamera, öffnet die Konsole ein Hinweisfenster;
+solange es offen ist, schließt Esc es und q beendet nicht.
 
 **Brücke 1.1.0 bauen (Windows):** einmalig `winget install JRSoftware.InnoSetup`, dann
 `windows\bridge\build-release.cmd`. Ergebnis in `dist-release`:
@@ -44,10 +57,13 @@ zwei USB-RS232-Adapter mit Nullmodemkabel; vorher Dauertest. Details unten.
 1. **raspi06:** Der Entwicklungsdienst `dispread-werkbank-bruecke` ist seit
    20.11. 15:00 gestoppt (regulär, nicht durch Claude; vorher 14:46 Stopp/14:48
    Start – vermutlich Konsolentest). Nicht autonom neu gestartet.
-2. **raspi01:** ~~Update auf `rc-51b620f` und `picam kalibrieren`~~ erledigt (25.11., Leonhard).
-   Nächster Schritt: Update auf `rc-de628ad`, dann die Kalibrierung einmal in der Konsole
-   (Kamera-Tab, `m`) durchlaufen lassen und einmal während der Aufnahme abbrechen:
-   sudo-Passwort im Feld, Normierung zurückgestellt, Dienst wieder da ([OQ-79](docs/open-questions.md#oq-79)).
+2. **raspi01:** Update auf `rc-6183cb1` (jetzt direkt im Konsolen-Bildschirm Update). Prüfen:
+   Kalibrierung in der Konsole (einmal ganz, einmal Abbruch in der Aufnahme: Passwortfeld,
+   Normierung zurückgestellt, Dienst wieder da, [OQ-79](docs/open-questions.md#oq-79)),
+   Deinstallations-Vorschau (nicht bestätigen), Zertifikat erneuern + Profil neu in die Brücke,
+   UART-Pinwahl bis zur Prüfseite (echter Wechsel auf uart2/uart4 mit Neustart: eigener Test,
+   [OQ-80](docs/open-questions.md#oq-80)), Einstellungen per Tastatur, Pi-Name ändern → Brücke 1.1.0.
+   Frische Installation zeigt Installer-Optik und Enter → Onboarding.
 3. **Werkbank ohne RS232 am Aufbau:** geführte Eingabe (Kästchen, verschiebbares
    Fenster) und Schwanken ±1 der letzten Stelle mit echtem GSV prüfen.
 4. **Entscheidungen:** Versionsnummer/Tag (VERSION steht auf `0.1.0.dev0`, Releases
