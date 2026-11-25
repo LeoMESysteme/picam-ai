@@ -38,7 +38,8 @@ Die Messkette (`scripts/sync-record.py`, `display-offset.py`,
 (`record`, `offset`, `build`, `schedule`) im Produkt; die Skripte sind
 dünne Hüllen, die Statistik ist unverändert. `picam kalibrieren` fährt sie
 bei der Inbetriebnahme mit einem vorübergehend angesteckten
-USB-RS232-Adapter automatisch ab (Ablauf: [INSTALLER.md](INSTALLER.md)).
+USB-RS232-Adapter automatisch ab, auf Wunsch im Kalibrierbildschirm der Konsole
+(Ablauf: [INSTALLER.md](INSTALLER.md)).
 Ohne RS232 ist dieselbe Größe (Telegramm → Display) nicht messbar; eine
 LED am GPIO würde eine andere Größe messen (Kamera-Latenz, M2) und wäre
 als eigenes Schema zu führen. Am Aufbau zu prüfen: ein voller Lauf auf

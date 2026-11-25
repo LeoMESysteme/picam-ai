@@ -310,6 +310,24 @@ vorübergehend angesteckten USB-RS232-Adapter (PL2303, `/dev/ttyUSB0`,
 picam kalibrieren            # oder: Konsole, Tab Kamera, „Kalibrieren …“ (m)
 ```
 
+**In der Konsole (Tab Kamera, `m` „Kalibrieren …“, `p` „Datei prüfen/importieren …“)**
+läuft derselbe Ablauf in einem eigenen Bildschirm statt im pausierten Terminal:
+Vorprüfung als Karte mit Abzeichen je Punkt (bei einem Problem „nicht möglich,
+nichts geändert“ und nur Schließen), Plan mit deutlicher Bestätigung, dann die
+Schrittliste (wartet / läuft / fertig / fehlgeschlagen / übersprungen), der
+Fortschrittsbalken der Aufnahme, ein Protokollfeld und zuletzt das Ergebnis
+(installiert, abgebrochen, nicht erkannt, Fehler; Kennzahlen, Normierung
+zurückgestellt ja/nein, Werkbank wieder gestartet ja/nein, Laufordner). Meldungen
+wie „Normierung nicht zurückgestellt“ stehen als rote Karte oben. Esc oder `q`
+während des Laufs fordert nach Rückfrage den Abbruch an: er wirkt an der nächsten
+Schrittgrenze, die Auswertung ist nicht abbrechbar (ein Abbruch dort verhindert
+nur die Übernahme), und aufgeräumt (Normierung zurück, Werkbank starten) wird
+immer. Der Bildschirm schließt erst, wenn alles durch ist. Braucht der
+Dienststopp `sudo` (Systeminstallation) und ist es nicht frisch freigegeben, fragt
+der Bildschirm das Passwort des Linux-Kontos in einem maskierten Feld ab; es wird
+nur an `sudo` übergeben. `picam kalibrieren` auf der Kommandozeile bleibt
+unverändert.
+
 Ablauf: prüfen (Adapter liefert Telegramme, StreamCam an USB 3, bestätigte
 Werkbank-Einrichtung vorhanden, kein Lauf/keine Einrichtung/keine
 Diagnosekopie, Platz in `/dev/shm` und auf der Karte) → Plan und Rückfrage

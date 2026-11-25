@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Kalibrierung läuft in der Konsole statt im Terminal.** Neuer
+  Bildschirm `views/kalibrieren_screen.py` (Kamera-Tab, `m` und `p`): Vorprüfung,
+  Plan mit Bestätigung, Schrittliste, Aufnahmebalken, Protokoll, Ergebnis, roter
+  Alarm, maskiertes sudo-Passwort, Abbruch mit Rückfrage; `picam kalibrieren` bleibt.
+  `DeferredConsole` reicht `mark`/`loud` jetzt unverändert an die echte Konsole
+  weiter (der Alarm „Normierung nicht zurückgestellt“ kam sonst nur als Zeile an).
+
 * 2026-11-25: **Kalibrierungs-Backend für die Konsole.** Die Kalibrierung kann
   aus einem Worker-Thread laufen. Ein Konsolenabbruch während der Aufnahme nutzt
   den Aufräumpfad von Strg+C, inklusive Rückstellung und Dienststart. Nach der

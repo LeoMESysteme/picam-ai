@@ -1080,10 +1080,12 @@ async def test_tui_calibration_actions_blocked_states(monkeypatch):
 
 
 @sync
-async def test_tui_calibrate_and_import_run_cli(monkeypatch):
+async def test_tui_calibrate_and_import_open_the_screen(monkeypatch):
     from dispread.admin.ui import AskScreen
+    from dispread.admin.views.kalibrieren_screen import KalibrierenScreen
 
     monkeypatch.setattr(calibrate, 'adapter_present', lambda port=None: True)
+    monkeypatch.setattr(KalibrierenScreen, '_thread_main', lambda self: None)  # kein echter Ablauf
     app = _app('idle')
     async with app.run_test(size=(100, 30)) as pilot:
         actions = await _kamera_actions(app, pilot)
@@ -1092,17 +1094,23 @@ async def test_tui_calibrate_and_import_run_cli(monkeypatch):
         app.run_cli = lambda argv, title: calls.append(argv) or 0
         await pilot.press('m')
         await pilot.pause(0.4)
-        assert calls == [['kalibrieren']]
+        assert isinstance(app.screen, KalibrierenScreen) and app.screen.mode == 'kalibrieren'
+        app.screen.dismiss(None)
+        await pilot.pause(0.2)
         await pilot.press('p')
         await pilot.pause(0.4)
         assert isinstance(app.screen, AskScreen)
         await pilot.click('#ok')
         await pilot.pause(0.4)
-        assert calls[-1] == ['kalibrieren', '--pruefen', '/var/lib/picam/calibration/timing-streamcam.json']
+        assert app.screen.mode == 'pruefen'
+        assert str(app.screen.path) == '/var/lib/picam/calibration/timing-streamcam.json'
+        app.screen.dismiss(None)
+        await pilot.pause(0.2)
         await pilot.press('p')
         await pilot.pause(0.4)
         field = app.screen.query_one('#ask-input')
         field.value = '/home/labor/timing-anderer-pi.json'
         await pilot.click('#ok')
         await pilot.pause(0.4)
-        assert calls[-1] == ['kalibrieren', '--import', '/home/labor/timing-anderer-pi.json']
+        assert app.screen.mode == 'import' and str(app.screen.path) == '/home/labor/timing-anderer-pi.json'
+        assert calls == []  # nichts mehr im pausierten Terminal

@@ -1033,6 +1033,9 @@ class PicamApp(App[int]):
         self.push_screen(HelpScreen())
 
     def action_quit_app(self) -> None:
+        guard = getattr(self.screen, 'quit_guard', None)
+        if guard is not None and guard():  # Kalibrierung läuft: erst Abbruch anfordern, nicht schließen
+            return
         self._stop_log()
         self.exit(0)
 

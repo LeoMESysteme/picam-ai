@@ -1,8 +1,9 @@
 """Tab Kamera: Daten der Logitech StreamCam, Kalibrierung, Lesevorlage, Kameraaktionen.
 
 Je Abschnitt eine Karte (Kamera, Kalibrierung, Lesevorlage). Kalibrieren und
-Prüfen/Importieren laufen als ``picam kalibrieren`` im Terminal (Konsole
-pausiert), damit Plan, Rückfrage und Fortschritt sichtbar sind.
+Prüfen/Importieren laufen im eigenen Bildschirm (``KalibrierenScreen``: Vorprüfung, Plan,
+Schrittliste, Protokoll, Ergebnis), nicht mehr im pausierten Terminal; ``picam kalibrieren``
+bleibt als Kommandozeile erhalten.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from ..widgets import (
     value,
 )
 from .base import FactView, probes_label
+from .kalibrieren_screen import KalibrierenScreen
 
 DASH = '–'
 MODEL = 'Logitech StreamCam'
@@ -173,8 +175,7 @@ class KameraView(FactView):
 
     def calibrate(self) -> None:
         if self.calibrate_blocker() is None:
-            self.app.run_worker(self._run_calibration(['kalibrieren'], 'Timing-Kalibrierung'),
-                                group='calibrate', exclusive=True)
+            self.app.push_screen(KalibrierenScreen(self.app.instance, 'kalibrieren'))
 
     def check_or_import(self) -> None:
         if self.import_blocker() is None:
@@ -193,16 +194,4 @@ class KameraView(FactView):
             return
         path = path.strip()
         same = bool(current) and Path(path).expanduser().resolve() == Path(current).resolve()
-        argv = ['kalibrieren', '--pruefen', path] if same else ['kalibrieren', '--import', path]
-        await self._run_calibration(argv, 'Kalibrierdatei prüfen' if same else 'Kalibrierdatei importieren')
-
-    async def _run_calibration(self, argv: list[str], title: str) -> None:
-        app = self.app
-        code = app.run_cli(argv, title)
-        words = {0: (probes.OK, f'{title}: erledigt.'),
-                 3: (probes.WARN, f'{title}: Voraussetzung fehlt (siehe Meldung im Terminal).'),
-                 130: (probes.WARN, f'{title}: abgebrochen, nichts geändert.')}
-        level, text = words.get(code, (probes.FAIL, f'{title}: nicht erfolgreich (Exit {code}).'))
-        app.message(level, text)
-        app._setup_at = 0.0
-        app.action_refresh()
+        app.push_screen(KalibrierenScreen(app.instance, 'pruefen' if same else 'import', path=path))

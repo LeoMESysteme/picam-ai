@@ -507,20 +507,35 @@ def _complete(console: Console, outcome: str, code: int, *, reason: str | None =
 class DeferredConsole(Console):
     """Merkt sich Ausgaben, statt sie zu schreiben; ``replay`` gibt sie
     danach in derselben Reihenfolge auf der echten Konsole aus. Im Aufräumen
-    laufen Rückstellung und Dienststart so vor jeder Konsolenausgabe."""
+    laufen Rückstellung und Dienststart so vor jeder Konsolenausgabe.
+    ``mark`` und ``loud`` werden als solche aufgehoben und an der echten Konsole
+    aufgerufen (eine Oberfläche zeigt einen Alarm anders als eine Zeile)."""
 
     def __init__(self, console: Console):
         super().__init__(console.style, console.out, console.err)
         self.target = console
-        self.lines: list[tuple[bool, str]] = []
+        self.events: list[tuple] = []
 
     def line(self, text: str = '', stream=None) -> None:
-        self.lines.append((stream is self.err, text))
+        self.events.append(('line', stream is self.err, text))
+
+    def mark(self, level: str, text: str, stream=None) -> None:
+        self.events.append(('mark', stream is self.err, level, text))
+
+    def loud(self, lines: list[str]) -> None:
+        self.events.append(('loud', False, list(lines)))
 
     def replay(self) -> None:
-        for to_err, text in self.lines:
-            self.target.line(text, self.target.err if to_err else None)
-        self.lines.clear()
+        target = self.target
+        for kind, to_err, *args in self.events:
+            stream = target.err if to_err else None
+            if kind == 'line':
+                target.line(args[0], stream)
+            elif kind == 'mark':
+                target.mark(args[0], args[1], stream)
+            else:
+                target.loud(args[0])
+        self.events.clear()
 
 
 class Progress:
