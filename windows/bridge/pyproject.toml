@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dispread-windows-bridge"
-version = "1.0.0"
+version = "1.1.0"
 description = "Internal Windows runtime probe for the provisional GSVmulti bridge"
 requires-python = ">=3.13"
 # Installation/builds use reviewed hash locks, never an implicit Pi dependency resolution.

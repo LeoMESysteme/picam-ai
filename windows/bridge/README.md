@@ -296,7 +296,7 @@ Paketierungsreferenz: [Inno-Architekturgrenzen](https://jrsoftware.org/ishelp/to
 `QT_QPA_PLATFORM=offscreen PYTHONPATH=src:../../src python -m pytest -q tests/test_ui*.py`.
 Nur unter Linux geprüft, keine Windows-Abnahme.
 
-## Release bauen (1.0.0)
+## Release bauen (1.1.0)
 
 Voraussetzung: Windows-11-x64-PC mit Python ≥ 3.13 x64, Git-Arbeitsbaum **ohne nicht eingecheckte
 Änderungen** (der Release-Build verweigert sonst, damit der Commit eindeutig ist). Die Version steht
@@ -315,10 +315,10 @@ Compiler bricht der Release-Build vor PyInstaller ab.
 
 In `windows\bridge\dist-release\` liegen nach erfolgreichem Bau die unsignierten Dateien für Forgejo.
 
-- **`GSVmulti-Bruecke-1.0.0-portable.exe`** ist eine einzelne Datei zum direkten Start.
+- **`GSVmulti-Bruecke-1.1.0-portable.exe`** ist eine einzelne Datei zum direkten Start.
   Der Start, insbesondere der erste, kann etwas länger dauern, weil sich die Laufzeit
   in ein temporäres Verzeichnis entpackt.
-- **`GSVmulti-Bruecke-Setup-1.0.0.exe`** installiert für den aktuellen Benutzer. Die Brücke
+- **`GSVmulti-Bruecke-Setup-1.1.0.exe`** installiert für den aktuellen Benutzer. Die Brücke
   ist danach im Startmenü verfügbar, auf Wunsch auch auf dem Desktop. Für ein Update
   das neuere Setup ausführen. Setup bietet das Schließen der laufenden installierten
   Brücke an und erhält die Benutzerdaten.

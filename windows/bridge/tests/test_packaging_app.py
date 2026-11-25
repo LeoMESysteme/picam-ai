@@ -143,7 +143,7 @@ def test_release_build_path_is_clean_and_distinct():
     iss = (BRIDGE / "packaging" / "setup-app.iss").read_text(encoding="utf-8")
     assert "#ifdef Release" in iss and "VersionInfoVersion={#AppVersion}.0" in iss
     assert "interner Test" in iss                                    # Testbuild bleibt unveraendert
-    assert (BRIDGE / "pyproject.toml").read_text(encoding="utf-8").count('version = "1.0.0"') == 1
+    assert (BRIDGE / "pyproject.toml").read_text(encoding="utf-8").count('version = "1.1.0"') == 1
 
 
 def test_double_click_starter_bypasses_policy_only_for_this_run():
