@@ -15,7 +15,7 @@ from textual import on
 from textual.widgets import Static
 
 from dispread.bridge.baud import UART_BAUD
-from dispread.hardware_ports import DIRECT_UART_BAUD, GSV_UART_PORT
+from dispread.hardware_ports import DIRECT_UART_BAUD
 
 from .. import probes
 from ..ui import Action
@@ -34,6 +34,7 @@ from ..widgets import (
     value,
 )
 from .base import FactView
+from .uart import output_label
 
 DASH = '–'
 #: (Schlüssel in live.status.output.transport, lange Beschriftung, kurze Beschriftung, Zeichen)
@@ -153,7 +154,7 @@ class AusgabeView(FactView):
             return status
         if chosen == 1:
             uart = dict(app.fact('uart').detail) if app.fact('uart') is not None else {}
-            return [*status, ('Port', value(GSV_UART_PORT)),
+            return [*status, ('Port', value(output_label(app.instance.output_port))),
                     ('Baudrate', value(DIRECT_UART_BAUD, 'Bd · Standard, je Lauf wählbar')),
                     ('Gerät', value(uart.get('Gerät'))), ('Boot', value(uart.get('Boot')))]
         if chosen == 2:
@@ -161,7 +162,7 @@ class AusgabeView(FactView):
             raw = dict(bridge.detail).get('UART-Empfang') if bridge is not None else None
             prepared = UART_STATES.get(raw, raw)
             receive = badge(UART_LEVELS.get(prepared, probes.UNKNOWN), prepared) if prepared else value(None)
-            return [*status, ('Port', value(GSV_UART_PORT)), ('Baudrate', value(UART_BAUD, 'Bd')),
+            return [*status, ('Port', value(output_label(app.instance.output_port))), ('Baudrate', value(UART_BAUD, 'Bd')),
                     ('UART-Empfang', receive), *self._bridge_rows()]
         return [*status, ('Werkbank', value(app.instance.url), True), *self._bridge_rows()]
 

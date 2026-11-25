@@ -158,8 +158,8 @@ class KameraView(FactView):
         app = self.app
         if not app.installed() or app.instance.unit is None or not app.instance.calibration:
             return 'nur für eine installierte Werkbank mit Dienst'
-        if not calibrate.adapter_present():
-            return f'kein USB-RS232-Adapter an {calibrate.REFERENCE_PORT}'
+        if not calibrate.adapter_present(app.instance.reference_port):
+            return f'kein USB-RS232-Adapter an {app.instance.reference_port}'
         if self._service_up():
             return app.blocker
         return None

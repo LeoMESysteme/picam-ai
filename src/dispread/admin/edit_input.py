@@ -112,7 +112,18 @@ class EditInput(Input):
                     step(1 if event.key == 'down' else -1)
             return  # im Bearbeiten: im Feld bleiben
         if not self.editing:
-            event.prevent_default()  # Input-Handler (Tippen) überspringen; die Taste läuft zur Konsole weiter
+            event.prevent_default()  # Input-Handler (Tippen) überspringen
+            # prevent_default verhindert auch die Bindungsprüfung: Tasten der Konsole (Ziffern, i, Aktionen) hier auslösen
+            if await self._run_console_binding(event.key):
+                event.stop()
+
+    async def _run_console_binding(self, key: str) -> bool:
+        # Textual blendet druckbare Tasten-Bindungen aus der Kette, solange ein Eingabefeld Fokus hat; die
+        # Bindungen der App (Ziffern, i, g, q) hier direkt ausführen
+        for binding in self.app._bindings.key_to_bindings.get(key, ()):
+            if not binding.priority and await self.app.run_action(binding.action, self.app):
+                return True
+        return False
 
     async def _on_mouse_down(self, event: events.MouseDown) -> None:
         self.start_edit()

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import shlex
-import sys
 from datetime import datetime
 from pathlib import Path
 
 from .. import probes
-from ..ui import Action, Confirmation, ConfirmScreen
+from ..ui import Action
 from ..widgets import (
     ActionBar,
     SectionCard,
@@ -24,6 +21,7 @@ from ..widgets import (
     value,
 )
 from .base import FactView
+from .zertifikat_screen import ZertifikatErneuernScreen
 
 DASH = '–'
 
@@ -46,8 +44,9 @@ class ZertifikatView(FactView):
             'Läuft es ab oder passt der Name nicht zur Adresse, warnen Browser. Nach dem Erneuern müssen '
             'Browser dem neuen Zertifikat wieder vertrauen, und die Werkbank braucht einen Neustart.',
             'Mit gekoppelter Windows-Brücke ist das Zertifikat zugleich die Identität des Pi: die Brücke '
-            'merkt sich seinen Fingerabdruck. Ein neues Zertifikat würde jede Kopplung brechen und darum '
-            'wird es dort nicht angeboten.',
+            'merkt sich seinen Fingerabdruck. Erneuern stellt es neu aus (gleiche Pi-ID, gleicher Schlüssel); '
+            'danach muss jede Windows-Brücke das neue Profil pi.dispread aus der Werkbank laden und neu '
+            'koppeln. Erneuern ist nur möglich, wenn kein Lauf aktiv ist.',
             'HTTPS lässt sich nicht abschalten: die Brücke und die Anmeldung verlangen verschlüsselte Verbindungen.')
     INFO_FACTS = ('zertifikat',)
 
@@ -72,11 +71,11 @@ class ZertifikatView(FactView):
         bridge = self.is_bridge_identity()
         if bridge is None:
             return 'Zertifikat nicht lesbar (Werkbank aus?)'
-        if bridge:
-            return 'Brückenidentität: Erneuern bräche alle Kopplungen'
-        if self.cert_directory() is None:
+        if bridge and not self.app.instance.bridge_directory:
+            return 'Ort der Brückenidentität unbekannt'
+        if not bridge and self.cert_directory() is None:
             return 'Ort des Zertifikats unbekannt'
-        return None
+        return self.app.blocker
 
     def update_view(self) -> None:
         app = self.app
@@ -110,8 +109,13 @@ class ZertifikatView(FactView):
             renew = join(badge(probes.OFF, 'nicht möglich', 'off'), f'  {reason}')
             hint = help_line('Erneuern stellt das Zertifikat mit demselben Schlüssel neu aus.', 'i', 'mehr')
         else:
-            renew = join(badge(probes.OK, 'möglich', 'ok'), '  derselbe Schlüssel; Browser müssen wieder vertrauen')
-            hint = help_line('Danach den Dienst neu starten, erst dann gilt das neue Zertifikat.')
+            if self.is_bridge_identity():
+                renew = join(badge(probes.OK, 'möglich', 'ok'),
+                             '  gleiche Pi-ID; alle Windows-Brücken müssen neu koppeln')
+                hint = help_line('Der Dienst wird dabei neu gestartet; Browser müssen neu vertrauen.')
+            else:
+                renew = join(badge(probes.OK, 'möglich', 'ok'), '  derselbe Schlüssel; Browser müssen wieder vertrauen')
+                hint = help_line('Der Dienst wird dabei neu gestartet, erst dann gilt das neue Zertifikat.')
         rows = [('Erneuern', renew, True),
                 ('Abschalten', join(badge(probes.OFF, 'nicht vorgesehen', 'off'),
                                     '  Brücke und Anmeldung verlangen TLS'), True)]
@@ -122,31 +126,8 @@ class ZertifikatView(FactView):
     def actions(self) -> list[Action]:
         return [Action('n', 'Erneuern', self.renew, blocked=self.renew_blocker(), icon='restart')]
 
-    def renew_command(self) -> list[str]:
-        command = [sys.executable, '-m', 'dispread.workbench.cli', 'renew-tls', '--directory',
-                   str(self.cert_directory())]
-        if self.app.instance.scope == 'system' and os.geteuid() != 0:
-            command = ['sudo', *command]
-        return command
-
     def renew(self) -> None:
         if self.renew_blocker() is None:
-            self.app.run_worker(self.confirm_and_renew(), group='renew', exclusive=True)
-
-    async def confirm_and_renew(self) -> None:
-        app = self.app
-        command = self.renew_command()
-        ok = await app.push_screen_wait(ConfirmScreen(Confirmation(
-            'Zertifikat erneuern',
-            ['Stellt das Zertifikat mit demselben Schlüssel neu aus; das alte bleibt als Sicherung liegen.',
-             'Browser und Windows müssen dem neuen Zertifikat wieder vertrauen. Die Werkbank muss danach '
-             'neu gestartet werden, erst dann liefert sie das neue aus.'],
-            [shlex.join(command)], 'Erneuern', danger=True)))
-        if not ok:
-            return
-        code = app.run_in_terminal(command, 'Zertifikat erneuern')
-        if code == 0:
-            app.message(probes.OK, 'Zertifikat erneuert. Dienst neu starten, Browser müssen wieder vertrauen.')
-        else:
-            app.message(probes.FAIL, f'Erneuern fehlgeschlagen (Exit {code}).')
-        app.action_refresh()
+            mode = 'bridge' if self.is_bridge_identity() else 'tls'
+            self.app.push_screen(ZertifikatErneuernScreen(self.app.instance, mode, directory=self.cert_directory(),
+                                                         collect=self.app._collect))

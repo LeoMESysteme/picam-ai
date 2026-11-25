@@ -1,6 +1,7 @@
 """Tabs Dienst, Kamera, Ausgabe, Zertifikat der picam-Konsole (Headless)."""
 
 import asyncio
+import dataclasses
 import functools
 import io
 
@@ -37,6 +38,47 @@ def text_of(app, tab_id):
 async def open_tab(pilot, key):
     await pilot.press(key)
     await pilot.pause(0.4)
+
+
+@sync
+async def test_zertifikat_bridge_identity_can_be_renewed_with_explicit_warning():
+    from dispread.admin.views.zertifikat_screen import ZertifikatErneuernScreen
+
+    app = admin_fakes.make_app('idle', instance=dataclasses.replace(
+        admin_fakes.INSTANCE, bridge_directory='/var/lib/picam/workbench/bridge'))
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause(0.4)
+        await open_tab(pilot, '6')
+        view = app.view()
+        text = text_of(app, 'zertifikat')
+        assert 'urn:picam:pi:565e3468' in text and '06.11.2027' in text and 'nicht vorgesehen' in text
+        assert 'Windows-Brücken müssen neu koppeln' in text
+        assert view.renew_blocker() is None and not view.query_one('#act-n', Button).disabled
+        await pilot.press('n')
+        await pilot.pause(0.4)
+        assert isinstance(app.screen, ZertifikatErneuernScreen) and app.screen.mode == 'bridge'
+        app.screen.cancel_event.set()
+
+
+@sync
+async def test_zertifikat_renew_for_plain_certificate_opens_console_screen():
+    from dispread.admin.views.zertifikat_screen import ZertifikatErneuernScreen
+
+    app = admin_fakes.make_app('idle')
+    ran = []
+    app.run_in_terminal = lambda command, title: ran.append(command) or 0
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause(0.4)
+        fact = app.snapshot.facts['zertifikat']
+        fact.detail = [(k, v) for k, v in fact.detail if k != 'Identität']
+        app.view('zertifikat').update_view()
+        await open_tab(pilot, '6')
+        assert app.view().renew_blocker() is None
+        await pilot.press('n')
+        await pilot.pause(0.4)
+        assert isinstance(app.screen, ZertifikatErneuernScreen) and app.screen.mode == 'tls'
+        assert not ran                                  # nichts mehr im pausierten Terminal
+        app.screen.cancel_event.set()
 
 
 @pytest.mark.parametrize('size', SIZES)
@@ -194,39 +236,7 @@ async def test_ausgabe_paths_and_bridge_uart_actions():
         assert 'bridge.prepare-uart' in socket.calls
 
 
-@sync
-async def test_zertifikat_bridge_identity_cannot_be_renewed():
-    app = admin_fakes.make_app('idle')
-    async with app.run_test(size=(100, 30)) as pilot:
-        await pilot.pause(0.4)
-        await open_tab(pilot, '6')
-        view = app.view()
-        text = text_of(app, 'zertifikat')
-        assert 'urn:picam:pi:565e3468' in text and '06.11.2027' in text and 'nicht vorgesehen' in text
-        assert 'Brückenidentität' in view.renew_blocker()
-        assert view.query_one('#act-n', Button).disabled
 
-
-@sync
-async def test_zertifikat_renew_confirm_for_plain_certificate():
-    app = admin_fakes.make_app('idle')
-    ran = []
-    app.run_in_terminal = lambda command, title: ran.append(command) or 0
-    async with app.run_test(size=(100, 30)) as pilot:
-        await pilot.pause(0.4)
-        fact = app.snapshot.facts['zertifikat']
-        fact.detail = [(k, v) for k, v in fact.detail if k != 'Identität']
-        app.view('zertifikat').update_view()
-        await open_tab(pilot, '6')
-        assert app.view().renew_blocker() is None
-        await pilot.press('n')
-        await pilot.pause(0.4)
-        assert isinstance(app.screen, ConfirmScreen)
-        assert app.screen.focused.id == 'cancel'
-        assert not ran
-        await pilot.click('#ok')
-        await pilot.pause(0.5)
-        assert ran and 'renew-tls' in ran[0] and '/var/lib/picam/workbench/tls' in ran[0]
 
 
 @pytest.mark.parametrize('size', SIZES)

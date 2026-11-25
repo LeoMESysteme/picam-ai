@@ -332,6 +332,8 @@ def parser():
                      help='Auch das Paket fastfetch entfernen, wenn der Installer es installiert hat')
     cli.add_argument('--apply', action='store_true', help='Plan tatsächlich ausführen')
     cli.add_argument('--json', action='store_true', help='Maschinenlesbarer Plan/Ergebnis auf stdout')
+    cli.add_argument('--guided', action='store_true',
+                     help='Geführt im Terminal: Plan, Rückfrage („deinstallieren“ eintippen), Ausführung, Zusammenfassung')
     return cli
 
 
@@ -354,8 +356,118 @@ def plan_from_args(args):
                           remove_fastfetch_package=args.remove_fastfetch_package)
 
 
+def describe(plan):
+    """Plan als Anzeigezeilen: ``remove`` und ``keep`` je ``[(Beschriftung, Text)]``, dazu ``notes``.
+
+    Nur Darstellung: dieselben Einträge wie im Plan, in Worten des Bedieners gruppiert.
+    """
+    request = plan.get('request', {})
+    unit = (plan.get('unit') or {}).get('path')
+    link = request.get('link')
+    remove, refs = [], []
+    for action in plan['actions']:
+        path, argv = action.get('path'), action.get('argv')
+        if action['kind'] == 'command' and argv and 'disable' in argv:
+            remove.append(('Dienst', f'{UNIT_NAME} stoppen und Autostart abschalten'))
+        elif action['kind'] == 'command':
+            continue  # systemd neu laden: gehört zum Dienst
+        elif path and path == unit:
+            remove.append(('Dienst', f'Unit-Datei {path} entfernen'))
+        elif path and path == link:
+            remove.append(('Befehl picam', f'Link {path}'))
+        elif path and Path(path).name in CODE_ENTRIES and Path(path).parent == Path(plan['prefix']):
+            refs.append(Path(path).name)
+        elif action['kind'] == 'rmtree' and path == str(Path(plan['prefix']) / 'releases'):
+            remove.append(('Programmversionen', f'{path} (alle Versionen)'))
+        elif action['kind'] == 'rmdir_if_empty':
+            remove.append(('Installationsort', f'{path}, falls danach leer'))
+        elif action['kind'] in ('rmtree', 'unlink') and plan['purge_data']:
+            remove.append(('Daten' if action['kind'] == 'rmtree' else 'Einstellungen', f'{path}: {action["text"]}'))
+        else:
+            remove.append(('me-fastfetch' if 'fastfetch' in action['text'] or 'bashrc' in str(path) else 'Weiteres',
+                           f'{action["text"]}' + (f' ({path})' if path else '')))
+    if refs:
+        where = next((i for i, (label, _) in enumerate(remove) if label == 'Programmversionen'), len(remove))
+        remove.insert(where, ('Verweise', ', '.join(sorted(set(refs))) + ' im Installationsort'))
+    keep = []
+    for item in plan['keep']:
+        path = item['path']
+        if path == request.get('data'):
+            label = 'Daten'
+            what = 'Läufe, Kalibrierung, Zertifikat, Brückenidentität und Kopplungen'
+        elif path == request.get('config') or path == str(Path(request.get('config') or '/').parent):
+            label, what = 'Einstellungen', 'Konfiguration der Werkbank'
+        elif path == request.get('runtime'):
+            label, what = 'Laufzeit', 'Laufzeitordner'
+        else:
+            label, what = 'Bleibt', item['reason']
+        keep.append((label, f'{path}: {what}'))
+    return {'remove': remove, 'keep': keep, 'notes': list(plan['notes']), 'needs_root': plan['needs_root'],
+            'service': bool(plan['stop_service'])}
+
+
+def guided_main(args, out=None, ask=input, apply=apply_uninstall):
+    """Geführte Deinstallation im Terminal (nach dem Ende der Konsole): Plan, „deinstallieren“, Fortschritt, Fazit.
+
+    Gleiche Plan- und Ausführungslogik wie ``--apply``; nur die Darstellung ist die Formsprache der Konsole.
+    Rückgabe: 0 erledigt, 1 Fehler, 130 nicht bestätigt.
+    """
+    from .tui import Out
+
+    out = out or Out()
+    try:
+        plan = plan_from_args(args)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        out.card('Deinstallation nicht möglich', [('Grund', str(error), 'fail')], badge='fail',
+                 hint='Nichts geändert.')
+        return 1
+    view = describe(plan)
+    out.rule('picam deinstallieren')
+    out.card('Wird entfernt', [(label, text) for label, text in view['remove']], badge='warn',
+             hint='Der laufende Werkbank-Dienst wird dabei gestoppt.' if view['service'] else None)
+    if view['keep']:
+        out.card('Bleibt erhalten', [(label, text) for label, text in view['keep']], badge='ok',
+                 hint='Eine Neuinstallation findet diese Daten wieder.')
+    elif plan['purge_data']:
+        out.card('Bleibt erhalten', [('Daten', 'nichts: --purge-data löscht auch Daten und Einstellungen')],
+                 badge='fail')
+    rows = [('Hinweis', note) for note in view['notes']]
+    if not plan['purge_data']:
+        rows.append(('Daten löschen', 'endgültig nur mit --purge-data (vorher sichern)'))
+    rows.append(('Rechte', 'Administratorrechte (sudo) nötig' if view['needs_root'] else 'keine Administratorrechte nötig'))
+    out.card('Hinweise', rows)
+    out.line()
+    try:
+        answer = ask(f'  {out.sym["ask"]} Zum Deinstallieren „deinstallieren“ eintippen '
+                     f'(alles andere bricht ab): ').strip()
+    except (EOFError, KeyboardInterrupt):
+        answer = ''
+    if answer != 'deinstallieren':
+        out.line()
+        out.status('off', 'Abgebrochen', 'Nichts deinstalliert. Die Konsole startet wieder mit picam.')
+        return 130
+    out.line()
+    try:
+        with out.progress(len(plan['actions'])) as steps:
+            result = apply(plan, progress=steps.step)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        detail = str(error)
+        if isinstance(error.__cause__, subprocess.CalledProcessError) and error.__cause__.stderr:
+            detail += ' ' + str(error.__cause__.stderr)[-400:].strip()
+        out.card('Deinstallation fehlgeschlagen', [('Grund', detail, 'fail')], badge='fail',
+                 hint='Teile können schon entfernt sein; der Grund nennt, was erledigt ist.')
+        return 1
+    prefix_gone = not Path(result['prefix']).exists()
+    rows = [('Programm', f'aus {result["prefix"]} entfernt' + ('' if prefix_gone else ' (Ordner bleibt)'), 'ok')]
+    rows += [(label, text) for label, text in describe(result)['keep']]
+    out.card('Fertig', rows, badge='ok', hint='Neu installieren: install.sh im Release-Archiv, danach picam.')
+    return 0
+
+
 def main(argv):
     args = parser().parse_args(argv)
+    if args.guided and not (args.json or args.apply):
+        return guided_main(args)
     try:
         plan = plan_from_args(args)
         result = apply_uninstall(plan, progress=None if args.json else lambda text: print('· ' + text)) \

@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import os
 import select
-import shlex
 import subprocess
 import sys
 import threading
@@ -31,7 +30,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import ContentSwitcher, Input, Static, Tab, Tabs
 
-from . import probes
+from . import probes, uninstall
 from .instance import Instance
 from .ui import (  # noqa: F401  (für Tests und Tabs erneut exportiert)
     ACCENT,
@@ -53,6 +52,8 @@ from .ui import (  # noqa: F401  (für Tests und Tabs erneut exportiert)
     symbol,
 )
 from .views import TABS
+from .views.uninstall_screen import UninstallScreen
+from .views.update_screen import UpdateScreen
 
 MIN_WIDTH, MIN_HEIGHT = 48, 14
 SPLIT_WIDTH = 76
@@ -243,6 +244,9 @@ class PicamApp(App[int]):
         self._spin = 0
         self._spinner_timer = None
         self.current = 'dashboard'
+        #: Nach dem Ende der Konsole im Terminal auszuführen (``run``): neu starten oder deinstallieren
+        self.relaunch: list[str] | None = None
+        self.terminal_job: list[str] | None = None
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
         """Palettenvariablen ($picam-…) schon vor dem Umschalten aufs picam-Theme bekannt machen."""
@@ -326,7 +330,7 @@ class PicamApp(App[int]):
         self.main_screen.query_one('#tabs', Tabs).active = f'tab-{tab_id}'
 
     def action_open_tab(self, tab_id: str) -> None:
-        if isinstance(self.focused, Input):
+        if self.typing():
             return
         self.open_tab(tab_id)
 
@@ -352,21 +356,31 @@ class PicamApp(App[int]):
         else:
             self.set_focus(None)
 
+    def typing(self) -> bool:
+        """Tippt der Bediener gerade? Ein Eingabefeld zählt nur beim echten Bearbeiten (``EditInput.editing``)."""
+        return isinstance(self.focused, Input) and getattr(self.focused, 'editing', True)
+
+    def move_focus(self, step: int) -> bool:
+        """Fokus im Tab um ``step`` Elemente bewegen; False, wenn nichts mehr folgt."""
+        widgets = self._view_focusables()
+        if not widgets:
+            return False
+        if self.focused not in widgets:
+            widgets[0 if step > 0 else -1].focus()
+            return True
+        index = widgets.index(self.focused) + step
+        if 0 <= index < len(widgets):
+            widgets[index].focus()
+            widgets[index].scroll_visible()
+            return True
+        return False
+
     def action_focus_step(self, step: int) -> None:
         """Pfeiltasten: nächstes/voriges Element im Tab (Knöpfe, Liste, Felder)."""
         if len(self.screen_stack) > 1:
             (self.screen.focus_next if step > 0 else self.screen.focus_previous)()
             return
-        widgets = self._view_focusables()
-        if not widgets:
-            return
-        if self.focused not in widgets:
-            widgets[0 if step > 0 else -1].focus()
-            return
-        index = widgets.index(self.focused) + step
-        if 0 <= index < len(widgets):
-            widgets[index].focus()
-            widgets[index].scroll_visible()
+        self.move_focus(step)
 
     @on(Tabs.TabActivated, '#tabs')
     def _tab_activated(self, event: Tabs.TabActivated) -> None:
@@ -389,7 +403,7 @@ class PicamApp(App[int]):
             self.focus_view()
 
     def action_info(self) -> None:
-        if isinstance(self.focused, Input):
+        if self.typing():
             return
         view = self.view()
         if view.INFO:
@@ -397,7 +411,7 @@ class PicamApp(App[int]):
 
     def on_key(self, event) -> None:
         """Tasten des aktuellen Tabs (stehen in der Tastenleiste)."""
-        if isinstance(self.focused, Input) or len(self.screen_stack) > 1:
+        if self.typing() or len(self.screen_stack) > 1:
             return
         if self.main_screen.query('#intro'):
             return
@@ -884,40 +898,25 @@ class PicamApp(App[int]):
             value=self._newest_archive(), placeholder='/home/…/picam-1.1.0.tar.gz'))
         if not source:
             return
-        ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
-            'Update installieren', [f'Archiv: {source}', 'Dienst wird neu gestartet.'],
-            [f'picam update --source {shlex.quote(source)}'], 'Installieren')))
-        if not ok:
-            return
-        self._after_update(self.run_cli(['update', '--source', source, '--yes'], 'picam update'))
+        await self.push_screen_wait(UpdateScreen(self.instance, 'update', source=source))
 
     @work(exclusive=True, group='update')
     async def start_rollback(self) -> None:
         fact = self.fact('version')
         if not self.installed() or fact is None:
             return
+        if self.blocker:
+            self.message(probes.WARN, f'Rückweg gesperrt: {self.blocker}')
+            return
         previous = dict(fact.detail).get('Vorige')
         if not previous:
             self.message(probes.OFF, 'Keine vorige Version vorhanden.')
             return
-        ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
-            f'Zurück auf {previous}', ['Schaltet auf die vorige Version um und startet den Dienst neu.'],
-            ['picam update --rollback'], 'Zurückschalten', blocker=self.blocker)))
-        if ok:
-            self._after_update(self.run_cli(['update', '--rollback', '--yes'], 'picam update --rollback'))
-
-    def _after_update(self, code: int) -> None:
-        from .instance import discover
-
-        self.instance = discover(self.instance.config)
-        self._setup_at = 0.0
-        self.message(probes.OK if code == 0 else probes.FAIL,
-                     'Update abgeschlossen.' if code == 0 else f'Update nicht abgeschlossen (Exit {code}).')
-        self.action_refresh()
+        await self.push_screen_wait(UpdateScreen(self.instance, 'rollback', release_id=previous))
 
     def _uninstall_command(self) -> list[str]:
         script = Path(self.instance.root or '') / 'install.sh'
-        command = [str(script), '--uninstall', '--mode', 'system' if self.instance.scope == 'system' else 'user']
+        command = [str(script), *uninstall.installer_argv(self.instance), '--guided']
         if self.instance.scope == 'system' and os.geteuid() != 0:
             command.insert(0, 'sudo')
         return command
@@ -935,37 +934,10 @@ class PicamApp(App[int]):
         if blocker:
             self.message(probes.WARN, f'Deinstallieren: {blocker}')
             return
-        command = self._uninstall_command()
-        ok = await self.push_screen_wait(ConfirmScreen(Confirmation(
-            'Werkbank deinstallieren',
-            ['Stoppt den Dienst und entfernt Dienst, Programmversionen und den Befehl picam.',
-             'Läufe, Einstellungen, Kopplungen und Kalibrierung bleiben erhalten (eine Neuinstallation '
-             'findet sie wieder). Endgültig löschen nur im Terminal mit --purge-data.',
-             'Zuerst zeigt der Installer den genauen Plan; erst danach wird gefragt.'],
-            [' '.join(shlex.quote(c) for c in command)], 'Plan zeigen', danger=True)))
-        if not ok:
-            return
-        with self.suspend():
-            print('\nDeinstallation – Plan:\n')
-            subprocess.call(command)
-            try:
-                answer = input('\nJetzt so deinstallieren? Tippe „deinstallieren“ zum Bestätigen: ').strip()
-            except EOFError:
-                answer = ''
-            code = None
-            if answer == 'deinstallieren':
-                code = subprocess.call([*command, '--apply'])
-                print(f'\nExit {code}.')
-            else:
-                print('\nNicht deinstalliert.')
-            try:
-                input('Enter drücken …')
-            except EOFError:
-                pass
-        if code == 0:
-            self.exit(0)  # Programm und Befehl sind entfernt: Konsole beenden
-        elif code is not None:
-            self.message(probes.FAIL, f'Deinstallation nicht abgeschlossen (Exit {code}).')
+        if await self.push_screen_wait(UninstallScreen(self.instance)):
+            # Konsole beenden; ``run`` führt danach die geführte Deinstallation im Terminal aus
+            self.terminal_job = self._uninstall_command()
+            self.exit(0)
 
     # ------------------------------------------------------------ Protokoll
     def _start_log(self) -> None:
@@ -1070,7 +1042,27 @@ def intro_wanted(flag: bool = True) -> bool:
 def run(instance: Instance, intro: bool = True, onboarding: str | None = 'auto') -> int:
     app = PicamApp(instance, intro=intro_wanted(intro), onboarding=onboarding)
     result = app.run()
-    return 0 if result is None else int(result)
+    code = 0 if result is None else int(result)
+    if app.terminal_job:
+        return run_terminal_job(app.terminal_job, app.instance)
+    if app.relaunch:
+        try:
+            os.execv(app.relaunch[0], app.relaunch)  # ersetzt diesen Prozess; kehrt nur bei Fehler zurück
+        except OSError as error:
+            print(f'picam: Neustart der Konsole fehlgeschlagen ({error}). Bitte „picam“ neu aufrufen.',
+                  file=sys.stderr)
+    return code
+
+
+def run_terminal_job(command: list[str], instance: Instance) -> int:
+    """Geführte Deinstallation im Terminal, nachdem die Konsole beendet ist."""
+    if command and command[0] == 'sudo':
+        print('\nDie Deinstallation braucht Administratorrechte; sudo fragt gleich nach dem Passwort.\n')
+    try:
+        return subprocess.call(command)
+    except OSError as error:
+        print(f'picam: Deinstallation konnte nicht gestartet werden ({error}).', file=sys.stderr)
+        return 1
 
 
 def snapshot_json(app: PicamApp) -> str:

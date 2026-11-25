@@ -403,19 +403,61 @@ wiederfindet; `--purge-data` löscht auch sie. me-fastfetch: entfernt
 werden nur unveränderte Dateien laut Manifest und der markierte
 `.bashrc`-Block (gesichert); das Paket `fastfetch` nur mit
 `--remove-fastfetch-package` und nur, wenn der Installer es eingespielt hat.
-In der Konsole: Einstellungen, `x` (zeigt zuerst den Plan, dann
-Bestätigung durch Tippen).
+In der Konsole: Einstellungen, `x`. Zuerst zeigt ein Bildschirm den Plan des
+Installers: Karte „Wird entfernt“ (Dienst, Programmversionen, Befehl `picam`
+mit Pfaden), Karte „Bleibt erhalten“ (Daten, Einstellungen mit Pfaden),
+ob `sudo` nötig ist und den Hinweis auf `--purge-data`. Der Knopf
+„Deinstallieren …“ ist rot, der Fokus steht auf „Abbrechen“; bis dahin ist
+nichts geändert. Nach der Bestätigung beendet sich die Konsole, und die
+Deinstallation läuft im Terminal (nicht in einem pausierten Fenster):
+`install.sh --uninstall … --guided` zeigt den Plan noch einmal in der
+Formsprache der Konsole (Karten und Abzeichen, bei `NO_COLOR` und ohne
+Terminal als einfacher Text), fragt, bis „deinstallieren“ eingetippt ist
+(alles andere bricht ab, Exit 130), zeigt je Schritt den Fortschritt und
+endet mit einer Zusammenfassung. Das Passwort für `sudo` fragt das Terminal
+vor dem Plan ab. Ohne `--guided` bleibt es bei Plan und `--apply`.
 
 ## Zertifikat erneuern
 
-Ohne Windows-Brücke: `python -m dispread.workbench.cli renew-tls
-[--directory DIR] [--host ADRESSE] [--days 365]` stellt das Zertifikat mit
-demselben Schlüssel neu aus (alte Datei als `cert.pem.bak-<Zeit>`).
-Browser müssen dem neuen Zertifikat erneut vertrauen, die Werkbank muss
-neu starten. Mit Brücke ist das Zertifikat die Brückenidentität; die
-Windows-App prüft dessen vollständigen SHA-256. Eine Erneuerung würde jede
-Kopplung ungültig machen, deshalb gibt es dafür keinen Befehl. HTTPS lässt
-sich nicht abschalten (die Brücke setzt TLS voraus).
+In der Konsole: Tab Zertifikat, `n`. Der Bildschirm zeigt die Folgen, prüft
+die Laufsperre (läuft eine Messung oder Einrichtung, ist die Erneuerung
+gesperrt und nichts wird geändert), erneuert, startet den Dienst neu und
+zeigt das Ergebnis.
+
+* **Ohne Windows-Brücke** (`renew-tls`): Das Zertifikat wird mit demselben
+  Schlüssel neu ausgestellt (alte Datei als `cert.pem.bak-<Zeit>`). Browser
+  müssen dem neuen Zertifikat erneut vertrauen.
+* **Mit Brücke** ist das Zertifikat die Brückenidentität (die Windows-App
+  prüft dessen vollständigen SHA-256). Die Erneuerung stellt ein neues
+  Zertifikat mit derselben Pi-ID, demselben Schlüssel und denselben Namen
+  aus; die Sicherung (mit privatem Schlüssel) liegt in einem Ordner nur für
+  das Dienstkonto. Danach muss **jede Windows-Brücke** das neue Profil
+  `pi.dispread` laden (Werkbank im Browser, Windows-Brücke einrichten, oder
+  auf dem Pi `dispread bridge export-profile …`) und neu koppeln; die
+  Tokens auf dem Pi bleiben. Browser müssen neu vertrauen. Weil das jede
+  Kopplung bricht, verlangt die Konsole das Eintippen von „erneuern“. Das
+  Ergebnis nennt alter und neuer Fingerabdruck, Gültigkeit, Sicherung und die
+  nächsten Schritte. Ohne Konsole: `dispread bridge identity --renew --yes`
+  als Dienstkonto.
+
+HTTPS lässt sich nicht abschalten (die Brücke setzt TLS voraus).
+
+## UART-Ports ändern
+
+In der Konsole: Tab UART, `p`. Der Bildschirm zeigt die Stiftleiste; Pin per
+Pfeiltasten oder Mausklick wählen. Für den Pin öffnet sich ein Dropdown mit
+den **wählbaren** UART-Funktionen (aktiv, oder braucht `config.txt` und
+Pi-Neustart). Nicht wählbare (RX-Pin, belegte Konsole, SPI/I2C-Konflikt,
+belegter Port) stehen mit Grund daneben. Getrennt davon wählt ein zweites
+Dropdown die Referenz (USB-RS232-Adapter, stabile `by-id`-Namen). „Prüfen
+und weiter“ zeigt eine Prüfseite mit Warnungen, den Diffs für `config.txt`
+und die Instanzkonfiguration und was neu startet; nach der Bestätigung (und
+bei Bedarf dem `sudo`-Passwort) schreibt der Worker mit Sicherung. Ein
+nötiger Pi-Neustart wird nur als Befehl angezeigt (`sudo systemctl reboot`);
+picam startet den Pi nie selbst. Pi-Pegel sind 3,3 V: nie direkt an RS-232.
+Die Tabs Ausgabe und UART, die Kalibrierung und `picam einrichten` nutzen
+danach den konfigurierten Ausgang und Referenzport; `picam kalibrieren
+--port` überstimmt nur, wenn angegeben.
 
 ## Update und Rückweg
 
@@ -435,7 +477,13 @@ atomar umschalten (die bisherige wird `previous`), Dienst neu starten und
 auf `/live` warten. Antwortet die neue Version nicht, schaltet picam auf
 die vorige zurück und startet sie neu. Daten, Konfiguration, Identität und
 Kalibrierung bleiben unverändert; die Konfiguration liest die Lesevorlage
-über `current`. In der Konsole: Bereich Version, `u` bzw. `z`.
+über `current`. In der Konsole: Tab Dienst, `u` bzw. `z`. Nach `u` (Archivpfad
+bzw. HTTPS-Adresse eintippen) zeigt ein Bildschirm Plan, Schrittliste mit
+Fortschritt, Protokoll und Ergebnis (alte → neue Version, Rückweg ausgelöst?);
+bei Erfolg fragt er, ob die Konsole mit der neuen Version neu starten soll
+(sie wird dann durch `<prefix>/current/.venv/bin/picam` ersetzt). Ein
+sudo-Passwort wird nur dafür maskiert abgefragt. `z` schaltet gleich auf die
+vorige Version zurück.
 
 Grenze: Die Laufsperre ist eine Prüfung unmittelbar vor Vorbereitung und
 Umschalten, keine atomare Wartungssperre im Dienst. Startet jemand genau

@@ -98,7 +98,7 @@ def test_back_and_skip_mark_states(home):
 
 
 def test_calibration_opens_screen_when_possible(home, monkeypatch):
-    monkeypatch.setattr(calibrate, 'adapter_present', lambda: True)
+    monkeypatch.setattr(calibrate, 'adapter_present', lambda port=None: True)
 
     async def test(app, pilot, screen):
         app.view('kamera').calibrate_blocker = lambda: None
@@ -113,7 +113,7 @@ def test_calibration_opens_screen_when_possible(home, monkeypatch):
 
 
 def test_calibration_blocker_is_shown_and_action_disabled(home, monkeypatch):
-    monkeypatch.setattr(calibrate, 'adapter_present', lambda: False)
+    monkeypatch.setattr(calibrate, 'adapter_present', lambda port=None: False)
 
     async def test(app, pilot, screen):
         act = screen.query_one('#ob-act')

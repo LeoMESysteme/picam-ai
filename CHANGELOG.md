@@ -5,7 +5,32 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Pi-Name bei Verbindung mit der Windows-Brücke.** Die Werkbank
+  meldet ihren konfigurierten Namen im Hello über Netzwerk und UART. Die
+  Windows-Brücke ab 1.1.0 übernimmt ihn bei der nächsten Verbindung, merkt
+  ihn für die Offline-Anzeige und protokolliert Namensänderungen. Ältere
+  Brücken können sich weiterhin verbinden.
+
 * 2026-11-25: **Einstellungen: Eingabefelder mit Navigations- und Bearbeitungszustand.** Beim Öffnen des Tabs schrieb Tippen sofort in den Port (`focus_first` fokussierte das Feld); jetzt wechseln ↑/↓ zwischen Feldern und Knöpfen, Enter bzw. Mausklick bearbeitet, Enter übernimmt, Esc verwirft (zweites Esc zum Dashboard) — `admin/edit_input.py`.
+* 2026-11-25: **Update, Deinstallation, Zertifikat und UART-Ports in der Konsole.**
+  Gemeinsame Grundlage `views/worker_screen.py` (aus dem Kalibrierbildschirm
+  gezogen, Verhalten unverändert): Worker-Thread, Rückfragen, maskiertes
+  sudo-Passwort, Schrittliste, Protokoll, Abbruch. Darauf `update_screen.py`
+  (Plan, Schritte, alte → neue Version, Rückweg; danach Angebot, die Konsole
+  per `os.execv` mit der neuen Version neu zu starten), `zertifikat_screen.py`
+  („Erneuern“ geht jetzt auch für die Brückenidentität, mit Laufsperre,
+  Eintippen von „erneuern“, Fingerabdrücken und nächsten Schritten) und
+  `uart_screen.py` (Pinwahl auf der Stiftleiste, Dropdowns nur mit wählbaren
+  Funktionen und Referenzadaptern, Prüfseite mit Diffs, Anwenden; ein
+  Pi-Neustart wird nur als Befehl gezeigt). Deinstallation: Vorschau-Bildschirm
+  in der Konsole, danach beendet sich die Konsole und
+  `install.sh --uninstall --guided` läuft formatiert im Terminal (Eintippen
+  von „deinstallieren“). Ausgabe-/UART-Tab, Kalibrierung und `picam einrichten`
+  nutzen `instance.output_port`/`reference_port`, `picam kalibrieren --port`
+  hat Vorgabe `None`. Außerdem: ↑/↓ wechseln in Tabs das Element (TabBody fing
+  sie ab), Ziffern- und Infotasten gelten bei einem Eingabefeld im
+  Navigationszustand (`PicamApp.typing()`).
+
 * 2026-11-25: **Wartungsabläufe für die Verwaltungskonsole.** Der Update-Worker
   meldet Vorbereitung, Neustart und gegebenenfalls den Rückweg. Nach einem
   erfolgreichen Update nennt er den Startpfad der neuen Konsole. Die

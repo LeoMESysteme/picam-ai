@@ -427,3 +427,36 @@ def test_bridge_not_connected_is_never_green():
         assert 'nicht verbunden' in link.plain
         assert TONE[probes.OK] not in str(link.spans[0].style)
     drive(check, state='idle')
+
+
+def test_digit_and_info_keys_work_while_edit_input_only_navigates():
+    async def check(app, pilot):
+        await pilot.press('c')
+        await pilot.pause(0.3)
+        field = app.query_one('#cfg-port', Input)
+        assert app.focused is field and not field.editing and not app.typing()
+        await pilot.press('3')                      # Navigationszustand: Ziffer wechselt den Tab
+        await pilot.pause(0.3)
+        assert app.current == 'dienst'
+        await pilot.press('c', 'enter')             # Bearbeiten: Ziffer wird getippt, kein Tabwechsel
+        await pilot.pause(0.2)
+        assert app.typing()
+        await pilot.press('3')
+        await pilot.pause(0.2)
+        assert app.current == 'einstellungen'
+        await pilot.press('escape')
+    drive(check, instance=admin_fakes.INSTANCE)
+
+
+def test_down_moves_between_focusable_elements_in_tab_body():
+    async def check(app, pilot):
+        await pilot.press('c')
+        await pilot.pause(0.3)
+        first = app.focused
+        await pilot.press('down')
+        await pilot.pause(0.2)
+        assert app.focused is not first and app.focused is not None
+        await pilot.press('up')
+        await pilot.pause(0.2)
+        assert app.focused is first
+    drive(check, instance=admin_fakes.INSTANCE)

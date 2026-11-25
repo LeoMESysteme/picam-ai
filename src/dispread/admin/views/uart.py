@@ -6,7 +6,9 @@ from rich.text import Text
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
 
-from .. import probes
+from dispread.hardware_ports import same_port, uart_devices
+
+from .. import probes, uart_ports
 from ..ui import ACCENT, MUTED, Action, P, ascii_mode
 from ..widgets import (
     ActionBar,
@@ -45,26 +47,46 @@ POWER_5V = P.pin_5v
 POWER_3V3 = P.pin_3v3
 
 
-def header_graphic(rows: int, compact: bool = False) -> Text:
+def used_pins(function) -> tuple[dict[int, str], dict[int, str], dict[int, str], dict[int, str]]:
+    """Vermerke der Stiftleiste für die konfigurierte UART-Funktion: (benutzt, frei, kurz benutzt, kurz frei).
+
+    ``function`` ist eine ``uart_ports.UartFunction`` oder ``None`` (Vorgabe: UART0, Pin 8/10, Masse Pin 6).
+    """
+    tx, rx = (function.tx_pin, function.rx_pin) if function is not None else (8, 10)
+    return ({6: 'benutzt', tx: 'benutzt (Senden)'}, {rx: 'nicht benutzt'},
+            {6: 'benutzt', tx: 'sendet'}, {rx: 'frei'})
+
+
+def header_graphic(rows: int, compact: bool = False, *, used_full=None, unused_full=None, used_short=None,
+                   unused_short=None, selected: int | None = None, choices=frozenset()) -> Text:
     """Stiftleiste: Pin 1 oben links, ungerade Pins links. ``rows`` = Pinpaare (20 = ganz).
 
     ``compact``: kurze Vermerke („sendet“, „frei“), damit die Leiste in 60 Spalten passt.
+    ``selected``: gewählter Pin (Auswahlfläche); ``choices``: Pins, die eine UART-Funktion haben
+    (Aus­wahl­punkt ``▸`` statt Punkt). Ohne die Vermerk-Angaben gilt die Vorgabe (Pin 6 und 8 benutzt).
     """
-    used, unused = (USED_SHORT, UNUSED_SHORT) if compact else (USED, UNUSED)
+    used_all = USED if used_full is None else used_full
+    unused_all = UNUSED if unused_full is None else unused_full
+    used, unused = ((USED_SHORT if used_short is None else used_short),
+                    (UNUSED_SHORT if unused_short is None else unused_short)) if compact else (used_all, unused_all)
     ascii_only = ascii_mode()
     tl, tm, tr = ('+', '+', '+') if ascii_only else ('┌', '┬', '┐')
     bl, bm, br = ('+', '+', '+') if ascii_only else ('└', '┴', '┘')
     side, dot_on, dot_off = ('|', '*', 'o') if ascii_only else ('│', '●', '○')
     arrow = '<' if ascii_only else '◀'
+    pick = '>' if ascii_only else '◆'
     text = Text(no_wrap=True)
     pad = ' ' * 11
     text.append(f'{pad}{tl}───{tm}───{tr}\n'.replace('─', '-' if ascii_only else '─'), style=MUTED)
+    chosen = f'bold {P.select_fg} on {P.select_bg}'
     for row in range(1, rows + 1):
         left, right = 2 * row - 1, 2 * row
 
         def tone(pin: int) -> str:
             name = PIN_NAMES[pin]
-            if pin in USED:
+            if pin == selected:
+                return chosen
+            if pin in used_all:
                 return f'bold {ACCENT}'
             if name == 'GND':
                 return MUTED
@@ -72,14 +94,17 @@ def header_graphic(rows: int, compact: bool = False) -> Text:
                 return POWER_5V
             if name == '3V3':
                 return POWER_3V3
-            return MUTED if pin not in UNUSED else ''
+            return MUTED if pin not in unused_all else ''
+
+        def dot(pin: int, default: str) -> str:
+            return pick if pin in choices else default
 
         text.append(PIN_NAMES[left].rjust(7), style=tone(left))
         text.append(f' {left:>2} ', style=tone(left))
         text.append(side, style=MUTED)
-        text.append(f' {dot_on} ', style=tone(left) if left in USED else tone(left))
+        text.append(f' {dot(left, dot_on)} ', style=tone(left))
         text.append(side, style=MUTED)
-        right_dot = dot_off if right in UNUSED else dot_on
+        right_dot = dot(right, dot_off if right in unused_all else dot_on)
         text.append(f' {right_dot} ', style=tone(right))
         text.append(side, style=MUTED)
         text.append(f' {right:<2}  ', style=tone(right))
@@ -88,12 +113,33 @@ def header_graphic(rows: int, compact: bool = False) -> Text:
             text.append(f'  {arrow} {used[right]}', style=f'bold {ACCENT}')
         elif right in unused:
             text.append(f'  {arrow} {unused[right]}', style=MUTED)
+        if left in used and left != 6:
+            text.append(f'  {arrow} Pin {left}: {used[left]}', style=f'bold {ACCENT}')
         text.append('\n')
     if rows < 20:
         text.append(f"{pad}{side} {':' if ascii_only else '·'} {side} {':' if ascii_only else '·'} {side}"
                     f'   Pins {2 * rows + 1}–40 nicht benutzt\n', style=MUTED)
     text.append(f'{pad}{bl}───{bm}───{br}'.replace('─', '-' if ascii_only else '─'), style=MUTED)
     return text
+
+
+def output_function(output_port: str, mapped: dict[str, str] | None = None):
+    """``UartFunction`` zum konfigurierten Ausgang (``uartN`` oder Gerätepfad); None, wenn unbekannt."""
+    if output_port.startswith('uart'):
+        return next((f for f in uart_ports.UARTS if f.uart == output_port), None)
+    mapped = uart_devices() if mapped is None else mapped
+    name = next((key for key, port in mapped.items() if same_port(port, output_port)), None)
+    if name is None and output_port == '/dev/ttyAMA0':
+        name = 'uart0'
+    return next((f for f in uart_ports.UARTS if f.uart == name), None)
+
+
+def output_label(output_port: str) -> str:
+    """Anzeige des Ausgangs: Gerätepfad, bei ``uartN`` mit aufgelöstem Gerät oder Hinweis."""
+    if not output_port.startswith('uart'):
+        return output_port
+    device = uart_devices().get(output_port)
+    return f'{output_port} ({device or uart_ports.CHECK_AFTER_REBOOT})'
 
 
 SIDE = 116  # ab dieser Breite steht die ganze Stiftleiste neben den Karten (darunter: Anschlusskarte voll breit statt schmaler Spalte)
@@ -108,8 +154,10 @@ class UartView(FactView):
              'Die Pegel des Pi sind 3,3 V. Nie direkt an RS-232 anschließen (Pegelwandler nötig, OQ-09). '
              'Den 6-poligen Kabelblock nicht auf die Stiftleiste stecken; die Kontaktfolge passt nicht. '
              'Zwei Jumper: Block GND an Pin 6, Block RXD an Pin 8.',
-             'Daten fließen über /dev/ttyAMA0; /dev/serial0 zeigt auf ttyAMA10, den 3-Pin-Debug-Header. '
-             'Port ändern ist nicht vorgesehen: GSVmulti ist fest an /dev/ttyAMA0 angebunden.')
+             'Standard ist /dev/ttyAMA0 (UART0); /dev/serial0 zeigt auf ttyAMA10, den 3-Pin-Debug-Header. '
+             'Mit „Port ändern“ wählen Sie einen anderen freien UART-Ausgang und den USB-RS232-Adapter '
+             'der Referenz; config.txt und Konfiguration werden erst nach Prüfseite und Bestätigung '
+             'geschrieben, ein Pi-Neustart kann nötig sein.')
     INFO_FACTS = FACTS
 
     DEFAULT_CSS = """
@@ -133,8 +181,22 @@ class UartView(FactView):
         yield ActionBar()
 
     def actions(self) -> list[Action]:
-        return super().actions() + [Action('p', 'Port ändern', lambda: None, icon='uart',
-                                           blocked='fest auf /dev/ttyAMA0 für GSVmulti')]
+        return super().actions() + [Action('p', 'Port ändern', self.change_ports, icon='uart',
+                                           blocked=self.change_blocker())]
+
+    def change_blocker(self) -> str | None:
+        instance = self.app.instance
+        if instance.problem:
+            return instance.problem
+        if not instance.config:
+            return 'Instanz ohne config.toml'
+        return self.app.blocker
+
+    def change_ports(self) -> None:
+        if self.change_blocker() is None:
+            from .uart_screen import UartPortsScreen
+
+            self.app.push_screen(UartPortsScreen(self.app.instance))
 
     def update_view(self) -> None:
         side = (self.size.width or self.app.size.width) >= SIDE
@@ -148,27 +210,38 @@ class UartView(FactView):
         card.show(header('uart', 'UART', fact_badge(fact), width, note='Werte an GSVmulti'),
                   fields(detail_rows(fact), width, label_w=12, columns=2 if width >= 60 else 1),
                   fact_help(fact, 'Pi-Pegel sind 3,3 V: nie direkt an RS-232.'))
-        graphic = header_graphic(20 if side else 5, compact=not side and width < FULL_W)
+        instance = self.app.instance
+        function = output_function(instance.output_port)
+        full, unused_full, short, unused_short = used_pins(function)
+        tx, rx = (function.tx_pin, function.rx_pin) if function else (8, 10)
+        graphic = header_graphic(20 if side else max(5, (max(tx, rx) + 1) // 2), compact=not side and width < FULL_W,
+                                 used_full=full, unused_full=unused_full, used_short=short,
+                                 unused_short=unused_short)
         self.query_one('#uart-pins-head', Static).update(
             header('pins', 'Stiftleiste', None, graphic.cell_len if side else width))
         self.query_one('#uart-pins', Static).update(graphic)
         use = self.query_one('#uart-use', SectionCard)
         side_w = self.card_width(use)
+        gpio_tx = function.tx_gpio if function else 14
+        gpio_rx = function.rx_gpio if function else 15
         rows = [('Pin 6', value('GND', tone=ACCENT, bold=True), 'Masse zu GSVmulti'),
-                ('Pin 8', value('GPIO14/TXD0', tone=ACCENT, bold=True), 'der Pi sendet; nur TX an RX von GSVmulti'),
-                ('Pin 10', value('GPIO15/RXD0'), 'nicht benutzt, nicht bestätigt'),
+                (f'Pin {tx}', value(f'GPIO{gpio_tx}' + ('/TXD0' if tx == 8 else ''), tone=ACCENT, bold=True),
+                 'der Pi sendet; nur TX an RX von GSVmulti'),
+                (f'Pin {rx}', value(f'GPIO{gpio_rx}' + ('/RXD0' if rx == 10 else '')),
+                 'nicht benutzt, nicht bestätigt'),
                 ('RS-232', badge(probes.WARN, 'nie direkt'), '3,3 V am Pi: Pegelwandler nötig (OQ-09)'),
                 ('Kabelblock', badge(probes.WARN, 'nicht aufstecken'),
-                 '2 Jumper: GND → Pin 6, RXD → Pin 8')]
+                 f'2 Jumper: GND → Pin 6, RXD → Pin {tx}')]
         if not side:  # breit genug: Nachsatz in derselben Zeile
             rows = [(label, join(content, f'  {note}')) for label, content, note in rows]
         use.show(header('connect', 'Anschluss', None, side_w), wrap_rows(rows, label_w=11 if side else 12),
                  help_line('Laut Hardwareprofil, nicht unabhängig bestätigt.'))
-        rows = [('Datenport', value('/dev/ttyAMA0', tone=ACCENT, bold=True), 'für GSVmulti'),
+        rows = [('Datenport', value(output_label(instance.output_port), tone=ACCENT, bold=True), 'für GSVmulti'),
+                ('Referenz', value(instance.reference_port), 'USB-RS232-Adapter am Messverstärker'),
                 ('Debug', value('/dev/serial0'), 'zeigt auf ttyAMA10, den 3-Pin-Debug-Header')]
         if not side:
             rows = [(label, join(content, f'  {note}')) for label, content, note in rows]
         self.query_one('#uart-ports', SectionCard).show(
             header('file', 'Ports', None, side_w), wrap_rows(rows, label_w=11 if side else 12),
-            help_line('Port ändern ist nicht vorgesehen.', 'i', 'mehr'))
+            help_line('Port ändern: Taste p.', 'i', 'mehr'))
         self.sync_buttons()

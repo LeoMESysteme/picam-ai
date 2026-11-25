@@ -345,6 +345,20 @@ class TabBody(VerticalScroll):
 
     can_focus = False
 
+    def _step(self, step: int, scroll) -> None:
+        # ↑/↓ wechseln das Element, solange eines folgt; danach (oder ohne Fokus im Tab) rollt der Tab
+        app, focused = self.app, self.app.focused
+        mover = getattr(app, 'move_focus', None)
+        if mover is not None and focused is not None and self in focused.ancestors and mover(step):
+            return
+        scroll()
+
+    def action_scroll_down(self) -> None:
+        self._step(1, super().action_scroll_down)
+
+    def action_scroll_up(self) -> None:
+        self._step(-1, super().action_scroll_up)
+
 
 class CardBox(Vertical):
     """Karte als Behälter (wenn ein Kopf bedienbar ist, z. B. eine Auswahlleiste)."""

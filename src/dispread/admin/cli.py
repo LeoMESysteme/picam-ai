@@ -271,7 +271,9 @@ def cmd_calibrate(args, instance, style) -> int:
     from . import calibrate
 
     console = calibrate.Console(style)
-    options = calibrate.Options(duration_s=args.dauer, hold_s=args.halten, port=args.port, baudrate=args.baudrate,
+    options = calibrate.Options(duration_s=args.dauer, hold_s=args.halten,
+                                port=args.port if args.port is not None else instance.reference_port,
+                                baudrate=args.baudrate,
                                 profile=Path(args.profil) if args.profil else None, seed=args.seed, yes=args.yes)
     if args.pruefen is not None:
         return calibrate.check_file(instance, Path(args.pruefen) if args.pruefen else None, console)
@@ -299,13 +301,13 @@ def setup_calibration(instance, style, ask=input, run=None, interactive: bool | 
     from . import calibrate
 
     run = run or (lambda argv: run_hint_command(shlex.join(['picam', *argv]), instance))
-    adapter = calibrate.adapter_present()
+    adapter = calibrate.adapter_present(instance.reference_port)
     if adapter:
-        print(style.text(f'      [k] neu kalibrieren (Adapter an {calibrate.REFERENCE_PORT} gefunden, '
+        print(style.text(f'      [k] neu kalibrieren (Adapter an {instance.reference_port} gefunden, '
                          'Werkbank kurz aus)'))
     else:
         print(style.text('      Neu kalibrieren braucht einen USB-RS232-Adapter am RS232-Ausgang des '
-                         f'Messverstärkers ({calibrate.REFERENCE_PORT} fehlt): Adapter stecken, dann '
+                         f'Messverstärkers ({instance.reference_port} fehlt): Adapter stecken, dann '
                          '„picam kalibrieren“.'))
     print(style.text('      [p] vorhandene Datei prüfen oder importieren'))
     print(style.text('      [s] später'))
@@ -476,8 +478,9 @@ def parser() -> argparse.ArgumentParser:
                      help=f'Aufnahmedauer in Sekunden (Standard {calibrate.DEFAULT_DURATION_S:g})')
     cal.add_argument('--halten', type=float, default=calibrate.DEFAULT_HOLD_S,
                      help=f'Haltezeit je Normierungsstufe (Standard {calibrate.DEFAULT_HOLD_S:g} s)')
-    cal.add_argument('--port', default=calibrate.REFERENCE_PORT,
-                     help=f'USB-RS232-Adapter (Standard {calibrate.REFERENCE_PORT})')
+    cal.add_argument('--port', default=None,
+                     help='USB-RS232-Adapter (Standard: der konfigurierte Referenzport der Instanz, '
+                          f'sonst {calibrate.REFERENCE_PORT})')
     cal.add_argument('--baudrate', type=int, default=calibrate.REFERENCE_BAUDRATE)
     cal.add_argument('--profil', help='bestätigtes Werkbank-Profil (Standard: neueste Einrichtung)')
     cal.add_argument('--seed', type=int, help='Startwert des Faktorplans (Standard: Uhrzeit)')

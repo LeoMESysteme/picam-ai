@@ -327,7 +327,7 @@ class OnboardingScreen(ModalScreen[str]):
                   help_line('Überspringen geht: später im Tab Kamera (m) oder mit picam kalibrieren.'))
         card = self.query_one('#ob-kalibrierung-3', SectionCard)
         width = self._width(card)
-        adapter = calibrate.adapter_present()
+        adapter = calibrate.adapter_present(self.app.instance.reference_port)
         state = (badge(probes.OK, 'bereit', 'ok') if blocker is None
                  else badge(probes.OFF, 'nicht möglich', 'off'))
         rows = [('Kalibrieren', join(state, f'  {blocker}' if blocker else '  Kalibrierbildschirm öffnen'), True),
