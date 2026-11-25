@@ -3,6 +3,10 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## Unveröffentlicht
+
+* 2026-11-25: Aufräumen nach dem Hauptcheckout. Doku-Einträge vom 5./11./13.11. (Laborjournal, VALIDATION, Projektgeschichte, Hardware-Profil, USER ENTRIES), WLAN-Wächter-Quellen (`scripts/picam-wlan-watchdog*`, `systemd/picam-wlan-watchdog.*`, `docs/HOST_NETZWERK.md`), Analyse 2026-11-10 und TUI-Wunschliste nach master übernommen; Repowise-Verweise aus Agent-Anweisungen, Hooks und Pflegeprompt entfernt; CI installiert Doku-Werkzeuge mit `PIP_CONFIG_FILE=/dev/null` ohne piwheels (dessen Proxy brach am 11.11. 9 von 20 TLS-Handshakes ab; auf aarch64 kommen alle Pakete von PyPI). Kein Messpfadcode geändert.
+
 ## 1.1.1 — 2026-11-25 (Installer: Rechte der Programmdateien)
 
 * Problem: Die Installation in einer Zeile brach auf raspi01 bei „Brückenidentität und Zertifikat erzeugen“ ab (`runuser: … .venv/bin/python: Permission denied`). `get-picam.sh` setzte `umask 077` für seine Temp-Dateien, der Installer erbte es und legte den Release nur für root lesbar an. Geändert: Bootstrap setzt vor dem Installer `umask 022` (nur der Temp-Ordner bleibt privat), Installer und Update setzen für Programmdateien selbst `umask 022`. Konsequenz: Installation und Update hängen nicht mehr vom umask der aufrufenden Shell ab. Der abgebrochene Lauf hatte alles Angelegte zurückgebaut.

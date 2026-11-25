@@ -30,12 +30,8 @@ dupliziert, damit sie nicht auseinanderläuft.
 * **Suchen:** gezielt mit `grep` und `Read`. Breite Suchen über viele Dateien
   gehen an einen Explore-Subagenten, damit die Dateiinhalte nicht im
   Hauptkontext landen.
-* **Repowise:** Bash-Ausgaben von Tests, Lint und `git log` werden automatisch
-  gekürzt. Ein Marker `[repowise#<ref>: …]` lässt sich **im Repo-Verzeichnis**
-  mit `repowise expand <ref>` zurückholen. `grep`, `git diff` und `ls` bleiben
-  absichtlich ungekürzt. Die MCP-Tools (`get_risk`, `get_health`, `get_why`)
-  nur bei ausdrücklichem Bedarf; `get_answer` ist abgeschaltet, weil es ein
-  LLM-Umweg ist.
+* **Befehle:** direkt ausführen. Architektur, Änderungsrisiken und
+  Entscheidungshistorie anhand von Code, Tests und Projektdokumentation prüfen.
 
 Für den menschlichen Entwickler liegt unter
 [docs/anleitung/](docs/anleitung/README.md) ein Lernpfad, der die offenen
