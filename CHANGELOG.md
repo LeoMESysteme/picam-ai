@@ -3,6 +3,10 @@
 Neueste Änderung oben. Je Abschnitt: was war das Problem, was wurde geändert,
 was ist die Konsequenz.
 
+## 1.1.1 — 2026-11-25 (Installer: Rechte der Programmdateien)
+
+* Problem: Die Installation in einer Zeile brach auf raspi01 bei „Brückenidentität und Zertifikat erzeugen“ ab (`runuser: … .venv/bin/python: Permission denied`). `get-picam.sh` setzte `umask 077` für seine Temp-Dateien, der Installer erbte es und legte den Release nur für root lesbar an. Geändert: Bootstrap setzt vor dem Installer `umask 022` (nur der Temp-Ordner bleibt privat), Installer und Update setzen für Programmdateien selbst `umask 022`. Konsequenz: Installation und Update hängen nicht mehr vom umask der aufrufenden Shell ab. Der abgebrochene Lauf hatte alles Angelegte zurückgebaut.
+
 ## 1.1.0 — 2026-11-25 (erster Release mit Installer in einer Zeile)
 
 * picam 1.1.0 und GSVmulti-Brücke 1.1.0. Installation: `curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash`; Update: `picam update`. Enthält alle Einträge seit Version 1.0 (19.11.) aus dem Abschnitt darunter: Verwaltung `picam` mit Konsole, geführter Installer mit Onboarding, Timing-Kalibrierung bei der Inbetriebnahme, Update mit Rückweg, Deinstallation, Zertifikat, UART-Ports, Einrichtung ohne RS232, Brücke 1.1.0. Auf raspi01 geprüft (25.11., Leonhard).

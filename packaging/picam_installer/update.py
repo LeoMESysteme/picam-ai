@@ -65,6 +65,7 @@ def plan_update(prefix, source, sha256=None, *, stable_version=None):
 def prepare(prefix, source, sha256=None, python='/usr/bin/python3', runner=subprocess.run,
             progress=lambda _text: None, *, step=None, stable_version=None):
     """Neue Version vorbereiten, nicht aktivieren. Bei Fehler bleibt nichts zurück."""
+    os.umask(0o022)  # Programmdateien für das Dienstkonto lesbar, auch bei geerbtem umask 077
     if step is not None:
         step('pruefen')
     bundle, target, state = plan_update(prefix, source, sha256, stable_version=stable_version)

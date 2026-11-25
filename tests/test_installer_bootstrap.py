@@ -74,6 +74,7 @@ def make_archive(path, version):
             ('install.sh', '''#!/bin/bash
 set -eu
 [[ -t 0 && "$1" == --guided && "$2" == --source && -f "$3" && "$4" == --sha256 ]]
+[[ "$(umask)" == 0022 ]]   # raspi01 25.11.: strenges umask des Bootstraps nicht vererben
 actual=$(sha256sum < "$3")
 [[ "${actual%% *}" == "$5" ]]
 IFS= read -r reply

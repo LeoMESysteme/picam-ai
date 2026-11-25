@@ -241,6 +241,27 @@ def test_apply_uses_only_new_target_and_preserves_it_on_repetition(tmp_path, mon
     assert (prefix / 'config/config.toml').read_bytes() == config
 
 
+def test_apply_under_strict_umask_keeps_code_usable_for_the_service_account(tmp_path, monkeypatch):
+    """raspi01 25.11.: get-picam.sh vererbte umask 077, das Dienstkonto durfte die venv nicht ausführen."""
+    import os
+    import stat
+
+    engine = installer()
+    monkeypatch.setattr(engine, 'probe_system', lambda *a, **kw: healthy(engine))
+    args = portable_args(engine, tmp_path, bundle(tmp_path))
+    previous = os.umask(0o077)
+    try:
+        engine.install(args, runner=fake_runner([]))
+        effective = os.umask(0o022)
+    finally:
+        os.umask(previous)
+    assert effective == 0o022
+    release = tmp_path / 'target/releases/v1'
+    for path in (release, *release.rglob('*')):
+        if path.is_dir() and not path.is_symlink():
+            assert path.stat().st_mode & stat.S_IROTH and path.stat().st_mode & stat.S_IXOTH, path
+
+
 def test_failed_install_does_not_activate_or_leave_partial_target(tmp_path, monkeypatch):
     engine = installer()
     monkeypatch.setattr(engine, 'probe_system', lambda *a, **kw: healthy(engine))

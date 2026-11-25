@@ -340,6 +340,10 @@ def install(args, runner=subprocess.run, progress=None):
         info = probe_system(args.python, runner=runner)
         if info.missing_modules:
             raise ValueError('Systemmodule nach apt weiterhin unbrauchbar: ' + ', '.join(info.missing_modules))
+    # Programmdateien muessen fuer das Dienstkonto lesbar und ausfuehrbar sein. Ein geerbtes
+    # umask 077 (z. B. aus get-picam.sh, raspi01 25.11.) machte den Release nur fuer root nutzbar.
+    # Private Orte (Daten, Konfiguration, Laufzeit) setzen ihre Modi ausdruecklich.
+    os.umask(0o022)
     created, unit_created = [], False
     try:
         # mkdir without exist_ok claims each root exclusively; parallel installs lose safely.

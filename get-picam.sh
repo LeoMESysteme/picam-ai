@@ -131,6 +131,9 @@ except (OSError, EOFError, TypeError, ValueError, KeyError, tarfile.TarError) as
     sys.exit(f'picam: {error}')
 PYTHON
     tar --no-same-owner --no-same-permissions -xzf "$work/$name" -C "$work"
+    # Nur der Temp-Ordner ist privat (mktemp -d: 0700). Der Installer legt Programmdateien
+    # fuer das Dienstkonto an und darf das strenge umask nicht erben (raspi01 25.11.).
+    umask 022
     "$work/picam/install.sh" --guided --source "$work/$name" --sha256 "$digest" <&3
 }
 
