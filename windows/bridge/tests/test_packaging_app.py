@@ -155,3 +155,30 @@ def test_double_click_starter_bypasses_policy_only_for_this_run():
     assert "py -3.13" in text and "pause" in text
     attrs = (BRIDGE / ".gitattributes").read_text(encoding="utf-8")
     assert re.search(r"^\*\.cmd -text$", attrs, re.M)
+
+
+def test_download_archive_carries_the_commit_for_release_builds():
+    """ZIP vom Server (git archive) hat kein .git: der Commit kommt per export-subst in die Datei."""
+    import shutil
+    import subprocess
+    import tarfile
+    from io import BytesIO
+
+    raw = (BRIDGE / "packaging/source-commit.txt").read_text(encoding="utf-8")
+    assert raw.strip() == "$Format:%H$"                       # im Arbeitsbaum nur der Platzhalter
+    assert "packaging/source-commit.txt export-subst" in (BRIDGE / ".gitattributes").read_text(encoding="utf-8")
+    assert "source-commit.txt" in PS1 and "'^[0-9a-f]{40}$'" in PS1
+    git = shutil.which("git")
+    repo = BRIDGE.parents[1]
+    if git is None or subprocess.run([git, "-C", str(repo), "rev-parse", "HEAD"], capture_output=True).returncode:
+        pytest.skip("kein Git-Arbeitsbaum")
+    head = subprocess.run([git, "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    listed = subprocess.run([git, "-C", str(repo), "ls-tree", "HEAD", "windows/bridge/packaging/source-commit.txt"],
+                            capture_output=True, text=True).stdout
+    if not listed:
+        pytest.skip("Datei noch nicht committet")
+    out = subprocess.run([git, "-C", str(repo), "archive", "--format=tar", "HEAD",
+                          "windows/bridge/packaging/source-commit.txt"], capture_output=True, check=True).stdout
+    with tarfile.open(fileobj=BytesIO(out)) as tar:
+        member = tar.extractfile("windows/bridge/packaging/source-commit.txt")
+        assert member is not None and member.read().decode().strip() == head

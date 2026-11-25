@@ -1,2 +1,5 @@
 # Windows-Starter mit CRLF unveraendert ausliefern (auch im ZIP-Download).
 *.cmd -text
+# Download-Archive (git archive, z. B. ZIP vom Forgejo-Server) tragen hier den Commit ein;
+# build-test.ps1 liest ihn, wenn kein .git-Ordner da ist.
+packaging/source-commit.txt export-subst

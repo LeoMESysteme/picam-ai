@@ -90,7 +90,7 @@ if (-not $Version) { throw "Version in pyproject.toml nicht gefunden." }
 
 $Commit = "unbekannt"
 $Dirty = $false
-# Ohne Git (z. B. ZIP-Download) bleibt die Quelle "unbekannt"; der Bau laeuft trotzdem.
+# Ohne Git und ohne Archiv-Commit bleibt die Quelle "unbekannt"; der Testbau laeuft trotzdem.
 if (Test-Path -LiteralPath (Join-Path $RepoRoot ".git")) {
     try {
         $Head = (& git -C $RepoRoot rev-parse HEAD 2>$null)
@@ -100,10 +100,24 @@ if (Test-Path -LiteralPath (Join-Path $RepoRoot ".git")) {
         }
     } catch { $Commit = "unbekannt" }
 }
+$FromArchive = $false
+if ($Commit -eq "unbekannt") {
+    # Download-Archiv (git archive / ZIP vom Server): der Commit steht per export-subst in source-commit.txt.
+    # Im Git-Arbeitsbaum steht dort nur der Platzhalter.
+    $CommitFile = Join-Path $BridgeRoot "packaging/source-commit.txt"
+    if (Test-Path -LiteralPath $CommitFile -PathType Leaf) {
+        $FromFile = (Get-Content -LiteralPath $CommitFile -Raw).Trim()
+        if ($FromFile -match '^[0-9a-f]{40}$') {
+            $Commit = $FromFile
+            $FromArchive = $true
+        }
+    }
+}
 $Commit12 = if ($Commit.Length -ge 12) { $Commit.Substring(0, 12) } else { $Commit }
 $CommitLabel = if ($Dirty) { "$Commit+geaendert" } else { $Commit }
 if ($Release) {
-    if ($Commit -eq "unbekannt") { throw "Release-Build gesperrt: Git-Commit nicht ermittelbar (Quelle muss ein Git-Arbeitsbaum sein)." }
+    if ($Commit -eq "unbekannt") { throw "Release-Build gesperrt: Git-Commit nicht ermittelbar. Quelle muss ein Git-Arbeitsbaum (git clone) oder ein unveraendertes Download-Archiv des Servers sein." }
+    if ($FromArchive) { Write-Output "Quelle: Download-Archiv von Commit $Commit (Aenderungen nach dem Entpacken sind nicht pruefbar)." }
     if ($Dirty) { throw "Release-Build gesperrt: der Arbeitsbaum hat nicht eingecheckte Aenderungen. Erst committen, dann bauen." }
 }
 
