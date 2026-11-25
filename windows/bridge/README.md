@@ -1,9 +1,8 @@
 # Windows-Laufzeitprobe
 
-Stand 2026-11-06: technische Grundlage für N1, **kein bestandener Windows-
-Nachweis**. Dieses Verzeichnis enthält eine Konsolenprobe und ein Rezept
-für ein internes, unsigniertes PyInstaller-Ordnerpaket. Produkt-GUI und
-Produkt-Setup-EXE fehlen weiterhin; ein internes Probe-Setup-Rezept steht unten. DUT-Ausgabe bleibt im bestehenden Kern gesperrt.
+Die Konsolenprobe und das unsignierte PyInstaller-Ordnerpaket bilden die
+technische Grundlage für N1 (Stand 2026-11-06, Windows-Nachweis offen).
+Der separate GUI-Bau steht unter [Release bauen](#release-bauen-100).
 
 Die Probe importiert `dispread.gsv_bridge`, pySerial und PySide6, erzeugt
 eine verborgene `QApplication` und beendet sich mit einem JSON-Bericht.
@@ -302,12 +301,31 @@ Nur unter Linux geprüft, keine Windows-Abnahme.
 Voraussetzung: Windows-11-x64-PC mit Python ≥ 3.13 x64, Git-Arbeitsbaum **ohne nicht eingecheckte
 Änderungen** (der Release-Build verweigert sonst, damit der Commit eindeutig ist). Die Version steht
 in `pyproject.toml` und `src/dispread_bridge_app/__init__.py` (beide gleich halten).
+Auf dem Build-PC einmalig Inno Setup 6 installieren.
 
-**Doppelklick auf `windows\bridge\build-release.cmd`** (Argumente wie bei `build-test.cmd`, z. B.
-`-Inno "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"` für das Setup). Es ruft `build-test.ps1 -Release`
-auf und legt unter `windows\bridge\dist-release\` ab: `GSVmulti-Bruecke-1.0.0.zip` und mit `-Inno`
-`GSVmulti-Bruecke-Setup-1.0.0.exe`. Kanal in der Fußzeile: „Release“. Die EXE besteht vorher den
-Selbsttest; ZIP/Setup danach als Forgejo-Release hochladen. Unsigniert.
+```powershell
+winget install JRSoftware.InnoSetup
+```
+
+**Doppelklick auf `windows\bridge\build-release.cmd`**. Der Starter ruft `build-test.ps1 -Release` auf.
+Der Build sucht `ISCC.exe` zuerst in Program Files (x86), dann in Program Files und im lokalen
+Benutzerprofil. Bei eigener Installation `-Python "<Pfad>\python.exe"` und
+`-Inno "<Pfad>\ISCC.exe"` an den Starter übergeben. Ohne
+Compiler bricht der Release-Build vor PyInstaller ab.
+
+In `windows\bridge\dist-release\` liegen nach erfolgreichem Bau die unsignierten Dateien für Forgejo.
+
+- **`GSVmulti-Bruecke-1.0.0-portable.exe`** ist eine einzelne Datei zum direkten Start.
+  Der Start, insbesondere der erste, kann etwas länger dauern, weil sich die Laufzeit
+  in ein temporäres Verzeichnis entpackt.
+- **`GSVmulti-Bruecke-Setup-1.0.0.exe`** installiert für den aktuellen Benutzer. Die Brücke
+  ist danach im Startmenü verfügbar, auf Wunsch auch auf dem Desktop. Für ein Update
+  das neuere Setup ausführen. Setup bietet das Schließen der laufenden installierten
+  Brücke an und erhält die Benutzerdaten.
+- **`GSVmulti-Bruecke-<Version>-SHA256SUMS.txt`** enthält die Prüfsummen beider EXE-Dateien.
+
+Die portable und die für Setup gebaute EXE durchlaufen jeweils einen Selbsttest mit den
+Session-Vorlagen und den gebündelten Lizenzhinweisen. In der App-Fußzeile steht „Release“.
 
 ## Interner Testbuild (GUI)
 
@@ -321,11 +339,11 @@ $py = py -3.13 -c "import sys; print(sys.executable)"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\bridge\build-test.ps1 -Python "$py"   # optional: -Inno "<Pfad>\ISCC.exe"
 ```
 
-Es entsteht unter `windows/bridge/dist-test/` ein ZIP (`GSVmulti-Bruecke-<version>-<commit12>-test.zip`)
-und mit `-Inno` ein Benutzer-Setup ohne Administratorrechte (`packaging/setup-app.iss`). Die EXE
-wird einmal im Selbsttest (`--self-test-out`, Importtest ohne Fenster) gestartet; schlägt er fehl,
-entsteht kein Paket. **Unsigniert, unqualifiziert, nur interner Test.** Das ist nicht der Weg zu
-einem Produkt: `build.ps1` mit `packaging/bridge.spec` (Hash-Locks, Konsolenprobe, N1-Nachweis)
-bleibt unverändert der einzige qualifizierte Bauweg. Auf dem Pi (Linux) lässt sich nichts davon
-bauen; hier laufen nur statische Tests (`tests/test_packaging_app.py`). Ablauf des ersten
-Gesamttests: [TESTLAUF.md](TESTLAUF.md).
+Unter `windows/bridge/dist-test/` entstehen `GSVmulti-Bruecke-<version>-<commit12>-test-portable.exe`,
+mit gefundenem Inno-Compiler auch `GSVmulti-Bruecke-Setup-<version>-<commit12>-test.exe` sowie
+`GSVmulti-Bruecke-<Version>-SHA256SUMS.txt` für die erzeugten Dateien. Die gebauten EXE-Dateien laufen im Selbsttest
+(`--self-test-out`) ohne Fenster. Bei einem fehlgeschlagenen Selbsttest bleibt die Ausgabe gesperrt.
+Die Pakete sind **unsigniert und nur für interne Tests**. Der qualifizierte Probeweg nutzt
+`build.ps1` und `packaging/bridge.spec` mit Hash-Locks und N1-Nachweis. Auf Linux laufen die
+Paketierungsprüfungen in `tests/test_packaging_app.py`. Der [Testlauf](TESTLAUF.md) beschreibt
+die Windows-Prüfung.

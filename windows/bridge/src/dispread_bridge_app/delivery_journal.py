@@ -320,29 +320,35 @@ _PUBLIC_FIELDS = frozenset({'type', 'outcome', 'state', 'completion_stage', 'pro
                             'kind', 'code', 'detail', 'demo_only', 'output_ready',
                             'gsv_receipt_confirmed', 'count', 'release', 'ts',
                             'route', 'port', 'bridge_port', 'gsv_port', 'usb_vid_pid',
+                            'peer', 'reason', 'ticks_written', 'ticks_filled', 'ticks_invalid', 'tick_disturbed',
                             'app_start', 'first_ts', 'last_ts', 'ts_time_base'})
 
 
 _PUBLIC_VALUES = frozenset({
     'started', 'stopped', 'connected', 'idle', 'ended', 'exchange', 'written',
-    'unknown', 'pending', 'not_written', 'expired', 'failed', 'audit_failed',
+    'unknown', 'pending', 'not_written', 'expired', 'failed', 'unconfirmed', 'audit_failed',
     'connection_failed', 'blocked', 'unknown_invalidation', 'unknown_delivery',
+    'com_open_failed', 'com_close_failed', 'com_write_failed',
     'recovering', 'connection_unavailable',
     'com_driver_write', 'host_monotonic', 'synthetic',
     'written_summary', 'diagnostics', 'dropped',
     'omitted', 'test_unaccepted', 'test_release',
-    'tick_disturbed', 'tick_gap_unfilled',
+    'tick_stats', 'tick_disturbed', 'tick_gap_unfilled',
     # Ereignisarten und Fehlercodes aus dem eigenen Code (feste Bezeichner, keine
     # Transportdaten). 13.11.2026: ohne sie war die Ursache eines UART-Abbruchs im
     # Export nicht erkennbar („[redacted]/[redacted]“).
     'connection', 'activity', 'heartbeat', 'peer_output_changed', 'connecting', 'authenticated',
-    'backoff', 'disconnected', 'network', 'uart',
+    'backoff', 'disconnected', 'connection_interrupted', 'network', 'uart',
     'adapter_driver_unavailable', 'adapter_required', 'adapter_unavailable', 'authentication_refused',
     'cancelled', 'connection_lost', 'demo_rejected', 'demo_unconfirmed', 'invalid_legacy_request',
     'lease_unavailable', 'network_unavailable', 'no_pending_poll', 'not_connected', 'pairing_refused',
     'pairing_required', 'peer_invalid', 'redirect_refused', 'run_changed', 'run_conflict',
     'selection_required', 'stale_ack', 'transport_unsupported', 'transport_write_uncertain',
     'uart_peer_unavailable', 'uart_timeout', 'uart_frame_invalid', 'uart_port_failed', 'uart_closed',
+    'clock_or_certificate_invalid', 'components_unsupported', 'credential_unavailable',
+    'endpoint_required', 'endpoint_unsupported', 'peer_refused', 'profile_invalid',
+    'tailscale_not_installed', 'tailscale_logged_out', 'tailscale_needs_approval',
+    'tailscale_running', 'tailscale_dns_error', 'tailscale_unreachable',
     'unix_realtime',
     'adapter', 'adapter_selected', 'adapter_changed', 'adapter_disappeared', 'adapter_returned',
     'adapter_opening', 'port_pair_selected', 'port_pair_changed', 'port_disappeared', 'port_returned',

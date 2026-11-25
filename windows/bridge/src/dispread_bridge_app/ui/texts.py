@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from dispread.bridge.types import BridgeEvent
 from dispread_bridge_app.readiness import Readiness
+from dispread_bridge_app.types import valid_port_name
 from dispread_bridge_app.worker import WorkerStatus
 
 from .port import JournalEntry, UiContext
@@ -334,7 +335,10 @@ WORKER_CODE_TEXT = {
     'unknown_invalidation': 'ungeklärte Auslieferung im Journal',
     'unknown_delivery': 'Ergebnis der letzten Weitergabe unklar',
     'audit_failed': 'Journal nicht schreibbar',
-    'connection_failed': 'Verbindung abgebrochen',
+    'connection_failed': 'Ursache der Unterbrechung unbekannt',
+    'com_open_failed': 'COM-Port ließ sich nicht öffnen',
+    'com_close_failed': 'COM-Port ließ sich nicht schließen',
+    'com_write_failed': 'COM-Schreibfehler',
     'blocked': 'Übertragung blockiert',
 }
 CONNECTION_CODE_TEXT = {
@@ -896,43 +900,95 @@ OUTPUT_JOURNAL = {'ended': 'Lauf auf dem Pi beendet', 'blocked': 'Ausgabe gesper
 DEMO_ABORTED = 'Empfangstest unterbrochen'
 DEMO_FINISHED = 'Empfangstest beendet'
 
+ADAPTER_JOURNAL = {
+    'adapter_selected': 'USB-Adapter ausgewählt',
+    'adapter_changed': 'USB-Adapter gewechselt',
+    'adapter_disappeared': 'USB-Adapter fehlt',
+    'adapter_returned': 'USB-Adapter wieder verfügbar',
+    'port_pair_selected': 'Portpaar ausgewählt',
+    'port_pair_changed': 'Portpaar gewechselt',
+    'port_disappeared': 'Port fehlt',
+    'port_returned': 'Port wieder verfügbar',
+}
+EXCHANGE_FAULTS = {
+    'failed': ('COM-Weitergabe fehlgeschlagen', 'COM-Treiber konnte die Weitergabe nicht abschließen'),
+    'unconfirmed': ('Quittung an den Pi unbestätigt', 'COM-Schreibvorgang abgeschlossen · Bestätigung vom Pi fehlt'),
+    'expired': ('Zeitbudget abgelaufen', 'Anstehender Schreibvorgang vor der COM-Weitergabe verworfen'),
+    'omitted': ('Wert ausgelassen', 'ungültig oder veraltet – nichts an COM geschrieben'),
+    'unknown': ('Weitergabe unklar', 'nicht wiederholt'),
+    'stopped': ('Weitergabe unklar', 'nicht wiederholt'),
+}
+TAILSCALE_JOURNAL = {
+    'tailscale_not_installed': 'Nicht installiert',
+    'tailscale_logged_out': 'Nicht angemeldet',
+    'tailscale_needs_approval': 'Freigabe erforderlich',
+    'tailscale_running': 'Aktiv',
+    'tailscale_dns_error': 'Namensauflösung fehlgeschlagen',
+    'tailscale_unreachable': 'Status konnte nicht ermittelt werden',
+}
+
 
 def event_entry(event: BridgeEvent, ctx: UiContext | None = None, now: str = '') -> JournalEntry:
     """BridgeEvent -> Journalzeile. Keine Rohdetails (Zugangsdaten) übernehmen."""
+    detail = event.detail or {}
     if event.kind == 'connection':
         if event.code == 'peer_output_changed':
-            out = (event.detail or {}).get('output')
+            out = detail.get('output')
             title = OUTPUT_JOURNAL.get(out, 'Ausgabestand geändert')
             return JournalEntry(now, title, f'Lauf {event.run_id}' if event.run_id else '',
                                 tone='warn' if out == 'test_release' else 'info')
+        if event.code == 'connection_interrupted':
+            reason = detail.get('reason')
+            cause = CONNECTION_CODE_TEXT.get(reason, ('', ''))[0] if reason != 'connection_lost' else ''
+            return JournalEntry(now, 'Verbindung unterbrochen', cause, tone='warn', fault=True)
+        if event.code == 'peer_invalid':
+            return JournalEntry(now, 'Pi-Antwort ungültig', 'Identität oder Protokoll ließ sich nicht bestätigen.',
+                                tone='err', fault=True)
+        if event.code == 'disconnected' and detail.get('peer') == 'backoff':
+            return JournalEntry(now, 'Verbindung unterbrochen', tone='warn', fault=True)
         title = {'authenticated': 'Pi verbunden (Identität geprüft)', 'backoff': 'Pi antwortet nicht',
-                 'disconnected': 'Verbindung beendet', 'connecting': 'Verbindung wird aufgebaut'}.get(event.code or '')
+                 'disconnected': 'Verbindung beendet', 'connecting': 'Verbindung wird aufgebaut',
+                 'adapter_opening': 'USB-Adapter wird geöffnet'}.get(event.code or '')
         if title is None and event.code in CONNECTION_CODE_TEXT:
             t, sub = CONNECTION_CODE_TEXT[event.code]
             return JournalEntry(now, t, sub, tone='err', fault=True)
-        if title is None and str(event.code or '').startswith('tailscale_'):
-            return JournalEntry(now, 'Tailscale', str(event.code)[10:], tone='info')
+        if event.code in TAILSCALE_JOURNAL:
+            return JournalEntry(now, 'Tailscale', TAILSCALE_JOURNAL[event.code], tone='info')
         title = title or 'Verbindungsereignis'
-        bad = event.code in ('backoff',)
+        bad = event.code == 'backoff' or detail.get('peer') == 'backoff'
+        if bad and title == 'Verbindungsereignis':
+            title = 'Verbindungsversuch fehlgeschlagen'
         return JournalEntry(now, title, tone='err' if bad else 'info', fault=bad)
     if event.kind == 'recovering':
         return JournalEntry(now, 'Verbindung unterbrochen', 'die Brücke verbindet neu', tone='warn', fault=True)
     if event.kind == 'tick_disturbed':
         return JournalEntry(now, 'Takt gestört', 'Lücke über 50 Takte, nicht aufgefüllt – Zeilenzahl weicht ab',
                             tone='err', fault=True)
+    if event.kind == 'tick_stats' and event.code == 'ticks_filled':
+        n = detail['count']
+        return JournalEntry(now, f'{n} {"Takt" if n == 1 else "Takte"} aufgefüllt',
+                            'Fehlwertzeilen für fehlende Taktnummern an COM geschrieben', tone='warn', fault=True)
+    if event.kind == 'tick_stats' and event.code == 'ticks_invalid':
+        n = detail['count']
+        return JournalEntry(now, f'{n} ungültige{"r Takt" if n == 1 else " Takte"}',
+                            'Vom Pi als ungültig markiert und an COM geschrieben', tone='warn', fault=True)
+    if event.kind == 'adapter' and event.code in ADAPTER_JOURNAL:
+        fault = event.code in ('adapter_disappeared', 'port_disappeared')
+        port = detail.get('port')
+        sub = port if isinstance(port, str) and valid_port_name(port) else ''
+        return JournalEntry(now, ADAPTER_JOURNAL[event.code], sub, tone='warn' if fault else 'info', fault=fault)
     if event.kind in ('blocked', 'audit_failed', 'connection_failed'):
         return JournalEntry(now, f'Übertragung gestoppt – {WORKER_CODE_TEXT.get(event.code or event.kind, event.kind)}',
                             'keine weiteren Werte an COM', tone='err', fault=True)
     if event.kind == 'started':
-        return JournalEntry(now, 'Übertragung gestartet', 'Demo · Werte sind synthetisch', tone='info')
+        return JournalEntry(now, 'Übertragung vorbereitet', 'COM-Port ist geöffnet', tone='info')
     if event.kind == 'stopped':
         return JournalEntry(now, 'Übertragung gestoppt', 'keine weiteren Werte an COM', tone='info')
     if event.kind == 'exchange':
-        outcome = (event.detail or {}).get('outcome')
-        if outcome in ('unknown', 'stopped'):
-            return JournalEntry(now, 'Weitergabe unklar', 'nicht wiederholt', tone='warn', fault=True)
-        if outcome == 'omitted':
-            return JournalEntry(now, 'Wert ausgelassen', 'ungültig oder veraltet – nichts an COM geschrieben', tone='warn')
+        outcome = detail.get('outcome', event.code)
+        if outcome in EXCHANGE_FAULTS:
+            title, sub = EXCHANGE_FAULTS[outcome]
+            return JournalEntry(now, title, sub, tone='err' if outcome == 'failed' else 'warn', fault=True)
         if outcome == 'idle':
             return JournalEntry(now, 'Wartet auf Messlauf', 'kein Wert vorhanden', tone='info')
         if outcome == 'ended':

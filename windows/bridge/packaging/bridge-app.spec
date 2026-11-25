@@ -1,12 +1,16 @@
 # INTERNER, UNQUALIFIZIERTER Testbuild der GUI "GSVmulti-Bruecke".
 # Nur ueber build-test.ps1 (Windows 11 x64). Kein freigegebener Bauweg:
 # der qualifizierte Weg bleibt build.ps1 + bridge.spec.
+import argparse
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
 
 bridge_root = Path(SPECPATH).parent
 repo_root = bridge_root.parents[1]
+parser = argparse.ArgumentParser()
+parser.add_argument("--portable", action="store_true")
+portable = parser.parse_args().portable
 
 a = Analysis(
     [str(bridge_root / "packaging/app_launcher.py")],
@@ -15,7 +19,8 @@ a = Analysis(
     datas=[(str(bridge_root / "src/dispread_bridge_app/templates/Session-COM8.ucf"),
             "dispread_bridge_app/templates"),
            (str(bridge_root / "src/dispread_bridge_app/templates/vorlage-4kanal-mvv.ucf"),
-            "dispread_bridge_app/templates")],
+            "dispread_bridge_app/templates"),
+           (str(bridge_root / "THIRD_PARTY_NOTICES.md"), ".")],
     hiddenimports=[
         "dispread.gsv_bridge", "serial", "serial.tools.list_ports",
         "PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets",
@@ -32,8 +37,12 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure)
-exe = EXE(
-    pyz, a.scripts, [], exclude_binaries=True, name="GSVmulti-Bruecke",
+exe_options = dict(
+    name="GSVmulti-Bruecke",
     debug=False, bootloader_ignore_signals=False, strip=False, upx=False, console=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="GSVmulti-Bruecke")
+if portable:
+    exe = EXE(pyz, a.scripts, a.binaries, a.datas, **exe_options)
+else:
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, contents_directory="_internal", **exe_options)
+    coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="GSVmulti-Bruecke")

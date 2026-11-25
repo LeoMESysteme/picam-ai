@@ -170,6 +170,28 @@ def worker(connection, com, db, emit):
     return BridgeWorker(connection, lambda: com, db, emit)
 
 
+@pytest.mark.parametrize('outcome,short,fail_ack', [('failed', True, False), ('unconfirmed', False, True)])
+def test_worker_emits_com_issue_even_when_exchange_raises(tmp_path, outcome, short, fail_ack):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+    from dispread_bridge_app.ui import texts
+
+    events, done = [], threading.Event()
+
+    def emit(event):
+        events.append(event)
+        if event.kind == 'stopped':
+            done.set()
+
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w = worker(Connection(Link(fail_ack=fail_ack)), Com(short=short), db, emit)
+        w.start()
+        assert done.wait(2)
+        w.stop()
+    issues = [e for e in events if e.kind == 'exchange' and e.code == outcome]
+    assert len(issues) == 1 and issues[0].run_id == 'run'
+    assert texts.event_entry(issues[0]).fault
+
+
 def test_worker_stop_disconnects_and_closes_com(tmp_path):
     from dispread_bridge_app.delivery_journal import DeliveryJournal
     connection, com, events, ready = Connection(Link()), Com(), [], threading.Event()
@@ -1057,6 +1079,7 @@ def test_worker_status_counts_tick_lines_fills_and_disturbance(tmp_path):
     replies = [tick_message(1), tick_message(2, valid=False), tick_message(5), tick_message(70)]
     with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
         worker, com, events, link = _tick_worker(tmp_path, replies, db)
+        worker._clock = lambda: 0.0  # Drosselung und Abschluss unabhängig vom Test-Tempo
         worker.start()
         deadline = _time.monotonic() + 3
         while not any(e.kind == 'tick_disturbed' for e in list(events)):  # nach Takt 70
@@ -1067,7 +1090,32 @@ def test_worker_status_counts_tick_lines_fills_and_disturbance(tmp_path):
     assert (status.ticks_written, status.ticks_invalid, status.ticks_filled) == (4, 1, 2)
     assert [p.split(b';')[2] for p in com.payloads] == [b'1', b'2', b'3', b'4', b'5', b'70']
     assert any(e.kind == 'tick_disturbed' for e in events)
+    reports = [e for e in events if e.kind == 'tick_stats']
+    assert len(reports) == 2  # erste Änderung sofort, Rest beim Stoppen
+    assert reports[-1].run_id == 'run'
+    assert (reports[-1].detail['ticks_filled'], reports[-1].detail['ticks_invalid']) == (2, 1)
     assert [m['filled'] for m in link.messages if m['type'] == 'tick_ack'] == [0, 0, 2, 0]
+
+
+def test_tick_reports_pending_counts_on_next_second(tmp_path):
+    from dispread_bridge_app.delivery_journal import DeliveryJournal
+
+    now = [0.0]
+    with DeliveryJournal(tmp_path / 'audit.sqlite') as db:
+        w, _, events, _ = _tick_worker(tmp_path, [], db)
+        w._clock = lambda: now[0]
+        session = BridgeSession()
+        session._count_tick('run', ticks_written=1, ticks_invalid=1)
+        w._report_ticks(session)
+        for _ in range(5):
+            now[0] += 0.1
+            session._count_tick('run', ticks_filled=1)
+            w._report_ticks(session)
+        assert len(events) == 1 and events[0].detail['ticks_filled'] == 0
+        now[0] = 1.0
+        w._report_ticks(session)
+        w._report_ticks(session)
+    assert len(events) == 2 and events[-1].detail['ticks_filled'] == 5
 
 
 def test_unknown_tick_line_blocks_worker_before_com_open(tmp_path):

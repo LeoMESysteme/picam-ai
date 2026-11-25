@@ -1,5 +1,18 @@
 # Hinweise zu Fremdbestandteilen (Windows-App GSVmulti-Brücke)
 
+## Qt und Qt for Python (PySide6, Shiboken6)
+
+Die Brücke bündelt Qt 6, die Python-Bindings PySide6 und deren
+Shiboken6-Laufzeit aus der Qt for Python Community Edition (The Qt Company
+und Mitwirkende). Für die mitgelieferten Qt-Bestandteile wird
+GNU LGPL Version 3 verwendet.
+
+- [LGPL-3.0-Lizenztext](https://www.gnu.org/licenses/lgpl-3.0.html)
+- [Qt-Lizenzen und Hinweise zu Drittbestandteilen](https://doc.qt.io/qt-6/licensing.html)
+- [Lizenzhinweise zu Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html)
+- Quellcode bei Qt für [Qt 6](https://download.qt.io/archive/qt/) und
+  [Qt for Python](https://code.qt.io/cgit/pyside/pyside-setup.git/)
+
 ## Fluent UI System Icons
 
 * Herkunft: npm-Paket `@fluentui/svg-icons`, Version 1.1.344

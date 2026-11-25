@@ -5,6 +5,16 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Windows-Brücke: Störungen im Journal und zwei EXE-Pakete.**
+  Abbruch der Pi-Verbindung, fehlgeschlagene COM-Weitergabe, unbestätigte
+  Pi-Quittungen und gestörte Takte erscheinen im Störungsfilter.
+  Wiederverbindungsversuche sowie aufgefüllte und ungültige Takte werden
+  gezählt. Die Dauer einer Unterbrechung stammt aus der monotonen Windows-Uhr.
+  Der GUI-Bau liefert eine portable EXE und mit Inno Setup ein Benutzer-Setup
+  samt SHA-256-Liste. Beide App-Bauformen prüfen im Selbsttest die
+  Session-Vorlagen und die Lizenzhinweise. Windows-Bau und Update stehen
+  zur Prüfung aus.
+
 * 2026-11-20 (nachts): **Befunde aus der unabhängigen Prüfung vor dem Release behoben.**
   Problem/Geändert:
   - `picam kalibrieren`: SIGHUP (SSH-Abbruch) und SIGTERM liefen ohne Aufräumen aus

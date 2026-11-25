@@ -117,6 +117,8 @@ def _abort_reason(texts, event) -> str:
     """Kurzer Grund für „Empfangstest unterbrochen“; unbekannte Codes bleiben leer statt geraten."""
     if event.kind == 'connection' and event.code == 'backoff':
         return 'Pi antwortet nicht'
+    if event.code == 'connection_interrupted':
+        return 'Verbindung unterbrochen'
     if not event.code or event.code == event.kind:
         return ''
     title = texts.explain_code(event.code)[0]
@@ -155,8 +157,18 @@ class AppController:
         self._lock = threading.RLock()
         self._subs: list[Callable] = []
         self._entries: deque = deque(maxlen=JOURNAL_MAX)
-        self._counter_entry = None           # die laufende Zaehlerzeile, solange sie oben steht
+        self._counter_entry = None           # die laufende Zeile für an COM übergebene Werte
         self._last_exchange = None
+        self._idle_noted = False
+        self._outage_start = None
+        self._outage_entry = None
+        self._outage_cause = ''
+        self._retry_hints = set()
+        self._exchange_run = None
+        self._exchange_fault_rows = {}
+        self._tick_run = None
+        self._tick_rows = {}
+        self._tick_base = {}
         # Diagnose: Schreiben nie im Workerthread (Datei-I/O, fsync).
         self._diag_queue: queue.Queue = queue.Queue(maxsize=DIAG_QUEUE_MAX)
         self._diag_written_pending = {}
@@ -607,23 +619,86 @@ class AppController:
         deadline.wait(timeout)
         self._diag_write(self._diag_collect())
 
+    def _journal_row(self, entry: JournalEntry, previous: JournalEntry | None = None) -> JournalEntry:
+        if previous is not None:
+            for index, row in enumerate(self._entries):
+                if row is previous:
+                    entry = replace(entry, time=row.time)
+                    self._entries[index] = entry
+                    return entry
+        self._entries.appendleft(entry)
+        return entry
+
+    def _connection_row(self, event: BridgeEvent, entry: JournalEntry) -> None:
+        """Eine laufende Störungszeile je Unterbrechung, einschließlich der Wiederholversuche."""
+        peer = (event.detail or {}).get('peer')
+        if event.kind == 'connection' and (event.code == 'adapter_opening' or (event.code or '').startswith('tailscale_')):
+            if event.code in self._retry_hints:
+                return
+            self._retry_hints.add(event.code)
+        elif event.kind == 'connection' and peer is None and self._manager is not None:
+            peer = self._manager.snapshot().peer
+
+        retry = event.code == 'backoff' or (peer == 'backoff' and event.kind == 'connection' and entry.fault)
+        if retry or event.kind == 'recovering' or event.code == 'connection_interrupted':
+            now = self._clock()
+            if self._outage_start is None:
+                self._outage_start = now
+            previous = self._outage_entry
+            if event.code == 'connection_interrupted':
+                self._outage_cause = entry.sub
+            if retry:
+                self._bo_n += 1
+                self._bo_t = now
+                attempts = ('1 fehlgeschlagener Verbindungsversuch' if self._bo_n == 1
+                            else f'{self._bo_n} fehlgeschlagene Verbindungsversuche')
+                title = previous.title if previous else entry.title
+                cause = entry.title if entry.title != title else entry.sub
+                if event.code == 'connection_lost' and self._outage_cause:
+                    cause = self._outage_cause
+                entry = replace(entry, title=title, sub=' · '.join(filter(None, (attempts, cause))))
+            elif previous is not None:
+                return
+            self._outage_entry = self._journal_row(entry, previous)
+            return
+
+        if event.code in ('authenticated', 'connecting', 'disconnected') or (peer == 'disconnected' and entry.fault):
+            if event.code == 'connecting':
+                # A manual reconnect starts a new worker whose local counters start at zero.
+                self._tick_base = {code: count for code, (count, _) in self._tick_rows.items()}
+            if event.code == 'authenticated' and self._outage_start is not None:
+                seconds = int(self._clock() - self._outage_start)
+                entry = replace(entry, title='Verbindung wieder da', sub='Pi-Identität geprüft',
+                                duration=f'{seconds} s' if seconds else '< 1 s')
+            self._bo_n = 0
+            self._outage_start = self._outage_entry = None
+            self._outage_cause = ''
+            self._retry_hints.clear()
+            self._idle_noted = False
+        self._journal_row(entry)
+
     def _note(self, event: BridgeEvent) -> None:
         from .ui import texts
-        run_now = self._run_id_now() if (event.detail or {}).get('release') else None   # ausserhalb der Sperre
+        detail = event.detail or {}
+        test_release = detail.get('release') == 'test_unaccepted'
+        run_now = event.run_id or (self._run_id_now() if test_release and event.kind == 'exchange' else None)
         with self._lock:
             now = datetime.now().strftime('%H:%M:%S')
-            if event.kind in ('connection', 'exchange'):
-                self._last_contact = now             # Lebenszeichen des Pi (jede Meldung zählt)
-            if event.kind == 'connection' and not str(event.code or '').startswith('tailscale_'):
-                m = self._manager
-                peer = m.snapshot().peer if m is not None else None
-                if peer == 'backoff':
-                    self._bo_n += 1
-                    self._bo_t = self._clock()
-                elif peer != 'connecting':
-                    self._bo_n = 0
-            outcome = (event.detail or {}).get('outcome') if event.kind == 'exchange' else None
-            test_release = (event.detail or {}).get('release') == 'test_unaccepted'
+            if event.kind == 'connection' and event.code == 'authenticated':
+                self._last_contact = now
+            if event.kind == 'tick_stats':
+                if event.run_id != self._tick_run:
+                    self._tick_run = event.run_id
+                    self._tick_rows.clear()
+                    self._tick_base.clear()
+                for code in ('ticks_filled', 'ticks_invalid'):
+                    count = self._tick_base.get(code, 0) + detail.get(code, 0)
+                    if count and self._tick_rows.get(code, (0, None))[0] != count:
+                        entry = texts.event_entry(replace(event, code=code, detail={'count': count}), now=now)
+                        previous = self._tick_rows.get(code, (0, None))[1]
+                        self._tick_rows[code] = count, self._journal_row(entry, previous)
+                return
+            outcome = detail.get('outcome', event.code) if event.kind == 'exchange' else None
             if event.kind == 'exchange':
                 if test_release and not self._tr_active:
                     self._tr_active, self._tr_written, self._tr_omitted = True, 0, 0
@@ -633,6 +708,7 @@ class AppController:
                 elif not test_release and self._tr_active:
                     self._tr_active = False
                     self._counter_entry = None
+                    self._idle_noted = False
                     self._entries.appendleft(JournalEntry(now, 'Ausgabe wieder gesperrt', tone='info'))
                 if test_release and outcome == 'written':
                     self._tr_written += 1
@@ -643,6 +719,7 @@ class AppController:
                     self._demo_noted = True
                     n, total = self._written, self._demo_count
                     self._counter_entry = None
+                    self._idle_noted = False
                     self._entries.appendleft(JournalEntry(
                         now, f'{texts.DEMO_FINISHED}: {n} von {total} übergeben',
                         'vollständig an COM übergeben' if n >= total else f'{total - n} fehlen',
@@ -657,9 +734,17 @@ class AppController:
                     self._com_issue = 'write_failed'
                 elif outcome in ('unknown', 'unconfirmed', 'stopped'):
                     self._com_issue = 'unclear'
-                if outcome == self._last_exchange and outcome in ('idle', 'ended'):
-                    return                              # Leerlauf nie als Einzelzeilen
+                previous_outcome = self._last_exchange
                 self._last_exchange = outcome
+                if outcome == 'idle':
+                    if event.run_id is not None or self._idle_noted:
+                        return  # Poll-Leerlauf tritt auch zwischen Takten eines laufenden Laufs auf.
+                    self._idle_noted = True
+                if outcome == 'ended':
+                    if previous_outcome == 'ended':
+                        return
+                    self._idle_noted = False
+                    self._counter_entry = None
             if outcome == 'written':
                 # Eine laufende Zaehlerzeile, die aktualisiert statt neu angehaengt wird.
                 n = self._tr_written if test_release else self._written
@@ -668,26 +753,34 @@ class AppController:
                          if test_release else
                          JournalEntry(now, f'Demo: {n} {"Wert" if n == 1 else "Werte"} weitergegeben',
                                       'COM-Weitergabe · kein GSVmulti-Empfangsnachweis', tone='info'))
-                if self._counter_entry is not None and self._entries and self._entries[0] is self._counter_entry:
-                    self._entries[0] = entry
-                else:
-                    self._entries.appendleft(entry)
-                self._counter_entry = entry
+                self._counter_entry = self._journal_row(entry, self._counter_entry)
                 return
-            self._counter_entry = None
-            self._entries.appendleft(texts.event_entry(event, now=now))
+            entry = texts.event_entry(event, now=now)
+            if event.kind in ('connection', 'recovering'):
+                self._connection_row(event, entry)
+            elif outcome in texts.EXCHANGE_FAULTS:
+                if event.run_id != self._exchange_run:
+                    self._exchange_run = event.run_id
+                    self._exchange_fault_rows.clear()
+                count, previous = self._exchange_fault_rows.get(outcome, (0, None))
+                count += 1
+                if count > 1:
+                    entry = replace(entry, sub=f'{entry.sub} · {count} Vorkommnisse')
+                self._exchange_fault_rows[outcome] = count, self._journal_row(entry, previous)
+            else:
+                self._journal_row(entry)
             # Abbruch eines laufenden Empfangstests sichtbar machen (einmal je Test): Verbindung weg, Übertragung
             # gestoppt oder Störung, bevor alle Werte übergeben waren.
             if (self._demo_started and not self._demo_ended and not self._demo_noted
                     and self._written < self._demo_count
-                    and (event.kind in ('stopped', 'blocked', 'audit_failed', 'connection_failed', 'recovering')
-                         or (event.kind == 'connection' and (event.code in ('disconnected', 'backoff')
-                                                             or event.code in texts.CONNECTION_CODE_TEXT)))):
+                    and (event.kind == 'stopped' or (entry.fault and event.kind in (
+                        'connection', 'blocked', 'audit_failed', 'connection_failed', 'recovering'))
+                         or (event.kind == 'connection' and event.code == 'disconnected'))):
                 self._demo_noted = True
                 self._entries.appendleft(JournalEntry(
                     now, f'{texts.DEMO_ABORTED}: {self._written} von {self._demo_count} übergeben',
                     _abort_reason(texts, event),
-                    tone='err', fault=True))
+                    tone='err' if entry.fault else 'info', fault=entry.fault))
 
     # ------------------------------------------------------------ Profil
     @_reports
@@ -946,6 +1039,8 @@ class AppController:
             self._connect_attempted, self._resumed = True, False
             self._bo_n = 0
             self._demo_started, self._written, self._com_issue = False, 0, None
+            self._counter_entry = None
+            self._exchange_fault_rows.clear()
             self._exited = False
             kwargs = {}
             if self._transport_factory is not None:
@@ -1006,6 +1101,7 @@ class AppController:
             raise AppError('run_active')
         with self._lock:
             self._demo_started, self._written, self._com_issue = True, 0, None
+            self._counter_entry = None
             self._demo_ended, self._demo_t0, self._demo_noted = False, self._clock(), False
         try:
             manager.start_demo(self._demo_count, self._demo_rate)

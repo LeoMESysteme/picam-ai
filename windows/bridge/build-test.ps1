@@ -28,6 +28,28 @@ function Invoke-Checked {
     }
 }
 
+function Test-BuiltExe {
+    param([string]$Exe, [string]$SelfTestJson)
+    if (-not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw "EXE nicht erzeugt: $Exe" }
+    $Proc = Start-Process -FilePath $Exe -ArgumentList @("--self-test-out", "`"$SelfTestJson`"") -PassThru -WindowStyle Hidden
+    try {
+        if (-not $Proc.WaitForExit(120000)) { $Proc.Kill(); throw "Selbsttest: Zeitueberschreitung bei $Exe" }
+        if (-not (Test-Path -LiteralPath $SelfTestJson -PathType Leaf)) {
+            throw "Selbsttest hat kein Ergebnis geschrieben (Exit $($Proc.ExitCode)): $Exe"
+        }
+        $Raw = Get-Content -LiteralPath $SelfTestJson -Raw -Encoding UTF8
+        $Report = $Raw | ConvertFrom-Json
+        if ($Proc.ExitCode -ne 0 -or -not $Report.ok -or -not $Report.frozen) {
+            Write-Output $Raw
+            throw "Selbsttest der EXE fehlgeschlagen: $Exe"
+        }
+        Write-Output "Selbsttest bestanden: $Exe"
+    }
+    finally {
+        $Proc.Dispose()
+    }
+}
+
 if ($env:OS -ne "Windows_NT") { throw "Build gesperrt: nur auf Windows 11 x64 moeglich (PyInstaller baut nur fuer das Host-System)." }
 if (-not [Environment]::Is64BitOperatingSystem) { throw "Build gesperrt: 64-Bit-Windows erforderlich." }
 if ([Environment]::OSVersion.Version.Build -lt 22000) { throw "Build gesperrt: Windows 11 (Build >= 22000) erforderlich." }
@@ -35,7 +57,28 @@ if ([Environment]::OSVersion.Version.Build -lt 22000) { throw "Build gesperrt: W
 # Kein Suchen im PATH: der Interpreter wird ausdruecklich angegeben.
 $Python = (Resolve-Path -LiteralPath $Python).Path
 Invoke-Checked $Python @("-I", "-c", "import sys,struct; sys.exit(0 if sys.version_info >= (3,13) and struct.calcsize('P') == 8 and sys.platform == 'win32' else 'Python >=3.13 x64 fuer Windows erforderlich.')")
-if ($Inno) { $Inno = (Resolve-Path -LiteralPath $Inno).Path }
+if ($Inno) {
+    if (-not (Test-Path -LiteralPath $Inno -PathType Leaf)) { throw "ISCC.exe nicht gefunden: $Inno" }
+    $Inno = (Resolve-Path -LiteralPath $Inno).Path
+}
+else {
+    $Candidates = @(
+        if (${env:ProgramFiles(x86)}) { Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6/ISCC.exe" }
+        if ($env:ProgramFiles) { Join-Path $env:ProgramFiles "Inno Setup 6/ISCC.exe" }
+        if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Programs/Inno Setup 6/ISCC.exe" }
+    )
+    foreach ($Candidate in $Candidates) {
+        if (Test-Path -LiteralPath $Candidate -PathType Leaf) {
+            $Inno = $Candidate
+            break
+        }
+    }
+}
+if (-not $Inno) {
+    $InnoHint = "ISCC.exe fehlt. Inno Setup installieren: winget install JRSoftware.InnoSetup"
+    if ($Release) { throw "Release-Build gesperrt: $InnoHint" }
+    Write-Warning "$InnoHint. Dieser Testbuild erzeugt nur die portable EXE."
+}
 
 # $PSScriptRoot ist in Windows PowerShell 5.1 in Parametervorgaben leer;
 # deshalb erst hier auswerten, mit Rueckfall auf den Skriptpfad.
@@ -91,41 +134,27 @@ channel = "$Channel"
 "@
 [System.IO.File]::WriteAllText($BuildInfo, $Info, (New-Object System.Text.UTF8Encoding($false)))
 try {
-    Invoke-Checked $VenvPython @("-I", "-m", "PyInstaller", "--clean", "--noconfirm", "--distpath", $DistPath,
-        "--workpath", (Join-Path $BuildRoot "pyinstaller"), (Join-Path $BridgeRoot "packaging/bridge-app.spec"))
+    $Spec = Join-Path $BridgeRoot "packaging/bridge-app.spec"
+    $BuildArgs = @("-I", "-m", "PyInstaller", "--clean", "--noconfirm", "--distpath", $DistPath)
+    Invoke-Checked $VenvPython ($BuildArgs + @("--workpath", (Join-Path $BuildRoot "pyinstaller-portable"),
+        $Spec, "--", "--portable"))
+    if ($Inno) {
+        Invoke-Checked $VenvPython ($BuildArgs + @("--workpath", (Join-Path $BuildRoot "pyinstaller-onedir"), $Spec))
+    }
 }
 finally {
     Remove-Item -LiteralPath $BuildInfo -ErrorAction SilentlyContinue
 }
 
-$AppDir = Join-Path $DistPath "GSVmulti-Bruecke"
-$Exe = Join-Path $AppDir "GSVmulti-Bruecke.exe"
-if (-not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw "EXE nicht erzeugt." }
+$PortableExe = Join-Path $DistPath "GSVmulti-Bruecke.exe"
+Test-BuiltExe $PortableExe (Join-Path $BuildRoot "selftest-portable.json")
+$Artifacts = [ordered]@{ "$PackageName-portable.exe" = $PortableExe }
 
-# Selbsttest der gebauten EXE: ohne Fenster, Ergebnis als JSON-Datei (die EXE hat keine Konsole).
-$SelfTestJson = Join-Path $BuildRoot "selftest.json"
-$Proc = Start-Process -FilePath $Exe -ArgumentList @("--self-test-out", "`"$SelfTestJson`"") -PassThru -WindowStyle Hidden
-if (-not $Proc.WaitForExit(120000)) { $Proc.Kill(); throw "Selbsttest: Zeitueberschreitung." }
-if (-not (Test-Path -LiteralPath $SelfTestJson)) { throw "Selbsttest hat kein Ergebnis geschrieben (Exit $($Proc.ExitCode))." }
-$Report = Get-Content -LiteralPath $SelfTestJson -Raw | ConvertFrom-Json
-if ($Proc.ExitCode -ne 0 -or -not $Report.ok -or -not $Report.frozen) {
-    Write-Output (Get-Content -LiteralPath $SelfTestJson -Raw)
-    throw "Selbsttest der EXE fehlgeschlagen; kein Paket erzeugt."
-}
-Write-Output "Selbsttest der EXE: bestanden (Importtest, kein Fenster)."
-
-# ZIP
-$Zip = Join-Path $OutputDirectory "$PackageName.zip"
-if (Test-Path -LiteralPath $Zip) { throw "Ausgabe existiert bereits: $Zip" }
-Add-Type -AssemblyName System.IO.Compression
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory($AppDir, $Zip, [System.IO.Compression.CompressionLevel]::Optimal, $true)
-$ZipHash = (Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash.ToLowerInvariant()
-Write-Output "ZIP:   $Zip"
-Write-Output "SHA256 $ZipHash"
-
-# Setup (optional)
+# Setup: beim Release Pflicht, beim Testbuild optional.
 if ($Inno) {
+    $AppDir = Join-Path $DistPath "GSVmulti-Bruecke"
+    $OnedirExe = Join-Path $AppDir "GSVmulti-Bruecke.exe"
+    Test-BuiltExe $OnedirExe (Join-Path $BuildRoot "selftest-onedir.json")
     $SetupOut = Join-Path $BuildRoot "setup"
     New-Item -ItemType Directory -Path $SetupOut -Force | Out-Null
     $IsccArgs = @("/DAppDir=$AppDir", "/DAppVersion=$Version", "/DAppCommit=$Commit12", "/DSetupOutput=$SetupOut")
@@ -134,12 +163,22 @@ if ($Inno) {
     $SetupName = "GSVmulti-Bruecke-Setup-$Version$Suffix.exe"
     $SetupBuilt = Join-Path $SetupOut $SetupName
     if (-not (Test-Path -LiteralPath $SetupBuilt -PathType Leaf)) { throw "Setup nicht erzeugt." }
-    $Setup = Join-Path $OutputDirectory $SetupName
-    if (Test-Path -LiteralPath $Setup) { throw "Ausgabe existiert bereits: $Setup" }
-    Move-Item -LiteralPath $SetupBuilt -Destination $Setup
-    Write-Output "Setup: $Setup"
-    Write-Output "SHA256 $((Get-FileHash -LiteralPath $Setup -Algorithm SHA256).Hash.ToLowerInvariant())"
+    $Artifacts[$SetupName] = $SetupBuilt
 }
+$SumsFile = Join-Path $OutputDirectory "$PackageName-SHA256SUMS.txt"
+if (Test-Path -LiteralPath $SumsFile) { throw "Ausgabe existiert bereits: $SumsFile" }
+$Sums = foreach ($Name in $Artifacts.Keys) {
+    $Target = Join-Path $OutputDirectory $Name
+    if (Test-Path -LiteralPath $Target) { throw "Ausgabe existiert bereits: $Target" }
+    $Hash = (Get-FileHash -LiteralPath $Artifacts[$Name] -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$Hash  $Name"
+}
+foreach ($Name in $Artifacts.Keys) {
+    $Target = Join-Path $OutputDirectory $Name
+    Move-Item -LiteralPath $Artifacts[$Name] -Destination $Target
+    Write-Output $Target
+}
+Set-Content -LiteralPath $SumsFile -Value $Sums -Encoding ASCII
 Write-Output "Quelle: $CommitLabel  Version: $Version"
-if ($Release) { Write-Output "Release $Version gebaut (unsigniert). Hochladen als Forgejo-Release: ZIP und ggf. Setup aus $OutputDirectory." }
+if ($Release) { Write-Output "Release $Version gebaut (unsigniert). Fuer Forgejo: portable EXE, Setup und $PackageName-SHA256SUMS.txt aus $OutputDirectory." }
 else { Write-Output "Unsigniert, unqualifiziert, nur interner Test. Kein Ersatz fuer build.ps1; keine Windows-Abnahme (N1/N2/N3)." }

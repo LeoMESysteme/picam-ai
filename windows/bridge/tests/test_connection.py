@@ -334,6 +334,9 @@ def test_write_admission_and_disconnect_share_one_linearization_lock(setup):
     assert disconnected.is_set()
     with pytest.raises(ConnectionError):
         manager.admit_write(link, lambda: pytest.fail('post revoke claim'))
+    with pytest.raises(ConnectionError):
+        link.heartbeat()
+    assert not any(event.code == 'connection_interrupted' for event in events)
 
 
 def test_ack_response_loss_revokes_link_and_does_not_replay_record(setup):
@@ -356,6 +359,8 @@ def test_ack_response_loss_revokes_link_and_does_not_replay_record(setup):
     with pytest.raises(ConnectionError, match='connection_lost'):
         link.send(dict(version=1, type='ack', request_id='poll-lost-ack', run_id=reply['run_id'],
                        frame_sequence=reply['record']['frame_sequence'], barrier_id=reply['barrier_id'], outcome='written'))
+    interruptions = [event for event in events if event.code == 'connection_interrupted']
+    assert len(interruptions) == 1 and interruptions[0].detail['output'] == 'unavailable'
     with pytest.raises(ConnectionError):
         manager.data_link()
     wait_for(lambda: hub.status()['connected'] is False)
@@ -434,7 +439,23 @@ def test_tailscale_logged_out_is_local_evidence_without_claiming_route_cause(set
     assert manager.network_status.state == 'logged_out'
     assert manager.snapshot().next_action == 'network_unavailable'
     assert any(event.code == 'tailscale_logged_out' for event in events)
+    wait_for(lambda: any(event.code == 'network_unavailable' and event.detail['peer'] == 'backoff'
+                         for event in events))
     assert not hub.status()['connected']
+
+
+def test_initial_handshake_timeout_keeps_transport_cause(setup):
+    from dispread_bridge_app.transports import TransportError
+
+    manager, factory, _, events = setup
+
+    def timeout(_):
+        raise TransportError('uart_timeout')
+
+    factory.mutate = timeout
+    manager.connect('network')
+    wait_for(lambda: any(e.code == 'uart_timeout' and e.detail['peer'] == 'backoff' for e in events))
+    assert not any(e.code == 'connection_interrupted' for e in events)
 
 
 @pytest.mark.parametrize('cancel_replacement', [False, True])
