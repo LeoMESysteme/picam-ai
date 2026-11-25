@@ -254,21 +254,57 @@ def test_worker_cancel_before_switch_leaves_active_version(prefix, admin, monkey
     assert inst_update.releases(prefix)['current'] == '1.0.0'
 
 
-def test_cli_update_without_source_reports_missing_release_source(admin, monkeypatch, capsys):
+@pytest.mark.parametrize(('version', 'code', 'message'), [
+    ('1.0.0', cli.EXIT_OK, 'bereits aktuell (1.0.0)'),
+    ('0.9.0', cli.EXIT_FAIL, 'Downgrade nur mit ausdrücklichem --source'),
+])
+def test_cli_compares_latest_before_downloading(admin, monkeypatch, capsys, version, code, message):
+    from dispread import release_source
+
+    def fail(*_):
+        pytest.fail('kein Download oder sudo nötig')
+
     monkeypatch.setattr(cli, 'discover', lambda *_: admin)
-    monkeypatch.setattr(inst_update, 'load_source', lambda *_: pytest.fail('keine Bezugsquelle'))
-    assert cli.main(['update', '--yes']) == cli.EXIT_FAIL
-    assert 'Bezugsquelle noch nicht festgelegt – mit --source angeben' in capsys.readouterr().err
+    monkeypatch.setattr(admin_update, 'needs_root', fail)
+    monkeypatch.setattr(release_source.LatestRelease, 'download', fail)
+    monkeypatch.setattr(release_source, 'latest_release',
+                        lambda: release_source.LatestRelease(version, 'https://archive', 'https://checksum'))
+    assert cli.main(['update']) == code
+    report = capsys.readouterr()
+    assert message in (report.out if code == cli.EXIT_OK else report.err)
 
 
-def test_cli_update_uses_configured_source(admin, monkeypatch, capsys):
-    monkeypatch.setattr(cli, 'discover', lambda *_: admin)
+def test_worker_latest_uses_verified_archive_and_rolls_back(prefix, admin, monkeypatch):
+    from dispread import release_source
+
+    latest = release_source.LatestRelease('1.1.0', 'https://archive', 'https://checksum')
+
+    def download(self, directory):
+        archive = directory / self.filename
+        archive.write_bytes(b'archive')
+        return archive, 'a' * 64
+
+    def prepare(prefix, source, sha256, *, progress, step, stable_version):
+        assert stable_version == '1.1.0'
+        assert sha256 == 'a' * 64
+        assert Path(source).read_bytes() == b'archive'
+        return {'release_id': '1.1.0', 'path': str(prefix / 'releases/1.1.0'), 'from': '1.0.0'}
+
+    monkeypatch.setattr(release_source, 'latest_release', lambda: latest)
+    monkeypatch.setattr(release_source.LatestRelease, 'download', download)
+    monkeypatch.setattr(inst_update, 'prepare', prepare)
     monkeypatch.setattr(admin_update, 'needs_root', lambda _: False)
-    monkeypatch.setattr(admin_update, 'RELEASE_SOURCE', 'lokales.tar.gz')
-    monkeypatch.setattr(admin_update, 'install_update',
-                        lambda instance, source, sha256, echo: (True, source))
-    assert cli.main(['update', '--yes']) == cli.EXIT_OK
-    assert capsys.readouterr().out.strip() == 'lokales.tar.gz'
+    answers = iter([False, True])
+    deps = admin_update.Deps(collect=snapshot_collect({'state': 'idle'}), restart=lambda *_: next(answers))
+    result = admin_update.run_update(admin, None, None, RecordingConsole(), deps, yes=True)
+    assert result.rollback_ok
+    assert inst_update.releases(prefix)['current'] == '1.0.0'
+
+
+def test_version_cli_uses_release_manifest(admin, monkeypatch, capsys):
+    monkeypatch.setattr(cli, 'discover', lambda *_: admin)
+    assert cli.main(['--version']) == cli.EXIT_OK
+    assert capsys.readouterr().out.strip() == 'picam 1.0.0'
 
 
 def test_worker_recovers_when_console_closes_after_switch(prefix, admin, monkeypatch):
@@ -341,3 +377,16 @@ def test_failed_current_swap_preserves_previous(prefix):
         inst_update.activate(prefix, '1.1.0')
     state = inst_update.releases(prefix)
     assert (state['current'], state['previous']) == ('1.0.0', '0.9.0')
+
+
+@pytest.mark.parametrize(('release_id', 'dirty', 'version'), [
+    ('1.2.0', False, b'1.1.0\n'),
+    ('1.1.0', True, b'1.1.0\n'),
+    ('1.1.0', False, b'0.1.0.dev0\n'),
+])
+def test_automatic_update_requires_matching_clean_bundle(prefix, monkeypatch, release_id, dirty, version):
+    bundle = SimpleNamespace(release_id=release_id, manifest={'dirty': dirty}, files={'VERSION': version})
+    monkeypatch.setattr(inst_update, 'load_source', lambda *_: bundle)
+    with pytest.raises(ValueError, match='Archiv passt nicht'):
+        inst_update.plan_update(prefix, 'archive', stable_version='1.1.0')
+    assert inst_update.releases(prefix)['current'] == '1.0.0'

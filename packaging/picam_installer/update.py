@@ -44,9 +44,14 @@ def check_prefix(prefix: Path) -> Path:
     return prefix
 
 
-def plan_update(prefix, source, sha256=None):
+def plan_update(prefix, source, sha256=None, *, stable_version=None):
     prefix = check_prefix(prefix)
     bundle = load_source(source, sha256)
+    if stable_version is not None and (
+        bundle.release_id != stable_version or bundle.manifest.get('dirty') is not False
+        or bundle.files['VERSION'].strip() != stable_version.encode('ascii')
+    ):
+        raise ValueError(f'Archiv passt nicht zum veröffentlichten Release {stable_version}.')
     state = releases(prefix)
     if bundle.release_id == state['current']:
         raise ValueError(f'Version {bundle.release_id} ist bereits aktiv')
@@ -58,11 +63,11 @@ def plan_update(prefix, source, sha256=None):
 
 
 def prepare(prefix, source, sha256=None, python='/usr/bin/python3', runner=subprocess.run,
-            progress=lambda _text: None, *, step=None):
+            progress=lambda _text: None, *, step=None, stable_version=None):
     """Neue Version vorbereiten, nicht aktivieren. Bei Fehler bleibt nichts zurück."""
     if step is not None:
         step('pruefen')
-    bundle, target, state = plan_update(prefix, source, sha256)
+    bundle, target, state = plan_update(prefix, source, sha256, stable_version=stable_version)
     info = probe_system(python, runner=runner)
     if info.missing_modules:
         raise ValueError('Python-Systemmodule fehlen: ' + ', '.join(info.missing_modules))

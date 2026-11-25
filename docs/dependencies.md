@@ -36,7 +36,10 @@ automatisch umgebaut. Python ab 3.13 bleibt Voraussetzung.
 NumPy, OpenCV und pySerial gehören zum aktiven Messpfad; `v4l-utils` liefert
 `v4l2-ctl` für UVC-Regler. systemd und der Benutzerbus tragen den Dienst;
 `curl` prüft nach einem Neustart begrenzt die HTTPS-Erreichbarkeit. Das ist
-kein Zertifikatsvertrauensnachweis. Die bestehende TUI und die optionale
+kein Zertifikatsvertrauensnachweis. Für stabile Release-Downloads nutzen
+Bootstrap und Update ebenfalls curl, dort mit TLS-Zertifikatsprüfung,
+HTTPS-Pflicht bei Weiterleitungen und Größen- und Zeitlimits.
+Die bestehende TUI und die optionale
 Discovery bleiben in der Liste, damit ihre CLI-Optionen nutzbar sind.
 
 **Optional:** `tesseract-ocr` und `tesseract-ocr-eng` nur für das ausdrücklich

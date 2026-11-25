@@ -9,6 +9,16 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-25 — Pi-Releases über den GitHub-Mirror
+
+Der öffentliche GitHub-Mirror liefert vorerst Bootstrap und versionierte
+Pi-Archive. Ein Download des Quellbaums würde die lokal vorliegende
+Lesevorlage auslassen. Deshalb baut der Herausgeber das Archiv vom
+sauberen Tag und lädt es mit einer separaten SHA-256-Datei hoch.
+Update und Veröffentlichung teilen die Quelle im Python-Modul. Der
+eigenständige Bootstrap hat dieselben Einstellungen, damit er vor der
+Installation laufen kann. Ein Test gleicht sie ab.
+
 ## 2026-11-25 — Pi-Name im Brücken-Hello
 
 Die Windows-Brücke erhält `bridge_name` bei jeder authentifizierten

@@ -3,6 +3,14 @@
 Optische Auslesung von Messverstärkeranzeigen im Kalibrierlabor. Erkannte
 Werte werden mit Zeitbasis, Freigabestatus und Begründung dokumentiert.
 
+Auf einem neuen Pi im SSH-Terminal installieren (sobald der erste stabile Release veröffentlicht ist):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash
+```
+
+[Installer und Updates](docs/INSTALLER.md)
+
 <div class="wiki-messkette" data-messkette></div>
 
 ## So kommst du zum ersten Messwert

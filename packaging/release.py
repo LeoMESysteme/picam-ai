@@ -148,6 +148,8 @@ def build_release(root: Path, output: Path, templates: Path, release_id: str) ->
         if _product_path(name) and name not in contents:
             contents[name] = _read_regular(root / name)
     contents[TEMPLATE_PATH] = (template_data, 0o644)
+    if re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", release_id):
+        contents["VERSION"] = ((release_id + "\n").encode("ascii"), contents["VERSION"][1])
     manifest = {
         "schema": 1,
         "release_id": release_id,

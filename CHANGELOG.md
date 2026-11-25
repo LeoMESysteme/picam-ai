@@ -5,6 +5,12 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Versionierte Pi-Releases vom öffentlichen Mirror.** `get-picam.sh`
+  startet nach einem geprüften Download den geführten Installer. `picam update`
+  sucht ohne `--source` die neueste stabile Version und nutzt den vorhandenen
+  Rückweg. `picam --version` zeigt die Lieferungs-ID. Das Veröffentlichungsskript
+  baut aus einem sauberen getaggten Arbeitsbaum und lädt Archiv und Prüfsumme hoch.
+
 * 2026-11-25: **Einstellungen: nur das fokussierte Feld bleibt hervorgehoben.** `EditInput` setzte die Markierung im Blur-Ereignis wegen des dort noch alten `has_focus` neu und behielt sie nach dem Fokuswechsel; `_style_state(focused=False)` löscht sie jetzt sicher (Test über Pfeile, Bearbeiten, Esc, Mausklick, Tab-Wechsel).
 
 * 2026-11-25: **Pi-Name sichtbar in der Brücke, Konsole ehrlicher.** Brücke zeigt den Namen im Kopf und im Fenstertitel (lange Namen gekürzt, Doppelung beim Protokoll entfernt); Risikotext zu `bridge_name` korrigiert; `thread_call` der Konsole protokolliert Hook-Fehler statt sie zu verschlucken, gescheiterte Rückfragen gelten als nicht bestätigt.

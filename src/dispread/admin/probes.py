@@ -619,8 +619,13 @@ def fact_version(instance: Instance, run=run_command) -> Fact:
             if previous.is_symlink() and previous.resolve().is_dir():
                 detail.append(('Vorige', previous.resolve().name))
             return Fact('version', 'Version', OK, str(manifest.get('release_id', '?')), detail,
-                        hint='Update: picam update --source picam-<version>.tar.gz · Rückweg: picam update --rollback')
+                        hint='Update: picam update · Rückweg: picam update --rollback')
         except (OSError, ValueError):
+            pass
+    if root is not None and (root / 'VERSION').is_file():
+        try:
+            return Fact('version', 'Version', OK, (root / 'VERSION').read_text().strip())
+        except OSError:
             pass
     if root is not None and (root / '.git').exists():
         code, out, _ = run(['git', '-C', str(root), 'describe', '--tags', '--always', '--dirty'])
@@ -631,7 +636,7 @@ def fact_version(instance: Instance, run=run_command) -> Fact:
     from importlib import metadata
 
     try:
-        return Fact('version', 'Version', OK, metadata.version('dispread'))
+        return Fact('version', 'Version', OK, metadata.version('picam-number-ingestion'))
     except metadata.PackageNotFoundError:
         return Fact('version', 'Version', UNKNOWN, 'unbekannt')
 

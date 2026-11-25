@@ -222,8 +222,24 @@ def cmd_update(args, instance) -> int:
     from . import update
 
     try:
-        if not (args.check or args.rollback or args.activate):
-            args.source = update.resolve_source(args.source)
+        if not (args.source or args.check or args.rollback or args.activate):
+            from .calibrate import Console
+
+            def authorize():
+                print('Für die Systeminstallation fragt sudo nach dem Passwort.', file=sys.stderr)
+                return subprocess.call(['sudo', '-v']) == 0
+
+            class UpdateConsole(Console):
+                def confirm(self, title, lines, expected, *, deps):
+                    return confirm(title)
+
+                def mark(self, level, text, stream=None):
+                    self.line(text, stream or (sys.stdout if level == probes.OK else sys.stderr))
+
+            console = UpdateConsole(Style(sys.stderr, color=False if args.no_color else None, ascii_only=args.ascii),
+                                    out=sys.stderr)
+            deps = update.Deps(authorize=authorize)
+            return update.run_update(instance, None, args.sha256, console, deps, yes=args.yes).exit_code
         update.prefix_of(instance)
         if args.check:
             state = update.versions(instance)
@@ -433,6 +449,7 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog='picam', parents=[common],
                                    description='Werkbank verwalten: Status, Diagnose, Dienst, Protokoll, '
                                    'Konfiguration. Ohne Befehl: Verwaltungskonsole.')
+    root.add_argument('--version', action='store_true', help='picam-Version anzeigen')
     sub = root.add_subparsers(dest='command')
     real_add = sub.add_parser
     sub.add_parser = lambda *a, **k: real_add(*a, parents=[common], **k)
@@ -452,7 +469,7 @@ def parser() -> argparse.ArgumentParser:
     config.add_argument('key', nargs='?')
     config.add_argument('value', nargs='?')
     config.add_argument('--yes', '-y', action='store_true')
-    upd = sub.add_parser('update', help='neue Version installieren, umschalten, neu starten (mit Rückweg)')
+    upd = sub.add_parser('update', help='neueste stabile Version installieren und neu starten (mit Rückweg)')
     group = upd.add_mutually_exclusive_group()
     group.add_argument('--source', help='Releasearchiv oder HTTPS-Adresse')
     group.add_argument('--rollback', action='store_true', help='zurück auf die vorige Version')
@@ -502,6 +519,9 @@ def main(argv=None) -> int:
         os.environ['NO_COLOR'] = '1'
     try:
         instance = discover(args.config)
+        if args.version:
+            print(f'picam {probes.fact_version(instance).value}')
+            return EXIT_OK
         command = args.command
         interactive = sys.stdin.isatty() and sys.stdout.isatty() and os.environ.get('TERM') != 'dumb'
         if command == 'tui' or (command is None and interactive and not args.ascii):

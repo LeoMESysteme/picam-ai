@@ -57,7 +57,6 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-42](#oq-42) | — | offen | Wie wird die ROM-Gegenprobe für weitere Aufstellungen belastbar? |
 | [OQ-43](#oq-43) | — | offen | Was bedeutet der Zeitstempel der UVC-Kamera: Belichtung oder Pufferempfang? |
 | [OQ-48](#oq-48) | — | offen | Lassen sich ausgefallene Übertragungszeiträume historisch in GSVmulti importieren? |
-| [OQ-49](#oq-49) | — | offen | Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt? |
 | [OQ-56](#oq-56) | — | teilweise geklärt | Ist direkter USB-CDC-ACM-Betrieb am Pi 5 mit stabiler Versorgung praktikabel? |
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
@@ -84,6 +83,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-44](#oq-44) | — | geklärt | Wie wird die Freigabesicherung eines Testlaufs im Audit erzwungen? |
 | [OQ-45](#oq-45) | — | geklärt | Wie werden monotone Verarbeitungsmarken korrekt als Zeitbasis bezeichnet? |
 | [OQ-46](#oq-46) | — | geklärt | Warum scheitert der Live-Rahmenfit trotz korrekter Grobverschiebung? |
+| [OQ-49](#oq-49) | — | geklärt | Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt? |
 | [OQ-54](#oq-54) | — | geklärt | Welche GSV-Bibliotheksversionen lädt die getestete Windows-Installation? |
 | [OQ-66](#oq-66) | — | geklärt | Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag? |
 | [OQ-76](#oq-76) | — | geklärt | Warum verliert ein Lauf nach bestätigter Einrichtung sämtliche Rahmenmerkmale? |
@@ -2668,24 +2668,16 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-49 — Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt?
 
-* **Status:** offen · erkannt 2026-11-04 beim ersten Windows-Setup
-* **Befund:** Der Nutzer möchte später einen einzigen Befehl für Download,
-  Bestandsprüfung, Installation fehlender Komponenten und Einrichtung
-  über die geplante TUI/CLI. Der Einstieg muss online/extern abrufbar sein
-  und darf kein lokales Repository voraussetzen. Bei SSH bestimmt der
-  Zielhost, ob Pi- oder Windows-Komponenten eingerichtet werden.
-* **Blockiert:** die Veröffentlichung des späteren Installers, nicht den
-  manuellen aktuellen GSVmulti-Test. Noch kein öffentlicher Installer
-  oder funktionierender Download-Befehl zugesichert.
-* **Klärung:** Hosting/Release-Quelle, stabile Einstiegsadresse, eventuell
-  erforderlichen Zugang, versionierte Artefakte und Integritätsprüfung
-  wählen. Wiederholtes Ausführen muss vorhandene Komponenten erhalten;
-  Einrichtung ohne GUI, Fehler-/Neustartbehandlung und nichtinteraktiven
-  Modus für beide Zielplattformen festlegen. Windows-Treiber müssen auf
-  Windows eingerichtet werden, nicht auf dem per SSH erreichten Pi.
-* **Antwort landet in:** [Geplante Funktionen](../PLANNED_FEATURES.md),
-  späterer Installationsplan und [Abhängigkeiten](dependencies.md).
-
+* **Status:** geklärt · 2026-11-25
+* **Befund:** Der Einstieg soll auf einem per SSH erreichbaren Pi ohne lokalen
+  Checkout laufen.
+* **Antwort:** Der öffentliche GitHub-Mirror stellt vorerst den Pi-Bootstrap
+  und stabile Releases bereit. Der Bootstrap prüft das lokal gebaute Archiv
+  mit der SHA-256-Datei, bevor er den geführten Installer im SSH-Terminal
+  startet. Ohne TTY gibt es den lokalen Installer mit ausdrücklichen
+  Angaben. Für Windows ist eine getrennte Lieferung vorgesehen.
+* **Beleg:** [Installer und Veröffentlichung](INSTALLER.md#installation-in-einer-zeile).
+  Erster Upload und Abnahme auf einem neuen Pi stehen aus.
 
 ---
 

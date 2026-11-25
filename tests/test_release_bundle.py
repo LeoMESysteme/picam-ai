@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -250,3 +251,54 @@ def test_cli_requires_explicit_inputs_and_builds_without_product_import(source, 
     assert built.returncode == 0, built.stderr
     with tarfile.open(output) as archive:
         assert json.load(archive.extractfile("picam/release.json"))["release_id"] == "cli-1"
+
+
+def test_stable_bundle_sets_delivery_version_only(source, tmp_path):
+    root, template = source
+    (root / "VERSION").write_text('0.1.0.dev0\n')
+    stable = build_release(root, tmp_path / 'stable.tar.gz', template, '1.1.0')
+    dev = build_release(root, tmp_path / 'rc.tar.gz', template, 'rc-abcdef')
+    for path, release_id, version in [(stable, '1.1.0', b'1.1.0\n'), (dev, 'rc-abcdef', b'0.1.0.dev0\n')]:
+        with tarfile.open(path, 'r:gz') as bundle:
+            assert bundle.extractfile('picam/VERSION').read() == version
+            manifest = json.load(bundle.extractfile('picam/release.json'))
+            assert manifest['release_id'] == release_id
+            assert manifest['files']['VERSION'] == hashlib.sha256(version).hexdigest()
+    assert (root / "VERSION").read_text() == '0.1.0.dev0\n'
+
+
+@pytest.mark.parametrize('state', ['clean', 'dirty', 'wrong-tag'])
+def test_publish_dry_run(source, tmp_path, monkeypatch, state):
+    from dispread.release_source import REPOSITORY
+
+    root, template = source
+    actual = BUILDER_PATH.parents[1]
+    script = root / 'scripts/publish-release.py'
+    script.write_bytes((actual / 'scripts/publish-release.py').read_bytes())
+    path = root / 'src/dispread/release_source.py'
+    path.write_bytes((actual / 'src/dispread/release_source.py').read_bytes())
+    (root / 'CHANGELOG.md').write_text('## 1.1.0 — 2026-11-25\n\nErster Release.\n')
+    # Neither building nor publishing is allowed in this test.
+    (root / 'scripts/build-release.py').write_text('raise SystemExit("build called")')
+    gh = tmp_path / 'gh'
+    gh.write_text('#!/bin/sh\ntouch "$(dirname "$0")/external-call"\nexit 1\n')
+    gh.chmod(0o755)
+    monkeypatch.setenv('PATH', f'{tmp_path}:/usr/bin:/bin')
+    git(root, 'add', '.')
+    git(root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'publisher')
+    git(root, 'tag', 'v1.1.0', 'HEAD^' if state == 'wrong-tag' else 'HEAD')
+    if state == 'dirty':
+        (root / 'untracked').touch()
+    result = subprocess.run([sys.executable, str(script), 'v1.1.0', '--templates', str(template), '--dry-run'],
+                            text=True, capture_output=True, check=False)
+    assert not (tmp_path / 'external-call').exists()
+    if state == 'clean':
+        assert result.returncode == 0, result.stderr
+        assert '--release-id 1.1.0' in result.stdout
+        assert 'picam-1.1.0.tar.gz.sha256' in result.stdout
+        assert 'gh release create v1.1.0' in result.stdout
+        assert f'--repo {REPOSITORY}' in result.stdout
+        assert '--verify-tag' in result.stdout
+    else:
+        assert result.returncode == 1
+        assert ('Arbeitsbaum muss sauber sein' if state == 'dirty' else 'muss auf HEAD zeigen') in result.stderr

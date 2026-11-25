@@ -12,17 +12,18 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import asdict, dataclass
 from functools import partial
 from pathlib import Path
+
+from dispread import release_source
 
 from . import probes, service
 from .calibrate import sudo_cached as sudo_cached
 from .calibrate import sudo_validate as sudo_validate
 from .instance import Instance
 
-RELEASE_SOURCE: str | None = None  # OQ-49
 STEPS = {
     'pruefen': 'Releasearchiv prüfen',
     'entpacken': 'Release entpacken',
@@ -53,6 +54,7 @@ class Deps:
     restart: Callable[[Instance, Callable[[str], None]], bool] | None = None
     cancelled: Callable[[], bool] = lambda: False
     ask: Callable[[str], str] = input
+    authorize: Callable[[], bool] | None = None
 
 
 @dataclass
@@ -71,12 +73,25 @@ class Result:
         return {'ok': 0, 'failed': 1, 'blocked': 3, 'cancelled': 130}[self.outcome]
 
 
-def resolve_source(source: str | None) -> str:
-    if source is None:
-        if not RELEASE_SOURCE:
-            raise UpdateError('Bezugsquelle noch nicht festgelegt – mit --source angeben')
-        source = RELEASE_SOURCE
-    return source
+def find_latest_update(instance: Instance) -> tuple[release_source.LatestRelease, str, bool]:
+    """Discover the stable release and report whether it is newer than current."""
+    prefix = prefix_of(instance)
+    latest = release_source.latest_release()
+    current, newer = _compare_latest(prefix, latest)
+    return latest, current, newer
+
+
+def _compare_latest(prefix, latest):
+    current = release_source.installed_version((prefix / 'current').resolve(strict=True))
+    comparison = release_source.compare_versions(latest.version, current)
+    if comparison < 0:
+        raise UpdateError(f'Bezugsquelle bietet {latest.version}, installiert ist {current}. '
+                          'Downgrade nur mit ausdrücklichem --source.')
+    return current, comparison > 0
+
+
+def _up_to_date(version):
+    return Result('ok', old_version=version, new_version=version, message=f'bereits aktuell ({version})')
 
 
 def prefix_of(instance: Instance) -> Path:
@@ -193,7 +208,7 @@ def _switch(instance, prefix, installer, result, deps, echo, step):
         result.message = 'Update fehlgeschlagen und Rückweg antwortet nicht. Protokoll: picam logs'
 
 
-def _perform(instance, source, sha256, release_id, deps, echo, step=None) -> Result:
+def _perform(instance, source, sha256, release_id, deps, echo, step=None, *, latest=None) -> Result:
     result = Result(new_version=release_id)
 
     def phase(key):
@@ -209,9 +224,21 @@ def _perform(instance, source, sha256, release_id, deps, echo, step=None) -> Res
             result.old_version = installer.releases(prefix)['current']
             if release_id is None:
                 _check_cancelled(deps)
+                if latest is not None:
+                    current, newer = _compare_latest(prefix, latest)
+                    if not newer:
+                        return _up_to_date(current)
                 _check_blocker(instance, deps)
-                prepared = installer.prepare(prefix, source, sha256, progress=lambda text: echo('· ' + text),
-                                             **({'step': phase} if step is not None else {}))
+                options = {'step': phase} if step is not None else {}
+                with tempfile.TemporaryDirectory(prefix='picam-update-') if latest is not None else nullcontext() as temp:
+                    if latest is not None:
+                        echo(f'Lade {latest.filename} …')
+                        archive, sha256 = latest.download(Path(temp))
+                        source = str(archive)
+                        options['stable_version'] = latest.version
+                        _check_cancelled(deps)
+                    prepared = installer.prepare(prefix, source, sha256, progress=lambda text: echo('· ' + text),
+                                                 **options)
                 result.new_version = prepared['release_id']
                 echo(f'Vorbereitet: {result.new_version} in {prepared["path"]}')
             _switch(instance, prefix, installer, result, deps, echo, phase)
@@ -256,19 +283,34 @@ def run_update(instance: Instance, source: str | None, sha256: str | None, conso
             progress(index + (key == 'bereit'), len(phases))
 
     try:
-        if release_id is None:
-            source = resolve_source(source)
         prefix_of(instance)
         _check_cancelled(deps)
-        title = f'Auf Version {release_id} umschalten?' if release_id is not None else 'Update installieren?'
-        lines = ([f'Archiv: {source}'] if release_id is None else []) + ['Der Werkbankdienst wird neu gestartet.']
-        if not yes and not console.confirm(title, lines, None, deps=deps):
-            raise _Cancelled('Update abgebrochen.')
-        _check_cancelled(deps)
-        if needs_root(instance):
-            result = _privileged(instance, source, sha256, release_id, deps, console.line, step)
-        else:
-            result = _perform(instance, source, sha256, release_id, deps, console.line, step)
+        latest = None
+        result = None
+        if release_id is None and not source:
+            if sha256 is not None:
+                raise UpdateError('--sha256 setzt --source voraus. Automatische Updates prüfen die Release-Prüfsumme.')
+            console.line('Suche neueste Version …')
+            latest, current, newer = find_latest_update(instance)
+            if not newer:
+                result = _up_to_date(current)
+            source = latest.archive_url
+        if result is None:
+            _check_cancelled(deps)
+            title = f'Auf Version {release_id} umschalten?' if release_id is not None else 'Update installieren?'
+            if latest is not None:
+                title = f'Version {latest.version} installieren und den Dienst neu starten?'
+            lines = ([f'Archiv: {source}'] if release_id is None else []) + ['Der Werkbankdienst wird neu gestartet.']
+            if not yes and not console.confirm(title, lines, None, deps=deps):
+                raise _Cancelled('Update abgebrochen.')
+            _check_cancelled(deps)
+            execute = _perform
+            if needs_root(instance):
+                if deps.authorize is not None and not deps.authorize():
+                    raise UpdateError('sudo-Freigabe für das Update fehlgeschlagen.')
+                execute = _privileged
+            options = {'latest': latest} if latest is not None else {}
+            result = execute(instance, source, sha256, release_id, deps, console.line, step, **options)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         result = Result('cancelled' if isinstance(error, _Cancelled) else 'failed',
                         new_version=release_id, reason=str(error), message=str(error))
@@ -283,10 +325,12 @@ def run_update(instance: Instance, source: str | None, sha256: str | None, conso
     return result
 
 
-def _privileged(instance, source, sha256, release_id, deps, echo, step):
+def _privileged(instance, source, sha256, release_id, deps, echo, step, *, latest=None):
     options = {'config': instance.config, 'activate': release_id, 'sha256': sha256}
     if release_id is None and source is not None:
         options['source'] = os.path.abspath(source) if '://' not in source else source
+    if latest is not None:
+        options.update({'latest-version': latest.version, 'checksum-url': latest.checksum_url})
     argv = [f'--{key}={value}' for key, value in options.items() if value is not None]
     python = Path(sys.executable)
     command = ['sudo', '-n', str(python.parent.resolve() / python.name), '-I', '-m', 'dispread.admin.update', *argv]
@@ -323,7 +367,14 @@ def _worker_main():
     target.add_argument('--source')
     target.add_argument('--activate')
     parser.add_argument('--sha256')
+    parser.add_argument('--latest-version')
+    parser.add_argument('--checksum-url')
     args = parser.parse_args()
+    latest = None
+    if args.latest_version is not None or args.checksum_url is not None:
+        if not args.source or not args.checksum_url or not release_source.stable_version(args.latest_version or ''):
+            parser.error('Automatisches Update braucht Version, Archiv und Prüfsummen-URL.')
+        latest = release_source.LatestRelease(args.latest_version, args.source, args.checksum_url)
 
     def send(**event):
         # Ein geschlossener Ausgabekanal darf nach dem Umschalten den Rückweg nicht verhindern.
@@ -339,7 +390,7 @@ def _worker_main():
     # systemctl-Ausgaben gehören nicht in den strukturierten Ereignisstrom.
     deps = Deps(cancelled=cancelled, restart=partial(_restart_and_wait, output=sys.stderr))
     result = _perform(discover(args.config), args.source, args.sha256, args.activate, deps,
-                      lambda text: send(line=text), lambda key: send(step=key))
+                      lambda text: send(line=text), lambda key: send(step=key), latest=latest)
     send(result=asdict(result))
     return result.exit_code
 

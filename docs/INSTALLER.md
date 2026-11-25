@@ -5,7 +5,26 @@ Er übernimmt keine vorhandene Werkbank und ändert weder Bootdateien noch
 Benutzergruppen oder Tailscale. Mit Angaben auf der Befehlszeile zeigt er
 ohne `--apply` nur einen Plan und schreibt keine Zieldateien.
 
-## Geführt installieren (empfohlen)
+## Installation in einer Zeile
+
+Ab dem ersten veröffentlichten stabilen Release auf einem neuen Pi als
+normaler Nutzer in einem Terminal oder einer SSH-Sitzung mit TTY ausführen.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash
+```
+
+Der Bootstrap fragt die öffentliche GitHub-Release-API des Mirrors ab und
+holt Archiv und SHA-256-Datei über HTTPS. Nach Prüfung startet der geführte
+Installer und liest seine Eingaben vom Terminal. Bei SSH ohne TTY zuerst
+`ssh -t` verwenden. Für Skripte das geprüfte Archiv lokal bereitstellen und
+[mit ausdrücklichen Angaben installieren](#installation-zuerst-planen).
+Eine bestimmte stabile Version lässt sich mit
+`| bash -s -- --version v1.1.0` am Ende des Befehls auswählen.
+Vorausgesetzt sind Bash, curl, tar, sha256sum und Python 3. Der Installer
+fragt bei einer Systeminstallation selbst nach sudo.
+
+## Geführt installieren
 
 Releasearchiv (`picam-<version>.tar.gz`) auf den neuen Pi kopieren,
 entpacken und im Terminal ohne weitere Angaben starten:
@@ -110,7 +129,8 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam start` / `stop` / `restart` | Dienst; Stopp während eines Laufs: Exit 3 (nur `--force` überstimmt) |
 | `picam config [get KEY]` | Konfiguration lesen |
 | `picam config set KEY WERT` | `port`, `bridge_name`, `bridge_discovery`; geprüft, wirksam nach `picam restart` |
-| `picam update --source ARCHIV` / `--rollback` | neue Version mit Rückweg, siehe unten |
+| `picam update [--source ARCHIV]` / `--rollback` | neueste stabile oder ausdrücklich gewählte Version mit Rückweg |
+| `picam --version` | Version der Werkbank |
 | `picam aufraeumen [--tage N]` | alte Läufe auflisten, nach Rückfrage löschen |
 | `picam setup` | offene Einrichtungspunkte nacheinander, Befehle einzeln nach Rückfrage |
 | `picam --onboarding` | Konsole mit dem Einrichtungsassistenten (Konto & Adresse, Kamera & Fokus, Timing-Kalibrierung) |
@@ -187,15 +207,19 @@ Im getrennten Entwicklungs-Checkout mit dessen eigener Python-Umgebung:
 
 ```bash
 ./.venv/bin/python scripts/build-release.py \
-  --output /absoluter/lieferordner/picam-release.tar.gz \
+  --output /absoluter/lieferordner/picam-1.1.0.tar.gz \
   --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json \
-  --release-id 0.1.0-installer1
-sha256sum /absoluter/lieferordner/picam-release.tar.gz
+  --release-id 1.1.0
+(cd /absoluter/lieferordner && sha256sum picam-1.1.0.tar.gz > picam-1.1.0.tar.gz.sha256)
 ```
 
 Das Ausgabeverzeichnis muss bereits existieren und außerhalb des
 Quell-Worktrees liegen; eine vorhandene Ausgabedatei wird nicht ersetzt.
 Die Vorlage wird gegen den im Produkt hinterlegten SHA-256 geprüft.
+Bei einer stabilen Release-ID `X.Y.Z` trägt auch die `VERSION` im Archiv
+diesen Wert. Daraus liest setuptools die Paketversion. `picam --version`
+und die Konsole zeigen die Release-ID aus dem Manifest. Lokale Testbauten
+können eine ID wie `rc-<commit>` verwenden.
 Kalibrierung, Laufdaten, Schlüssel, Kopplungen und venv werden nicht geliefert.
 `release.json` nennt Commit, abweichenden Arbeitsstand (`dirty`) und
 SHA-256 jeder gelieferten Datei. Der Archivbau ist reproduzierbar für
@@ -219,6 +243,30 @@ zipapp.create_archive(
 
 Sie enthält nur die Installer-Engine und braucht keine Produktbibliotheken
 im Bootstrap-Interpreter. Die Produktlaufzeit wird getrennt geprüft.
+
+## Release veröffentlichen
+
+Die Lesevorlage `templates-stufe2c-2026-09-30.json` liegt lokal. Setze die
+gewünschte Version in `VERSION`, schreibe den Abschnitt `## X.Y.Z` im
+CHANGELOG und tagge den sauberen Stand als `vX.Y.Z`. Der Tag muss auf
+`HEAD` zeigen und vor dem Upload auf dem GitHub-Mirror vorhanden sein.
+
+```bash
+./.venv/bin/python scripts/publish-release.py v1.1.0 \
+  --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json --dry-run
+
+./.venv/bin/python scripts/publish-release.py v1.1.0 \
+  --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json
+```
+
+Der Probelauf prüft den lokalen Stand und zeigt die Befehle an. Der echte
+Lauf baut lokal, prüft das Manifest auf Tag-Version, Commit und
+`"dirty": false` und lädt `picam-X.Y.Z.tar.gz` und
+`picam-X.Y.Z.tar.gz.sha256` mit der authentifizierten GitHub CLI (`gh`) hoch.
+`--notes-file DATEI` erlaubt eigene Release-Notes. Die Windows-Brücke erhält
+eine eigene Lieferung. Für einen Umzug des Mirrors die Einstellungen in
+`src/dispread/release_source.py` und im eigenständigen `get-picam.sh` gemeinsam
+ändern und die dokumentierten Aufrufe aktualisieren.
 
 ## Installation zuerst planen
 
@@ -459,17 +507,26 @@ Die Tabs Ausgabe und UART, die Kalibrierung und `picam einrichten` nutzen
 danach den konfigurierten Ausgang und Referenzport; `picam kalibrieren
 --port` überstimmt nur, wenn angegeben.
 
-## Update und Rückweg
+## Update auf die neueste Version
 
 Ein erneuter Installeraufruf aktualisiert nichts. Updates laufen über
 `picam update` (System- und Benutzerinstallation):
 
 ```bash
-picam update --source picam-1.1.0.tar.gz   # vorbereiten, umschalten, neu starten
+picam update                               # neueste stabile Version suchen und nach Bestätigung installieren
+picam update --source picam-1.1.0.tar.gz   # bestimmtes Archiv wählen
 picam update --rollback                    # zurück auf die vorige Version
 picam update --check                       # aktive, vorige, installierte Versionen
 picam update --activate 1.1.0              # vorbereitete Version aktivieren
 ```
+
+`picam update` liest den neuesten veröffentlichten stabilen Release des
+öffentlichen Mirrors ohne GitHub-Token. Ist er bereits aktiv, meldet das
+Programm `bereits aktuell (X)`. Ein älterer Release erfordert eine
+ausdrücklich angegebene Quelle. Entwicklungslieferungen wie
+`rc-<commit>` gelten als älter als stabile Versionen. Jeder automatische
+Download braucht die passende SHA-256-Datei. `--yes` bestätigt das Update
+auf der Kommandozeile.
 
 Ablauf: Laufsperre prüfen, neue Version unter `releases/<id>` vorbereiten
 (Dateien, eigene venv, Selbsttest), Laufsperre erneut prüfen, `current`
