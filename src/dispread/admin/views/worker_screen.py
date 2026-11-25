@@ -15,6 +15,7 @@ bleiben aus Gründen der Kompatibilität gleich.
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 import threading
 from dataclasses import dataclass
 
@@ -52,6 +53,7 @@ from ..widgets import (
 
 WAITING, RUNNING, DONE, FAILED, SKIPPED, ABORTED = ('wartet', 'läuft', 'fertig', 'fehlgeschlagen',
                                                      'übersprungen', 'abgebrochen')
+log = logging.getLogger(__name__)
 POLL_S = 0.15
 SUDO_ATTEMPTS = 3
 _LEVEL_ICON = {probes.OK: 'ok', probes.WARN: 'warn', probes.FAIL: 'fail', probes.OFF: 'off',
@@ -139,10 +141,15 @@ class ScreenHooks:
 
     def confirm(self, title: str, lines: list[str], expected: str | None, *, deps=None) -> bool:
         screen = self.screen
-        answer = screen.ask(title=title, lines=lines, expected=expected)
-        accepted = answer == expected if expected is not None else answer is True
-        if accepted and expected is None and not screen.obtain_sudo():
-            accepted = False
+        try:
+            answer = screen.ask(title=title, lines=lines, expected=expected)
+            accepted = answer == expected if expected is not None else answer is True
+            if accepted and expected is None and not screen.obtain_sudo():
+                accepted = False
+        except Exception:  # noqa: BLE001 - gescheiterte Rückfrage = nicht bestätigt (sicherer Ausgang)
+            log.exception('Rückfrage %r gescheitert, gilt als nicht bestätigt', title)
+            screen.thread_call(screen.log_line, 'Rückfrage gescheitert, nicht bestätigt.', True)
+            return False
         if accepted:
             screen.thread_call(screen.set_phase, 'running')
         return accepted
@@ -459,11 +466,26 @@ class WorkerScreen(ModalScreen[None]):
         self.cancel_event.set()
 
     def thread_call(self, fn, *args) -> bool:
-        """Aus dem Worker in die Oberfläche; scheitert still, wenn die App schon schließt."""
+        """Aus dem Worker in die Oberfläche. ``False``, wenn der Aufruf nicht ausgeführt wurde.
+
+        Schließt die App gerade, scheitert der Aufruf still. Wirft der Hook selbst, wird das nicht
+        verschluckt: Eintrag im Log und eine Fehlerzeile im Protokollfeld; der Worker läuft weiter,
+        der Aufrufer sieht ``False`` (Rückfragen gelten dann als nicht bestätigt)."""
+        if self.gone.is_set():
+            return False
         try:
             self.app.call_from_thread(fn, *args)
             return True
-        except Exception:  # noqa: BLE001 - Aufräumen im Worker darf nicht an der Oberfläche scheitern
+        except Exception as exc:  # noqa: BLE001 - Anzeigefehler dürfen den Worker nicht beenden
+            if self.gone.is_set():
+                return False
+            name = getattr(fn, '__name__', repr(fn))
+            log.exception('UI-Hook %s im Worker gescheitert', name)
+            try:
+                self.app.call_from_thread(
+                    self.log_line, f'Anzeigefehler ({name}): {type(exc).__name__}: {exc}', True)
+            except Exception:  # noqa: BLE001 - die Fehlerzeile selbst darf nicht erneut werfen
+                log.exception('Fehlerzeile konnte nicht angezeigt werden')
             return False
 
     def set_phase(self, phase: str) -> None:

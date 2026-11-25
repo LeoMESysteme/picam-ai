@@ -251,6 +251,9 @@ class MainWindow(QWidget):
         r, w, c = self.controller.snapshot(), self.controller.worker_status(), self.controller.context()
         locked = self._locked(c, w)
         self.status_view.update_from(r, w, c, locked, configured=self.configured(c))
+        title = texts.window_title(c)
+        if self.windowTitle() != title:
+            self.setWindowTitle(title)
         if c.setup is not None and c.mode == 'setup':
             self.setup_view.update_from(r, w, c, locked)
             self.stack.setCurrentWidget(self.setup_view)

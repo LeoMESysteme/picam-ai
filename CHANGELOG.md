@@ -5,6 +5,8 @@ was ist die Konsequenz.
 
 ## 0.1.0.dev0 — 2026-10-12 (Messpfad live)
 
+* 2026-11-25: **Pi-Name sichtbar in der Brücke, Konsole ehrlicher.** Brücke zeigt den Namen im Kopf und im Fenstertitel (lange Namen gekürzt, Doppelung beim Protokoll entfernt); Risikotext zu `bridge_name` korrigiert; `thread_call` der Konsole protokolliert Hook-Fehler statt sie zu verschlucken, gescheiterte Rückfragen gelten als nicht bestätigt.
+
 * 2026-11-25: **Pi-Name live in der Brücke.** Der Pi meldet `bridge_name` bei jeder Verbindung (Netzwerk und UART) als `capabilities.pi_name` im Hello; die Brücke 1.0.0 ignoriert das Feld (gegen ihren Originaldecoder aus `37f0bee` geprüft). Die Brücke ab 1.1.0 übernimmt den Namen, merkt ihn für die Offline-Anzeige und protokolliert „Pi heißt jetzt …“. Wirkt nach Dienstneustart.
 
 * 2026-11-25: **Pi-Name bei Verbindung mit der Windows-Brücke.** Die Werkbank

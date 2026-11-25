@@ -533,6 +533,22 @@ def headline(readiness: Readiness, worker: WorkerStatus | None, ctx: UiContext) 
     return Headline('Unbekannt', 'info')
 
 
+NAME_MAX = 40
+
+
+def short_name(name: str, limit: int = NAME_MAX) -> str:
+    """Langer Pi-Name gekürzt (mit …); der volle Name steht im Tooltip."""
+    name = ' '.join(name.split())
+    return name if len(name) <= limit else name[:limit - 1].rstrip() + '…'
+
+
+def window_title(ctx: UiContext) -> str:
+    """Fenster-/Taskleistentitel; mit Pi-Name nur, wenn ein Pi gewählt ist (nicht bei UART direkt)."""
+    if ctx.route_mode == 'uart_direct' or not ctx.pi_name:
+        return APP_TITLE
+    return f'{APP_TITLE} – {short_name(ctx.pi_name)}'
+
+
 def head_title(ctx: UiContext) -> tuple[str, str]:
     """(Name, Weg); Name leer vor der Pi-Wahl."""
     if ctx.route_mode == 'uart_direct':

@@ -399,8 +399,10 @@ class Header(QWidget):
     def update_from(self, ctx, headline: texts.Headline, locked: bool, allow_switch=True, peer: str | None = None,
                     allow_mode=True, badges: tuple = ()) -> None:
         name, _route = texts.head_title(ctx)
-        self.title.setText(name)
-        self.title.setToolTip(name)
+        shown = texts.short_name(name)
+        if self.title.text() != shown:
+            self.title.setText(shown)
+        self.title.setToolTip(name if shown != name or ctx.pi_name else '')
         self.mode_button.set_view(*texts.mode_view(ctx))
         self.mode_button.setVisible(allow_mode)
         busy = peer in ('connecting', 'backoff')

@@ -36,7 +36,8 @@ FIELDS = {
              (probes.WARN, 'mittel – Lesezeichen, gekoppelte Brücken und Firewall-Regeln brauchen danach '
                            'die neue Adresse')),
     'bridge_name': ('Name des Pi in der Windows-Brücke',
-                    (probes.OK, 'gering – nur die Anzeige in der Windows-App ändert sich')),
+                    (probes.OK, 'gering – die Windows-Brücke (ab 1.1.0) zeigt den neuen Namen nach einem '
+                                'Dienstneustart; UART über Brücke danach neu vorbereiten')),
     'bridge_discovery': ('Im Netzwerk ankündigen (Windows-App findet den Pi selbst)',
                          (probes.OK, 'gering – aus: die Brücke muss die Adresse von Hand kennen')),
 }

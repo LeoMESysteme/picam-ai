@@ -761,8 +761,7 @@ class StatusView(QWidget):
 
     def _update_counts(self) -> None:
         n = self.model.total
-        pi = f' · {self._pi_name}' if self._pi_name and self._pi_name != 'Prüfstand 2' else ''
-        self.count_label.setText(f'{n} Einträge{pi}')
+        self.count_label.setText(f'{n} Einträge')       # der Pi-Name steht im Kopf, nicht doppelt
         faults = self.model.fault_count
         self.seg_faults.setText(f'Störungen {faults}' if faults else 'Störungen')
         empty = self.model.rowCount() == 0
