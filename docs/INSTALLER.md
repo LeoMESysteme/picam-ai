@@ -509,6 +509,16 @@ danach den konfigurierten Ausgang und Referenzport; `picam kalibrieren
 
 ## Update auf die neueste Version
 
+**Umstieg von einem Releasekandidaten (`rc-…`, vor 1.1.0):** Ältere Stände kennen die Bezugsquelle noch nicht und melden „Bezugsquelle noch nicht festgelegt“. Einmal von Hand auf 1.1.0 aktualisieren, danach reicht `picam update`:
+
+```bash
+gh release download v1.1.0 --repo LeoMESysteme/picam-ai   # oder im Browser von der Release-Seite
+sha256sum -c picam-1.1.0.tar.gz.sha256
+picam update --source picam-1.1.0.tar.gz --sha256 "$(cut -d' ' -f1 picam-1.1.0.tar.gz.sha256)"
+```
+
+Portable Installationen haben kein `picam update` (neu installieren).
+
 Ein erneuter Installeraufruf aktualisiert nichts. Updates laufen über
 `picam update` (System- und Benutzerinstallation):
 

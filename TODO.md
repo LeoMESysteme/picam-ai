@@ -14,14 +14,21 @@ Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
 ## Übergabe (Stand 25.11. abends)
 
-Gemergt nach `master` und `feat/integration` (Fast-Forward, Leonhards OK 25.11.).
-**Releasekandidat:** `~/picam-releases/picam-rc-eaa4ad8.tar.gz`, SHA-256
-`14cb39ba4eabd0f7be8d541da0484430883c9f862223995b50843ac776cae548` (nicht dirty), auf
-raspi01 installiert und von Leonhard geprüft (Kalibrierung, Zertifikat, Update u. a.).
-Enthält: Konsolen-Bildschirme für Update, Deinstallation, Zertifikat, UART-Ports;
-Einstellungen mit Navigations-/Bearbeitungszustand; Installer-Optik + Onboarding;
-Pi-Name live in der Brücke (ab 1.1.0); Fixe für `serial0 → ttyAMA0` (raspi01), Beenden
-mit q und hängende Hervorhebung.
+**Release v1.1.0 veröffentlicht** (picam 1.1.0 + GSVmulti-Brücke 1.1.0): Tag `v1.1.0` auf
+`master` (`36cf1f3`), GitHub-Release auf dem Mirror
+https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.0 mit `picam-1.1.0.tar.gz` und `.sha256`.
+Installation: `curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash`
+(vom echten Mirror bis zur ersten Installer-Frage geprüft); Update: `picam update` (Suche der neuesten
+Version gegen den Mirror geprüft). Quelle steht nur in `src/dispread/release_source.py` (+ Spiegel oben in
+`get-picam.sh`, Test prüft Gleichstand) – beim Wechsel aufs Produktiv-Repo dort ändern.
+
+Offen:
+- raspi01 (läuft `rc-eaa4ad8`): einmal `picam update --source picam-1.1.0.tar.gz --sha256 …`
+  (siehe docs/INSTALLER.md „Update auf die neueste Version“), danach automatisch.
+- Windows-Dateien der Brücke 1.1.0 (portable EXE, Setup, SHA256SUMS) an den Release hängen:
+  `gh release upload v1.1.0 <Dateien> --repo LeoMESysteme/picam-ai` (Leonhard hat sie gebaut/getestet).
+- Veröffentlichen beim nächsten Mal: `scripts/publish-release.py vX.Y.Z --templates … [--notes-file …]`
+  (GitHub antwortete beim ersten Versuch mit HTTP 500 während einer Störung; Wiederholung trug).
 
 **Prüfstand 25.11. abends (`6183cb1`):** Pi-Suite mit Entwicklungsdaten 5146 bestanden,
 27 übersprungen, 2 xfailed; Playwright Werkbank 73/73, Doku 153/154 – offen:
