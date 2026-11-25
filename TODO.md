@@ -1,4 +1,4 @@
-# TODO — Stand 2026-11-20
+# TODO — Stand 2026-11-25
 
 > **KRITISCHER NUTZERAUFTRAG 2026-11-11:** Vor Bridge-/EXE-Features den Workbench-Blocker bearbeiten.
 > Einstieg: [docs/WORKBENCH_BLOCKER.md](docs/WORKBENCH_BLOCKER.md).
@@ -12,36 +12,42 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
-## Übergabe für Mittwoch (Claude, autonom seit 20.11. abends)
+## Übergabe (Stand 25.11.)
 
-Branch `feat/picam-admin` (gepusht, Arbeitsstand sauber). **Releasekandidat:**
-`~/picam-releases/picam-rc-51b620f.tar.gz`, SHA-256
-`af7c7fc4c7ada7885e9be3a9cce85a76ca35b640ae3c086c085b267041815a6d` (Code-Stand
-`51b620f`, nicht dirty), gebaut mit `scripts/build-release.py`.
+Branch `feat/picam-admin` (gepusht). **Releasekandidat:**
+`~/picam-releases/picam-rc-de628ad.tar.gz`, SHA-256
+`9fd1d312c780b81b3677712e873a6e70afed3a6c6b3cf886827460a556220823` (nicht dirty).
+Enthält gegenüber `rc-51b620f` (auf raspi01 installiert und kalibriert, 25.11.):
+Kalibrierung als Bildschirm der Konsole (Kamera-Tab `m`/`p`, sudo-Passwort und Abbruch
+in der Konsole; `picam kalibrieren` im Terminal bleibt) und die Windows-Brücke 1.1.0
+(Branch `feat/bruecke-1.1`, eingemergt).
 
-**Prüfstand (20./21.11. nachts, Stand `51b620f`):** pytest 4985 bestanden,
-27 übersprungen, 2 xfailed; 1 Fehlschlag nur unter Volllast im Test der alten
-`dispread tui` (`test_tui_oeffnet_nachfuehrzeile_ohne_absturz`, einzeln 3× grün; vorher
-ebenso ein Brückentest). Playwright Werkbank 73/73, Doku 154/154; Node 317; ruff
-sauber; strenger Doku-Build ohne Befund. Unabhängige Code-Prüfung der neuen Teile:
-1 kritischer (Kalibrierung bei SSH-Abbruch ohne Aufräumen), 1 wichtiger und 4
-kleinere Befunde – alle behoben (`51b620f`). Releasetest im
-Scratch: portabel installiert, Test-Werkbank mit `--simulate` gestartet, `picam
-status/doctor`, `kalibrieren --pruefen/--import` (getippte Bestätigung) und Konsole
-im echten Terminal (alle Tabs, Exit 0) geprüft, Deinstallation portabel;
-Systemmodus in Staging-Wurzel installiert, `systemd-analyze verify` der erzeugten
-Unit OK.
+**Brücke 1.1.0 bauen (Windows):** einmalig `winget install JRSoftware.InnoSetup`, dann
+`windows\bridge\build-release.cmd`. Ergebnis in `dist-release`:
+`GSVmulti-Bruecke-1.1.0-portable.exe` (eine Datei, ohne `_internal`),
+`GSVmulti-Bruecke-Setup-1.1.0.exe` (Benutzer-Setup, Startmenü, optional Desktop) und
+`GSVmulti-Bruecke-1.1.0-SHA256SUMS.txt`. Prüfen: Protokoll „Alle“/„Störungen“ bei LAN
+ziehen und bei Lauf mit ungültigen Takten, Detailfenster „Weitergabe“ flackert nicht,
+Setup über eine laufende 1.0.0-Installation, Start der portablen EXE.
+
+**Prüfstand 25.11. (`de628ad`):** Pi-Suite 4801 bestanden; 15 Nachführungstests
+scheitern nur ohne `DISPREAD_DEV_DATA` (Kopie `var/live/live-20261030T113427Z` ohne
+Diagnosebilder seit 04.11.), mit Entwicklungsdaten 653/653 grün. Brücken-Suite 790,
+Pi-Brücke 342, ruff sauber. Releasetest portabel: Installation, `picam status`,
+Konsole im PTY (Exit 0).
+
+**SerialLoom (Antwort an Leonhard 25.11.):** Weg 1 empfohlen (Brücke erkennt
+SerialLoom-Paare, legt per `serialloom-cli pair` an), Weg 2 nur bei Bedarf, Rückfall
+zwei USB-RS232-Adapter mit Nullmodemkabel; vorher Dauertest. Details unten.
 
 **Zuerst von Leonhard:**
 1. **raspi06:** Der Entwicklungsdienst `dispread-werkbank-bruecke` ist seit
    20.11. 15:00 gestoppt (regulär, nicht durch Claude; vorher 14:46 Stopp/14:48
    Start – vermutlich Konsolentest). Nicht autonom neu gestartet.
-2. **raspi01 aktualisieren:** `picam update --source picam-rc-….tar.gz --sha256 …`
-   (enthält den Stopp-Fix für Systemdienste mit sudo und den Unit-Fix). Danach
-   `picam kalibrieren` mit gestecktem USB-RS232-Adapter am GSV-2AS; dabei prüfen:
-   180 s genug Ereignisse, Dauer der Auswertung, Platz in `/dev/shm`/SD (~1,2 GB),
-   Normierung exakt zurückgestellt, Strg+C während der Aufnahme, Dateirechte
-   (Bedienkonto vs. sudo). Erst dann ist ein echter Messlauf auf raspi01 möglich.
+2. **raspi01:** ~~Update auf `rc-51b620f` und `picam kalibrieren`~~ erledigt (25.11., Leonhard).
+   Nächster Schritt: Update auf `rc-de628ad`, dann die Kalibrierung einmal in der Konsole
+   (Kamera-Tab, `m`) durchlaufen lassen und einmal während der Aufnahme abbrechen:
+   sudo-Passwort im Feld, Normierung zurückgestellt, Dienst wieder da ([OQ-79](docs/open-questions.md#oq-79)).
 3. **Werkbank ohne RS232 am Aufbau:** geführte Eingabe (Kästchen, verschiebbares
    Fenster) und Schwanken ±1 der letzten Stelle mit echtem GSV prüfen.
 4. **Entscheidungen:** Versionsnummer/Tag (VERSION steht auf `0.1.0.dev0`, Releases
