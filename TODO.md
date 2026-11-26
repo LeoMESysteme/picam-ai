@@ -34,7 +34,8 @@ Offen:
 3. `docs/HOST_NETZWERK.md` und `docs/analyse-2026-11-10-*.md` in die Wiki-Navigation
    (`zensical.toml`, Wiki-Datei – nur mit Leonhards OK).
 4. CLAUDE.md: „`/dev/serial0` zeigt auf `ttyAMA10`“ gilt nur für raspi06 (raspi01: `ttyAMA0`).
-5. Enterprise-Plan (Vorschlag 26.11.): (1) LICENSE/SECURITY.md/CONTRIBUTING.md und
+5. **Releases auch auf Forgejo:** v1.1.1 dort am 26.11. von Hand angelegt (Archiv, Prüfsumme, Brücken-EXEs). `scripts/publish-release.py` lädt bisher nur auf den GitHub-Mirror; Forgejo-Upload ergänzen.
+6. Enterprise-Plan (Vorschlag 26.11.): (1) LICENSE/SECURITY.md/CONTRIBUTING.md und
    Prüfung des öffentlichen Inhalts vor dem Wechsel aufs Produktiv-Repo, (2) CI mit pytest/
    ruff/Typprüfung als Pflicht-Checks + Branch-Schutz für master, (3) Releases in der CI bauen
    und signieren (Archiv + EXE), SBOM, (4) Validierungsbericht je Release (ISO/IEC 17025),
