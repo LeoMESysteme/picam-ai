@@ -12,6 +12,35 @@ in den verlinkten Dateien; hier steht, was zu tun ist und warum.
 Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
 Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
 
+## Repo-Aufräumen (26.11.)
+
+Erledigt 25./26.11.: alle Neben-Worktrees entfernt, Hauptcheckout auf `master`, lokal nur
+noch `master`; 16 gemergte Branches auf dem Server gelöscht. Sicherungen (Patches, untracked
+Dateien inkl. Zips, Bundles aller nicht gemergten Branches) unter
+`/mnt/ssd/picam-dev/backup-worktrees-20261125/` (`origin-offene-branches.bundle`,
+`alte-branches.bundle`, `main/`).
+
+Offen:
+1. **GitHub-Mirror prüfen:** Übernimmt er die Löschungen auf dem Server? Falls die 16
+   gelöschten Branches auf https://github.com/LeoMESysteme/picam-ai/branches stehen bleiben,
+   dort entfernen (oder Mirror-Einstellung „prune“ prüfen).
+2. **10 nicht gemergte Server-Branches** (gesichert im Bundle) einzeln entscheiden:
+   `codex/MEM-6-…pi-housekeeping` (pi-housekeeping.py), `codex/automatic-seven-segment`
+   (Experiment 18.09.), `docs/oq22-rp2040-wedge` und `docs/zensical-prototyp` (24.09.),
+   `docs/workbench-critical-2026-11-11` (Belege 11.11., Inhalt inzwischen in master),
+   `exp/r13-fenster-tracker` (Prototyp), `feat/gsvmulti-bridge` (alter Hauptcheckout-Stand,
+   Inhalt in master), `feat/messpfad-live` (22.10.), `fix/session-explorer-test-wackelt`
+   (Fix sinngemäß in master), `test/clahe-ocr-accuracy` (10.09.).
+3. `docs/HOST_NETZWERK.md` und `docs/analyse-2026-11-10-*.md` in die Wiki-Navigation
+   (`zensical.toml`, Wiki-Datei – nur mit Leonhards OK).
+4. CLAUDE.md: „`/dev/serial0` zeigt auf `ttyAMA10`“ gilt nur für raspi06 (raspi01: `ttyAMA0`).
+5. Enterprise-Plan (Vorschlag 26.11.): (1) LICENSE/SECURITY.md/CONTRIBUTING.md und
+   Prüfung des öffentlichen Inhalts vor dem Wechsel aufs Produktiv-Repo, (2) CI mit pytest/
+   ruff/Typprüfung als Pflicht-Checks + Branch-Schutz für master, (3) Releases in der CI bauen
+   und signieren (Archiv + EXE), SBOM, (4) Validierungsbericht je Release (ISO/IEC 17025),
+   (5) Hardware-Profile je Pi + Testmatrix, (6) Typprüfung/Altcode/Paketgrenzen,
+   (7) strukturierte Logs/Kennzahlen, (8) Doku entschlacken, (9) Agenten-Änderungen nur per PR.
+
 ## Übergabe (Stand 25.11. abends)
 
 **Aktuell: v1.1.1** (25.11. spät, Fix: Installer erbte umask 077 von get-picam.sh → „Permission denied“ auf raspi01; https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1). **Release v1.1.0 veröffentlicht** (picam 1.1.0 + GSVmulti-Brücke 1.1.0): Tag `v1.1.0` auf
