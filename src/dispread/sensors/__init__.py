@@ -38,6 +38,9 @@ def _unique_keys(pairs):
     return data
 
 
+CONNECTIONS = ("rs232", "usb", "none", "unknown")
+
+
 def _object(data, model, name, *, derived=(), optional=()):
     if not isinstance(data, dict):
         raise ValueError(f"{name} muss ein Objekt sein")
@@ -49,14 +52,14 @@ def _object(data, model, name, *, derived=(), optional=()):
     return data
 
 
-def _read(path, model, *, derived=()):
+def _read(path, model, *, derived=(), optional=()):
     if path.is_symlink():
         raise ValueError(f"Symlink als Paketdatei unzulaessig: {path}")
     try:
         data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_keys)
     except (OSError, ValueError) as exc:
         raise ValueError(f"{path} nicht als JSON lesbar: {exc}") from exc
-    _object(data, model, path.name, derived=derived)
+    _object(data, model, path.name, derived=derived, optional=optional)
     if type(data["schema"]) is not int or data["schema"] != 1:
         raise ValueError(f"{path.name}: schema {data['schema']!r} wird nicht unterstuetzt")
     return data
@@ -192,7 +195,8 @@ def _validate_generic_display(data, roles, fmt, anchor):
 def load_definition(directory: Path | str) -> SensorDefinition:
     """Liest die beiden Beschreibungen. Die Vorlagen werden bei Bedarf geladen."""
     directory = Path(directory).absolute()
-    data = _read(directory / "sensor.json", SensorDefinition, derived=("display", "directory"))
+    data = _read(directory / "sensor.json", SensorDefinition, derived=("display", "directory"),
+                 optional=("connection",))
     sensor_id = _text(data["id"], "id")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,62}", sensor_id):
         raise ValueError(f"Ungueltige Sensor-id {sensor_id!r}")
@@ -213,6 +217,7 @@ def load_definition(directory: Path | str) -> SensorDefinition:
         status=_supported(data["status"], "status", {"verified", "provisional", "draft"}),
         aliases=_sequence(data["aliases"], "aliases", _text), templates=TemplateRef(filename, digest),
         display=_display(directory / "display.json"), directory=directory,
+        connection=_supported(data.get("connection", "unknown"), "connection", set(CONNECTIONS)),
         **{key: _text(data[key], key) for key in
            ("display_name", "manufacturer", "device_id", "unit", "release_notice")},
     )

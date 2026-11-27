@@ -234,7 +234,8 @@ def propose(run: RunDir, instance, sensor_id: str, *, example=None, unit=None, s
                     'schema': 1, 'version': 1, 'id': sensor_id, 'device_id': sensor_id, 'status': 'provisional',
                     'display_name': data['name'] if display_name is None else display_name,
                     'manufacturer': data['manufacturer'], 'aliases': [],
-                    'unit': unit, 'templates': {'file': 'templates.json', 'sha256': source.templates.sha256},
+                    'unit': unit, 'connection': data['connection']['kind'],
+                    'templates': {'file': 'templates.json', 'sha256': source.templates.sha256},
                     'release_notice': 'Anzeigefamilie HD44780 5×8. Einheit durch Bediener zu bestätigen.',
                 })
                 _write_json(staged / 'display.json', asdict(display))

@@ -169,3 +169,17 @@ def test_registry_rejects_duplicate_aliases(tmp_path):
     assert len(errors) == 1
     with pytest.raises(ValueError, match="Doppelter Sensoralias"):
         registry([tmp_path])
+
+
+def test_connection_is_optional_and_checked(tmp_path):
+    from dispread.sensors import load_definition
+
+    assert load_definition(PACKAGE).connection == 'rs232'         # Referenzgerät GSV-2AS
+    directory = shutil.copytree(PACKAGE, tmp_path / PACKAGE.name)
+    data = json.loads((directory / 'sensor.json').read_text(encoding='utf-8'))
+    data.pop('connection')
+    (directory / 'sensor.json').write_text(json.dumps(data), encoding='utf-8')
+    assert load_definition(directory).connection == 'unknown'     # ältere Pakete bleiben gültig
+    change(directory, 'sensor.json', 'connection', 'wlan')
+    with pytest.raises(ValueError, match='connection'):
+        load_definition(directory)

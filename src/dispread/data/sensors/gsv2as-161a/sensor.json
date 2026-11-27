@@ -8,6 +8,7 @@
   "aliases": ["GSV-2AS"],
   "device_id": "gsv-sensor-161a",
   "unit": "mV/V",
+  "connection": "rs232",
   "release_notice": "Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.",
   "templates": {
     "file": "templates.json",

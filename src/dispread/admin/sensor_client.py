@@ -85,17 +85,38 @@ def list_sensors(instance=None) -> list[dict]:
     extra = [root] if root.is_dir() else []
     found, errors = sensors.registry_with_errors(extra)
     active = active_sensor_id(instance)
+    ledger = _install_ledger(instance)
     rows = []
     for definition in found.values():
         local = definition.directory.parent == root
+        origin = ('market' if definition.id in ledger else 'local') if local else 'bundled'
         rows.append({'id': definition.id, 'display_name': definition.display_name,
                      'manufacturer': definition.manufacturer, 'aliases': list(definition.aliases),
                      'status': definition.status, 'unit': definition.unit, 'active': definition.id == active,
-                     'local': local, 'directory': str(definition.directory)})
+                     'local': local, 'directory': str(definition.directory),
+                     'origin': origin, 'version': definition.version, 'connection': definition.connection,
+                     'family': definition.display.family, 'polarity': definition.display.polarity,
+                     'cells': definition.display.cells, 'rows': definition.display.rows,
+                     'example': _preview(definition)})
     rows.sort(key=lambda row: (not row['active'], row['display_name'].lower()))
     if errors:
         rows.append({'id': '', 'error': '; '.join(errors)})
     return rows
+
+
+def _install_ledger(instance) -> dict:
+    """Aus dem Marktplatz installierte Pakete (id -> Eintrag); ohne Backend oder Ledger leer."""
+    try:
+        return dict(_catalog().installed(instance))
+    except Exception:  # noqa: BLE001 - Herkunft ist Zusatzinformation
+        return {}
+
+
+def _preview(definition) -> str:
+    try:
+        return _catalog().preview_example(definition)
+    except Exception:  # noqa: BLE001
+        return ''
 
 
 # ----------------------------------------------------------------- Werkzeuge
@@ -231,6 +252,29 @@ def catalog_entries(instance=None) -> list[dict]:
         return []
     sensors = index.get('sensors') if isinstance(index, dict) else None
     return [dict(entry) for entry in sensors or [] if isinstance(entry, dict) and entry.get('id')]
+
+
+def catalog_info(instance=None) -> dict:
+    """Stand des zwischengespeicherten Katalogs: {'entries', 'generated', 'fetched'} (fetched = Zeit der Datei)."""
+    entries = catalog_entries(instance)
+    generated, fetched = None, None
+    try:
+        index = _catalog().cached_index(instance)
+        if isinstance(index, dict):
+            generated = index.get('generated')
+            path = _catalog().catalog_dir(instance) / 'index.json'
+            fetched = datetime.fromtimestamp(path.stat().st_mtime).astimezone()
+    except Exception:  # noqa: BLE001 - kein Cache ist kein Fehler
+        pass
+    return {'entries': entries, 'generated': generated, 'fetched': fetched}
+
+
+def pending_count(instance=None) -> int:
+    """Zahl der ausstehenden (noch nicht gesendeten) Einreichungen."""
+    try:
+        return len(_catalog().pending(instance))
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def catalog_refresh(instance=None) -> tuple[bool, str]:

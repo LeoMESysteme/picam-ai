@@ -250,6 +250,55 @@ def test_validate_index_accepts_good_and_rejects_bad(tmp_path):
             catalog.validate_index(item)
 
 
+def test_index_connection_is_optional_and_checked(tmp_path):
+    index = good_index(tmp_path)
+    assert 'connection' not in index['sensors'][0]
+    assert catalog.validate_index(index) is index                 # alter Index ohne Anschluss bleibt gültig
+    for kind in ('rs232', 'usb', 'none', 'unknown'):
+        index['sensors'][0]['connection'] = kind
+        assert catalog.validate_index(index) is index
+    for bad in ('wifi', '', None, 3):
+        index['sensors'][0]['connection'] = bad
+        with pytest.raises(ValueError):
+            catalog.validate_index(index)
+
+
+def test_preview_example_follows_display_roles():
+    definition = load_definition(_PACKAGE_ROOT / 'gsv2as-161a')
+    assert catalog.preview_example(definition) == '+0.00000 mV/V'
+    assert len(catalog.preview_example(definition)) <= 16
+
+
+def load_index_script():
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / 'scripts' / 'sensor-catalog-index.py'
+    spec = importlib.util.spec_from_file_location('sensor_catalog_index', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_index_script_writes_connection_and_derived_example(tmp_path):
+    sensors = tmp_path / 'sensors'
+    sensors.mkdir()
+    with_conn = make_package(sensors, 'astra-1')
+    data = json.loads((with_conn / 'sensor.json').read_text(encoding='utf-8'))
+    data['connection'] = 'usb'
+    (with_conn / 'sensor.json').write_text(json.dumps(data), encoding='utf-8')
+    without = make_package(sensors, 'astra-2')
+    data = json.loads((without / 'sensor.json').read_text(encoding='utf-8'))
+    data.pop('connection', None)
+    (without / 'sensor.json').write_text(json.dumps(data), encoding='utf-8')
+    (without / 'README.md').write_text('Kein Beispiel.\n', encoding='utf-8')
+    assert load_index_script().main(['--sensors', str(sensors)]) == 0
+    index = catalog.validate_index(json.loads((sensors / 'index.json').read_text(encoding='utf-8')))
+    entries = {item['id']: item for item in index['sensors']}
+    assert entries['astra-1']['connection'] == 'usb'
+    assert entries['astra-2']['connection'] == 'unknown'          # nichts erfunden
+    assert entries['astra-2']['example'] == '+0.00000 mV/V'       # aus den Rollen der Anzeige abgeleitet
+
+
 def test_fetch_index_caches_and_enforces_limits(instance, tmp_path):
     net = Net()
     index = serve_catalog(net, tmp_path / 'r', [entry_for(make_package(tmp_path / 'r'))])

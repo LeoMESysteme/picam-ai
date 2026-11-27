@@ -87,6 +87,8 @@ class SensorDefinition:
     templates: TemplateRef
     display: DisplayDefinition
     directory: Path
+    #: Anschluss des Geraets: rs232 | usb | none | unknown (optionales Feld in sensor.json, Vorgabe unknown)
+    connection: str = "unknown"
 
     @property
     def templates_path(self) -> Path:

@@ -2,6 +2,7 @@
 
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -106,7 +107,10 @@ def test_propose_check_activate(state, capsys):
     config, run = state
     prefix = ['--config', str(config), 'sensor']
     assert main([*prefix, 'propose', '--run', str(run.path), '--id', 'test-01']) == 0
-    assert json.loads(capsys.readouterr().out)['sensor_id'] == 'test-01'
+    proposal = json.loads(capsys.readouterr().out)
+    assert proposal['sensor_id'] == 'test-01'
+    stored = json.loads((Path(proposal['directory']) / 'sensor.json').read_text(encoding='utf-8'))
+    assert stored['connection'] == run.request()['connection']['kind']   # Anschluss aus der Anfrage im Paket
     assert main([*prefix, 'check', '--id', 'test-01', '--run', str(run.path)]) == 0
     assert json.loads(capsys.readouterr().out)['mode'] == 'static'
     assert main([*prefix, 'activate', '--id', 'test-01']) != 0

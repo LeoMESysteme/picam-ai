@@ -27,9 +27,11 @@ from dispread.sensors.onboarding import RunDir
 
 ROWS = [
     {'id': 'gsv2as-161a', 'display_name': 'GSV-2AS', 'manufacturer': 'ME-Meßsysteme', 'aliases': ['GSV-2ASD'],
-     'status': 'verified', 'unit': 'mV/V', 'active': True, 'local': False},
+     'status': 'verified', 'unit': 'mV/V', 'active': True, 'local': False, 'origin': 'bundled', 'version': 1,
+     'connection': 'rs232', 'family': 'hd44780_5x8', 'polarity': 'dark_on_light', 'cells': 16, 'rows': 1,
+     'example': '+0.00000 mV/V'},
     {'id': 'astra-1', 'display_name': 'Astra Messbox', 'manufacturer': 'Astra', 'aliases': ['AST-1'],
-     'status': 'provisional', 'unit': 'N', 'active': False, 'local': True},
+     'status': 'provisional', 'unit': 'N', 'active': False, 'local': True, 'origin': 'local', 'version': 1},
 ]
 GOOD = {'claude': {'installed': True, 'logged_in': True}, 'codex': {'installed': True, 'logged_in': False}}
 
@@ -54,6 +56,7 @@ async def until(pilot, predicate, limit_s=10.0):
 @pytest.fixture
 def client(monkeypatch):
     calls = {'activate': []}
+    monkeypatch.setattr(admin_fakes.INSTANCE, 'sensor', 'gsv2as-161a', raising=False)   # Aktivieren ändert sie
     monkeypatch.setattr(sensor_client, 'feature_enabled', lambda instance=None: True)
     monkeypatch.setattr(sensor_client, 'catalog_entries', lambda instance=None: [])
     monkeypatch.setattr(sensor_client, 'token_status', lambda instance=None: False)
@@ -68,7 +71,7 @@ def client(monkeypatch):
 
 # ------------------------------------------------------------ Tab
 
-def test_tab_lists_sensors_and_filters(client):
+def test_tab_lists_installed_sensors_as_cards(client):
     async def main():
         app = admin_fakes.make_app('idle')
         async with app.run_test(size=(120, 50)) as pilot:
@@ -76,20 +79,18 @@ def test_tab_lists_sensors_and_filters(client):
             await pilot.press('o')
             await pilot.pause(0.3)
             view = app.query_one(SensorenView)
-            assert app.current == 'sensoren'
-            assert [r['id'] for r in view.shown] == ['gsv2as-161a', 'astra-1']
+            assert app.current == 'sensoren' and view.page == 'mine'
+            assert [c.key for c in view.grid().cards] == ['gsv2as-161a', 'astra-1']
+            assert app.focused is view.grid()                         # Fokus beim Öffnen im Raster
             active = text_of(view.query_one('#sen-active'))
-            assert 'GSV-2AS' in active and 'verifiziert' in active
-            chips = text_of(view.query_one('#sen-chips'))
-            assert 'Astra Messbox' in chips and 'vorläufig' in chips
-            assert 'nicht geladen' in text_of(view.query_one('#sen-market'))
-            view.query_one('#sen-filter').value = 'ast-1'   # Alias
-            await pilot.pause(0.2)
-            assert [r['id'] for r in view.shown] == ['astra-1']
-            assert 'Astra' in text_of(view.query_one('#sen-detail'))
-            view.query_one('#sen-filter').value = 'gibtsnicht'
-            await pilot.pause(0.2)
-            assert view.shown == [] and 'Keine Treffer' in text_of(view.query_one('#sen-list-help'))
+            assert 'GSV-2AS' in active and 'verifiziert' in active and 'AKTIVER SENSOR' in active
+            grid = text_of(view.grid())
+            assert 'Astra Messbox' in grid and 'vorläufig' in grid and 'lokal angelegt' in grid
+            assert 'AKTIV' in grid and 'Anschluss unbekannt' in grid    # ohne Angabe: unbekannt, nichts erfunden
+            sub = text_of(view.query_one('#sen-sub'))
+            assert 'Meine Sensoren (2)' in sub and 'Marktplatz' in sub
+            actions = {a.key: a for a in view.actions()}
+            assert set(actions) == {'n', 'a', 'u'} and actions['a'].blocked == 'ist bereits aktiv'
     asyncio.run(main())
 
 
@@ -108,8 +109,9 @@ def test_activate_provisional_warns_and_calls_backend(client):
             view = app.query_one(SensorenView)
             actives = {a.key: a for a in view.actions()}
             assert actives['a'].blocked == 'ist bereits aktiv'
-            view.query_one('#sen-chips').choose(1)
+            await pilot.press('right')                              # Pfeile wählen die nächste Karte
             await pilot.pause(0.2)
+            assert view.selected_row()['id'] == 'astra-1'
             assert {a.key: a for a in view.actions()}['a'].blocked is None
             view.activate_selected()
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))

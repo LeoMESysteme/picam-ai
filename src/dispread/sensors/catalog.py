@@ -50,6 +50,9 @@ _SHA = re.compile(r"[0-9a-f]{64}")
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{16,128}")
 _ENTRY_KEYS = {"id", "version", "status", "display_name", "manufacturer", "aliases", "unit", "family",
                "polarity", "example", "files", "submitted", "checks"}
+#: Optionale Felder: aeltere Indizes ohne sie bleiben gueltig.
+_OPTIONAL_ENTRY_KEYS = {"connection"}
+CONNECTIONS = ("rs232", "usb", "none", "unknown")
 UNREACHABLE = ("Forgejo ist nur im Firmennetz oder über Tailscale erreichbar. "
                "Das Paket liegt im Ausgang; „Ausstehende senden“ versucht es erneut.")
 
@@ -152,8 +155,11 @@ def validate_index(data) -> dict:
         raise ValueError("Index: sensors muss eine Liste sein")
     seen = set()
     for entry in entries:
-        if not isinstance(entry, dict) or entry.keys() != _ENTRY_KEYS:
+        if (not isinstance(entry, dict) or not _ENTRY_KEYS <= entry.keys()
+                or not entry.keys() <= _ENTRY_KEYS | _OPTIONAL_ENTRY_KEYS):
             raise ValueError("Index: Eintrag mit unerwarteten Schlüsseln")
+        if entry.get("connection", "unknown") not in CONNECTIONS:
+            raise ValueError("Index: connection ungültig")
         _check_id(entry["id"])
         if entry["id"] in seen:
             raise ValueError(f"Index: doppelte id {entry['id']}")
@@ -182,6 +188,25 @@ def validate_index(data) -> dict:
                 or checks["runs"] < 0):
             raise ValueError("Index: checks ungültig")
     return data
+
+
+def preview_example(definition) -> str:
+    """Formatvorschau (hoechstens 16 Zeichen) aus den Rollen der Anzeige, wenn kein Beispiel gespeichert ist.
+
+    Beispiel GSV-2AS: `+ 0.00000 mV/V` (vorzeichen, Zahlenblock mit Nullen, Einheit in den Einheitszellen).
+    """
+    display = definition.display
+    cells = [" "] * display.cells
+    roles, fmt = display.roles, display.format
+    if roles.sign and fmt.sign_chars:
+        cells[roles.sign[0]] = fmt.sign_chars[0]
+    digits = "0" * fmt.digits
+    number = digits if fmt.decimal != "point" else "0." + "0" * (fmt.digits - 1)
+    for offset, char in enumerate(number[: len(roles.number)]):
+        cells[roles.number[offset]] = char
+    for position, char in zip(roles.unit, definition.unit, strict=False):
+        cells[position] = char
+    return "".join(cells).rstrip()[:16]
 
 
 def _parse_index(raw: bytes) -> dict:

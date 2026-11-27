@@ -5,6 +5,18 @@ was ist die Konsequenz.
 
 ## Unveröffentlicht
 
+* 2026-11-27: Tab „Sensoren“ neu gestaltet (Konsole). Kopfband „Aktiver Sensor“ auf beiden Unterseiten
+  (Akzentbalken, Hinweis „Neustart der Werkbank nötig“ nach dem Umstellen), Unterseiten „Meine Sensoren“ und
+  „Marktplatz“ (Taste m, Pfeile, Klick), Sensoren als Kartenraster (Spalten nach Breite, aktive Karte mit
+  schwerem Rahmen und Marke AKTIV, Auswahl als gefüllte Fläche), Enter oder Klick öffnet ein Pop-up mit Anzeigeart
+  und Polarität, Anschluss, Einheit, Formatvorschau der 16 Zellen, Hersteller, Kennung, Version, Status, Datum,
+  Prüfläufen und Herkunft samt Installieren/Aktualisieren/Als aktiv setzen/Einreichen. Marktplatz mit Suchzeile und
+  Filterleiste (Anschluss, Status, Anzeigeart, nur nicht installierte). Der Katalog lädt beim Öffnen der Seite im
+  Hintergrund (höchstens alle 30 s), offline bleibt der zwischengespeicherte Stand mit Zeit und Hinweis. Backend:
+  optionales Feld `connection` (rs232 | usb | none | unknown) in `sensor.json` und im Katalogindex (alte Pakete und
+  Indizes bleiben gültig), `propose` schreibt den Anschluss aus der Anfrage, der Indexbau leitet ein fehlendes
+  Beispiel aus den Rollen der Anzeige ab (`catalog.preview_example`). GSV-2AS trägt `rs232`. Konsequenz: ohne
+  Angabe zeigt die Konsole „unbekannt“, nichts wird erfunden.
 * 2026-11-27: Sensor-Marktplatz (Backend) und optionaler Schalter. Neu: `[features] sensor_assistant`
   in der Instanzkonfiguration (Vorgabe aus; Dev-Instanzen in `sensor-config.toml`), `dispread.sensors.features`,
   `picam sensor features on|off|status`. Aus: `onboard`, `propose` und `catalog pull|submit|pending|token set`

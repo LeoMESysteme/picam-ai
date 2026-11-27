@@ -23,18 +23,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 from dispread.sensors import load_definition, templates  # noqa: E402
-from dispread.sensors.catalog import BUNDLE_FILES, validate_index  # noqa: E402
+from dispread.sensors.catalog import BUNDLE_FILES, preview_example, validate_index  # noqa: E402
 
 _EXAMPLE = re.compile(r'^Beispiel:\s*\|(.{0,16})\|\s*$', re.MULTILINE)
 
 
-def _example(directory: Path) -> str:
+def _example(directory: Path, definition) -> str:
+    """Gespeichertes Beispiel aus der README, sonst Vorschau aus den Rollen der Anzeige."""
     readme = directory / 'README.md'
     if readme.is_file():
         match = _EXAMPLE.search(readme.read_text(encoding='utf-8'))
         if match:
             return match.group(1)
-    return ''
+    return preview_example(definition)
 
 
 def build_entries(sensors: Path, previous: dict, now: str) -> list[dict]:
@@ -54,7 +55,8 @@ def build_entries(sensors: Path, previous: dict, now: str) -> list[dict]:
             'display_name': definition.display_name, 'manufacturer': definition.manufacturer,
             'aliases': list(definition.aliases), 'unit': definition.unit,
             'family': definition.display.family, 'polarity': definition.display.polarity,
-            'example': _example(directory), 'files': files,
+            'connection': definition.connection,
+            'example': _example(directory, definition), 'files': files,
             'submitted': before['submitted'] if same else now,
             'checks': before['checks'] if same else {'runs': 0},
         })

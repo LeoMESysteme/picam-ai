@@ -423,7 +423,7 @@ class PicamApp(App[int]):
         view = self.view()
         view.update_view()
         fade_in(view, start=0.35, duration=0.15)
-        self.call_after_refresh(view.focus_first if tab_id == 'einstellungen' else self.focus_view)
+        self.call_after_refresh(view.focus_first if hasattr(view, 'focus_first') else self.focus_view)
         self.refresh_footer()
 
     def action_go_back(self) -> None:
