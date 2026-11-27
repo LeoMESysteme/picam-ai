@@ -53,7 +53,6 @@ def notes_for(version, notes_file):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('tag', help='Versionstag vX.Y.Z auf HEAD')
-    parser.add_argument('--templates', required=True, type=Path, help='Pfad zur freigegebenen lokalen Lesevorlage')
     parser.add_argument('--notes-file', type=Path, help='Release-Notes, sonst der Versionsabschnitt im CHANGELOG')
     parser.add_argument('--dry-run', action='store_true', help='Voraussetzungen prüfen und Befehle anzeigen')
     args = parser.parse_args()
@@ -64,15 +63,13 @@ def main():
     try:
         commit = check_checkout(tag)
         notes = notes_for(version, args.notes_file)
-        if not args.templates.is_file():
-            raise ValueError(f'Lesevorlage fehlt: {args.templates}')
         filename = release_source.ASSET_NAME.format(version=version)
 
         def commands(directory):
             archive = directory / filename
             checksum = directory / (filename + '.sha256')
             build = [sys.executable, str(ROOT / 'scripts/build-release.py'), '--output', str(archive),
-                     '--templates', str(args.templates.absolute()), '--release-id', version]
+                     '--release-id', version]
             upload = ['gh', 'release', 'create', tag, str(archive), str(checksum),
                       '--repo', release_source.REPOSITORY, '--verify-tag',
                       '--title', f'picam {version}', '--notes-file', str(directory / 'release-notes.md')]

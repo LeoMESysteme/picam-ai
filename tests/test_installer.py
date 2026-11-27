@@ -10,12 +10,14 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tomllib
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'packaging'))
+SENSOR_DIR = 'src/dispread/data/sensors/gsv2as-161a'
 ACCOUNT = pwd.getpwuid(os.getuid()).pw_name
 
 
@@ -32,7 +34,7 @@ def fixture_template_hash(monkeypatch):
     monkeypatch.setattr(engine.socket, 'create_connection', no_listener)
 
 
-def bundle(tmp_path, extra=None, mutate=None):
+def bundle(tmp_path, extra=None, mutate=None, change_files=None):
     files = {
         'pyproject.toml': b'[project]\nname="picam-number-ingestion"\n',
         'VERSION': b'1.0\n',
@@ -41,8 +43,13 @@ def bundle(tmp_path, extra=None, mutate=None):
         'install.sh': b'#!/bin/sh\n',
         'packaging/picam_installer/__main__.py': b'',
         'src/dispread/__init__.py': b'',
-        'src/dispread/data/templates-stufe2c-2026-09-30.json': b'{}',
+        f'{SENSOR_DIR}/sensor.json': json.dumps({'templates': {
+            'file': 'templates.json', 'sha256': hashlib.sha256(b'{}').hexdigest()}}).encode(),
+        f'{SENSOR_DIR}/display.json': b'{}',
+        f'{SENSOR_DIR}/templates.json': b'{}',
     }
+    if change_files:
+        change_files(files)
     manifest = {'schema': 1, 'release_id': 'v1', 'commit': 'abc123',
                 'files': {k: hashlib.sha256(v).hexdigest() for k, v in files.items()}}
     if mutate:
@@ -127,6 +134,22 @@ def test_manipulated_manifest_cannot_activate_release(tmp_path):
     from picam_installer.archive import read_bundle
     source = bundle(tmp_path, mutate=lambda m: m['files'].__setitem__('VERSION', '0' * 64))
     with pytest.raises(ValueError, match='Hash'):
+        read_bundle(source.read_bytes())
+
+
+@pytest.mark.parametrize('name', ['sensor.json', 'display.json', 'templates.json'])
+def test_missing_sensor_file_with_matching_manifest_is_rejected(tmp_path, name):
+    from picam_installer.archive import read_bundle
+    source = bundle(tmp_path, change_files=lambda files: files.pop(f'{SENSOR_DIR}/{name}'))
+    with pytest.raises(ValueError, match='unvollstaendig'):
+        read_bundle(source.read_bytes())
+
+
+@pytest.mark.parametrize('path', [f'{SENSOR_DIR}/templates.json', 'src/dispread/data/templates-stufe2c-2026-09-30.json'])
+def test_changed_template_with_matching_manifest_is_rejected(tmp_path, path):
+    from picam_installer.archive import read_bundle
+    source = bundle(tmp_path, change_files=lambda files: files.update({path: b'anders'}))
+    with pytest.raises(ValueError, match='Vorlage'):
         read_bundle(source.read_bytes())
 
 
@@ -234,6 +257,9 @@ def test_apply_uses_only_new_target_and_preserves_it_on_repetition(tmp_path, mon
     assert not any(c[0] in ('apt-get', 'sudo', 'systemctl') for c in calls)
     assert not any('start' in c or 'enable' in c for c in calls)
     config = (prefix / 'config/config.toml').read_bytes()
+    templates = Path(tomllib.loads(config.decode())['live']['templates'])
+    assert templates == prefix / 'current' / SENSOR_DIR / 'templates.json'
+    assert templates.is_file()
     before = len(calls)
     with pytest.raises(ValueError, match='besteht|vorhanden|bereits'):
         engine.install(args, runner=fake_runner(calls))

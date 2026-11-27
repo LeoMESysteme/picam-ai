@@ -237,14 +237,15 @@ Im getrennten Entwicklungs-Checkout mit dessen eigener Python-Umgebung:
 ```bash
 ./.venv/bin/python scripts/build-release.py \
   --output /absoluter/lieferordner/picam-1.1.1.tar.gz \
-  --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json \
   --release-id 1.1.1
 (cd /absoluter/lieferordner && sha256sum picam-1.1.1.tar.gz > picam-1.1.1.tar.gz.sha256)
 ```
 
 Das Ausgabeverzeichnis muss bereits existieren und außerhalb des
 Quell-Worktrees liegen; eine vorhandene Ausgabedatei wird nicht ersetzt.
-Die Vorlage wird gegen den im Produkt hinterlegten SHA-256 geprüft.
+Der Release-Bau liest die Vorlage aus dem Sensorpaket `gsv2as-161a` im
+Checkout und prüft ihren SHA-256. Für bestehende Installationen enthält das
+Archiv dieselben Bytes auch am bisherigen Vorlagenpfad.
 Bei einer stabilen Release-ID `X.Y.Z` trägt auch die `VERSION` im Archiv
 diesen Wert. Daraus liest setuptools die Paketversion. `picam --version`
 und die Konsole zeigen die Release-ID aus dem Manifest. Lokale Testbauten
@@ -275,17 +276,14 @@ im Bootstrap-Interpreter. Die Produktlaufzeit wird getrennt geprüft.
 
 ## Release veröffentlichen
 
-Die Lesevorlage `templates-stufe2c-2026-09-30.json` liegt lokal. Setze die
-gewünschte Version in `VERSION`, schreibe den Abschnitt `## X.Y.Z` im
+Setze die gewünschte Version in `VERSION`, schreibe den Abschnitt `## X.Y.Z` im
 CHANGELOG und tagge den sauberen Stand als `vX.Y.Z`. Der Tag muss auf
 `HEAD` zeigen und vor dem Upload auf dem GitHub-Mirror vorhanden sein.
 
 ```bash
-./.venv/bin/python scripts/publish-release.py vX.Y.Z \
-  --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json --dry-run
+./.venv/bin/python scripts/publish-release.py vX.Y.Z --dry-run
 
-./.venv/bin/python scripts/publish-release.py vX.Y.Z \
-  --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json
+./.venv/bin/python scripts/publish-release.py vX.Y.Z
 ```
 
 Der Probelauf prüft den lokalen Stand und zeigt die Befehle an. Der echte

@@ -9,6 +9,21 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-27 — GSV-2AS als Datenpaket ausliefern
+
+Die externe Stufe-2c-Datei war bisher eine zusätzliche Eingabe beim
+Release-Bau. Gerätebeschreibung, Displayraster und geprüfte Vorlagen
+liegen jetzt gemeinsam im Sensorpaket. Builder und Installer prüfen die
+Vorlagenbytes gegen dieselbe festgelegte SHA-256-Prüfsumme. Lokale
+Paketwurzeln dürfen keine mitgelieferte Kennung überschreiben und kein
+Paket als `verified` auszeichnen.
+
+Ein sofortiges Entfernen des bisherigen Vorlagenpfads hätte Updates von
+1.1.1 verhindert. Sowohl dessen Archivprüfer als auch die vorhandene
+Dienstkonfiguration erwarten diesen Pfad. Der Builder legt deshalb im
+Archiv eine zweite reguläre Datei aus denselben geprüften Bytes ab. Der
+neue Installer trägt bei der Ersteinrichtung den Paketpfad ein.
+
 ## 2026-11-25 — Pi-Releases über den GitHub-Mirror
 
 Der öffentliche GitHub-Mirror liefert vorerst Bootstrap und versionierte

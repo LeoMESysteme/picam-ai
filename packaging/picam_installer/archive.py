@@ -13,10 +13,14 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 MAX_BYTES = 128 * 1024 * 1024
-TEMPLATE = 'src/dispread/data/templates-stufe2c-2026-09-30.json'
+SENSOR_DIR = 'src/dispread/data/sensors/gsv2as-161a'
+SENSOR = f'{SENSOR_DIR}/sensor.json'
+DISPLAY = f'{SENSOR_DIR}/display.json'
+TEMPLATE = f'{SENSOR_DIR}/templates.json'
+LEGACY_TEMPLATE = 'src/dispread/data/templates-stufe2c-2026-09-30.json'
 TEMPLATE_SHA256 = '6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a'
 REQUIRED = {'pyproject.toml', 'VERSION', 'packaging/apt-packages.txt', 'scripts/install.py',
-            'install.sh', 'packaging/picam_installer/__main__.py', 'src/dispread/__init__.py', TEMPLATE}
+            'install.sh', 'packaging/picam_installer/__main__.py', 'src/dispread/__init__.py', SENSOR, DISPLAY, TEMPLATE}
 
 
 def unique_json(pairs):
@@ -26,6 +30,18 @@ def unique_json(pairs):
             raise ValueError('Doppelter JSON-Schluessel')
         result[key] = value
     return result
+
+
+def check_template(sensor_data, template_data):
+    """Prueft den Paketverweis und die unabhaengig festgelegte Stufe-2c-Pruefsumme."""
+    try:
+        reference = json.loads(sensor_data, object_pairs_hook=unique_json)['templates']
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('Vorlagenverweis in sensor.json fehlt oder ist ungueltig') from error
+    if reference != {'file': 'templates.json', 'sha256': TEMPLATE_SHA256}:
+        raise ValueError('Vorlagenverweis in sensor.json passt nicht zur freigegebenen Vorlage')
+    if hashlib.sha256(template_data).hexdigest() != TEMPLATE_SHA256:
+        raise ValueError('Vorlagen-Hash stimmt nicht mit der freigegebenen Vorlage ueberein')
 
 
 @dataclass(frozen=True)
@@ -94,8 +110,9 @@ def read_bundle(raw):
             raise ValueError('Ungueltige Manifestdatei')
         if hashlib.sha256(files[name]).hexdigest() != digest:
             raise ValueError(f'Hash stimmt nicht: {name}')
-    if hashlib.sha256(files[TEMPLATE]).hexdigest() != TEMPLATE_SHA256:
-        raise ValueError('Vorlagen-Hash stimmt nicht mit der freigegebenen Vorlage ueberein')
+    check_template(files[SENSOR], files[TEMPLATE])
+    if LEGACY_TEMPLATE in files and files[LEGACY_TEMPLATE] != files[TEMPLATE]:
+        raise ValueError('Vorlage fuer bestehende Installationen weicht vom Sensorpaket ab')
     # A file cannot also be another file's parent, even when its hash is valid.
     for name in files:
         if any(str(parent) in files for parent in PurePosixPath(name).parents if str(parent) != '.'):
