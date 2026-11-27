@@ -17,4 +17,15 @@ from .zertifikat import ZertifikatView
 TABS = (DashboardView, LaufView, DienstView, KameraView, AusgabeView, ZertifikatView, SpeicherView,
         NetzwerkView, UartView, KontoView, ProtokollView, SensorenView, EinstellungenView)
 
-__all__ = ['TABS']
+
+
+def visible_tabs(instance=None, enabled: bool | None = None) -> tuple:
+    """Tabs der Konsole; Tabs mit ``FEATURE`` nur, wenn der Schalter in den Einstellungen an ist."""
+    if enabled is None:
+        from .. import sensor_client
+
+        enabled = sensor_client.feature_enabled(instance)
+    return tuple(view for view in TABS if not getattr(view, 'FEATURE', '') or enabled)
+
+
+__all__ = ['TABS', 'visible_tabs']

@@ -39,8 +39,10 @@ def test_arrows_move_between_fields_checkbox_and_buttons(tmp_path):
         await pilot.press('down')
         assert isinstance(app.focused, Checkbox)
         await pilot.press('down')
+        assert app.focused.id == 'cfg-feature'
+        await pilot.press('down')
         assert isinstance(app.focused, Button)
-        await pilot.press('up', 'up', 'up')
+        await pilot.press('up', 'up', 'up', 'up')
         assert app.focused is port
         assert port.value == '8080' and name.value == 'aq'
     drive(check, instance=settings(tmp_path))
@@ -150,6 +152,9 @@ def test_only_focused_element_is_highlighted_after_every_focus_change(tmp_path):
         _only_focused_marked(app)
         await pilot.press('down', 'down')  # Kontrollkästchen
         assert isinstance(app.focused, Checkbox)
+        _only_focused_marked(app)
+        await pilot.press('down')  # Schalter „Experimentell“
+        assert app.focused.id == 'cfg-feature'
         _only_focused_marked(app)
         await pilot.press('down')  # Knopf
         assert isinstance(app.focused, Button)

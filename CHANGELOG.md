@@ -5,6 +5,30 @@ was ist die Konsequenz.
 
 ## Unveröffentlicht
 
+* 2026-11-27: Sensor-Marktplatz (Backend) und optionaler Schalter. Neu: `[features] sensor_assistant`
+  in der Instanzkonfiguration (Vorgabe aus; Dev-Instanzen in `sensor-config.toml`), `dispread.sensors.features`,
+  `picam sensor features on|off|status`. Aus: `onboard`, `propose` und `catalog pull|submit|pending|token set`
+  verweigern mit Hinweis auf die Einstellungen; `list`, `activate`, `agents`, `ports`, `catalog refresh|search|
+  check-bundle|token status|token delete` bleiben, der Messpfad mit `gsv2as-161a` ändert sich nicht. Neu:
+  `dispread.sensors.catalog` (Index mit Schemaprüfung und Cache, Suche, `pull` mit SHA256-/Größenprüfung immer als
+  vorläufig, deterministisches `bundle`, `check_bundle` ohne Links/fremde Dateien/Übergröße, Forgejo-Token 0600,
+  `submit` als Issue mit Anhang und Einwilligung, Ausgang für Offline-Fälle) und `picam sensor catalog …`. Der
+  Installer fragt optional (Vorgabe nein) und schreibt `[features]` (`--with/--without-sensor-assistant`).
+  `.github/workflows/sensor-submission.yml` prüft Einreichungen und schreibt nur `sensors/**` in den Zweig
+  `sensor-katalog` (`scripts/sensor-catalog-index.py`). Nur gegen echtes Forgejo prüfbar: Issue-Ereignisse der
+  Actions, Anhangs-API, Label-Anlage, Push des Bot-Tokens, Spiegelung des Zweigs nach GitHub.
+
+* 2026-11-27: Konsole, Tab „Sensoren“: Karte „Marktplatz“ ist echt. Die Suche
+  deckt lokale Sensoren und Katalogeinträge ab (Kennzeichen „Marktplatz“);
+  Aktionen „Katalog laden“ (k), „Installieren“ (v, immer vorläufig),
+  „Einreichen“ (u; Einwilligungsdialog, danach bei fehlendem Token
+  maskierte Tokeneingabe) und „Ausstehende senden“ (s). Neu in den
+  Einstellungen: Schalter „Experimentell: KI-Sensoreinrichtung und
+  Marktplatz“. Ist er aus, fehlt der Tab „Sensoren“ (Tasten o und Tab-Taste
+  überspringen ihn); Umschalten blendet ihn ohne Neustart der Konsole ein
+  oder aus. `sensor_client` kapselt Katalog und Schalter, importiert das
+  Backend erst beim Aufruf und meldet ein fehlendes Modul ehrlich. Das Token
+  steht in keiner Meldung. Der Messpfad ist unverändert.
 * 2026-11-27: `picam sensor` kann HD44780-Anzeigen einrichten, vorläufige
   Sensorpakete aus einem Zellbeispiel erzeugen und den aktiven Sensor setzen.
   Der Assistent arbeitet mit Bedienerbestätigung, optional über Claude oder

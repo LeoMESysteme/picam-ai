@@ -184,3 +184,139 @@ def activate(sensor_id: str, instance=None) -> tuple[bool, str]:
     data = _json(out)
     message = data.get('message') if isinstance(data, dict) else None
     return True, message or f'Sensor {sensor_id} ist aktiv.'
+
+
+# ----------------------------------------------------------------- Feature-Schalter (optional, experimentell)
+FEATURE_NAME = 'sensor_assistant'
+BACKEND_MISSING = 'Backend noch nicht vorhanden'
+
+
+def feature_enabled(instance=None) -> bool:
+    """Ist „KI-Sensoreinrichtung und Marktplatz“ eingeschaltet? Ohne Backend gilt: aus."""
+    try:
+        from dispread.sensors import features
+    except ImportError:
+        return False
+    try:
+        return bool(features.enabled(instance))
+    except Exception:  # noqa: BLE001 - Anzeige darf nie an der Konfiguration scheitern
+        return False
+
+
+def set_feature(instance, value: bool) -> tuple[bool, str, bool]:
+    """Schalter setzen. Rückgabe (ok, Meldung, Neustart nötig)."""
+    try:
+        from dispread.sensors import features
+    except ImportError:
+        return False, f'Schalter: {BACKEND_MISSING} (dispread.sensors.features)', False
+    try:
+        result = features.set_enabled(instance, bool(value)) or {}
+    except Exception as error:  # noqa: BLE001 - Meldung statt Absturz
+        return False, f'Schalter nicht gesetzt: {error}', False
+    return True, str(result.get('message') or 'Gespeichert.'), bool(result.get('restart_required'))
+
+
+# ----------------------------------------------------------------- Marktplatz (Katalog, Einreichung)
+def _catalog():
+    from dispread.sensors import catalog
+
+    return catalog
+
+
+def catalog_entries(instance=None) -> list[dict]:
+    """Einträge des zwischengespeicherten Katalogs (ohne Netz); ohne Backend oder Cache leer."""
+    try:
+        index = _catalog().cached_index(instance)
+    except Exception:  # noqa: BLE001 - kein Cache ist kein Fehler
+        return []
+    sensors = index.get('sensors') if isinstance(index, dict) else None
+    return [dict(entry) for entry in sensors or [] if isinstance(entry, dict) and entry.get('id')]
+
+
+def catalog_refresh(instance=None) -> tuple[bool, str]:
+    """Katalog laden (HTTPS). Rückgabe (ok, Meldung)."""
+    try:
+        catalog = _catalog()
+    except ImportError:
+        return False, f'Katalog: {BACKEND_MISSING} (dispread.sensors.catalog)'
+    try:
+        index = catalog.fetch_index(instance)
+    except Exception as error:  # noqa: BLE001 - Netz-/Schemafehler zeigen
+        return False, f'Katalog nicht geladen: {error}'
+    count = len(index.get('sensors') or []) if isinstance(index, dict) else 0
+    return True, f'Katalog aktualisiert: {count} Einträge.'
+
+
+def catalog_install(instance, sensor_id: str, *, overwrite: bool = False) -> tuple[bool, str]:
+    """Marktplatz-Eintrag installieren (immer vorläufig). Rückgabe (ok, Meldung)."""
+    try:
+        catalog = _catalog()
+    except ImportError:
+        return False, f'Installieren: {BACKEND_MISSING} (dispread.sensors.catalog)'
+    try:
+        kwargs = {'overwrite': True} if overwrite else {}
+        catalog.pull(instance, sensor_id, **kwargs)
+    except Exception as error:  # noqa: BLE001
+        return False, f'Installieren fehlgeschlagen: {error}'
+    return True, f'{sensor_id} installiert (vorläufig).'
+
+
+def token_status(instance=None) -> bool:
+    """Ist ein Forgejo-Token gespeichert? (Nur ja/nein, nie der Wert.)"""
+    try:
+        status = _catalog().token_status(instance)
+    except Exception:  # noqa: BLE001
+        return False
+    if isinstance(status, dict):
+        return bool(status.get('present') or status.get('saved') or status.get('ok'))
+    return bool(status)
+
+
+def save_token(instance, token: str) -> tuple[bool, str]:
+    """Token prüfen und speichern. Das Token erscheint in keiner Meldung."""
+    try:
+        catalog = _catalog()
+    except ImportError:
+        return False, f'Token: {BACKEND_MISSING} (dispread.sensors.catalog)'
+    try:
+        catalog.save_token(instance, token)
+    except Exception as error:  # noqa: BLE001
+        return False, f'Token nicht gespeichert: {str(error).replace(token, "***") if token else error}'
+    return True, 'Token gespeichert.'
+
+
+def submit_sensor(instance, sensor_id: str, *, consent: bool) -> tuple[bool, str]:
+    """Paket einreichen (Forgejo-Issue). Rückgabe (ok, Meldung inkl. Issue-Adresse)."""
+    try:
+        catalog = _catalog()
+    except ImportError:
+        return False, f'Einreichen: {BACKEND_MISSING} (dispread.sensors.catalog)'
+    try:
+        result = catalog.submit(instance, sensor_id, consent=consent) or {}
+    except Exception as error:  # noqa: BLE001 - z. B. Forgejo nicht erreichbar; Paket bleibt ausstehend
+        return False, f'Nicht gesendet: {error}'
+    url = result.get('issue_url')
+    return True, f'Eingereicht: {url}' if url else 'Eingereicht.'
+
+
+def submit_pending(instance=None) -> tuple[bool, str]:
+    """Ausstehende Einreichungen erneut senden."""
+    try:
+        catalog = _catalog()
+    except ImportError:
+        return False, f'Ausstehende senden: {BACKEND_MISSING} (dispread.sensors.catalog)'
+    try:
+        result = catalog.submit_pending(instance)
+    except Exception as error:  # noqa: BLE001
+        return False, f'Nicht gesendet: {error}'
+    if isinstance(result, dict):
+        result = result.get('results') or result.get('sent') or []
+    items = [item for item in (result or []) if isinstance(item, dict)]
+    ok = [item for item in items if item.get('ok', True)]
+    failed = [item for item in items if not item.get('ok', True)]
+    if not items:
+        return True, 'Keine ausstehenden Einreichungen.'
+    if failed:
+        reason = failed[0].get('error') or 'unbekannter Fehler'
+        return bool(ok), f'Gesendet: {len(ok)}, nicht gesendet: {len(failed)} ({reason}).'
+    return True, f'Ausstehende gesendet: {len(ok)}.'

@@ -24,6 +24,8 @@ _FIELDS = frozenset(_PATHS) | {
     'host', 'port', 'pam_user', 'bridge_endpoint', 'bridge_name',
     'bridge_discovery', 'camera', 'simulate', 'output_port', 'reference_port',
 }
+# Schalter fuer optionale, experimentelle Funktionen (Vorgabe: aus).
+FEATURES = frozenset({'sensor_assistant'})
 # Include non-configurable serve options so argparse abbreviations stay unambiguous.
 _SERVE_OPTIONS = _FIELDS | {
     'config', 'help', 'width', 'height', 'fps', 'min_area', 'max_area',
@@ -120,6 +122,28 @@ def _workbench(values, base):
     return result
 
 
+def parse_features(config) -> dict:
+    """Schalter des Abschnitts [features]; fehlt er, ist alles aus (Vorgabe)."""
+    values = config.get('features', {})
+    if not isinstance(values, dict):
+        raise ValueError('features: TOML-Tabelle erforderlich')
+    if unknown := values.keys() - FEATURES:
+        raise ValueError(f'features: unbekannte Schluessel: {", ".join(sorted(unknown))}')
+    for name, value in values.items():
+        if type(value) is not bool:
+            raise ValueError(f'features.{name}: TOML true/false erforderlich')
+    return {name: values.get(name, False) for name in sorted(FEATURES)}
+
+
+def load_features(path) -> dict:
+    """Validierte Schalter einer Konfigurationsdatei (ganze Datei wird geprueft)."""
+    source = Path(path).resolve()
+    with source.open('rb') as stream:
+        config = tomllib.load(stream)
+    parse_config(config, source.parent)
+    return parse_features(config)
+
+
 def _explicit_options(argv):
     explicit = set()
     for arg in argv:
@@ -143,14 +167,16 @@ def load_config(path):
 
 
 def parse_config(config, base):
-    if unknown := config.keys() - {'workbench', 'live'}:
+    if unknown := config.keys() - {'workbench', 'live', 'features'}:
         raise ValueError(f'unbekannte Abschnitte: {", ".join(sorted(unknown))}')
-    for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration', 'sensor'})):
+    for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration', 'sensor'}),
+                             ('features', FEATURES)):
         values = config.get(section, {})
         if not isinstance(values, dict):
             raise ValueError(f'{section}: TOML-Tabelle erforderlich')
         if unknown := values.keys() - allowed:
             raise ValueError(f'{section}: unbekannte Schluessel: {", ".join(sorted(unknown))}')
+    parse_features(config)
     workbench = _workbench(config.get('workbench', {}), base)
     live = {}
     for name, value in config.get('live', {}).items():

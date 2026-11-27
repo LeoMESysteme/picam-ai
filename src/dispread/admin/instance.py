@@ -81,6 +81,7 @@ class Instance:
     output_port: str = GSV_UART_PORT
     reference_port: str = REFERENCE_PORT
     sensor: str = DEFAULT_SENSOR_ID
+    sensor_assistant: bool = False   # [features] sensor_assistant (experimentell, Vorgabe aus)
 
     @property
     def label(self) -> str:
@@ -125,6 +126,7 @@ def _from_config(path: Path, kind: str) -> Instance:
         if name in workbench:
             setattr(instance, name, workbench[name])
     instance.sensor = live.get('sensor', DEFAULT_SENSOR_ID)
+    instance.sensor_assistant = _features_of(path)
     instance.templates = str(live['templates']) if 'templates' in live else None
     instance.calibration = str(live['calibration']) if 'calibration' in live else None
     root = code_root()
@@ -133,6 +135,15 @@ def _from_config(path: Path, kind: str) -> Instance:
         root = current.resolve()  # nach einem Update zählt die aktive Version
     instance.root = str(root)
     return instance
+
+
+def _features_of(path: Path) -> bool:
+    try:
+        from dispread.workbench.config import load_features
+
+        return load_features(path)['sensor_assistant']
+    except (OSError, ValueError):
+        return False
 
 
 def parse_exec_start(text: str) -> list[str]:
@@ -182,6 +193,7 @@ def _dev_from_argv(argv: list[str], workdir: str | None) -> Instance:
         try:
             _, live, _ = load_config(sensor_config)
             instance.sensor = live.get('sensor', DEFAULT_SENSOR_ID)
+            instance.sensor_assistant = _features_of(sensor_config)
         except (OSError, ValueError) as error:
             instance.problem = f'Sensorkonfiguration {sensor_config}: {error}'
     return instance

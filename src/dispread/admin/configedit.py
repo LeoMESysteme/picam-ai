@@ -144,6 +144,25 @@ def propose_sensor(path: Path, sensor_id: str, *, dev_data: str | None = None) -
     return updated
 
 
+def propose_features(path: Path, sensor_assistant: bool, *, dev_data: str | None = None) -> str:
+    """Aendert den Schalter [features] sensor_assistant ueber denselben validierten TOML-Schreibweg."""
+    from dispread.workbench.config import parse_config
+
+    if path.exists():
+        text = path.read_text(encoding='utf-8')
+    elif dev_data is not None:
+        text = '[workbench]\ndata = ' + json.dumps(dev_data, ensure_ascii=False) + '\n'
+    else:
+        raise FileNotFoundError(f'Konfiguration fehlt: {path}')
+    lines = text.splitlines()
+    if 'features' not in tomllib.loads(text):
+        lines.extend(('', '[features]'))
+    old = _replace_key(lines, 'sensor_assistant', bool(sensor_assistant), section='features')
+    updated = text if old is bool(sensor_assistant) else '\n'.join(lines) + '\n'
+    parse_config(tomllib.loads(updated), path.resolve().parent)
+    return updated
+
+
 def apply(path: str | Path, new_text: str, *, create: bool = False) -> None:
     source = Path(path).resolve()
     existing = source.exists()

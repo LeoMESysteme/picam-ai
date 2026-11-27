@@ -48,6 +48,12 @@ def test_generic_parser():
     assert parse('12.3 ', integer) is None
 
 
+@pytest.fixture(autouse=True)
+def _feature_on(monkeypatch):
+    """Onboarding und propose sind hinter dem Schalter [features]; hier zaehlt der Ablauf, nicht der Schalter."""
+    monkeypatch.setattr('dispread.sensors.features.enabled', lambda instance: True)
+
+
 @pytest.fixture
 def state(tmp_path):
     from dispread.sensors.onboarding import RunDir

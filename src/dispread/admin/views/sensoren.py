@@ -7,11 +7,11 @@ import asyncio
 from rich.text import Text
 from textual import on, work
 from textual.containers import Vertical
-from textual.widgets import Static
+from textual.widgets import Input, Static
 
 from .. import probes, sensor_client
 from ..edit_input import EDIT_HINT, EditInput
-from ..ui import MUTED, SOFT, TONE, Action, Confirmation, ConfirmScreen
+from ..ui import MUTED, TONE, Action, AskScreen, Confirmation, ConfirmScreen
 from ..widgets import (
     ActionBar,
     CardBox,
@@ -26,7 +26,18 @@ from ..widgets import (
 )
 from .base import TabView
 
-MARKET_NOTE = 'Online-Katalog folgt – Suche zeigt vorerst lokale und mitgelieferte Sensoren.'
+MARKET_BADGE = 'Marktplatz'
+CONSENT_LINES = ('Paketdateien (Format, Vorlagen, keine Bilder) werden an das Firmen-Forgejo gesendet und '
+                 'erscheinen öffentlich im Katalog.',
+                 'Das Paket wird dort automatisch geprüft; erst danach ist es im Marktplatz sichtbar.')
+
+
+class TokenScreen(AskScreen):
+    """Eingabe des Forgejo-Tokens, maskiert (der Wert erscheint nirgends im Klartext)."""
+
+    def on_mount(self) -> None:
+        super().on_mount()
+        self.query_one('#ask-input', Input).password = True
 
 
 def status_badge(status: str) -> Text:
@@ -46,6 +57,7 @@ def matches(row: dict, query: str) -> bool:
 
 class SensorenView(TabView):
     TAB_ID, TITLE, KEY = 'sensoren', 'Sensoren', 'o'
+    FEATURE = sensor_client.FEATURE_NAME   # Tab nur sichtbar, wenn der Schalter in den Einstellungen an ist
     INFO_TITLE = 'Sensoren'
     OWN_BAR = True
     ABOUT = ('Ein Sensorpaket beschreibt eine Anzeige (Raster, Zeichen, Format) samt eingefrorenen Vorlagen. '
@@ -57,6 +69,8 @@ class SensorenView(TabView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.rows: list[dict] = []
+        self.market_count = 0
+        self.token_saved = False
         self.shown: list[dict] = []
         self.load_error: str | None = None
         self.loaded = False
@@ -91,8 +105,23 @@ class SensorenView(TabView):
         if errors:
             self.load_error = ' '.join(errors)
         self.rows = [r for r in rows if r.get('id')]
+        self.add_market_rows()
         self.loaded = True
         self.apply_filter()
+
+    def add_market_rows(self) -> None:
+        """Katalogeinträge (Zwischenspeicher, ohne Netz) hinter die lokalen Sensoren; lokale gehen vor."""
+        entries = sensor_client.catalog_entries(self.app.instance)
+        self.market_count = len(entries)
+        known = {r['id'] for r in self.rows}
+        for entry in entries:
+            if entry['id'] in known:
+                continue
+            self.rows.append({'id': entry['id'], 'display_name': entry.get('display_name') or entry['id'],
+                              'manufacturer': entry.get('manufacturer') or '',
+                              'aliases': list(entry.get('aliases') or []), 'status': entry.get('status') or '',
+                              'unit': entry.get('unit') or '', 'active': False, 'local': False, 'market': True,
+                              'version': entry.get('version')})
 
     def apply_filter(self, keep: str | None = None) -> None:
         chips = self.query_one('#sen-chips', ChipSelector)
@@ -101,11 +130,16 @@ class SensorenView(TabView):
         query = self.query_one('#sen-filter', EditInput).value.strip()
         self.shown = [r for r in self.rows if matches(r, query)]
         index = next((i for i, r in enumerate(self.shown) if r['id'] == keep), 0)
-        items = [('on' if r['active'] else 'template', r['display_name'], None if r['status'] == 'verified'
-                  else badge(probes.WARN, 'vorläufig')) for r in self.shown]
+        items = [('on' if r['active'] else 'template', r['display_name'], self.chip_mark(r)) for r in self.shown]
         chips.set_items(items, index)
         if self.is_mounted:
             self.draw()
+
+    @staticmethod
+    def chip_mark(row: dict) -> Text | None:
+        if row.get('market'):
+            return badge(probes.OFF, MARKET_BADGE, 'off')
+        return None if row['status'] == 'verified' else badge(probes.WARN, 'vorläufig')
 
     def selected(self) -> dict | None:
         chips = self.query_one('#sen-chips', ChipSelector)
@@ -158,14 +192,25 @@ class SensorenView(TabView):
                      ('Einheit', value(sel['unit'] or None)),
                      ('Aliase', value(', '.join(sel['aliases']) or None), True),
                      ('Kennung', value(sel['id']), True),
-                     ('Herkunft', value('lokal angelegt' if sel.get('local') else 'mitgeliefert'))]
-            hint = (help_line('Vorläufig: Werte werden als vorläufig markiert.') if sel['status'] != 'verified'
+                     ('Herkunft', value(MARKET_BADGE + ' (nicht installiert)' if sel.get('market')
+                                        else 'lokal angelegt' if sel.get('local') else 'mitgeliefert'))]
+            hint = (help_line('Installieren (v) lädt das Paket vorläufig; Werte werden als vorläufig markiert.')
+                    if sel.get('market') else
+                    help_line('Vorläufig: Werte werden als vorläufig markiert.') if sel['status'] != 'verified'
                     else None)
             detail.show(header('info', 'Details', status_badge(sel['status']), dwidth),
                         fields(drows, dwidth, label_w=11), hint)
         market = self.query_one('#sen-market', SectionCard)
-        market.show(header('network', 'Marktplatz', badge(probes.OFF, 'folgt', 'off'), self.card_width(market)),
-                    Text(MARKET_NOTE, style=SOFT), None)
+        mwidth = self.card_width(market)
+        self.token_saved = sensor_client.token_status(inst)
+        mrows = [('Katalog', value(f'{self.market_count} Einträge' if self.market_count else 'nicht geladen (k)'),
+                  True),
+                 ('Token', value('gespeichert' if self.token_saved else 'fehlt – wird beim Einreichen erfragt'),
+                  True)]
+        market.show(header('network', 'Marktplatz', badge(probes.OFF, 'experimentell', 'off'), mwidth),
+                    fields(mrows, mwidth, label_w=9),
+                    help_line('Suche zeigt lokale Sensoren und Katalog (k lädt ihn). Einreichen sendet an das '
+                              'Firmen-Forgejo (nur im Firmennetz/Tailscale).'))
 
     @on(EditInput.Changed, '#sen-filter')
     def _filter_changed(self) -> None:
@@ -186,13 +231,90 @@ class SensorenView(TabView):
         sel = self.selected() if self.is_mounted and self.query('#sen-chips') else None
         if sel is None:
             block = 'kein Sensor gewählt'
+        elif sel.get('market'):
+            block = 'erst installieren (v)'
         elif sel['active']:
             block = 'ist bereits aktiv'
         else:
             block = None
-        return [Action('n', 'Neuen Sensor hinzufügen', self.add_sensor, icon='setup'),
-                Action('a', 'Als aktiv setzen', self.activate_selected, icon='check', blocked=block),
-                Action('r', 'Aktualisieren', self.reload, icon='restart')]
+        install_block = ('kein Marktplatz-Eintrag gewählt' if sel is None or not sel.get('market') else None)
+        if sel is None:
+            submit_block = 'kein Sensor gewählt'
+        elif sel.get('market'):
+            submit_block = 'nur lokale Pakete sind einreichbar'
+        elif not sel.get('local'):
+            submit_block = 'mitgelieferte Pakete sind schon im Release'
+        elif sel['status'] == 'verified':
+            submit_block = 'nur vorläufige Pakete werden eingereicht'
+        else:
+            submit_block = None
+        return [Action('n', 'Neuer Sensor', self.add_sensor, icon='setup'),
+                Action('a', 'Aktiv setzen', self.activate_selected, icon='check', blocked=block),
+                Action('r', 'Neu lesen', self.reload, icon='restart'),
+                Action('k', 'Katalog laden', self.refresh_catalog, icon='network'),
+                Action('v', 'Installieren', self.install_selected, icon='setup', blocked=install_block),
+                Action('u', 'Einreichen', self.submit_selected, icon='check', blocked=submit_block),
+                Action('s', 'Ausstehende senden', self.send_pending, icon='restart')]
+
+    @work(exclusive=True, group='sensor-catalog')
+    async def refresh_catalog(self) -> None:
+        app = self.app
+        app.message(probes.OFF, 'Katalog wird geladen …')
+        ok, message = await asyncio.to_thread(sensor_client.catalog_refresh, app.instance)
+        app.message(probes.OK if ok else probes.FAIL, message)
+        self.reload()
+
+    @work(exclusive=True, group='sensor-install')
+    async def install_selected(self) -> None:
+        app = self.app
+        sel = self.selected()
+        if sel is None or not sel.get('market'):
+            return
+        lines = [f'„{sel["display_name"]}“ ({sel["id"]}) wird aus dem Marktplatz geladen.',
+                 'Es wird als vorläufig installiert, auch wenn der Katalog „verifiziert“ nennt; Werte sind in '
+                 'Läufen und im Audit als vorläufig markiert.']
+        ok = await app.push_screen_wait(ConfirmScreen(Confirmation('Sensor installieren', lines, [], 'Installieren')))
+        if not ok:
+            return
+        done, message = await asyncio.to_thread(sensor_client.catalog_install, app.instance, sel['id'])
+        app.message(probes.OK if done else probes.FAIL, message)
+        if done:
+            self.reload()
+            self.apply_filter(keep=sel['id'])
+
+    @work(exclusive=True, group='sensor-submit')
+    async def submit_selected(self) -> None:
+        app = self.app
+        sel = self.selected()
+        if sel is None or sel.get('market') or not sel.get('local') or sel['status'] == 'verified':
+            return
+        lines = [f'„{sel["display_name"]}“ ({sel["id"]}) einreichen.', *CONSENT_LINES]
+        consent = await app.push_screen_wait(ConfirmScreen(Confirmation(
+            'Sensor einreichen', lines, [], 'Einverstanden und senden')))
+        if not consent:
+            return
+        if not await asyncio.to_thread(sensor_client.token_status, app.instance):
+            token = await app.push_screen_wait(TokenScreen(
+                'Forgejo-Token', ['Zum Einreichen braucht es ein Forgejo-Token (Eingabe wird nicht angezeigt).',
+                                  'Es wird geprüft und nur auf diesem Gerät gespeichert.'],
+                placeholder='Token'))
+            if not token:
+                app.message(probes.OFF, 'Abgebrochen: kein Token.')
+                return
+            saved, message = await asyncio.to_thread(sensor_client.save_token, app.instance, token)
+            del token
+            if not saved:
+                app.message(probes.FAIL, message)
+                return
+        done, message = await asyncio.to_thread(sensor_client.submit_sensor, app.instance, sel['id'], consent=True)
+        app.message(probes.OK if done else probes.FAIL, message)
+        self.draw()
+
+    @work(exclusive=True, group='sensor-pending')
+    async def send_pending(self) -> None:
+        app = self.app
+        done, message = await asyncio.to_thread(sensor_client.submit_pending, app.instance)
+        app.message(probes.OK if done else probes.FAIL, message)
 
     @work(exclusive=True, group='sensor-add')
     async def add_sensor(self) -> None:
@@ -218,7 +340,7 @@ class SensorenView(TabView):
     async def activate_selected(self) -> None:
         app = self.app
         sel = self.selected()
-        if sel is None or sel['active']:
+        if sel is None or sel['active'] or sel.get('market'):
             return
         lines = [f'Die Werkbank liest künftig mit „{sel["display_name"]}“ ({sel["id"]}).',
                  'Wirksam nach einem Neustart der Werkbank; ein laufender Lauf bleibt unverändert.']

@@ -13,7 +13,7 @@ import time
 import uuid
 from pathlib import Path
 
-from dispread.sensors import local_root, registry_with_errors
+from dispread.sensors import catalog, features, local_root, registry_with_errors
 from dispread.sensors import tools as sensor
 from dispread.sensors.formats import derive_display
 from dispread.sensors.onboarding import (
@@ -24,6 +24,35 @@ from dispread.sensors.onboarding import (
     RunDir,
     slugify,
 )
+
+# Hinter dem Schalter [features] sensor_assistant (Vorgabe aus). list, agents, ports, activate, features und
+# die lesenden Katalogbefehle bleiben immer erreichbar, damit man jederzeit zurueckschalten kann.
+GATED = frozenset({'onboard', 'propose'})
+GATED_CATALOG = frozenset({'pull', 'submit', 'pending', 'token-set'})
+
+
+def _add_catalog(subs) -> None:
+    cat = subs.add_parser('catalog', help='Sensor-Marktplatz (experimentell)')
+    csubs = cat.add_subparsers(dest='catalog_command', required=True)
+    csubs.add_parser('refresh', help='Katalogindex laden')
+    found = csubs.add_parser('search', help='Katalog durchsuchen')
+    found.add_argument('text', nargs='?', default='')
+    pull = csubs.add_parser('pull', help='Katalogpaket als vorläufig installieren')
+    pull.add_argument('id')
+    pull.add_argument('--overwrite', action='store_true')
+    submit = csubs.add_parser('submit', help='Lokales Paket einreichen')
+    submit.add_argument('id')
+    submit.add_argument('--consent', action='store_true', help='Veröffentlichung im öffentlichen Katalog bestätigen')
+    pending = csubs.add_parser('pending', help='Ausgang anzeigen oder erneut senden')
+    pending.add_argument('--send', action='store_true')
+    token = csubs.add_parser('token', help='Forgejo-Token verwalten').add_subparsers(
+        dest='token_command', required=True)
+    token.add_parser('set', help='Token von stdin lesen und prüfen')
+    token.add_parser('status', help='Token vorhanden?')
+    token.add_parser('delete', help='Token löschen')
+    check = csubs.add_parser('check-bundle', help='Einreichungspaket prüfen (CI)')
+    check.add_argument('file', type=Path)
+    check.add_argument('--index', type=Path, help='Katalogindex: Versionsregel für vorhandene Kennungen')
 
 
 def add_commands(parser: argparse.ArgumentParser) -> None:
@@ -70,6 +99,9 @@ def add_commands(parser: argparse.ArgumentParser) -> None:
             cmd.add_argument('--accept-provisional', action='store_true')
         elif name == 'onboard':
             cmd.add_argument('--assistant', choices=('claude', 'codex', 'none'))
+    _add_catalog(subs)
+    feature = subs.add_parser('features', help='KI-Sensoreinrichtung und Marktplatz ein-/ausschalten')
+    feature.add_argument('state', nargs='?', choices=('on', 'off', 'status'), default='status')
 
 
 def _ask(run, kind, prompt, *, options=None, timeout=sensor.DEFAULT_TIMEOUT):
@@ -206,7 +238,7 @@ class _AgentTools:
         except SystemExit as error:
             raise ValueError('Sensor-Werkzeugaufruf ist ungültig') from error
         cmd = args.sensor_command
-        if cmd == 'onboard' or getattr(args, 'source', None) is not None:
+        if cmd in ('onboard', 'catalog', 'features') or getattr(args, 'source', None) is not None:
             raise ValueError('Dieser Aufruf ist während des Agentenlaufs nicht verfügbar')
         if getattr(args, 'run', None) is not None and args.run.resolve() != self.run.path.resolve():
             raise ValueError('Diese Aktion gehört zur aktuellen Laufmappe')
@@ -321,8 +353,46 @@ def _onboard(run, instance, args):
     return {**result, 'ok': True}
 
 
+def _catalog(args, instance):
+    cmd = args.catalog_command
+    if cmd == 'token':
+        cmd = f'token-{args.token_command}'
+    if cmd in GATED_CATALOG:
+        features.require(instance)
+    if cmd == 'refresh':
+        index = catalog.fetch_index(instance)
+        return {'ok': True, 'generated': index['generated'], 'count': len(index['sensors'])}
+    if cmd == 'search':
+        index = catalog.cached_index(instance) or catalog.fetch_index(instance)
+        return catalog.search(index['sensors'], args.text)
+    if cmd == 'pull':
+        return catalog.pull(instance, args.id, overwrite=args.overwrite)
+    if cmd == 'submit':
+        return catalog.submit(instance, args.id, consent=args.consent)
+    if cmd == 'pending':
+        return catalog.submit_pending(instance) if args.send else catalog.pending(instance)
+    if cmd == 'token-set':
+        return catalog.save_token(instance, sys.stdin.read(512))
+    if cmd == 'token-status':
+        return catalog.token_status(instance)
+    if cmd == 'token-delete':
+        return catalog.delete_token(instance)
+    index = None
+    if args.index is not None:
+        index = catalog.validate_index(json.loads(args.index.read_text(encoding='utf-8')))
+    return catalog.check_bundle(args.file, index=index)
+
+
 def dispatch(args, instance, *, run=None):
     cmd = args.sensor_command
+    if cmd in GATED:
+        features.require(instance)
+    if cmd == 'catalog':
+        return _catalog(args, instance)
+    if cmd == 'features':
+        if args.state == 'status':
+            return {'sensor_assistant': features.enabled(instance)}
+        return features.set_enabled(instance, args.state == 'on')
     if run is None and getattr(args, 'run', None) is not None:
         run = RunDir.open(args.run.absolute())
     if cmd != 'onboard':

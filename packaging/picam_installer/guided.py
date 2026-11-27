@@ -312,7 +312,7 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
     out = out or Out()
     ui = ui or make_ui(out, input_)
     given = argparse.Namespace(**{k: None for k in ('source', 'sha256', 'mode', 'user', 'host', 'port',
-                                                    'prefix', 'fastfetch')})
+                                                    'prefix', 'fastfetch', 'sensor_assistant')})
     if argv:
         early = argparse.ArgumentParser(add_help=False)
         for name in ('source', 'sha256', 'mode', 'user', 'host', 'prefix'):
@@ -320,6 +320,8 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
         early.add_argument('--port', type=int)
         early.add_argument('--with-fastfetch', dest='fastfetch', action='store_true', default=None)
         early.add_argument('--without-fastfetch', dest='fastfetch', action='store_false')
+        early.add_argument('--with-sensor-assistant', dest='sensor_assistant', action='store_true', default=None)
+        early.add_argument('--without-sensor-assistant', dest='sensor_assistant', action='store_false')
         given, _ = early.parse_known_args(argv, given)
     root = installer_root or Path(__file__).resolve().parents[2]
     try:
@@ -406,10 +408,19 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
         if mode == 'portable' and not prefix:
             prefix = ui.text('Installationsordner', str(Path(owner.pw_dir) / 'picam'), validate=check_prefix)
         with_fastfetch = given.fastfetch
-        if with_fastfetch is None:
-            chosen = ui.multi('Optionale Komponenten', [
-                ('fastfetch', 'me-fastfetch', 'ME-Logo und Systemübersicht beim SSH-Login', True)])
-            with_fastfetch = 'fastfetch' in chosen
+        with_assistant = given.sensor_assistant
+        if with_fastfetch is None or with_assistant is None:
+            items = []
+            if with_fastfetch is None:
+                items.append(('fastfetch', 'me-fastfetch', 'ME-Logo und Systemübersicht beim SSH-Login', True))
+            if with_assistant is None:  # Vorgabe nein: experimentell, später in den Einstellungen umschaltbar
+                items.append(('sensor_assistant', 'KI-Sensoreinrichtung und Sensor-Marktplatz (experimentell)',
+                              'Tab „Sensoren“ in der Konsole; jederzeit in den Einstellungen umschaltbar', False))
+            chosen = ui.multi('Optionale Komponenten', items)
+            if with_fastfetch is None:
+                with_fastfetch = 'fastfetch' in chosen
+            if with_assistant is None:
+                with_assistant = 'sensor_assistant' in chosen
         component = None
         if with_fastfetch:
             try:
@@ -425,7 +436,8 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
                                           + ([] if bridge else ['--without-bridge'])
                                           + (['--prefix', str(Path(prefix).expanduser())] if prefix else [])
                                           + (['--install-packages'] if missing and mode == 'system' else [])
-                                          + (['--with-fastfetch'] if with_fastfetch else ['--without-fastfetch']))
+                                          + (['--with-fastfetch'] if with_fastfetch else ['--without-fastfetch'])
+                                          + (['--with-sensor-assistant'] if with_assistant else []))
         missing = missing if mode == 'system' else []
         if missing and mode != 'system':
             if info.missing_modules:
@@ -472,6 +484,7 @@ def run(argv=None, input_=None, out=None, runner=subprocess.run, installer=engin
             flags += (['--sha256', sha] if sha else []) + ([] if bridge else ['--without-bridge'])
             flags += ['--install-packages'] if missing else []
             flags += ['--with-fastfetch'] if with_fastfetch else ['--without-fastfetch']
+            flags += ['--with-sensor-assistant'] if with_assistant else []
             package_root = str(Path(__file__).resolve().parents[1])  # packaging/ oder picam-install.pyz
             bootstrap = ('import sys; sys.path.insert(0, sys.argv.pop(1)); '
                          'from picam_installer.engine import main; raise SystemExit(main())')

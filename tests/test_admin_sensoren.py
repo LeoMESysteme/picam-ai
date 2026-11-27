@@ -54,6 +54,9 @@ async def until(pilot, predicate, limit_s=10.0):
 @pytest.fixture
 def client(monkeypatch):
     calls = {'activate': []}
+    monkeypatch.setattr(sensor_client, 'feature_enabled', lambda instance=None: True)
+    monkeypatch.setattr(sensor_client, 'catalog_entries', lambda instance=None: [])
+    monkeypatch.setattr(sensor_client, 'token_status', lambda instance=None: False)
     monkeypatch.setattr(sensor_client, 'list_sensors', lambda instance=None: [dict(r) for r in ROWS])
     monkeypatch.setattr(sensor_client, 'detect_assistants', lambda instance=None: GOOD)
     monkeypatch.setattr(sensor_client, 'list_ports', lambda instance=None: [{'port': '/dev/ttyUSB0',
@@ -79,7 +82,7 @@ def test_tab_lists_sensors_and_filters(client):
             assert 'GSV-2AS' in active and 'verifiziert' in active
             chips = text_of(view.query_one('#sen-chips'))
             assert 'Astra Messbox' in chips and 'vorläufig' in chips
-            assert 'Online-Katalog folgt' in text_of(view.query_one('#sen-market'))
+            assert 'nicht geladen' in text_of(view.query_one('#sen-market'))
             view.query_one('#sen-filter').value = 'ast-1'   # Alias
             await pilot.pause(0.2)
             assert [r['id'] for r in view.shown] == ['astra-1']
