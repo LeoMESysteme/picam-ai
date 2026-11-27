@@ -518,9 +518,9 @@ def test_token_roundtrip_is_private_and_never_in_messages(instance):
     status = catalog.token_status(instance)
     assert status['present'] is False
     net = Net()
-    net.on('GET', f'{catalog.FORGEJO_BASE}/api/v1/user', {'login': 'bediener'})
+    net.on('GET', f'{catalog.FORGEJO_BASE}/api/v1/repos/{catalog.FORGEJO_REPO}/labels', [{'id': 1, 'name': catalog.SUBMISSION_LABEL}])
     result = catalog.save_token(instance, TOKEN + '\n', opener=net)
-    assert result == {'ok': True, 'user': 'bediener'}
+    assert result == {'ok': True, 'label_present': True}
     request = net.calls[0]
     assert request.get_header('Authorization') == f'token {TOKEN}'
     path = Path(catalog.token_status(instance)['path'])
@@ -532,11 +532,11 @@ def test_token_roundtrip_is_private_and_never_in_messages(instance):
 
 def test_token_rejected_unreachable_and_malformed_are_not_stored(instance):
     net = Net()
-    net.on('GET', f'{catalog.FORGEJO_BASE}/api/v1/user', urllib.error.HTTPError('u', 401, 'x', {}, None))
+    net.on('GET', f'{catalog.FORGEJO_BASE}/api/v1/repos/{catalog.FORGEJO_REPO}/labels', urllib.error.HTTPError('u', 401, 'x', {}, None))
     with pytest.raises(ValueError, match='lehnt das Token ab') as error:
         catalog.save_token(instance, TOKEN, opener=net)
     assert TOKEN not in str(error.value)
-    net.on('GET', f'{catalog.FORGEJO_BASE}/api/v1/user', unreachable())
+    net.on('GET', f'{catalog.FORGEJO_BASE}/api/v1/repos/{catalog.FORGEJO_REPO}/labels', unreachable())
     with pytest.raises(catalog.CatalogUnreachable, match='Firmennetz'):
         catalog.save_token(instance, TOKEN, opener=net)
     for bad in ('', 'kurz', 'mit leerzeichen ' + 'x' * 20, 'a\nb' + 'x' * 20):

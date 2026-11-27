@@ -475,8 +475,10 @@ def save_token(instance, token, *, timeout=10, opener=None) -> dict:
     token = (token or "").strip()
     if not _TOKEN.fullmatch(token):
         raise ValueError("Token hat ein ungültiges Format")
+    # Geprüft wird über die Repo-Labels (Scope issue): Tokens, die auf ein Repository beschränkt sind,
+    # dürfen in Forgejo keinen user-Scope haben.
     try:
-        raw = _get(f"{FORGEJO_BASE}/api/v1/user", timeout=timeout, limit=MAX_INDEX_BYTES, opener=opener,
+        raw = _get(_api("/labels?limit=100"), timeout=timeout, limit=MAX_INDEX_BYTES, opener=opener,
                    token=token)
     except HttpStatus as error:
         if error.status in (401, 403):
@@ -486,11 +488,11 @@ def save_token(instance, token, *, timeout=10, opener=None) -> dict:
         raise CatalogUnreachable("Forgejo ist nur im Firmennetz oder über Tailscale erreichbar; "
                                  "das Token wurde nicht gespeichert.") from None
     try:
-        user = json.loads(raw).get("login", "")
-    except (ValueError, AttributeError):
-        user = ""
+        names = {item.get("name") for item in json.loads(raw) if isinstance(item, dict)}
+    except (ValueError, TypeError):
+        names = set()
     _atomic_write(_token_path(instance), (token + "\n").encode(), mode=0o600)
-    return {"ok": True, "user": _clean(user, 60)}
+    return {"ok": True, "label_present": SUBMISSION_LABEL in names}
 
 
 def delete_token(instance) -> dict:

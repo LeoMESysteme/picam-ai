@@ -37,6 +37,10 @@ was ist die Konsequenz.
   verlangt ein festes Plus in Zelle 0. Die Projekt-Tour übernimmt ihre
   GSV-2AS-Zellrollen aus der Paketdatei.
 
+* 2026-11-27: Das Forgejo-Token für Sensor-Einreichungen wird über die Repo-Labels geprüft
+  statt über `/api/v1/user`. Forgejo erlaubt bei Tokens, die auf ein Repository beschränkt
+  sind, nur die Scopes issue und repository.
+
 * 2026-11-27: Werkbank-Einrichtung mit vorläufigem Sensorpaket nimmt getippte Werte
   (`0.1489`, `+0,1489`, `0.1489 mV/V`) an und setzt sie eindeutig in die Paketzellen;
   vorher war nur der exakte Zellentext mit Leerzellen gültig. Der Sensor-Assistent fragt
