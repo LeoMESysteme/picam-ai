@@ -1,16 +1,93 @@
-# TODO — Stand 2026-11-25
+# TODO — Stand 2026-11-26
 
-> **KRITISCHER NUTZERAUFTRAG 2026-11-11:** Vor Bridge-/EXE-Features den Workbench-Blocker bearbeiten.
-> Einstieg: [docs/WORKBENCH_BLOCKER.md](docs/WORKBENCH_BLOCKER.md).
-> Originale, Quellstände, Logs und Regressionen sind im Hauptcheckout gesichert.
-> Ziel Freitag 2026-11-13; keine Hardwarefreigabe ohne Beleg.
+[Status und Übergabe](docs/status.md) hält den belegten Stand fest. Die
+[Roadmap](docs/ROADMAP.md) führt die Abnahmekriterien je Projektphase. Die
+älteren Abschnitte unten bewahren Befunde und damalige Entscheidungen.
 
-Diese Datei ist der Wiedereinstieg. Sie soll genug Kontext tragen, dass man
-weitermachen kann, **ohne erst zu recherchieren**. Tiefe Begründungen stehen
-in den verlinkten Dateien; hier steht, was zu tun ist und warum.
+## Die Aufgaben, in Reihenfolge
 
-Die verbindliche Einstiegsreihenfolge (`CLAUDE.md`) gilt weiter —
-Diese Arbeitsliste kommt zuerst, danach `docs/status.md`.
+### Werkbank und Nachführung am Aufbau
+
+- **Leonhard, am Aufbau:** Mit Raumlicht neu einrichten und die Nachführung
+  unter vergleichbaren Bedingungen mit einem Kontrolllauf prüfen. Den Einbruch
+  vom 18.11. anhand gepaarter Diagnosebilder nachvollziehen und Varianten mit
+  einer Schutzprobe gegen bisher gültige Läufe prüfen
+  ([OQ-78](docs/open-questions.md#oq-78), [Messbeleg vom 18.11.](docs/VALIDATION.md#workbench-2026-11-18)).
+  Das Fokusband und die gewarnte Startprobe auf weiteren brauchbaren und
+  unbrauchbaren Starts prüfen ([OQ-74](docs/open-questions.md#oq-74)).
+- **Leonhard, bei Wiederauftreten:** Verzögerungen der Einrichtung und
+  gleichzeitigen Kamera-/Verbindungsausfall mit Zeiten, Status und
+  Diagnosepaket festhalten ([OQ-73](docs/open-questions.md#oq-73),
+  [OQ-75](docs/open-questions.md#oq-75)).
+- Auf weitere Geräte und Aufstellungen ausweiten. Große Wertwechsel,
+  gezielte Bewegung und angepasste Lesetoleranz jeweils separat anhand
+  einer Referenzaufzeichnung prüfen ([OQ-26](docs/open-questions.md#oq-26)).
+  Messplan und vorhandene Referenzläufe stehen im historischen Abschnitt
+  „Messpfad live“.
+
+### Installation und Inbetriebnahme auf raspi01
+
+- **Leonhard:** Den zuletzt im Laborjournal belegten Kandidaten
+  `rc-eaa4ad8` auf das veröffentlichte Paket 1.1.1 heben. Den ersten
+  Wechsel von einem Kandidaten mit explizitem Releasearchiv und Prüfsumme
+  durchführen. Anschließend die installierte Version, den Dienst und
+  `picam update` prüfen ([Installations- und Updateanleitung](docs/INSTALLER.md)).
+- **Leonhard:** Den Frischinstallationstest mit separatem System oder
+  frischen Installationspfaden durchführen. Onboarding und ersten
+  Messlauf am Aufbau belegen. Die geführte Eingabe ohne RS232 am echten
+  GSV einschließlich Schwankung der letzten Stelle (±1) durchspielen.
+- **Leonhard:** Bei der Timing-Kalibrierung aus der Konsole Dienststopp,
+  Abbruch während der Aufnahme, Rückstellung und Wiederanlauf prüfen und
+  die wirksame sudo-Freigabe dokumentieren ([OQ-79](docs/open-questions.md#oq-79)).
+  Einen freien Header-UART wählen und nach dem Neustart seinen Gerätenamen
+  per sysfs belegen ([OQ-80](docs/open-questions.md#oq-80)).
+
+### Windows-Brücke und GSVmulti
+
+- **Leonhard, am Windows-Laborplatz:** Das veröffentlichte Setup und die
+  portable EXE im Zielumfeld prüfen. Offene Gates für Setup, Treiber,
+  Pairing über LAN/Tailscale und Sessionexport stehen in
+  [OQ-62](docs/open-questions.md#oq-62) und [OQ-64](docs/open-questions.md#oq-64).
+  Signierung/Aktualisierung und automatisierter Windows-Bau bleiben eigene
+  Aufgaben ([OQ-65](docs/open-questions.md#oq-65), [OQ-68](docs/open-questions.md#oq-68)).
+- **Leonhard, am Aufbau:** UART-Rahmenfehler und Anmelde-Timeouts mit
+  Leitung, Port und Brückenprotokoll eingrenzen ([OQ-77](docs/open-questions.md#oq-77)).
+  SerialLoom als alternatives virtuelles COM-Paar im Dauertest mit GSVmulti
+  prüfen, bevor die Brücke die Einrichtung übernimmt
+  ([Portpaar-Auswahl](docs/GSVMULTI_PROTOCOL.md#vcom-wahl)).
+- Offene GSVmulti-Fragen zum Telegramm und zum Verhalten bei ungültigen,
+  fehlenden und ersetzten Werten weiterführen
+  ([OQ-07](docs/open-questions.md#oq-07), [OQ-06](docs/open-questions.md#oq-06),
+  [OQ-50](docs/open-questions.md#oq-50), [OQ-51](docs/open-questions.md#oq-51),
+  [OQ-52](docs/open-questions.md#oq-52), [OQ-53](docs/open-questions.md#oq-53),
+  [OQ-55](docs/open-questions.md#oq-55), [OQ-58](docs/open-questions.md#oq-58),
+  [OQ-47](docs/open-questions.md#oq-47)).
+
+### Weitere offene Aufgaben
+
+- Laufablage und Export ([OQ-60](docs/open-questions.md#oq-60)),
+  Nachberechnung ([OQ-59](docs/open-questions.md#oq-59)) und Bereinigung des
+  alten Controllers ([OQ-61](docs/open-questions.md#oq-61)) weiterführen.
+- Schwellen für Telegrammlücken auf den vorgesehenen Quellen nachmessen
+  ([OQ-40](docs/open-questions.md#oq-40), Abschnitt „Gap-Schwellen nachmessen“ unten).
+
+## Veröffentlichter Stand und letzte Gerätebelege
+
+Die [Veröffentlichung v1.1.1](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1)
+enthält picam 1.1.1 (`7d26df1`) mit korrigierten Zugriffsrechten bei
+Installation und Update, die portable Brücke 1.1.0 und ihr Windows-Setup
+mit Prüfsummen. Die öffentliche Quelle für Bootstrap und automatische
+Pi-Updates ist der GitHub-Mirror
+([Installation und Update](docs/INSTALLER.md), [OQ-49](docs/open-questions.md#oq-49)).
+
+Die Werkbank und die drei Ausgabewege wurden am 13.11. am damaligen Aufbau
+abgenommen. Der Pi-Dienst lief mit `5a31b41`. Für den abschließenden
+Windows-Build von 14:50 nennt der UX2-Bericht `c643f30` als vermuteten Commit.
+[Smoketest](windows/bridge/SMOKETEST-2026-11-13.md) ·
+[Windows-Prüfbericht UX2](docs/quellen/ux2-pruefung-2026-11-13/ux2-bericht.md).
+Für raspi01 belegt das [Laborjournal](docs/lab_journal.md) die Timing-Kalibrierung
+und den Betrieb mit `rc-eaa4ad8` am 25.11. Die Übersicht zu neuerer
+Softwareprüfung und offenen Geräteprüfungen steht in [Status](docs/status.md).
 
 ## Repo-Aufräumen (26.11.)
 
@@ -20,50 +97,33 @@ Dateien inkl. Zips, Bundles aller nicht gemergten Branches) unter
 `/mnt/ssd/picam-dev/backup-worktrees-20261125/` (`origin-offene-branches.bundle`,
 `alte-branches.bundle`, `main/`).
 
+Der Abgleich am 26.11. per `git ls-remote --heads` ergab auf Forgejo und dem
+GitHub-Mirror dieselben 11 Branch-Namen (`master` und die zehn unten).
+
 Offen:
-1. **GitHub-Mirror prüfen:** Übernimmt er die Löschungen auf dem Server? Falls die 16
-   gelöschten Branches auf https://github.com/LeoMESysteme/picam-ai/branches stehen bleiben,
-   dort entfernen (oder Mirror-Einstellung „prune“ prüfen).
-2. **10 nicht gemergte Server-Branches** (gesichert im Bundle) einzeln entscheiden:
+1. **10 nicht gemergte Server-Branches** (gesichert im Bundle) einzeln entscheiden:
    `codex/MEM-6-…pi-housekeeping` (pi-housekeeping.py), `codex/automatic-seven-segment`
    (Experiment 18.09.), `docs/oq22-rp2040-wedge` und `docs/zensical-prototyp` (24.09.),
    `docs/workbench-critical-2026-11-11` (Belege 11.11., Inhalt inzwischen in master),
    `exp/r13-fenster-tracker` (Prototyp), `feat/gsvmulti-bridge` (alter Hauptcheckout-Stand,
    Inhalt in master), `feat/messpfad-live` (22.10.), `fix/session-explorer-test-wackelt`
    (Fix sinngemäß in master), `test/clahe-ocr-accuracy` (10.09.).
-3. `docs/HOST_NETZWERK.md` und `docs/analyse-2026-11-10-*.md` in die Wiki-Navigation
+2. `docs/HOST_NETZWERK.md` und `docs/analyse-2026-11-10-*.md` in die Wiki-Navigation
    (`zensical.toml`, Wiki-Datei – nur mit Leonhards OK).
-4. CLAUDE.md: „`/dev/serial0` zeigt auf `ttyAMA10`“ gilt nur für raspi06 (raspi01: `ttyAMA0`).
-5. **Releases auch auf Forgejo:** v1.1.1 dort am 26.11. von Hand angelegt (Archiv, Prüfsumme, Brücken-EXEs). `scripts/publish-release.py` lädt bisher nur auf den GitHub-Mirror; Forgejo-Upload ergänzen.
-6. Enterprise-Plan (Vorschlag 26.11.): (1) LICENSE/SECURITY.md/CONTRIBUTING.md und
+3. **Releases auch auf Forgejo:** v1.1.1 dort am 26.11. von Hand angelegt (Archiv, Prüfsumme, Brücken-EXEs). `scripts/publish-release.py` lädt bisher nur auf den GitHub-Mirror; Forgejo-Upload ergänzen.
+4. Enterprise-Plan (Vorschlag 26.11.): (1) LICENSE/SECURITY.md/CONTRIBUTING.md und
    Prüfung des öffentlichen Inhalts vor dem Wechsel aufs Produktiv-Repo, (2) CI mit pytest/
    ruff/Typprüfung als Pflicht-Checks + Branch-Schutz für master, (3) Releases in der CI bauen
    und signieren (Archiv + EXE), SBOM, (4) Validierungsbericht je Release (ISO/IEC 17025),
    (5) Hardware-Profile je Pi + Testmatrix, (6) Typprüfung/Altcode/Paketgrenzen,
    (7) strukturierte Logs/Kennzahlen, (8) Doku entschlacken, (9) Agenten-Änderungen nur per PR.
 
-## Übergabe (Stand 25.11. abends)
-
-**Aktuell: v1.1.1** (25.11. spät, Fix: Installer erbte umask 077 von get-picam.sh → „Permission denied“ auf raspi01; https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1). **Release v1.1.0 veröffentlicht** (picam 1.1.0 + GSVmulti-Brücke 1.1.0): Tag `v1.1.0` auf
-`master` (`36cf1f3`), GitHub-Release auf dem Mirror
-https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.0 mit `picam-1.1.0.tar.gz` und `.sha256`.
-Installation: `curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash`
-(vom echten Mirror bis zur ersten Installer-Frage geprüft); Update: `picam update` (Suche der neuesten
-Version gegen den Mirror geprüft). Quelle steht nur in `src/dispread/release_source.py` (+ Spiegel oben in
-`get-picam.sh`, Test prüft Gleichstand) – beim Wechsel aufs Produktiv-Repo dort ändern.
-
-Offen:
-- raspi01 (läuft `rc-eaa4ad8`): einmal `picam update --source picam-1.1.0.tar.gz --sha256 …`
-  (siehe docs/INSTALLER.md „Update auf die neueste Version“), danach automatisch.
-- Windows-Dateien der Brücke 1.1.0 (portable EXE, Setup, SHA256SUMS) an den Release hängen:
-  `gh release upload v1.1.0 <Dateien> --repo LeoMESysteme/picam-ai` (Leonhard hat sie gebaut/getestet).
-- Veröffentlichen beim nächsten Mal: `scripts/publish-release.py vX.Y.Z --templates … [--notes-file …]`
-  (GitHub antwortete beim ersten Versuch mit HTTP 500 während einer Störung; Wiederholung trug).
+## Prüf- und Bauhinweise vom 25.11. (historisch)
 
 **Prüfstand 25.11. abends (`6183cb1`):** Pi-Suite mit Entwicklungsdaten 5146 bestanden,
-27 übersprungen, 2 xfailed; Playwright Werkbank 73/73, Doku 153/154 – offen:
+27 übersprungen, 2 xfailed; Playwright Werkbank 73/73, Doku 153/154 (damals offen:
 `docs-site.spec.ts:837` Roadmap-Mausrad scheitert reproduzierbar, Roadmap/Theme seit dem
-grünen Lauf vom 20.11. unverändert (Wiki-Bereich, nicht angefasst); Node 329/330 (der eine,
+grünen Lauf vom 20.11. unverändert); Node 329/330 (der eine,
 `workbench_client.test.mjs`, scheiterte schon vorher); Brückensuite 799; ruff sauber;
 strenger Doku-Build ohne Befund. Releasetest portabel: Installation, `picam status`,
 Konsole im PTY. Hinweis: Fehlt die Kamera, öffnet die Konsole ein Hinweisfenster;
@@ -83,34 +143,7 @@ Diagnosebilder seit 04.11.), mit Entwicklungsdaten 653/653 grün. Brücken-Suite
 Pi-Brücke 342, ruff sauber. Releasetest portabel: Installation, `picam status`,
 Konsole im PTY (Exit 0).
 
-**SerialLoom (Antwort an Leonhard 25.11.):** Weg 1 empfohlen (Brücke erkennt
-SerialLoom-Paare, legt per `serialloom-cli pair` an), Weg 2 nur bei Bedarf, Rückfall
-zwei USB-RS232-Adapter mit Nullmodemkabel; vorher Dauertest. Details unten.
-
-**Zuerst von Leonhard:**
-1. **raspi06:** Der Entwicklungsdienst `dispread-werkbank-bruecke` ist seit
-   20.11. 15:00 gestoppt (regulär, nicht durch Claude; vorher 14:46 Stopp/14:48
-   Start – vermutlich Konsolentest). Nicht autonom neu gestartet.
-2. **raspi01:** ~~Update und Konsolen-Bildschirme~~ erledigt (25.11. abends, `rc-eaa4ad8`).
-   Offen: echter UART-Wechsel auf uart2/uart4 mit Neustart ([OQ-80](docs/open-questions.md#oq-80)),
-   frische Installation mit Onboarding.
-3. **Werkbank ohne RS232 am Aufbau:** geführte Eingabe (Kästchen, verschiebbares
-   Fenster) und Schwanken ±1 der letzten Stelle mit echtem GSV prüfen.
-4. **Entscheidungen:** Versionsnummer/Tag (VERSION steht auf `0.1.0.dev0`, Releases
-   heißen bisher `rc-<commit>`), Merge `feat/picam-admin` → `feat/integration` →
-   `master`, me-fastfetch auch in der Texteingabe abfragen (heute nur Menü bzw.
-   `--without-fastfetch`), SerialLoom-Einbindung in die Brücke (Ideen unten),
-   Rasterprüfung 2j bei Übertrag über mehrere Stellen (siehe CHANGELOG).
-
-## Zuerst: Reihenfolge nach der Abnahme vom 13.11.
-
-**Abnahme:** Herr Kaulitz hat am 2026-11-13 die Werkbank und die Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen (Stand `feat/integration`, Pi-Dienst `5a31b41`, EXE gebaut 14:50 aus `c643f30`). Smoketest: [windows/bridge/SMOKETEST-2026-11-13.md](windows/bridge/SMOKETEST-2026-11-13.md); Prüfbericht: [docs/quellen/ux2-pruefung-2026-11-13](docs/quellen/ux2-pruefung-2026-11-13/ux2-bericht.md).
-
-1. **Workbench stabilisieren.** Hauptursache der unlesbaren Läufe am 18.11. war wenig Licht (Gain 128 am Anschlag, Rahmen fast schwarz); die Einrichtung erkennt das jetzt selbst (Einzelbildprobe der Nachführung, Gain-Warnung) – **am Aufbau mit Raumlicht neu einrichten und prüfen**. Am 18.11. traf das Fokusband drei von sieben Starts. Die Startprüfung prüft nun bei Abweichung die tatsächliche Lesbarkeit ([OQ-74](docs/open-questions.md#oq-74)). Vorrangig den Einbruch der Rahmennachführung an der Aufstellung reproduzieren und mit Bildpaaren und Schutzproben bearbeiten ([OQ-78](docs/open-questions.md#oq-78)). [Auditzahlen und Kontrollaufnahme](docs/VALIDATION.md#workbench-2026-11-18). Raster A1+B1 bleibt seit 13.11. im Integrationsstand ([Bericht](docs/quellen/rahmen-raster-2026-11-13/REPORT-codex.md)).
-2. **Überarbeitung der EXE (UI, Claude):** Gestaltungsrunde 3 auf `wip/bruecke-ux3` fertigstellen und nach `feat/integration` mergen, offene Punkte aus dem Prüfbericht (unten), Bildschirmfoto-Tour mit Leonhard.
-3. **Installer und TUI:** One-Line-Installer; TUI/CLI, die den Nutzer visuell durch das Setup des picam-Projekts im Terminal führt und von der aus man Status und Logs sieht sowie die Werkbank startet, stoppt, konfiguriert, Fehler sucht und aktualisiert. Ersetzt auch den umständlichen Windows-Testbau (siehe „Auslieferung der Windows-App vereinfachen“ unten). **Stand 14.11.:** [Spec-Entwurf](docs/superpowers/specs/2026-11-13-installer-tui-design.md) mit Bestandsaufnahme und offenen Entscheidungen (Abschnitt 9); Stufe P0a (Aufräumen ohne Entscheidung) umgesetzt und gemergt. Nächste Stufen P0/P1 brauchen Leonhards Entscheidungen zu Ort, Dienstart, Name und Bezugsquelle. **Stand 20.11. (Branch `feat/picam-admin`):** Installer-Vorbereitung (17.11.) gemergt, geführter Modus `./install.sh`, Verwaltung `picam` (Konsole + Einzelbefehle) auf echten Daten, eigenes Design statt des Codex-Kachelentwurfs. `picam update` mit Rückweg, `picam setup`, `picam aufraeumen` gebaut; volle Suite 4588 grün, Playwright 66/66 und 154/154. **SD-Karte (20.11.):** 2,4 GB frei; Läufe älter als 14 Tage belegen nur 226 MB, `var/live` 3,3 GB sind fast alles jüngere Läufe, `var/workbench` 3,0 GB, `~/var-backups` 3,0 GB (Tar-Sicherungen vom 28.09./01.10., Kandidat zum Verschieben auf die SSD), `.vscode-server`/`.codex`/`.claude` je ~3 GB – nichts davon ist autonom gelöscht. Offen: Sichtprüfung durch Leonhard, Systeminstallation auf zweitem Pi, ersten stabilen Pi-Release auf dem Mirror veröffentlichen, Kalibrierung auf neuem Pi.
-
-## Befunde Smoketest 13.11. (offen)
+## Befunde Smoketest 13.11. (damaliger Stand)
 
 **Vollständiger Prüfbericht (Windows-Prüfung UX2, 13.11.):** `docs/quellen/ux2-pruefung-2026-11-13/ux2-pruefung.zip` mit `ux2-bericht.md` (Zusammenfassung, alle Prüf-IDs, Läufe-Tabelle) und `ux2-bericht-details.md` (chronologisch, Zitate, Messwerte), dazu Bilder, TDMS, Sessions, Protokollexporte. Reports entpackt daneben ([ux2-bericht.md](docs/quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)). Top 5 laut Bericht:
 1. UART über Brücke: `uart_frame_invalid` (Signalqualität), siehe unten.
@@ -158,7 +191,7 @@ Heute nachgeprüft und bestanden: Netzwerk (Empfangstest 600/600, Lauf lückenlo
   - UART direkt: Kachel „Komponenten“ zeigt ein altes Portpaar (COM7 ↔ COM6); dort gehört nur der Adapter hin.
 - **Nachprüfen unter Windows:** C-04 (LAN ziehen ohne Lauf, 53fbbd6) und „UART über Brücke“ koppeln (eef2991).
 
-## Danach offen (Brücke)
+## Aufgaben nach dem Smoketest (damaliger Stand)
 
 - **Merge:** `feat/bruecke-ui` nach `master`, erst mit Leonhards OK nach dem Test.
 - **UART kompakter kodieren:** Für 10 Hz über UART muss das Protokoll kompakter werden. Das ist ein Eingriff ins Protokoll mit Review.
@@ -570,9 +603,9 @@ Details: [docs/status.md](docs/status.md), alle Zahlen in
 
 ---
 
-## Die Aufgaben, in Reihenfolge
+## Historische Arbeitsstände
 
-### Windows-Brücke v2 (aktiv, Nutzerfreigabe 2026-11-06)
+### Windows-Brücke v2 (Plan vom 6.11.)
 
 Backend und testbare Paketierung im isolierten Zweig `codex/windows-bridge-core`
 fortführen. [OQ-62](docs/open-questions.md#oq-62),
@@ -584,7 +617,7 @@ Grundlagen geprüft; laufende Schritte und nächste Aufgaben in
 [Status](docs/status.md). UI/Anleitung/Bereitschaftsdarstellung für Claude
 vorbereiten, keine Veröffentlichung oder DUT-Entsperrung daraus ableiten.
 
-### Messpfad live (aktiv)
+### Messpfad live (Arbeitsstand Oktober/Anfang November)
 
 **Stand 2026-10-30:** Auf `feat/r13-display-haertung` (nicht in `master`)
 sind R13-1 bis R13-23 und der P4-Prototyp gebaut.
@@ -813,7 +846,7 @@ Aufstellung und jeweils ein Abgleich mit
 (Fehllesungen, Wechselanteile, Verzögerung und `tolerance_frames` in
 `session.json`; siehe [Anleitung Kapitel 10](docs/anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich)). Bis dahin keine Toleranz-Läufe für echte Kalibrierungen.
 
-### Zensical-Wiki umbauen (Gerüst gebaut, weitere Seiten offen)
+### Zensical-Wiki umbauen (ursprünglicher Plan vom 23.10.)
 
 Gerüst und Beispielseiten sind auf Branch `feat/wiki-geruest` gebaut,
 noch nicht gemergt. Leser und Leitlinien stehen in `PRODUCT.md`,

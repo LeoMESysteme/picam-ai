@@ -35,8 +35,7 @@ test('Messkette: alle Stufen aus kette.json, Links auf die Doku, Zweck beim Übe
     expect(new URL(await node.evaluate((link) => (link as HTMLAnchorElement).href)).pathname).toBe(`/${stage.doku}`);
     await expect(node.locator('.wmk-zustand')).toHaveText(stage.zustand);
   }
-  // Ehrlicher Zustand der Ausgabe: gesperrte DUT-Ausgabe aus kette.json.
-  await expect(host.locator('a[data-stufe="sink"] .wmk-sperre')).toHaveText('DUT gesperrt');
+  await expect(host.locator('a[data-stufe="sink"] .wmk-sperre')).toHaveText('Beispiel: aus');
   // In „lebendig“ ersetzt die Bühne die kompakte Kette (keine doppelte Information).
   await expect(page.locator('.wiki-kette[data-variant="kompakt"]')).toBeHidden();
 
@@ -120,7 +119,7 @@ test('Messkette: die Linse ist während des Laufs nie leer, Inhalte passen in ih
 
 const UNTERSCHRIFT: Record<string, RegExp> = {
   frames: /^Bild mit Zeitstempel$/, detect: /^Anzeige gefunden$/, track: /^Viereck nachgeführt$/,
-  rectify: /^entzerrtes Raster$/, ocr: /^gelesen: /, validate: /^Datensatz · VALID$/, sink: /^Audit · DUT gesperrt$/,
+  rectify: /^entzerrtes Raster$/, ocr: /^gelesen: /, validate: /^Datensatz · VALID$/, sink: /^Audit · Ausgabe aus$/,
 };
 
 test('Messkette: Unterschrift, Form und markierter Knoten gehören immer zur selben Stufe', async ({ page }) => {

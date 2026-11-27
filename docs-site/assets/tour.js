@@ -524,12 +524,12 @@
     label(refs.browser, 825, 255, "Anzeige bestätigen", "t-button-text", { "text-anchor": "middle" });
     refs.browserLink = svg("path", { d: "M600 362C640 330 650 310 700 286", class: "t-link-line" }, layer);
 
-    // GSVmulti, geplant.
+    // Optionale UserDefined-Ausgabe.
     refs.gsv = group(layer, "bench-gsv");
-    panel(refs.gsv, 760, 318, 160, 84, "t-window t-planned-box");
+    panel(refs.gsv, 760, 318, 160, 84, "t-window t-flow-box");
     label(refs.gsv, 840, 352, "GSVmulti", "t-label t-strong", { "text-anchor": "middle" });
-    label(refs.gsv, 840, 376, "DUT gesperrt", "t-small t-plan-text", { "text-anchor": "middle" });
-    refs.gsvLink = svg("path", { d: "M618 384H756", class: "t-plan-line" }, layer);
+    label(refs.gsv, 840, 376, "Optionale Ausgabe", "t-small", { "text-anchor": "middle" });
+    refs.gsvLink = svg("path", { d: "M618 384H756", class: "t-flow-line" }, layer);
     tour.docLink(refs.gsv, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [906, 334]);
     tour.docLink(refs.pi, "docs/HARDWARE_PROFILE.html", "Hardwareprofil öffnen", [630, 370]);
 
@@ -601,12 +601,12 @@
 
     const dot = svg("circle", { r: 8, class: "t-pulse" }, layer);
     const dot2 = svg("circle", { r: 7, class: "t-pulse" }, layer);
-    const dot3 = svg("circle", { r: 7, class: "t-pulse t-pulse--plan" }, layer);
+    const dot3 = svg("circle", { r: 7, class: "t-pulse" }, layer);
     hidden(dot, dot2, dot3);
     const stop = group(layer, "stop");
     svg("circle", { cx: 690, cy: 384, r: 13, class: "t-plan-fill" }, stop);
     label(stop, 690, 389, "?", "t-label t-strong", { "text-anchor": "middle" });
-    tour.docLink(stop, "docs/open-questions.html#oq-07", "OQ-07 öffnen: UserDefined-Anbindung");
+    tour.docLink(stop, "docs/GSVMULTI_PROTOCOL.html#abnahme", "GSVmulti-Empfang prüfen");
 
     hidden(log, ref, match, motto, stop, forbid, logToMatch, refToMatch, toLog);
     tl.set(dot, { opacity: 1 }, 100);
@@ -1170,20 +1170,20 @@
     const toLog = svg("path", { d: "M470 190C540 190 540 105 606 105", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
 
     const serial = group(layer, "out-serial");
-    panel(serial, 610, 230, 140, 64, "t-panel t-planned-box");
+    panel(serial, 610, 230, 140, 64, "t-panel t-flow-box");
     label(serial, 680, 258, "UserDefined", "t-mono", { "text-anchor": "middle" });
-    label(serial, 680, 278, "DUT gesperrt", "t-small t-plan-text", { "text-anchor": "middle" });
+    label(serial, 680, 278, "optionale Ausgabe", "t-small", { "text-anchor": "middle" });
     ctx.tour.docLink(serial, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [740, 246]);
-    const toSerial = svg("path", { d: "M470 262H606", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
+    const toSerial = svg("path", { d: "M470 262H606", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
 
     const gsv = group(layer, "out-gsv");
-    panel(gsv, 800, 230, 120, 64, "t-panel t-planned-box");
+    panel(gsv, 800, 230, 120, 64, "t-panel t-flow-box");
     label(gsv, 860, 258, "GSVmulti", "t-label t-strong", { "text-anchor": "middle" });
-    label(gsv, 860, 278, "Ziel", "t-small", { "text-anchor": "middle" });
-    const toGsv = svg("path", { d: "M750 262H796", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
+    label(gsv, 860, 278, "Aufzeichnung", "t-small", { "text-anchor": "middle" });
+    const toGsv = svg("path", { d: "M750 262H796", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
     const open = group(layer, "oq07");
-    badge(open, 850, 326, "Abnahme offen · OQ-07", "plan", 176);
-    ctx.tour.docLink(open, "docs/open-questions.html#oq-07", "OQ-07 öffnen");
+    badge(open, 850, 326, "Empfang separat prüfen", "plan", 176);
+    ctx.tour.docLink(open, "docs/GSVMULTI_PROTOCOL.html#abnahme", "GSVmulti-Empfang prüfen");
 
     const receipt = group(layer, "receipt");
     panel(receipt, 610, 390, 290, 70, "t-panel");
@@ -1193,7 +1193,7 @@
 
     const d1 = svg("circle", { r: 7, class: "t-pulse" }, layer);
     const d2 = svg("circle", { r: 7, class: "t-pulse" }, layer);
-    const d3 = svg("circle", { r: 7, class: "t-pulse t-pulse--plan" }, layer);
+    const d3 = svg("circle", { r: 7, class: "t-pulse" }, layer);
     const pathGsv = svg("path", { d: "M750 262H796", class: "t-path-none" }, layer);
 
     hidden(card.querySelector("rect"), Array.from(card.children).filter((el) => el.tagName === "text"), rows, log, serial, gsv, open, receipt, toReceipt, d1, d2, d3);
@@ -1214,7 +1214,7 @@
     fadeUp(tl, gsv, {}, "+=50");
     drawIn(tl, A, toGsv, { duration: 400 }, "<<");
     tl.set(d3, { opacity: 1 }, "<");
-    travel(tl, A, pathGsv, d3, { t: [0, 0.6], duration: 500, ease: "outQuad" }, "<<");
+    travel(tl, A, pathGsv, d3, { duration: 500, ease: "outQuad" }, "<<");
     tl.add(d3, { opacity: 0, duration: 250 }, "<");
     popIn(tl, A, [open], { ease: "outElastic(1, .6)", duration: 900 }, "<<");
     tl.add(toReceipt, { opacity: [0, 1], duration: 400 }, "+=100");

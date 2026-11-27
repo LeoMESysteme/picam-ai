@@ -1,19 +1,23 @@
 # Roadmap
 
-Stand des Abgleichs: **2026-11-06**. Neu: Nutzerentscheidungen vom
-2026-11-06 zu Laufende, Laufablage und Fahrplan nach dem Werkbank-Redesign
-(P6/P7-Schritte unten, [Ausblick P9](#p9-betrieb-und-ausbau),
-[OQ-59](open-questions.md#oq-59) bis [OQ-61](open-questions.md#oq-61)).
-Ausgabe pro Lauf: Aus, UART direkt (P4-3, als nicht abgenommener Prototyp
-gekennzeichnet, nur nach Bestätigung) oder UART/Netzwerk über die Brücke
-(DUT-gesperrt bis zur Windows-Abnahme). UserDefined-Formatter, gemeinsame
-TCP-/UART-Windows-Brücke und Live-Konfiguration sind als Software-Prototyp
-gebaut ([Bewertung](GSVMULTI_PROTOCOL.md)). P4 ist teilweise umgesetzt,
-aber nicht abgenommen: Echte DUT-Ausgabe bleibt strukturell gesperrt.
-Gültiger Zahlenimport in 2.03 Pro ist belegt (OQ-01), auch über gemeinsame
-TCP-Brücke. Ungültigbehandlung (OQ-06), Puffernachlauf/Wiederanlauf (OQ-47)
-und Zeitachse (M8/P5) brauchen weitere Nachweise am Windows-PC.
-OQ-02, OQ-03 und OQ-04 betreffen weiterhin die Abnahme.
+Stand des Abgleichs **2026-11-26**. Veröffentlicht sind picam **1.1.1** und
+die GSVmulti-Brücke **1.1.0**. Ein-Befehl-Installer und Verwaltungskonsole
+sind verfügbar. Auf dem zweiten Pi wurden die Archivinstallation, die
+Timing-Kalibrierung und die Konsolen-Bildschirme mit Releasekandidaten
+erprobt. Ein vollständiger Abnahmelauf auf diesem Pi steht aus.
+[Release](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1) und
+[Laborjournal](lab_journal.md).
+
+Am 2026-11-13 wurden die Werkbank und die drei Ausgabewege für den
+geprüften GSV-2AS-Aufbau abgenommen. Pro Lauf stehen Aus, UART direkt,
+UART über die Brücke und Netzwerk über die Brücke zur Wahl. Im geprüften
+Vierkanalprofil hält Kanal 1 bei einem ungültigen Takt den letzten gültigen
+Wert, und Kanal 2 kennzeichnet die Gültigkeit. Für P4 bleiben unter anderem
+die Behandlung in der Kalibrierauswertung und Störfälle auf UART offen.
+Die Systemabnahme auf vorab festgelegten Sperrgeräten gehört zu P7.
+[Arbeitsprotokoll der Abnahme](../CHANGELOG.md),
+[Prüfbericht vom 13.11.](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md),
+[GSVmulti-Protokoll](GSVMULTI_PROTOCOL.md).
 
 | Phase | Ziel | Kamera? | GSVmulti-Spec? | Hartes Exit-Kriterium | Stand |
 | --- | --- | --- | --- | --- | --- |
@@ -21,10 +25,10 @@ OQ-02, OQ-03 und OQ-04 betreffen weiterhin die Abnahme.
 | **P1** | Kamera in Betrieb, Zeitbasis vermessen, erste `replay://`-Session | ja | nein | `camera-commissioning.sh` Exit 0; `TIMING.md` mit echten Zahlen | 🔶 **teilweise** — seit 2026-09-25 StreamCam statt IMX500; `camera-commissioning.sh` Exit 0 (2026-09-28), Zeitbasis MONOTONIC → BOOTTIME über gemessenen Versatz, `replay://` implementiert; Zeitstempel-Semantik offen (OQ-43, für die Ernte durch die Timing-Kalibrierung abgedeckt) |
 | **P2** | Optischer Aufbau + realer Datensatz mit automatischem Label | ja | nein | ≥ 6 Geräteinstanzen über ≥ 3 Displaytypen, davon **2 gesperrt**; Manifeste vollständig | **teilweise** — Sammelmodus, serielle Auto-Labels, Timing-Kalibrierung, Ernte und Import gebaut; reale Dot-Matrix-Daten und mehrere Aufstellungen vorhanden. Geräte-/Displayvielfalt und zwei gesperrte Geräteinstanzen fehlen; mehrere Aufstellungen desselben GSV-2AS sind keine weiteren Geräte |
 | **P3** | Werterkennung an realen Anzeigen, Freigabeschwellen kalibrieren | ja | nein | Trefferquote **pro Fehlerklasse** aufgeschlüsselt; reale Freigabeschwellen für den vereinbarten Gerätekreis belegt | **teilweise** — Dot-Matrix-Abnahme 3: 215/215 richtig auf zwei neuen Aufstellungen desselben GSV-2AS (2026-09-30); Live-Bedienerläufe seit 2026-10-21. Andere Geräte, Vorzeichen, Einheiten und angepasste Toleranz nicht abgenommen |
-| **P4** | Echte GSVmulti-Anbindung | nein | **ja** | GSVmulti nimmt den Strom an, zeigt Wert und Einheit korrekt; Verhalten bei ungültig/veraltet/Abbruch belegt | **teilweise** — Software gebaut; direkter UART-Demoimport, gespeicherte Sprünge und lokale Windows-Demo sowie gemeinsamer Pi-TCP-/JSONL-/ACK-Dateipfad über COM5/COM6 jeweils mit600/600 exakten Werten belegt (2026-11-04). Timeout und Fortsetzung nach Datenpause belegt, Ungültigabschnitte fehlen auch mit NaN und bestätigtem Replace Missing Values; mV/V/Skalierung 1 in TDMS/Session belegt, Prozesswiederanlauf mit510/510 geschriebenen Werten belegt, übrige Abbruch-/Altwertfälle offen; DUT-Ausgabe gesperrt (OQ-06, OQ-47, OQ-50, OQ-51, OQ-52) |
-| **P5** | Zeitbezug vollständig: §6 von Prosa in Zahlen | ja | teilw. | Unsicherheitsbudget mit **getrennten** Einzelbeiträgen ausgefüllt | **teilweise** — StreamCam-Timing-Kalibrierung und Live-Referenzauswertung vorhanden; getrenntes Budget, Referenzsynchronität und M8 weiter offen |
-| **P6** | Robustheit und Dauerbetrieb (§10 Ph. 3) | ja | teilw. | 72-h-Dauerlauf mit provozierten Störungen; **kein unmarkierter Altwert**; Speicher stabil | **teilweise** — Live-Pfad mit STALE und Audit gebaut, kurze Störversuche vorhanden; 72 h, Audit-Aufbewahrung und Nachführung bei großen Wertwechseln offen ([OQ-26](open-questions.md#oq-26)) |
-| **P7** | Validierung und Abnahme (§10 Ph. 4) | ja | ja | Abnahmeprotokoll auf den Sperrgeräten gegen vorab festgelegte Kriterien | offen |
+| **P4** | Echte GSVmulti-Anbindung | nein | **ja** | GSVmulti nimmt den Strom an, zeigt Wert und Einheit korrekt und behandelt ungültige, veraltete und abgebrochene Übertragungen nachvollziehbar bis zur Kalibrierauswertung | **teilweise** — Werkbank und alle drei Wege am 2026-11-13 im GSV-2AS-Aufbau abgenommen. Vierkanal-Takte und Wiederverbinden nach LAN-Ausfall in UX2 belegt. Kalibrierauswertung, UART-Störfälle und Einkanal-Ungültigverhalten bleiben offen. |
+| **P5** | Zeitbezug vollständig (§6) | ja | teilw. | Unsicherheitsbudget mit **getrennten** Einzelbeiträgen ausgefüllt | **teilweise** — StreamCam-Timing-Kalibrierung auf zwei Pi erprobt und Live-Referenzauswertung vorhanden. Getrenntes Budget, Referenzsynchronität und M8 weiter offen. |
+| **P6** | Robustheit und Dauerbetrieb (§10 Ph. 3) | ja | teilw. | 72-h-Dauerlauf mit provozierten Störungen ohne unmarkierte Altwerte und mit stabilem Speicherbedarf | **teilweise** — Live-Pfad mit STALE und Audit gebaut, kurze Störversuche belegt. Fokus und Rahmennachführung am Aufbau, 72 h und Audit-Aufbewahrung bleiben offen. [OQ-26](open-questions.md#oq-26), [OQ-74](open-questions.md#oq-74), [OQ-78](open-questions.md#oq-78). |
+| **P7** | Validierung und Abnahme (§10 Ph. 4) | ja | ja | Abnahmeprotokoll auf den Sperrgeräten gegen vorab festgelegte Kriterien | **teilweise** — Begrenzte Betriebsabnahme am 2026-11-13 und Inbetriebnahmeschritte auf dem zweiten Pi belegt. Kriterien, Sperrgeräte und formale Systemabnahme stehen aus. |
 | **P8** | *optional:* eigenes Modell, Lokalisierung auf den IMX500 | ja | nein | belegter Gewinn bei CPU-Last oder Latenz gegenüber der Pi-Variante | offen — ruht, IMX500 außer Betrieb seit 2026-09-25 |
 
 ## Arbeitsschritte und Checkpoints {#roadmap-schritte}
@@ -60,24 +64,27 @@ bedeutet, dass kein einzelner Aktualisierungszeitpunkt dokumentiert ist.
 | P3 | p3-schwellen | Freigabeschwellen und angepasste Toleranz real belegen | offen | — | [Freigabeevidenz](open-questions.md#oq-14) |
 | P3 | p3-fehlerklassen | Trefferquote nach Fehlerklassen aufschlüsseln | offen | — | [Fehlerklassen](VALIDATION.md#fehlerklassen-getrennt-zu-zahlen) |
 | P4 | p4-format | UserDefined-Spezifikation für den Prototyp beschaffen | belegt | 2026-10-28 | [Primärquelle und Nachweisgrenzen](GSVMULTI_PROTOCOL.md#quellen), [OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md#oq-07) |
-| P4 | p4-ungueltig | Behandlung ungültiger und veralteter Werte vereinbaren | offen | — | [OQ-06](open-questions.md#oq-06) |
-| P4 | p4-anbindung | Software-Prototyp: Formatter, Transport und Live-Lebenszyklus mit DUT-Ausgabesperre | gebaut | 2026-11-04 | [Anbindungsnaht](GSVMULTI_PROTOCOL.md#die-naht-im-code), [OQ-47](open-questions.md#oq-47) |
-| P4 | p4-nachweis | Annahme, Wert, Einheit und Abbruchverhalten in GSVmulti nachweisen | offen | 2026-11-04 | [UART-Demo und Ungültiggrenze](VALIDATION.md#uart-demo-20261104-10); mV/V in TDMS/Session [belegt](VALIDATION.md#uart-demo-20261104-11); lokale Windows-Demo600/600 [belegt](VALIDATION.md#windows-local-demo-20261104-01), gemeinsamer TCP-Dateipfad600/600 [belegt](VALIDATION.md#tcp-demo-20261104-01), Prozesswiederanlauf510/510 geschriebene Werte [belegt](VALIDATION.md#tcp-reconnect-20261104-01); ungültige Zeiträume unmarkiert, vollständiges Ungültig-/Abbruchverhalten offen, [Abnahmeplan](GSVMULTI_PROTOCOL.md#abnahme) |
-| P5 | p5-kalibrierung | StreamCam-Timing-Kalibrierung | vorhanden | — | [Zeitbezug](TIMING.md) |
+| P4 | p4-ungueltig | Ungültige Takte bis zur Kalibrierauswertung prüfen | offen | — | [OQ-06](open-questions.md#oq-06), [OQ-51](open-questions.md#oq-51) |
+| P4 | p4-uart-stoerung | UART-Rahmenfehler und Anmelde-Timeouts am Aufbau untersuchen | offen | — | [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md), [OQ-77](open-questions.md#oq-77) |
+| P4 | p4-anbindung | UserDefined-Formatter, Transporte und Live-Ausgabe | gebaut | 2026-11-13 | [Anbindungsnaht](GSVMULTI_PROTOCOL.md#die-naht-im-code), [UX2-Prüfbericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md) |
+| P4 | p4-nachweis | Zahlenimport, mV/V und Vierkanal-Ausgabe im geprüften Aufbau | belegt | 2026-11-13 | [mV/V in TDMS und Session](VALIDATION.md#uart-demo-20261104-11), [UX2-Bericht zu allen drei Wegen](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md) |
+| P5 | p5-kalibrierung | StreamCam-Timing-Kalibrierung auf dem zweiten Pi | belegt | 2026-11-25 | [Laborjournal](lab_journal.md), [Zeitbezug](TIMING.md) |
 | P5 | p5-referenz | Live-Referenzauswertung | vorhanden | 2026-10-21 | [Werteplan-Auswertung](VALIDATION.md#messpfad-live-werteplan-2026-10-21) |
 | P5 | p5-budget | Unsicherheitsbudget mit getrennten Einzelbeiträgen ausfüllen | offen | — | [Zeitbezug und Messprogramm](TIMING.md) |
 | P5 | p5-synchron | Referenzsynchronität klären und belegen | offen | — | [Referenzzeitbasis](open-questions.md#oq-03) |
 | P5 | p5-m8 | M8: Zeitachse des UserDefined-Imports prüfen | offen | — | [M8](GSVMULTI_PROTOCOL.md#die-wichtigste-einzelfrage-m8) |
 | P6 | p6-live | Live-Pfad mit STALE und Audit | gebaut | 2026-10-21 | [Live-Bedienerläufe](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
 | P6 | p6-stoerung | Kurze Störversuche am Aufbau | belegt | 2026-10-21 | [Bedienerläufe und Grenzen](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
-| P6 | p6-tracking | Nachführung bei großen Wertwechseln absichern | offen | — | [OQ-26](open-questions.md#oq-26) |
+| P6 | p6-fokus-start | Startprobe bei Fokusabweichung und Prüfung der Rahmenbereiche auf Einzelbildern | gebaut | 2026-11-18 | [Läufe und Diagnose](VALIDATION.md#workbench-2026-11-18) |
+| P6 | p6-tracking | Fokus und Rahmennachführung am Aufbau reproduzierbar prüfen | offen | — | [OQ-26](open-questions.md#oq-26), [OQ-74](open-questions.md#oq-74), [OQ-78](open-questions.md#oq-78) |
 | P6 | p6-korrektur | Automatische Korrektur bei Kamerastoß und Anzeigeverschiebung verbessern | offen | — | [OQ-26](open-questions.md#oq-26), [Laufende nach Verschiebung](superpowers/specs/2026-11-04-werkbank-redesign-design.md#offene-punkte) |
 | P6 | p6-audit | Audit-Belege dauerhaft aufbewahren | offen | — | [Aktive Arbeitsliste](../TODO.md) |
 | P6 | p6-ablage | Laufablage, Export und Aufbewahrung spezifizieren und bauen | offen | — | [OQ-60](open-questions.md#oq-60) |
 | P6 | p6-nachberechnung | Nachberechnungsmodus: Spec und Messungen am Pi 5 | offen | — | [OQ-59](open-questions.md#oq-59) |
 | P6 | p6-dauerlauf | 72-h-Dauerlauf mit provozierten Störungen durchführen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
 | P7 | p7-kriterien | Abnahmekriterien und Gerätekreis vorab festlegen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien), [OQ-04](open-questions.md#oq-04) |
-| P7 | p7-frischinstallation | Einrichtung, Konfiguration und Betrieb auf einem frisch installierten Pi prüfen | offen | — | [OQ-49](open-questions.md#oq-49), [Aktive Arbeitsliste](../TODO.md) |
+| P7 | p7-werkbank-ausgabe | Werkbank und drei Ausgabewege im GSV-2AS-Aufbau prüfen und abnehmen | belegt | 2026-11-13 | [Abnahmevermerk](../CHANGELOG.md), [UX2-Prüfbericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md) |
+| P7 | p7-frischinstallation | Stabile Ein-Befehl-Installation bis zum Messlauf auf einem frisch installierten Pi prüfen | offen | — | [Installer](INSTALLER.md#installation-in-einer-zeile), [Bisherige Prüfungen auf raspi01](lab_journal.md), [OQ-49](open-questions.md#oq-49) |
 | P7 | p7-abnahme | Formale Abnahme auf den Sperrgeräten durchführen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
 | P7 | p7-protokoll | Abnahmeprotokoll gegen die vereinbarten Kriterien erstellen | offen | — | [Abnahmekriterien](VALIDATION.md#abnahmekriterien) |
 | P7 | p7-produktionsabnahme | Produktionsabnahme durch die Abteilungsleitung | offen | — | [Aktive Arbeitsliste](../TODO.md) |
@@ -88,28 +95,17 @@ bedeutet, dass kein einzelner Aktualisierungszeitpunkt dokumentiert ist.
 
 ## Ausblick P9: Betrieb und Ausbau {#p9-betrieb-und-ausbau}
 
-Fahrplan nach Leonhards Entscheidung vom 2026-11-06, gültig sobald die neue
-Werkbank und die GSVmulti-Anbindung fertig sind. P9 steht absichtlich nicht
-in der Phasentabelle oben: Die interaktive Karte liest genau neun Phasen
-(P0–P8). Die Aufnahme in die Karte braucht eine Änderung an
-`docs-site/assets/roadmap.js` und `tests/docs-site.spec.ts` und folgt
-gesondert.
+Fahrplan nach Leonhards Entscheidung vom 2026-11-06. Die übrigen Arbeiten
+stehen in der [Arbeitsliste](../TODO.md).
 
 | Phase | Ziel | Kamera? | GSVmulti-Spec? | Hartes Exit-Kriterium | Stand |
 | --- | --- | --- | --- | --- | --- |
-| **P9** | Betrieb und Ausbau: Code und Wiki polieren, TUI für Einrichtung, Verwaltung, Konfiguration und Fehlersuche, Ein-Befehl-Installer, nächster Sensor GSV-2TSD-DI | ja | teilw. | Frischer Pi mit einem Befehl eingerichtet; TUI deckt Einrichtung, Konfiguration und Fehlersuche ab; zweiter Sensor angelernt und abgenommen | offen |
+| **P9** | Betrieb und Ausbau mit Verwaltungskonsole, Ein-Befehl-Installer und weiterem Sensor GSV-2TSD-DI | ja | teilw. | Frischer Pi mit einem Befehl eingerichtet, Konsole für Einrichtung und Fehlersuche erprobt, zweiter Sensor angelernt und abgenommen | **teilweise** — Installer und Konsole mit Onboarding, Dienstverwaltung, Kalibrierung, Update und Diagnose sind veröffentlicht. |
 
-Reihenfolge:
-
-1. Codebasis polieren.
-2. Wiki polieren (Doku und Zensical-Seite).
-3. TUI für Einrichtung, Verwaltung, Konfiguration und Fehlersuche; deckt so
-   viel wie möglich ab und wird entsprechend umfangreich.
-4. Frische Pi-Installation prüfen (P7, `p7-frischinstallation`): Einrichtung
-   möglichst mit einem einzigen Befehl ([OQ-49](open-questions.md#oq-49)).
-5. Produktionsabnahme (P7, `p7-produktionsabnahme`), voraussichtlich durch
-   den Abteilungsleiter Holger Kabelitz.
-6. Danach Anlernen eines neuen Sensors: GSV-2TSD-DI.
+Der nächste Installationsnachweis steht unter P7 (`p7-frischinstallation`).
+Auf die Produktionsabnahme (`p7-produktionsabnahme`) folgt nach dem
+vereinbarten Fahrplan das Anlernen des GSV-2TSD-DI. Die
+[Installationsanleitung](INSTALLER.md) beschreibt den veröffentlichten Stand.
 
 ## P0 — was tatsächlich steht
 
@@ -127,8 +123,7 @@ Reihenfolge:
   aber kein VALID in stabilen Referenzfenstern bei Faktor 2 und 5;
   Rückstellung bestätigt. Die Nachführung bleibt damit offen
   ([Auswertung](VALIDATION.md#messpfad-live-werteplan-2026-10-21)).
-  Seit 2026-11-04 ist die optionale TCP-/UART-Brücke eingebunden; echte
-  DUT-Ausgabe bleibt bis zum Windows-Nachweis gesperrt (P4 / OQ-06 / OQ-47).
+  Die Ausgabewege und ihre Nachweise sind in P4 aufgeführt.
 
 - [x] Repo-Grundgerüst nach MEhub-Konventionen, Importpaket `dispread`
 - [x] Projekt-venv mit `--system-site-packages`, Paket mit `--no-deps`
@@ -166,10 +161,12 @@ Reihenfolge:
 - [x] Workbench-Profile und `SessionProfile` gebaut, mit bestätigter
   Geometrie und Kamerareglern; das frühere Ziel `config/profiles/` samt
   allgemeinem `ProfileStore` ist nicht umgesetzt
-- [ ] Allgemeines `install.sh`, Messdienst, udev-Regel, pre-commit-Hook;
-  `scripts/install-workbench.sh` und systemd-Units für die Doku-Runner
-  existieren bereits
-- [ ] `docs`-Konsistenztest (`tests/test_docs.py`): OQ-Nummern lückenlos, keine toten Verweise, `status.md` mit Datum
+- [x] Geführtes `install.sh` und `get-picam.sh`, System- oder Benutzerdienst
+  und Verwaltung mit `picam`. Installationsnachweise folgen unter P7.
+  [Installation und Betrieb](INSTALLER.md).
+- [x] Der Doku-Build prüft OQ-Index und Wiki. Playwright prüft unter anderem
+  Roadmap-Beleglinks, Filter, Suche und Tabellen ohne JavaScript.
+  [Projektregeln](../AGENTS.md).
 
 ## Fehlerklassen und Datensatzregeln
 
@@ -198,11 +195,12 @@ M1–M8, siehe [TIMING.md](TIMING.md). Zwei Punkte prägen die Priorisierung:
 
 ## Sofort anstoßen, weil rein organisatorisch mit Vorlaufzeit
 
-* [OQ-07](open-questions.md#oq-07) — UserDefined-Empfang in 2.01 Pro bestätigen;
-  Spezifikationsbeschaffung seit 2026-10-28 nicht mehr der Blocker
-* [OQ-47](open-questions.md#oq-47) — Windows-COM-Transport und Wiederanlauf festlegen
-* [OQ-09](open-questions.md) — Transceiver und galvanische Trennung
-* [OQ-04](open-questions.md) — Gerätekreis festlegen, Sperrgeräte vereinbaren
+* Gerätekreis und Sperrgeräte festlegen. [OQ-04](open-questions.md#oq-04).
+* Umgang mit ungültigen Takten in der Kalibrierauswertung mit QM klären.
+  [OQ-06](open-questions.md#oq-06).
+* Windows-Buildrechner und Betreuung festlegen. [OQ-68](open-questions.md#oq-68).
+* Bedarf an Transceivern und galvanischer Trennung klären.
+  [OQ-09](open-questions.md#oq-09).
 
 ## Top-Risiken mit Frühwarnsignal
 

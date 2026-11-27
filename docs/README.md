@@ -1,9 +1,10 @@
 # Dokumentationsübersicht
 
-Die [Startseite](../index.md) verlinkt jede veröffentlichte Seite direkt.
-Für komplexere Fragen sind [Messpfad und Freigabe](uebersicht/messpfad.md),
+Die [Startseite](../index.md) führt zu den veröffentlichten Seiten.
+Für Inbetriebnahme und Wartung siehe [Installation und Verwaltung](INSTALLER.md).
+[Messpfad und Freigabe](uebersicht/messpfad.md),
 [Zeitstempel richtig lesen](uebersicht/zeitstempel.md) und
-[Daten und Abnahme](uebersicht/daten-und-abnahme.md) die thematischen Einstiege.
+[Daten und Abnahme](uebersicht/daten-und-abnahme.md) erklären den Messbetrieb.
 
 Der [Wiki-Abgleich vom 2026-10-21](wiki-audit-2026-10-21.md) hält Prüfung,
 Korrekturen und offene Befunde für alle 52 Navigationsseiten fest.
@@ -21,8 +22,9 @@ Korrekturen und offene Befunde für alle 52 Navigationsseiten fest.
 
 | Dokument | Inhalt |
 | --- | --- |
-| [status.md](status.md) | Aktueller Stand, Blocker, nächste drei Schritte. Wird überschrieben, nicht angehängt |
-| [open-questions.md](open-questions.md) | Alle Unbekannten als `OQ-nn`, mit Vorabdefault und Zuständigkeit |
+| [status.md](status.md) | Veröffentlichte Versionen, Gerätebelege und Integrationsübergabe |
+| [../TODO.md](../TODO.md) | Arbeitsreihenfolge und nächste Prüfungen |
+| [open-questions.md](open-questions.md) | Offene Fragen und dokumentierte Antworten als `OQ-nn` |
 | [ROADMAP.md](ROADMAP.md) | Phasen P0–P8 mit Exit-Kriterien und Risiken |
 
 ## Verlauf und Entscheidungen
@@ -54,7 +56,8 @@ Korrekturen und offene Befunde für alle 52 Navigationsseiten fest.
 
 | Dokument | Inhalt |
 | --- | --- |
-| [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md) | Was bekannt ist, was nicht, die Adapter-Naht, das provisorische Platzhalterformat |
+| [GSVMULTI_PROTOCOL.md](GSVMULTI_PROTOCOL.md) | Ausgabewege, UserDefined-Formate und Prüfbelege |
+| [BRIDGE_PROTOCOL_V2.md](BRIDGE_PROTOCOL_V2.md) | Nachrichten und Transport zwischen Pi und Windows-Brücke |
 | [HOSTING.md](HOSTING.md) | Geschütztes Doku-Hosting, Build, Runner und Pflege |
 | [dependencies.md](dependencies.md) | Jede Abhängigkeit mit Begründung, inkl. der `--system-site-packages`/`--no-deps`-Regel |
 

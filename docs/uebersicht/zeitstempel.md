@@ -111,14 +111,17 @@ Die Mehrbildbestätigung meldet ihre eigene
 <code>confirmation_span_ns</code>. Diese Felder dürfen nicht zu
 einem einzigen undifferenzierten „Zeitstempel“ zusammenfallen.
 
-Seit 2026-10-28 ist der UserDefined-Zahlenimport dokumentiert. Dieses
-einfache Profil hat kein definiertes Aufnahmezeitfeld; eine weitere Zahl
-wird zunächst ein Messkanal. Versuch M8 muss seine tatsächliche Zeitachse
-bei bekannten Sendefolgen, Pausen und gebündeltem Empfang prüfen.
-Ungültigbehandlung und zeitliche Zuordnung sind weiter offen
-([GSVmulti-Protokoll](../GSVMULTI_PROTOCOL.md),
-[OQ-07](../open-questions.md#oq-07)). Ein gleichmäßiger serieller
-Datenstrom belegt daher keine Synchronität zur Referenz.
+Im UserDefined-Einkanalformat wird nur der Zahlenwert übertragen. Im
+Vierkanal-Takt enthält Kanal 4 eine vorläufige Unix-Zeitangabe aus der
+monotonen Pi-Uhr und dem beim Laufstart gemessenen Zeitversatz. Der
+Laufstatus nennt diese Zeitbasis `unix_realtime_from_monotonic`. Bei
+Gültigkeit 1 beschreibt sie den Kamerastempel, bei Gültigkeit 0 die
+Nominalzeit des Takts. Für den Zeitkanal bleibt die Gesamtunsicherheit
+unbekannt. Die Tabellenzeit von GSVmulti ist davon getrennt und kann bei
+Pausen von der tatsächlichen Zeitenfolge abweichen. Versuch M8 prüft diese
+Zeitachse bei bekannten Sendefolgen, Pausen und gebündeltem Empfang.
+([GSVmulti-Protokoll](../GSVMULTI_PROTOCOL.md#die-wichtigste-einzelfrage-m8),
+[OQ-43](../open-questions.md#oq-43)).
 
 <figure class="tour-figure" data-scene="zeit-zuordnung" markdown="1">
 <figcaption markdown="span">Prüfling und Referenz werden nachträglich über ihre Zeitstempel zusammengeführt. Belastbar ist das erst, wenn die offenen Punkte unten auf der Bühne geklärt sind.</figcaption>

@@ -14,7 +14,7 @@ Beispielwerte, keine Messergebnisse. Maßgeblich bleiben
 [Konzept.md](../../Konzept.md), der [Messpfad](messpfad.md) und die
 [API-Referenz](../../api/index.md).
 
-Stand der Tour: 2026-11-04 (vorheriger Stand: 2026-10-28). Alle sechs Kapitel sind fertig: Überblick,
+Stand der Tour: 2026-11-26. Die sechs Kapitel sind Überblick,
 Erkennung, Zeit, Training, Bedienung und Regeln.
 
 <div class="tour" data-tour markdown="1">
@@ -33,10 +33,10 @@ Wert automatisch und mit Zeitstempel im Rechner landet.
 Links steht der Prüfling, hier ein GSV-2AS. Seine Anzeige ist ein
 Punktraster-LCD. Eine Logitech StreamCam filmt sie über USB 3, und ein
 Raspberry Pi 5 liest den Wert aus jedem Bild. Eingerichtet wird das Ganze im
-Browser an der Werkbank. Am Ende soll der Wert seriell an das Programm
-GSVmulti gehen. UserDefined-Formatter und gemeinsame Netzwerk-/UART-Brücke
-sind als Software-Prototyp gebaut. Echte DUT-Ausgabe bleibt gesperrt, bis
-Empfang, ungültige Werte und Altwertpuffer in GSVmulti geprüft sind.
+Browser an der Werkbank. Reguläre Läufe können über UART direkt oder über
+die gekoppelte Windows-Brücke an GSVmulti ausgeben. Die Brücke verbindet
+sich per Netzwerk oder UART mit dem Pi. Die Ausgabe verwendet den
+UserDefined-Zahlenimport von GSVmulti.
 
 Die beschrifteten Etiketten auf der Bühne öffnen die Kapitel.
 
@@ -55,8 +55,10 @@ begründete Ablehnung, nie ein geratener Wert.
 
 Der Punkt läuft den Weg eines Werts entlang: von der Anzeige über die Kamera
 zum Pi. Dort entsteht ein Datensatz, der ins Audit-Protokoll (JSONL) geschrieben
-wird, auch wenn der Wert abgelehnt wurde. Der Weg zu GSVmulti endet beim „?“,
-weil die Windows-Abnahme noch offen ist und echte DUT-Ausgabe gesperrt bleibt.
+wird, auch wenn der Wert abgelehnt wurde. Die optionale Ausgabe an GSVmulti
+läuft parallel zum Audit. Das „?“ auf der Leitung verweist auf die
+Prüfung beim Empfänger. Der Schreibbeleg bestätigt die Übergabe an den
+Port; die Empfängerdatei zeigt die aufgezeichneten Daten.
 
 Unten läuft die Kalibrierreferenz, also das Vergleichsgerät des Labors. Ihr
 Wert wird erst **nachher** über die Zeitstempel zugeordnet. In die Erkennung
@@ -336,13 +338,11 @@ Aufnahmezeit, Wert, Einheit, Status und weitere. Die Konfidenz ist eine
 Qualitätskennzahl. Sie sagt **nicht**, wie wahrscheinlich der Wert falsch
 ist.
 
-Jeder Datensatz geht als eine JSON-Zeile in das Audit-Protokoll. Die
-serielle Senke als Baustein und die gemeinsame TCP-/UART-Brücke sind gebaut.
-Der Live-Lauf schreibt zuerst das JSONL-Audit und kann den Verbindungszustand
-der Brücke anzeigen. Echte DUT-Zahlen werden bis zur Windows-Abnahme nicht
-weitergegeben. Der `UserDefinedFormatter` erhält die gelesene Dezimalauflösung;
-Übertragungsbelege bleiben getrennt vom `ValueRecord`. Ein COM-Schreibbeleg
-bestätigt keine Verarbeitung durch GSVmulti.
+Jeder Datensatz geht als eine JSON-Zeile in das Audit-Protokoll. Der
+Live-Lauf schreibt das Audit vor der optionalen UserDefined-Ausgabe.
+Bei Vierkanal-Takt hält Kanal 1 den letzten gültigen Wert, wenn Kanal 2
+Gültigkeit 0 meldet. Der `TxReceipt` dokumentiert die Übergabe an die
+Senke. Für den Nachweis der GSVmulti-Verarbeitung zählt die Empfängerdatei.
 
 Mehr dazu: [Verträge (API)](../../api/vertraege.md) ·
 [Ausgabe (API)](../../api/sink.md) ·
@@ -726,8 +726,8 @@ auf denen man das Raster sieht.
 
 Im Live-Browser unter `/live` nutzt die Einrichtung dieselben Messbausteine
 über den gemeinsamen `CameraOwner`. Dort prüft zusätzlich `gegenlesen` den
-Leser am Standbild; schwankende Zellen können maskiert werden. Für einen
-normalen Lauf muss diese Lesesperre aufgehoben sein.
+Leser an den Standbildern. Ohne angeschlossenen RS232-Adapter fragt die
+Werkbank den angezeigten Wert ab. Schwankende Zellen können maskiert werden.
 Vor den Standbildern stimmt die Live-Einrichtung die feste Belichtung auf
 die grüne Anzeige ab. Erreicht sie ihr Zielband nicht oder findet sie keinen
 Hinweisbereich, übernimmt sie die besten Einstellungen und meldet eine
@@ -760,8 +760,9 @@ ein und bestätigt danach genauso.
 Die Live-Oberfläche bestätigt getrennt mit Namen sowie geprüfter Einheit
 und Format. FEHLER der Einrichtung lassen sich dort nicht übergehen;
 WARNUNG verlangt eine ausdrückliche Kenntnisnahme. Eine angebotene
-angepasste Lesetoleranz setzt eine serielle Gegenprobe und ein eigenes
-Häkchen voraus. Sie ist nur für diese Aufstellung geprüft und bleibt als
+angepasste Lesetoleranz setzt eine Gegenprobe und ausdrückliche Auswahl
+bei der Bestätigung voraus. Mit manueller Eingabe gelten zusätzliche
+Prüfungen zur Stabilität der Anzeige. Sie ist für diese Aufstellung geprüft und bleibt als
 **nicht validiert** in Oberfläche und Laufmetadaten gekennzeichnet.
 
 Mehr dazu: [Geräteprofile](../anleitung/04-geraeteprofile.md) ·
@@ -783,8 +784,8 @@ Stopp. Die ältere Werkbank erhält gedrosselte Bilder desselben Owners;
 Kamerabedienung erfolgt über `/live`. Andere Kameraprozesse bekommen während
 der Serverlaufzeit „belegt“.
 
-Jeder Lauf schreibt `records.jsonl` und `session.json` unter
-`var/live/<sitzung>/run-NN/`. Optional kommt der getrennte serielle
+Jeder Lauf schreibt `records.jsonl` und `session.json` in seinen
+Laufordner. Optional kommt der getrennte serielle
 GSV-2AS-Strom als `reference.jsonl` hinzu. Ein Werteplan mit `set norm` und
 anschließender Rückstellung dient kontrollierten Gegenproben; das Planende
 stoppt den Lauf nicht automatisch.
@@ -794,14 +795,14 @@ Bei Lesesperre ist nur ein ausdrücklich markierter Testlauf möglich
 Jede Gate-Freigabe wird vor dem Audit als unlesbar ohne Zahlenwert
 protokolliert; die Oberfläche zeigt niemals gültige Testlaufwerte.
 Die ursprüngliche Gate-Entscheidung bleibt eine getrennte Leser-Diagnose.
-Testläufe sind von Messnachweisen ausgeschlossen; die technische
-Freigabesicherung ist umgesetzt ([OQ-44](../open-questions.md#oq-44)).
+Die externe Ausgabe ist im Testlauf gesperrt. Testläufe sind von
+Messnachweisen ausgeschlossen ([OQ-44](../open-questions.md#oq-44)).
 
-Der Live-Pfad ist am Aufbau gelaufen, aber noch nicht umfassend abgenommen:
-Große Wertwechsel können die Nachführung verlieren lassen (OQ-26), die
-angepasste Toleranz bleibt nicht validiert. Der UserDefined-Software-Prototyp
-ist gebaut; echte DUT-Ausgabe an GSVmulti bleibt bis zur Prüfung von Empfang,
-ungültigen Werten und Altwertpuffern gesperrt (OQ-06, OQ-47).
+Werkbank und Ausgabewege wurden am 13.11. am konkreten Aufbau abgenommen.
+Die vollständige Live-Messabnahme steht aus. Große Wertwechsel können die
+Nachführung verlieren lassen (OQ-26). Eine Validierung der angepassten
+Toleranz sowie die vollständige Prüfung von Ungültigbehandlung und
+Altwertpuffern stehen aus (OQ-06, OQ-47).
 
 Mehr dazu: [Kamera-Workbench](../anleitung/10-kamera-livevorschau.md) ·
 [Arbeitsliste](../../TODO.md) · [Betrieb](../anleitung/09-betrieb.md)
@@ -916,7 +917,7 @@ Mehr dazu: [OCR (API)](../../api/ocr.md) ·
 
 ### Kein erfundenes Protokoll {#regeln-protokoll}
 
-**Kurz:** UserDefined ist dokumentiert und als Prototyp gebaut. Ein
+**Kurz:** UserDefined ist dokumentiert und im Betrieb einsetzbar. Ein
 unbelegtes natives Geräteprotokoll wird weiterhin nicht geraten.
 
 Was könnte passieren? Ein ausgedachtes Format würde in Tests grün
@@ -925,14 +926,14 @@ Laborplatz auffallen.
 
 Darum wirft der Platzhalter für das native GSV-Geräteprotokoll
 (`GsvAsciiFormatter`) weiterhin absichtlich einen Fehler. Der neue
-`UserDefinedFormatter` setzt den dokumentierten Zahlenimport um; die
-Windows-Brücke empfängt dafür wahlweise über Netzwerk oder UART. Auch
-dieser Prototyp ist vorläufig (`provisional = True`), und diese Markierung
+`UserDefinedFormatter` setzt den dokumentierten Zahlenimport um. Die
+Windows-Brücke empfängt dafür wahlweise über Netzwerk oder UART. Der
+Formatter ist vorläufig (`provisional = True`), und diese Markierung
 gehört in jedes Laufergebnis. Das ältere CSV-Testformat bleibt erhalten.
 
-Echte DUT-Ausgabe bleibt strukturell gesperrt, bis Empfang, ungültige Werte
-und Altwertpuffer in der eingesetzten GSVmulti-Version geprüft sind.
-Ein erfolgreicher COM-Schreibvorgang allein hebt diese Sperre nicht auf.
+Für reguläre Läufe ist die Ausgabe an GSVmulti verfügbar. Wie die getestete
+Gegenstelle bei ungültigen Werten und Unterbrechungen reagiert, ist Teil
+der noch offenen vollständigen Ende-zu-Ende-Prüfung.
 
 Mehr dazu: [GSVmulti-Protokoll](../GSVMULTI_PROTOCOL.md) ·
 [OQ-07](../open-questions.md#oq-07)
@@ -958,7 +959,8 @@ Offen sind:
 * das Minuszeichen: Dieses Gerät zeigt nie negative Werte, deshalb kennt der
   Leser nur „+“,
 * Freigabeschwellen an realen Geräten (OQ-14),
-* GSVmulti-Empfang, Ungültigbehandlung und Altwertpuffer (OQ-07, OQ-06, OQ-47),
+* die vollständige Prüfung von GSVmulti-Aufzeichnung, Ungültigbehandlung
+  und Altwertpuffern (OQ-07, OQ-06, OQ-47),
 * die Nachführung bei großen Wertwechseln (OQ-26) und die vollständige
   Live-Abnahme,
 * eine belastbare Validierung der angepassten Lesetoleranz.

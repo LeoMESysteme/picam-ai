@@ -1,8 +1,24 @@
-# Windows-Laufzeitprobe
+# GSVmulti-Brücke für Windows
+
+Die reguläre Brücke verbindet die Werkbank über Netzwerk oder UART mit dem
+virtuellen COM-Portpaar für GSVmulti. Für **UART direkt** kann die Brücke
+die Session zur Einrichtung erzeugen; der Datenstrom läuft vom USB-UART-
+Adapter zu GSVmulti. Der [Anbindungsstand](../../docs/GSVMULTI_PROTOCOL.md)
+beschreibt Ausgabewege und Abnahmegrenzen.
+
+Brücke **1.1.0** ist als portable EXE und als Benutzer-Setup mit
+SHA-256-Liste veröffentlicht. Die dokumentierte Windows-Prüfung vom
+18.11. betrifft die frühere Gestaltungsrunde 3. Erstinstallation und
+Upgrade des veröffentlichten Pakets auf den vorgesehenen Windows-Rechnern
+stehen zur dokumentierten Prüfung aus.
+[Release](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1) ·
+[Release bauen](#release-bauen-110)
+
+## Historische Windows-Laufzeitprobe
 
 Die Konsolenprobe und das unsignierte PyInstaller-Ordnerpaket bilden die
 technische Grundlage für N1 (Stand 2026-11-06, Windows-Nachweis offen).
-Der separate GUI-Bau steht unter [Release bauen](#release-bauen-100).
+Der separate GUI-Bau steht unter [Release bauen](#release-bauen-110).
 
 Die Probe importiert `dispread.gsv_bridge`, pySerial und PySide6, erzeugt
 eine verborgene `QApplication` und beendet sich mit einem JSON-Bericht.
@@ -287,14 +303,20 @@ PYTHONPATH=src:windows/bridge/src ./.venv/bin/python -m pytest -q windows/bridge
 Paketierungsreferenz: [Inno-Architekturgrenzen](https://jrsoftware.org/ishelp/topic_archidentifiers.htm),
 [Admin-Modus](https://jrsoftware.org/ishelp/topic_admininstallmode.htm).
 
-## Oberfläche (`ui/`, nur Entwurf)
+<a id="oberflache-ui-nur-entwurf"></a>
+
+## Oberfläche (`ui/`) und Demo-Modus
 
 `src/dispread_bridge_app/ui/` enthält die Qt-Widgets-Oberfläche nach dem Mock unter
 `docs/superpowers/specs/2026-11-06-windows-bruecke-mock/`; sie hängt nur am `ControllerPort`
 (`ui/port.py`). `python -m dispread_bridge_app.main --demo-ui [--state=B3]` startet sie mit dem
 `FakeController` (Zustände des Mocks, synthetisch) zur Sichtprüfung auf Windows. Tests offscreen:
 `QT_QPA_PLATFORM=offscreen PYTHONPATH=src:../../src python -m pytest -q tests/test_ui*.py`.
-Nur unter Linux geprüft, keine Windows-Abnahme.
+Die Demo nutzt synthetische Stati. Die Prüfungen am Windows-Aufbau und die
+spätere Gestaltungsrunde stehen in [PRUEFUNG-UX2.md](PRUEFUNG-UX2.md) und
+[PRUEFUNG-UX3.md](PRUEFUNG-UX3.md).
+
+<a id="release-bauen-100"></a>
 
 ## Release bauen (1.1.0)
 

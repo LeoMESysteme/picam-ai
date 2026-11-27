@@ -9,9 +9,14 @@ Ein Push auf `master` baut und veröffentlicht die Seite automatisch, sofern
 `CLOUDFLARE_PAGES_PROJECT` gesetzt ist. Ein manuell gestarteter Lauf auf
 `master` tut dasselbe, inklusive Session-Archiv; so lässt sich ein am Netz
 gescheiterter Upload ohne Leer-Commit wiederholen (seit 2026-11-11, vorher
-nur Push). Ein manueller Lauf auf einem anderen Branch und jeder
-Feature-Branch dürfen Build, Tests und den Prüfstand ausführen, aber nie das
-produktive Deployment überschreiben.
+nur Push). Auf einem anderen Branch ist der Workflow manuell verfügbar.
+Er baut und prüft die Doku und kann bei gesetzter Projektvariable den
+Prüfstand aktualisieren. Das produktive Deployment läuft auf `master`.
+
+Die Doku- und Playwright-Workflows installieren die Doku-Werkzeuge aus
+`requirements-docs.txt` mit `PIP_CONFIG_FILE=/dev/null`. Damit verwenden
+sie auf dem aarch64-Runner PyPI ohne den zusätzlichen piwheels-Index aus
+der Systemkonfiguration, dessen TLS-Verbindungen den CI-Start verzögerten.
 
 ```mermaid
 flowchart LR
@@ -76,9 +81,10 @@ Der [Session-Explorer](session-explorer.md) ist Teil des normalen Wikis.
 Ein Build ohne Archiv enthält einen klaren Leerzustand. Die bestehenden
 Playwright- und Doku-Pflege-Workflows bekommen weder Zugriff auf `var/live`
 noch eine neue lokale Abhängigkeit. Ein zusätzlicher Schritt in `docs.yml`
-ergänzt ausschließlich bei Push auf `master` eine bereits geprüfte Generation
-im Buildverzeichnis `site/`. Manuelle Prüfstandsdeployments verändern weiterhin
-keine Produktion. Anmeldung und Schutzprüfung gelten auch für Katalog,
+ergänzt bei Push oder manuellem Workflowstart auf `master` eine bereits
+geprüfte Generation im Buildverzeichnis `site/`. Manuelle Läufe auf anderen
+Branches können den Prüfstand aktualisieren. Anmeldung und Schutzprüfung
+gelten auch für Katalog,
 Manifeste, komprimierte Teile und die eigenständige Explorer-Seite.
 Der optionale Schritt legt für den Standardbibliothekshelfer eine Projekt-venv
 mit `--system-site-packages --without-pip` an. Es wird kein Paket installiert.

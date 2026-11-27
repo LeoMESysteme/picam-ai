@@ -153,12 +153,18 @@ Kalibrierung ist nicht belegt
 Bei einer gestörten Leitung darf der Übertragungsfehler nicht als
 Erkennungsfehler erscheinen
 ([Datensatzvertrag](../../api/vertraege.md),
-[Sink-Vertrag](../../api/sink.md)). Der aktuelle Live-Lauf nutzt ausschließlich das JSONL-Log als Auditspur.
-Eine serielle GSVmulti-Ausgabe ist dort noch nicht angeschlossen.
-Das serielle ASCII-CSV ist nur ein als <code>provisional=True</code>
-gekennzeichneter Platzhalter. Der
-[UserDefined-Einstieg](../GSVMULTI_PROTOCOL.md#userdefined-format) ist seit
-2026-10-28 dokumentiert; der zugehörige Adapter und seine Abnahme fehlen.
+[Sink-Vertrag](../../api/sink.md)). Im Live-Lauf wird der Datensatz zuerst in
+<code>records.jsonl</code> geschrieben. Reguläre Läufe können parallel über
+UART direkt oder über die gekoppelte Windows-Brücke ausgeben. Eine Quittung
+belegt die lokale Übergabe beziehungsweise das Schreiben an den COM-Port.
+Die Aufnahme in GSVmulti wird anhand der Empfängerdatei geprüft.
+
+Die Vorgabe ist der Vierkanal-Takt. Bei Gültigkeit 0 hält Zahlenkanal 1 den
+letzten gültigen Wert des Laufs. In der Auswertung zählen Zeilen mit
+Gültigkeit 1. Der UserDefined-Formatter bleibt als
+<code>provisional=True</code> gekennzeichnet. Die am 13.11. abgenommenen
+Bedien- und Ausgabewege sowie die Grenzen des Nachweises stehen in der
+[GSVmulti-Anbindung](../GSVMULTI_PROTOCOL.md#stand-das-format-ist-unbekannt).
 
 Die optionale serielle GSV-2AS-Aufzeichnung steht getrennt in
 <code>reference.jsonl</code>; der Nachvergleich erfolgt mit
@@ -170,9 +176,12 @@ die Live-Sitzung setzt jede Gate-Freigabe vor dem Audit von
 und dem ersten Ablehnungsgrund <code>testlauf_keine_freigabe</code>.
 Die Oberfläche zeigt nur die getrennte Leser-Vermutung als Diagnose,
 niemals einen gültigen Testlaufwert
-([OQ-44](../open-questions.md#oq-44)). Eine angepasste Lesetoleranz setzt eine
-serielle Einrichtungsgegenprobe und ausdrückliche Bestätigung voraus;
-sie bleibt als nicht validiert markiert.
+([OQ-44](../open-questions.md#oq-44)). Testläufe sperren die externe Ausgabe.
+Eine angepasste Lesetoleranz setzt eine erfolgreiche Einrichtungsgegenprobe
+und die ausdrückliche Auswahl bei der Bestätigung voraus. Bei manueller
+Eingabe prüft die Gegenprobe zusätzlich, ob die Vergleichszellen während
+der Standbilder unverändert blieben, mit dokumentierter Ausnahme für die
+letzte Stelle. Die angepasste Toleranz bleibt als nicht validiert markiert.
 
 Eigene **Schreibsequenzen** des Werteplans und der Rückstellung sperren
 dagegen die Freigabe: vom BOOTTIME-Zeitpunkt vor dem ersten STOP bis nach

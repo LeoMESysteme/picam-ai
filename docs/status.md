@@ -1,76 +1,50 @@
-# Status und Übergabe — 2026-11-25
+# Status und Übergabe — 2026-11-27
 
-## Kurzfassung
+## Veröffentlicht und integriert
 
-- **SSH-Zugang raspi06:** `tailscale set --ssh=false` hat Tailscale-SSH zurückgesetzt (`RunSSH=false`), der Dienst `ssh` ist aktiv, der über `100.122.154.35:22` abgefragte ED25519-Hostschlüssel stimmt mit dem OpenSSH-Hostschlüssel überein. Der Login vom Client wurde nicht geprüft. Gegen WLAN-Abbrüche mit NetworkManager-Sperre gibt es den [WLAN-Wächter](HOST_NETZWERK.md) (Quellen `scripts/picam-wlan-watchdog*`, `systemd/picam-wlan-watchdog.*`).
-- **25.11. nachmittags, `feat/picam-admin`:** Konsole: Update, Deinstallation (Vorschau in der Konsole, formatierte Rückfrage im Terminal), Zertifikat erneuern (auch Brückenidentität, danach Profil neu laden) und UART-Ports (Pinwahl, Pi-5-UARTs uart0–4, config.txt-Diff, Pi-Neustart nur von Hand, [OQ-80](open-questions.md#oq-80)) als eigene Bildschirme; Einstellungen mit Navigations-/Bearbeitungszustand; Installer in Konsolen-Optik mit Enter → Onboarding. Pi-Name kommt live in der Brücke an (ab 1.1.0, abwärtskompatibel zu 1.0.0). Alles nur mit Fakes geprüft.
-- **25.11., Wartung:** Update-Worker mit Rückweg, Deinstallationsvorschau und bestätigte Erneuerung der Brückenidentität stehen für die Konsole bereit. Öffentliche Release-Quelle offen ([OQ-49](open-questions.md#oq-49)).
-- **25.11., `feat/picam-admin`:** raspi01 läuft mit `rc-51b620f`, die Timing-Kalibrierung ist dort gemessen (Leonhard, [Laborjournal](lab_journal.md)). Neu: Kalibrierung als Bildschirm der Konsole statt im Terminal (Abbruch, sudo-Passwort in der Konsole; am Pi noch nicht gelaufen, [OQ-79](open-questions.md#oq-79)). Windows-Brücke 1.1.0 (Branch `feat/bruecke-1.1`, eingemergt): Protokoll fror nach den ersten Einträgen ein (behoben), Störungen für Verbindungsabbruch, COM-Fehler und aufgefüllte/ungültige Takte, kein Flackern der Detailfenster, portable Einzel-EXE plus Setup (Inno). Windows-Bau steht aus.
-- **20.11. abends, `feat/picam-admin`:** Werkbank-Einrichtung ohne RS232 (geführte Eingabe des Anzeigewerts, Prüfung vorab statt Abbruch nach Minuten), Konsole mit Tabs und Formsprache „Karten + Abzeichen“, Installer-Unit repariert. Erstinstallation auf raspi01 trägt; dort fehlt die Timing-Kalibrierung, Laufstart bleibt gesperrt (kein Messlauf validiert). Neu: `picam kalibrieren` misst sie bei der Inbetriebnahme mit vorübergehend angestecktem USB-RS232-Adapter (noch nicht am Aufbau gelaufen; nächster Schritt raspi01). Installer mit Menüs und optionalem me-fastfetch. Prüfstand vor `419da9b`: 4828 bestanden, 20 übersprungen, 2 xfailed, Playwright 71/71. Details: [CHANGELOG](../CHANGELOG.md), [Laborjournal](lab_journal.md).
-- **Verwaltung `picam` und geführter Installer (20.11., Branch `feat/picam-admin`):** Konsole und Einzelbefehle für Status, Diagnose, Dienst, Protokoll und Konfiguration auf echten Daten; `./install.sh` führt ohne Angaben durch die Installation. Installer-Vorbereitung vom 17.11. eingemergt. Anleitung: [INSTALLER.md](INSTALLER.md). `picam update` mit automatischem Rückweg. Offen: Systeminstallation auf frischem Pi, Bezugsquelle des One-Liners, Kalibrierung auf neuem Pi.
-- **Version 1.0 (18./19.11.):** Testfreigabe-Hinweise und -Haken in Werkbank und EXE entfernt (Abnahme 13.11.), angepasste Lesetoleranz als gleichwertige Wahl mit Risikohinweis, Lauf mit Standardtoleranz nur noch mit Hinweis statt Sperre. EXE 1.0.0 mit Release-Build `windows/bridge/build-release.cmd`. Wire-Marker des Brückenprotokolls unverändert.
-- **Workbench 18.11. (Diagnose Codex + Claude):** Drei von sieben Starts scheiterten am Fokusband (eingeführt 13.11. abends), die gestarteten Läufe hatten 15–75 % gültige Werte, fast alle Ausfälle `rahmen_unstimmig`. Ursache der Ausfälle ist das Licht am Aufbau, nicht der Code: Gain 128 statt 0–46, Struktur der Rahmenbereiche 2,4–3,2 statt 6–12 (Patch-Streuung), Raster und Nachführung seit 13.11. unverändert (Quad A1/B1 alt gegen neu 0,000 px). Behoben: Laufstart nutzt den bestätigten Stream weiter und lässt Starts außerhalb des Fokusbands zu, wenn eine Startprobe gültig liest (Fokuswarnung). Neu: Die Einrichtung führt den Lauf-Tracker über ihre acht Einzelbilder (7–8 OK, 5–6 WARNUNG, ≤ 4 FEHLER) und warnt bei Gain am Anschlag. Belege: [Validierung](VALIDATION.md#workbench-2026-11-18), [OQ-78](open-questions.md#oq-78).
-- **Installer P0a (Codex, von Claude reviewt, 2026-11-14, auf `feat/integration`):** eine Paketliste (`packaging/apt-packages.txt`), keine festen Pfade dieses Pi in Produktskripten, `dispread.defaults`/`hardware_ports` als einzige Quelle, Dienstskript `scripts/werkbank-dienst.sh`, `init-tls --host` Pflicht. Bericht und Entscheidungsvorlage Pfadmodell: [quellen/installer-p0-2026-11-14](quellen/installer-p0-2026-11-14/REPORT-codex.md). Der laufende Dienst läuft weiter per systemd-run.
-- **Abnahme:** Herr Kaulitz hat am 2026-11-13 Werkbank und Ausgabewege (Netzwerk über Brücke, UART über Brücke, UART direkt) offiziell abgenommen. Grundlage: Smoketest und Windows-Prüfung UX2 ([Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)).
-- **Heute behoben (alle auf `feat/integration`):** EXE-Selbsttest unter Windows, Empfangstest im Format der Session und verlustfrei mit klarem Ende, Kanal 1 hält bei ungültigem Takt (Entscheidung Leonhard), Wiederverbinden nach LAN-Ausfall, Kopplung je Weg, Laufstart gibt UART-Empfang frei, Diagnose mit Zeit und UART-Fehlercodes, Doppelklick-Build `build-test.cmd`.
-- **Rahmen/Raster (Codex, von Claude reviewt, auf `feat/integration`):** Fokusprüfung am Laufstart zweiseitig, Band vorläufig 0,95–1,05, außerhalb wird der Start abgelehnt („neu einrichten“). Raster A1 (Leerzellengrenze) und B1 (zweite Unterkantenannahme) liefern 63/65 statt 58/65 Fits, kein alter Fit verloren. Details unten.
-- **Kleine Backend-Punkte (Codex, von Claude reviewt, 13.11. nachts, `fix/kleine-backend`):** App zählt geschriebene Werte schon beim COM-Beleg statt erst nach der Pi-Antwort (Ursache 123/124); `details.jsonl` mit Weg/Port/App-Start, aktueller Start getrennt von früheren (`details-previous.jsonl`), Leerlauf beim Export verdichtet; Adapter- und Portwechsel im Journal; dreimal `uart_timeout` beim Verbinden ohne Hardware nur eingegrenzt, Messauftrag OQ-77.
-- **Offen:** Fokusband am Aufbau kalibrieren (OQ-74), UART über Brücke mit Rahmenfehlern; EXE-Gestaltungsrunde 3 am 18.11. von Leonhard geprüft und gemergt (1.0-reif); danach Installer/TUI. Reihenfolge und Details: [TODO.md](../TODO.md).
+- **picam 1.1.1 und GSVmulti-Brücke 1.1.0.** Der öffentliche Release
+  enthält Installerarchiv und SHA-256-Prüfsumme für den Pi sowie
+  Windows-Setup, portable EXE und deren Prüfsummen. picam 1.1.1 korrigiert
+  die Rechte der Programmdateien bei Installation und Update.
+  [Veröffentlichung v1.1.1](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1) ·
+  [Installationsanleitung](INSTALLER.md) · [Changelog](../CHANGELOG.md)
+- **`master` enthält den Stand von Werkbank, Windows-Brücke und
+  Verwaltungskonsole.** Die Arbeit aus den bisherigen Integrationszweigen
+  ist im Hauptcheckout. Die Konsole führt unter anderem durch Update,
+  Zertifikat, UART-Konfiguration und Timing-Kalibrierung. Die Brücke
+  1.1.0 zeigt den vom Pi übermittelten Namen und protokolliert
+  Verbindungsabbrüche, COM-Fehler und aufgefüllte oder ungültige Takte.
+  Forgejo und GitHub führten am 26.11. dieselben 11 Branch-Namen.
+  `master` stand auf beiden Servern am 27.11. auf `197959a`.
+  [Arbeitsliste und verbleibende Repository-Aufgaben](../TODO.md)
+- **Download und Update.** Der Bootstrap und `picam update` beziehen die
+  neueste stabile Fassung vom öffentlichen GitHub-Mirror. Laut Arbeitsliste
+  wurde v1.1.1 am 26.11. auch auf Forgejo manuell bereitgestellt. Der
+  automatisierte Upload dorthin steht aus. [OQ-49](open-questions.md#oq-49) ·
+  [Release-Verfahren](INSTALLER.md)
 
-## Rahmenprüfung und Rasterbestimmung (13.11. abends)
+## Gerätebelege und nächste Prüfungen
 
-Umsetzung des [Codex-Handoffs](superpowers/handoffs/2026-11-13-codex-rahmen-raster.md), Bericht unter
-[quellen/rahmen-raster-2026-11-13/REPORT-codex.md](quellen/rahmen-raster-2026-11-13/REPORT-codex.md).
-
-- **Aufgabe 1, Fokus:** Reale Laufstarts vergleichen die Schärfe nach dem Kameraneustart mit der Einrichtung. Liegt das Verhältnis außerhalb von 0,95–1,05 (vorläufig, aus 14 Laufstarts vom 13.11. mit 0,982–1,026), wird der Start mit Meldung abgelehnt und als `live-start-rejection/1` im Laufordner festgehalten. Fehlt die Referenz oder schlägt die Prüfung fehl, wird ebenfalls abgelehnt. **Bedienerfolge:** auch ein brauchbarer Start kann abgelehnt werden (ein guter Lauf vom 13.11. lag bei 1,418); Abhilfe ist neu einrichten. Zweitversuchsanteil und Maßstab stehen in Status, Inspektor und `session.json`. Residualgrenzen 0,35/0,65 px unverändert.
-- **Aufgabe 2, A1:** Randminima im letzten Viertel der Lückenspalte zählen nicht mehr als Belegung der Leerzelle. Gegenprobe mit belegter Leerzelle bleibt abgelehnt.
-- **Aufgabe 3, B1:** Erst wenn die Suche endgültig `keine_startlage` liefert, folgt ein zweiter Durchgang mit der Unterkante parallel zur Oberkante; Prüfungen unverändert.
-
-| Standbilder | Baseline | Nur B1 | Nur A1 | A1+B1 |
-| --- | ---: | ---: | ---: | ---: |
-| ursprüngliche 65 | 58 | 59 | 61 | 63 |
-| erweiterte 74 | 64 | 66 | 69 | 72 |
-
-Kein bisheriger Fit verloren, maximale Eckverschiebung 0,52 px. Die acht neuen Fits wurden gegen den seriellen Text und Overlays geprüft; sechs behalten eine ROM-Offsetwarnung. Belege: [Korpus](quellen/raster-recherche-2026-11-13/korpus/README.md), [VALIDATION](VALIDATION.md), [Laborjournal](lab_journal.md).
-
-## Laufender Stand
-
-- **Dienst:** `dispread-werkbank-bruecke` (systemd-run `--user`) aus `.worktrees/bruecke-run`, detached auf `feat/integration` 95d0540 (Rahmen/Raster), seit 2026-11-13 ~19:35. Adresse `https://100.122.154.35:8082`, Pi-Identität und Kopplung unverändert. Neustartbefehl siehe Projekt-Memory bzw. `systemctl --user show`.
-- **Gemeinsamer Branch:** `feat/integration` = EXE-Stand `feat/bruecke-merge` (Session picam-ai-65, UX2) + `feat/bruecke-ui` (Werkbank, Brückentakt, Blocker-Fixes). Weitere EXE-Arbeit baut darauf auf.
-- **EXE:** muss Leonhard aus `feat/integration` bauen (`build-test.ps1`). Eine ältere EXE spricht weder Takt noch 460 800 Baud.
-
-## Workbench-Blocker ([WORKBENCH_BLOCKER.md](WORKBENCH_BLOCKER.md))
-
-Triage (`.superpowers/sdd/2026-11-11-gsvmulti-takt/blocker-triage.md`): **keine Regression**. Die Einrichtungsmodule waren in allen Ständen byte-identisch; die Fehler sind alte Lücken, die erst die neuen Aufstellungen sichtbar machten.
-
-| OQ | Stand | Nachweis |
+| Bereich | Letzter Beleg | Nächste Prüfung |
 | --- | --- | --- |
-| OQ-71 Sackgasse | behoben: FEHLER sperrt Bestätigen, „Neu einrichten“ immer erreichbar, Belege bleiben | Backend-, Node- und Playwright-Tests |
-| OQ-74 Fokus | Teilbehebung: ROI aus der LCD-Hinweisbox, Endprüfung nach Neustart (Einrichtung **und** Laufstart), Diagnosebilder; seit 13.11. abends zweiseitiges Startband 0,95–1,05 mit Ablehnung | Regressionen auf 7 Paketbildern, Replay 216 Bilder; Band nur vorläufig, am Aufbau kalibrieren |
-| OQ-70 einseitige Rahmenbereiche | behoben: Rahmen trotz Kerbe erkannt, sonst klare Meldung | 60/63 Vorschläge identisch, 3 besser |
-| OQ-72 Kantenprüfung | geklärt: echte Reflexe, Grenzen bleiben; Meldung nennt Zelle, Lage und Abhilfe | alle Urteile bitgleich |
-| OQ-69 Startlage | behoben: Schein-Plus an Glaskanten und Einzelartefakte in Leerzellen; unabhängiges Review mit Auflagen, erfüllt | 4 Fehlerbilder lösbar (2 danach berechtigt Kanten-FEHLER), 77/77 alte Fits erhalten |
-| OQ-73 Trägheit, OQ-75 Ausfall 7 s | offen, nur am Aufbau messbar | Smoketest notiert Uhrzeiten |
+| Werkbank und Ausgabewege | Herr Kaulitz hat am 13.11. Werkbank, Netzwerk über Brücke, UART über Brücke und UART direkt für den geprüften Aufbau abgenommen. Der Pi-Dienst lief mit `5a31b41`. Für den Windows-Build von 14:50 vermutet der UX2-Bericht `c643f30`. [Smoketest](../windows/bridge/SMOKETEST-2026-11-13.md) · [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md) | UART-Rahmenfehler und Anmelde-Timeouts am Aufbau eingrenzen. Windows-Pakete und Sessionexport im Zielumfeld prüfen. [OQ-62](open-questions.md#oq-62) · [OQ-77](open-questions.md#oq-77) |
+| Fokus, Raster und Nachführung | Die Prüfung vom 18.11. belegt Startablehnungen, schwache Beleuchtung und fortbestehende Trackingverluste. `master` enthält den gewarnten Start nach erfolgreicher Leseprobe bei begrenzter Fokusabweichung, die Lichtwarnung und die geprüften Rasteränderungen A1+B1. [Validierung](VALIDATION.md#workbench-2026-11-18) · [Rasterbericht](quellen/rahmen-raster-2026-11-13/REPORT-codex.md) | Bei Raumlicht neu einrichten, Kontrollläufe vergleichen und den Einbruch der Nachführung reproduzieren. [OQ-74](open-questions.md#oq-74) · [OQ-78](open-questions.md#oq-78) |
+| raspi01 | Am 25.11. wurde die Timing-Kalibrierung mit `rc-51b620f` gemeldet. Später lief `rc-eaa4ad8`. Davor hatte das Update bei fehlerhafter UART-Porterkennung automatisch zurückgeschaltet. [Laborjournal](lab_journal.md) | Update auf 1.1.1. Konsolen-Kalibrierung mit sudo-Freigabe und Abbruch belegen. Freien Header-UART nach Neustart zuordnen. Für die Frischinstallation mit Onboarding und Messlauf frische Installationspfade oder ein separates System verwenden. [OQ-79](open-questions.md#oq-79) · [OQ-80](open-questions.md#oq-80) |
+| raspi06 | Bei der systemd-Abfrage am 26.11. war kein `dispread*`-Werkbankdienst geladen. Am 25.11. wurde Tailscale-SSH mit `tailscale set --ssh=false` deaktiviert. Der Dienst `ssh` war aktiv, und der abgefragte ED25519-Hostschlüssel am Tailscale-Endpunkt entsprach dem OpenSSH-Hostschlüssel. | Login vom Client steht aus. Für NetworkManager-Sperren steht der [WLAN-Wächter](HOST_NETZWERK.md) bereit. |
 
-## Weitere Arbeit seit 11.11.
+Die vollständigen nächsten Aufgaben stehen in der [Arbeitsliste](../TODO.md).
+Die [Roadmap](ROADMAP.md) führt die Abnahmekriterien je Phase und die
+[offenen Fragen](open-questions.md) enthalten Belege und Prüfschritte.
 
-- **GSVmulti-Vierkanal-Takt:** Telegramm `%wert;gültig;takt;zeit` mit festem Takt bis 10 Hz; ungültig = `gültig 0`, Kanal 1 hält seit 13.11. den letzten gültigen Wert (vorher Fehlwert `99999999.0`, Spec 3.5). Spec und Plan unter `docs/superpowers/{specs,plans}/2026-11-11-gsvmulti-takt-vierkanal*`.
-  - Pi und alle drei Wege umgesetzt (B1, B2), Werkbank mit Formatwahl (U1), EXE-Vorgabe Vierkanal.
-  - Brücken-UART auf 460 800 Baud.
-  - Belegt sind nur die GSVmulti-Versuche vom 11.11.; ein Ende-zu-Ende-Lauf mit EXE steht aus.
-- **Nachführung:** strengere Auswahl der Rahmenbereiche und automatische Stilllegung dauerhaft unstimmiger Bereiche mit Schutzprobe (TB). Zweifach reviewt, Testfreigabe.
+## Doku-Abgleich und Integration
 
-## Prüfstand 2026-11-12 (`feat/integration` vor dem Smoketest-Commit)
-
-- **Pi** mit `DISPREAD_DEV_DATA`: 4151 bestanden. 2 Brückentests wackelten unter Volllast, einzeln dreimal grün.
-- **Windows** 641, **Node** 273, **Playwright** 64/65. Der eine Fehlschlag ist der bekannte Wackler „UART direkt ohne Haken“, einzeln grün. **ruff** sauber.
-
-## Offen
-
-- Hardware-Bestätigung aller Fixes, Fokusverhalten beim Kameraneustart, OQ-73 und OQ-75.
-- EXE-Oberfläche für Taktzähler und Format-Abgleich (picam-ai-65).
-- Merge nach `master`: freigegeben am 13.11. (autonomer Plan), erst nach grüner voller Suite und ohne Wiki-/Theme-Dateien der Wiki-Session anzufassen.
-
-## Dokumentationshosting
-
-Der Wiki-Sessionexport ist für Pushes und manuelle Workflowstarts auf `master` vorgesehen. Das Exportbudget beträgt 600 s, die systemd-Grenze 720 s. Ein offener, kürzlich geänderter Messlauf unter `var/live` verschiebt den Export; eine laufende Werkbank ohne Messlauf blockiert ihn nicht. Die Regel und ihre Grenzen stehen in [Doku-Hosting](HOSTING.md#session-archiv-und-explorer).
+- Leonhard hat den Doku-Abgleich vom 26.–27.11. für `master` freigegeben.
+  Basis ist `197959a`. Codex übernimmt Commit, Push und die Prüfung der
+  Forgejo-Läufe „Doku-Seite“ und „Playwright Tests“ für den Ziel-Commit.
+  Die Prüfergebnisse stehen in der Sitzungsübergabe.
+- Der frühere Prüfstand vom 25.11. ist einschließlich geprüftem Softwarestand
+  in der [Arbeitsliste](../TODO.md) festgehalten. Die Gerätebelege beziehen sich
+  jeweils auf die dort oder oben genannten Versionen.
+- Der Wiki-Sessionexport wird bei einem Push auf `master` oder manuell
+  gestartet. Er wird bei einem offenen, kürzlich geänderten Messlauf
+  verschoben. [Doku-Hosting](HOSTING.md#session-archiv-und-explorer)

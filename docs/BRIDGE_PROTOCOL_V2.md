@@ -1,10 +1,11 @@
 # Pi-/Windows-Brückenprotokoll 2
 
-Stand: 2026-11-11 (Taktnachricht B2 additiv, Abschnitt am Ende). Eigener Brückenvertrag, kein GSV-Telegramm.
-DUT-Ausgabe bleibt fachlich gesperrt; einzige Ausnahme ist die je Lauf vom
-Pi-Bediener bestätigte **Testfreigabe** (Abschnitt unten, keine Abnahme).
-Version 2 und eine erfolgreiche Kopplung sind keine Ausgabeabnahme. V1 bleibt
-ausschließlich explizite Demo.
+Interner Brückenvertrag zwischen Pi und Windows, Stand 2026-11-26. Seit
+Version 1.0 gibt ein regulärer Lauf den gewählten Brückenweg frei. Der
+Wire-Marker `release: "test_unaccepted"` bleibt aus Kompatibilitätsgründen
+erhalten. Ein Diagnose-Testlauf mit übergangener Lesesperre sperrt die
+externe Ausgabe. V1 bleibt den expliziten Demowerkzeugen vorbehalten.
+[Nachweise zu den Ausgabewegen](GSVMULTI_PROTOCOL.md#stand-das-format-ist-unbekannt).
 
 ## Kodierung und Grenzen
 
@@ -46,8 +47,9 @@ entscheidet anhand der authentisierten Berechtigungen und exklusiven Lease.
 
 `record` enthält das vollständige unveränderte `ValueRecord.to_dict()`-Schema 1,
 mit Zeitbasis, Unsicherheit (unbekannt bleibt `null`), Status und Ablehnungsgründen.
-Ohne bestätigte Testfreigabe (siehe unten) ist ausschließlich synthetische
-Ausgabe erlaubt; `frame_age_ns` bleibt in jedem Fall `null`. Es gibt keine Subtraktion von Pi-/Windows-Uhren.
+Für echte `record`-Nachrichten muss der Pi die Weitergabe für Lauf und
+Ausgabeweg angekündigt haben. `frame_age_ns` bleibt stets `null`. Eine
+Altersangabe aus den Pi- und Windows-Uhren wird daraus nicht berechnet.
 Die Formatter-Metadaten einschließlich `provisional` gehören ins Runartefakt.
 
 ## Profil
@@ -56,8 +58,9 @@ UTF-8-JSON, maximal 16384 Bytes, exakt diese Felder: `schema: 1`, `pi_id`, `name
 `certificate_pem`, `certificate_sha256`, `endpoints`, `protocol_version: 2`,
 optional `pairing_offer` (sonst `null`) und `uart_baud`.
 `uart_baud` ist eine Ganzzahl 1..4000000 (kein Boolean); ohne Feld gilt
-`dispread.bridge.baud.UART_BAUD` (460800 Baud). Der Pi exportiert den Wert
-im Profil, Windows verwendet ihn für Pi↔Brücke. GSVmulti und die direkte
+`dispread.bridge.baud.LEGACY_UART_BAUD` (115 200 Baud). Der aktuelle Pi
+exportiert 460 800 Baud, Windows verwendet den Profilwert für Pi ↔ Brücke.
+GSVmulti und die direkte
 Pi-Ausgabe sind davon getrennt und behalten ihre Session-Baudrate. `endpoints` enthält höchstens acht
 verschiedene absolute `https`-/`wss`-URLs, ohne Zugangsdaten, Query oder Fragment.
 IPv6 muss geklammert sein; eine Scope-ID bleibt unverändert erhalten. Kein
@@ -96,8 +99,8 @@ Ein v2-Adapter darf nur nach Codec- und Berechtigungsprüfung die validierten
 Poll-/ACK-Felder in v1-Kernfelder übersetzen; dies ist keine v1-Netzwerkfreigabe.
 
 Im Speicher liegen der jüngste Datensatz, eine Invalidierungsbarriere und
-höchstens ein ausstehendes Angebot. Die Barriere hat Vorrang und wird nur
-bei passendem `written`-ACK beseitigt. ACK muss Request, Run, Frame und Barriere
+höchstens ein ausstehendes Angebot. Die Barriere hat Vorrang und wird im
+Einkanal-Lauf mit passendem `omitted`-ACK beseitigt. ACK muss Request, Run, Frame und Barriere
 exakt treffen; der v2-Adapter prüft zusätzlich Pi, Client und Lease. Neue
 Ungültigkeit ersetzt eine ältere Barriere, deren späteres ACK die neue nicht
 beseitigen kann. Verbindungs-/Leaseverlust ruft `abandon_pending()` auf:
@@ -185,14 +188,13 @@ Lease/Run werden danach erneut geprüft. Socket-/UART-I/O findet außerhalb
 beider Locks statt. Ein verlorenes ACK bleibt unbestätigt: Zahlen werden
 nicht wiederholt, eine offene Ungültigkeitsbarriere bleibt erhalten.
 
-## Testfreigabe echter Werte (seit 2026-11-09, additiv, v2 bleibt v2)
+## Weitergabe echter Werte {#testfreigabe-echter-werte-seit-2026-11-09-additiv-v2-bleibt-v2}
 
-Nutzerentscheidung 2026-11-09 für den Test am 11.11.: echte Messwerte dürfen
-über die Brücke (UART und Netzwerk) nach GSVmulti, **nur** wenn der
-Pi-Bediener den Lauf mit `output = {transport: "uart"|"tcp", …,
-acknowledge_unaccepted: true}` startet. Das ist **keine Abnahme** und keine
-Messfreigabe (OQ-06/OQ-47 bleiben offen). Ohne `true` bleibt alles wie oben
-gesperrt; die EXE hat keinen Schalter dafür.
+Der Pi kündigt die Weitergabe für den gewählten Brückenweg und die Lease
+des regulären Laufs an. Vor Version 1.0 musste der Bediener diese
+Weitergabe je Lauf über `acknowledge_unaccepted: true` bestätigen.
+Diese Testfreigabe entfiel nach der Abnahme der Ausgabewege. Decoder und
+Gegenstellen verwenden weiterhin den bisherigen Wire-Marker.
 
 - **Freigabestand:** `hello` und `idle` tragen `release: "test_unaccepted"`
   und `release_block: null` nur, wenn der gebundene echte Lauf bestätigt ist
@@ -201,7 +203,11 @@ gesperrt; die EXE hat keinen Schalter dafür.
   Wert und nie zusammen mit einer Sperre. Der Pi sendet das Feld nur im
   freigegebenen Fall: ein alter Client ohne R1-Codec lehnt es als unbekanntes
   Feld ab und verbindet nicht (fail-closed); ein neuer Client nimmt ohne Feld
-  „gesperrt“ an. `capabilities.dut_output` bleibt `false`.
+  „gesperrt“ an. `capabilities.dut_output` bleibt aus Kompatibilitätsgründen
+  `false`; die Weitergabe richtet sich nach `release` und `release_block`.
+  Seit Pi-Version 1.1.0 kann `capabilities.pi_name` den konfigurierten
+  Anzeigenamen in Hello über Netzwerk und UART enthalten. Windows-Brücke
+  1.1.0 übernimmt ihn für die Anzeige; Brücke 1.0.0 ignoriert ihn.
 - **Ankündigung vor Wert:** Ändert sich der Freigabestand im selben Lauf (die
   Run-ID wird vor der Publisher-Bindung reserviert), antwortet der Pi auf
   `poll`/`heartbeat` zuerst mit `hello`. Ein `record` mit `demo: false` geht
@@ -221,14 +227,14 @@ gesperrt; die EXE hat keinen Schalter dafür.
 - **Barriere und Laufwechsel:** Eine offene Invalidierungsbarriere gehört zum
   Lauf und wird bei einem Laufwechsel nicht in den nächsten Lauf übernommen.
   Innerhalb eines Laufs (z. B. Lease-Wechsel) geht sie jedem späteren Wert vor.
-- **Zeitbasis:** Unter Testfreigabe bietet der Pi nur Datensätze mit echter
+- **Zeitbasis:** Bei Weitergabe bietet der Pi nur Datensätze mit echter
   Kamerazeitbasis (`v4l2_monotonic`) an; andere (synthetisch/Replay) werden
   nie angeboten (Audit `release_time_base_rejected`).
 - **Nur VALID an COM:** Der Windows-Kern formatiert freigegebene Werte mit
   dem P4-3-`UserDefinedFormatter(prefix="%")` – byte-gleich mit UART direkt.
   Ungültige Werte laufen weiter als Invalidierungsbarriere, werden aber mit
   `ack.outcome = "omitted"` quittiert, ohne ein COM-Byte. Der Pi lehnt
-  `written` für eine Barriere im Testfreigabe-Lauf ab und hebt die Barriere
+  `written` für eine Barriere im Einkanal-Lauf ab und hebt die Barriere
   nur mit passendem `omitted` auf. Ein Demo-Lauf akzeptiert `omitted` nie.
   GSVmulti zeigt bei ausgelassenen Werten den letzten Wert unmarkiert weiter;
   genau so steht es im Hinweis (`release_note`).
@@ -240,15 +246,15 @@ gesperrt; die EXE hat keinen Schalter dafür.
 ## Taktnachricht für den Vierkanal-Takt (seit 2026-11-11, B2, additiv)
 
 Spec: `docs/superpowers/specs/2026-11-11-gsvmulti-takt-vierkanal-design.md`
-(F1–F5). Gilt nur für einen echten Lauf mit `output.format: "4ch"` auf `uart`
-oder `tcp` **und** bestätigter Testfreigabe. Keine Abnahme, keine Messfreigabe.
+(F1–F5). Gilt für einen regulären Lauf mit `output.format: "4ch"` auf `uart`
+oder `tcp` und angekündigter Weitergabe.
 
 **Takt auf dem Pi.** Der Pi entscheidet jeden Takt selbst, mit demselben
 `dispread.live.tick.Ticker` wie bei UART direkt (B1): festes Monotonraster,
 1–10 Hz (Vorgabe 10), kein Aufholen; gültig nur ein noch nicht gesendetes,
 VALID-Bild mit echter Kamerazeitbasis, jünger als `max_frame_age_ms`. Jeder
 erzeugte Takt wird **vor** dem Angebot als `tick` in `output.jsonl` auditiert.
-Ohne Testfreigabe entsteht kein Takt (auch keine Fehlwertzeile).
+Ohne Weitergabe entsteht kein Takt.
 
 **Warteschlange statt latest-only.** Der Pi hält die erzeugten Takte in
 Reihenfolge vor und bietet sie einzeln an (ein offenes Angebot je Lease wie
@@ -291,8 +297,11 @@ Windows unmittelbar vor diesem Takt geschrieben hat.
 **Windows: Formatieren und Auffüllen.** Windows formatiert mit dem
 `TickFormatter` (`gsvmulti_userdefined_4ch_v1`): `%wert;gültig;takt;zeit\r\n`.
 Ist die höchste geschriebene Taktnummer dieses Laufs *n* und kommt Takt *n+k*,
-schreibt Windows zuerst *k−1* Fehlwertzeilen `%99999999.0;0;s;Nominalzeit`,
-dann den Takt. Ist *k−1 > 50*, wird nicht aufgefüllt; die Lücke steht im
+schreibt Windows zuerst *k−1* Zeilen mit Gültigkeit 0 und Nominalzeit,
+dann den Takt. In diesen Zeilen und bei ungültigen Takten hält Kanal 1 den
+letzten gültigen Wert, den die Brücke für diesen Lauf geschrieben hat.
+Vor dem ersten gültigen Wert steht `99999999.0`. Ist *k−1 > 50*, wird
+nicht aufgefüllt; die Lücke steht im
 Journal (`tick_gaps`) und der Lauf gilt als gestört (`tick_disturbed`). Ein
 Takt mit *s ≤ n* wird nie geschrieben (bereits geschriebener Takt: nur erneute
 Quittung). Jede Zeile, auch jede Auffüllung, wird **vor** dem COM-Schreiben im

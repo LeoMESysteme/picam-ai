@@ -153,15 +153,19 @@ dass Tests ohne Kamera laufen.
 
 ## Hardware-Fakten, die man leicht falsch annimmt
 
-* **Die NVMe-SSD unter `/mnt/ssd` ist nur Entlastung** (Backups, Tests,
-  Trainings-/Diagnoseaufnahmen). Das fertige Gerät hat keine SSD: alles,
-  was das Produkt liest oder schreibt, bleibt in `var/` auf der SD-Karte,
-  ohne Link auf die SSD. Entwicklungsaufnahmen liegen unter
+* **Die NVMe-SSD unter `/mnt/ssd` dient der Entwicklung** (Backups, Tests,
+  Trainings-/Diagnoseaufnahmen). Auf dem Gerät liegen die Mess- und
+  Betriebsdaten auf der SD-Karte unter `/var/lib/picam` bei der
+  Systeminstallation und unter `var/` im Entwicklungs-Checkout.
+  Entwicklungsaufnahmen liegen unter
   `/mnt/ssd/picam-dev` und sind für Tests/Skripte über
   `DISPREAD_DEV_DATA=/mnt/ssd/picam-dev` erreichbar; `src/` kennt die SSD
   nie (Wächtertest). Datenorte: [docs/HARDWARE_PROFILE.md](docs/HARDWARE_PROFILE.md).
-* Datenport für GSVmulti ist **`/dev/ttyAMA0`**. `/dev/serial0` zeigt auf
-  `ttyAMA10` und ist der **3-Pin-Debug-Header**, nicht der Nutzdatenport.
+* Der Standard-Datenport für GSVmulti ist **`/dev/ttyAMA0`**.
+  **`/dev/ttyAMA10`** ist der reservierte 3-Pin-Debug-Header.
+  `/dev/serial0` ist ein Alias mit geräteabhängigem Ziel. Am 25.11. zeigte
+  er auf raspi06 auf `ttyAMA10` und auf raspi01 auf `ttyAMA0`. In der
+  Werkbank den konkreten Port der Instanz konfigurieren.
 * Pi-GPIO-Pegel dürfen **nicht** direkt mit RS-232 verbunden werden
   ([OQ-09](docs/open-questions.md)).
 * **StreamCam:** 1920×1080 nur in YUYV an einem **USB3-Port** (blau); an USB2

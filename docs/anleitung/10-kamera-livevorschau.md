@@ -13,8 +13,9 @@ weg: bedienen
 > die in der laufenden Workbench tatsächlich angebotenen Regler prüfen;
 > die historischen Control-Namen gelten für die frühere IMX500.
 
-Die Werkbank bietet Kamerabild, Log und echte Bash-Tabs. Alle Zugriffe
-sind mit dem Linux-Passwort von `me-systeme` geschützt. Seit dem Messpfad live
+Die Werkbank bietet Kamerabild, Log und echte Bash-Tabs. Die Anmeldung
+verwendet das Linux-Konto und Passwort des Bedieners, unter dem der
+Dienst läuft. Seit dem Messpfad live
 richtet `/live` die StreamCam ein und liest mit dem Dot-Matrix-Leser.
 Die alte Werkbankseite bekommt gedrosselte Bilder vom `CameraOwner`;
 Kamerabedienung erfolgt nur auf `/live`. Das alte `run` bezeichnet dort
@@ -24,77 +25,62 @@ den früheren Ablauf; für die StreamCam gilt der Abschnitt „Live-Seite `/live
 
 ## Start
 
-Im Projektverzeichnis:
+Auf einem neu installierten Pi die vom [Installer](../INSTALLER.md)
+ausgegebene HTTPS-Adresse mit `/live` im Browser öffnen. `picam url`
+zeigt die Adresse erneut, `picam status` und `picam logs` helfen bei der
+Diagnose. Vor dem ersten Lauf Kamera und Anzeige einrichten und die
+[Timing-Kalibrierung](../INSTALLER.md#timing-kalibrierung-bei-der-inbetriebnahme-rs232-nur-einmal)
+vornehmen.
+
+Für einen manuellen Start ohne Brückendienst im Entwicklungscheckout
+`pi-neu.local` durch die Adresse ersetzen, unter der der Browser den Pi
+erreicht, und bei Bedarf einen freien Port wählen.
 
 ```bash
 bash scripts/install-workbench.sh
-./.venv/bin/dispread init-tls --host <adresse>
-./.venv/bin/dispread serve --host <adresse> --port 8081
+./.venv/bin/dispread init-tls --host pi-neu.local
+./.venv/bin/dispread serve --host pi-neu.local --port 8081
 ```
 
-`<adresse>` durch die IP oder den DNS-Namen ersetzen, unter der Windows den Pi
-erreicht. Ohne `--host` verweigert `init-tls` die Erzeugung.
-`init-tls` nur einmal ausführen. Bereits vorhandene Schlüssel werden nicht
-überschrieben. Wenn `cert.pem` und `key.pem` bereits unter
-`var/workbench/tls/` vorhanden sind, kannst du direkt
-`./.venv/bin/dispread serve --host <adresse> --port 8081` starten.
-
-Mit diesem Startbefehl ist die Werkbank unter der zuvor vom Nutzer
-eingestellten internen Adresse und Port 8081 erreichbar:
-
-```text
-https://100.122.154.35:8081
-```
-
-Auf diesem Pi belegt MEhub den Port 8080, deshalb `--port 8081`.
-Dafür `https://100.122.154.35:8081/live` öffnen.
-
-**Es ist jetzt HTTPS, nicht mehr HTTP.** Alten Vorschauprozess vorher mit
-`Ctrl+C` beenden. Der kompatible Einstieg bleibt:
-
-```bash
-./.venv/bin/python examples/17_camera_display_preview.py --port 8081
-```
-
-Die gesamte Oberfläche verlangt das normale Linux-/SSH-Passwort von
-`me-systeme`, nicht das separate root-Passwort. Passwörter werden weder
-protokolliert noch gespeichert. Nach acht Stunden ist eine erneute Anmeldung
-nötig. Fünf Anmeldeversuche pro Minute und Client sind möglich.
+`init-tls` beim ersten Start ausführen. Gibt es bereits `cert.pem` und
+`key.pem` unter `var/workbench/tls/`, zuerst prüfen, ob das Zertifikat zur
+Adresse passt. Danach `https://pi-neu.local:8081/live` öffnen und das
+Linux-Passwort des Dienstkontos verwenden. Die Browseranmeldung gilt bis
+zu acht Stunden. Pro Client sind fünf Anmeldeversuche pro Minute möglich.
 
 ## Werkbank als Benutzerdienst {#werkbank-dienst}
 
-`scripts/werkbank-dienst.sh` hält den bisherigen `systemd-run --user`-Befehl im
-Repository fest. Host und Port sind bei jedem Aufruf Pflicht; der Unitname ist
-`dispread-werkbank-bruecke`. Die Einrichtung auf einem neuen Pi erfolgt im
-Projektverzeichnis in dieser Reihenfolge (Platzhalter ersetzen):
+Bei einer Release-Installation verwaltet `picam` die Unit
+`picam-werkbank.service`. Im Entwicklungscheckout startet
+`scripts/werkbank-dienst.sh` die transiente Unit `dispread-werkbank-bruecke`
+mit `systemd-run --user`. Host und Port sind bei jedem Aufruf Pflicht. Eine
+neue Entwicklungsinstanz mit Brücke im Projektverzeichnis so vorbereiten
+(Adresse und Port beim ersten Aufruf anpassen):
 
 ```bash
-./.venv/bin/dispread bridge identity --provision
-./.venv/bin/dispread init-tls --host <adresse>
-scripts/werkbank-dienst.sh start --host <adresse> --port <port>
-./.venv/bin/dispread bridge export-profile --name 'Dispread Pi' --endpoint https://<adresse>:<port>/bridge/v2 --output profil.json --pair
+host=pi-neu.local
+port=8081
+bash scripts/install-workbench.sh
+./.venv/bin/dispread bridge identity --provision --host "$host"
+scripts/werkbank-dienst.sh start --host "$host" --port "$port"
 ```
 
-Die Paketliste steht in `packaging/apt-packages.txt`; der
-[Installer](../dependencies.md#pi-werkbank-installieren) meldet noch fehlende
-Gruppen-/Boot-Einrichtung. Vorlagen und gültige Timing-Kalibrierung sind separat
-bereitzustellen. Das Kopplungsangebot im exportierten Profil gilt fünf Minuten.
+Das Entwicklungsskript meldet fehlende Gruppen- oder Boot-Einstellungen.
+Vorlagen und gültige Timing-Kalibrierung sind separat bereitzustellen. Das
+Profil für die [Windows-Brücke](../GSVMULTI_PROTOCOL.md#windows-bruecke)
+wird in der laufenden Werkbank heruntergeladen.
 
-**Zwei bestehende Zertifikatswege:** Der Brückendienst lädt das gepinnte
-Identitätszertifikat aus `--bridge-directory`; `--cert`/`--key` aus dem klassischen
-Browserbetrieb werden dabei nicht verwendet. Dieses Identitätszertifikat trägt
-eine Pi-URI, keine IP-/DNS-SANs. `init-tls --host` erstellt das separate
-Browserzertifikat für `serve` ohne `--bridge-directory`. Es behebt deshalb keine
-Namenswarnung des Browsers am Brückendienst. Die Windows-Brücken-App prüft dessen
-Identität über das exportierte Profil. Eine Zusammenführung oder Erneuerung
-dieser Zertifikatswege ist nicht Teil von P0a; vorhandene Identitäten bleiben
-unverändert.
+Mit Brücke verwendet der HTTPS-Listener das Identitätszertifikat aus
+`--bridge-directory`. Bei der Erstprovisionierung setzt `--host` die DNS-
+oder IP-Adresse ins Zertifikat. Bei vorhandener Identität wird das bestehende
+Zertifikat geladen. Für `serve` ohne Brücke gilt das Zertifikat aus
+`init-tls`. Die Windows-Brücke prüft den Fingerabdruck aus `pi.dispread`.
 
 ```bash
-scripts/werkbank-dienst.sh status --host <adresse> --port <port>
-scripts/werkbank-dienst.sh logs --host <adresse> --port <port>
-scripts/werkbank-dienst.sh stop --host <adresse> --port <port>
-scripts/werkbank-dienst.sh restart --host <adresse> --port <port>
+scripts/werkbank-dienst.sh status --host "$host" --port "$port"
+scripts/werkbank-dienst.sh logs --host "$host" --port "$port"
+scripts/werkbank-dienst.sh stop --host "$host" --port "$port"
+scripts/werkbank-dienst.sh restart --host "$host" --port "$port"
 ```
 
 `logs` folgt dem Journal; `Ctrl+C` beendet nur die Anzeige. `stop` und `restart`
@@ -124,50 +110,43 @@ die Repo-Wurzel; der Endpunkt ist sonst `https://<host>:<port>/bridge/v2`.
 IPv6 beim Host ohne Klammern angeben; das Skript setzt sie in URLs selbst.
 Bei einer bereits anders gestarteten Unit unbedingt deren tatsächlichen
 Socket und Pfade angeben. Der normale CLI-Standardsocket bleibt unverändert.
-Ein Wechsel des Installationsortes oder des allgemeinen Pfadmodells ist offen
-([Installer-Spec L6](../superpowers/specs/2026-11-13-installer-tui-design.md)).
+Die [Installationsarten für Releases](../INSTALLER.md#drei-installationsarten)
+haben eigene Code-, Daten- und Laufzeitpfade.
 
 ## Live-Seite `/live`
 
-Stand 2026-10-21: gebaut; Einrichtung und mehrere Bedienerläufe mit
-serieller Referenz sind dokumentiert. Eine allgemeine Live-Freigabe folgt
-daraus nicht. Der beendete Werteplan-Versuch zeigt bei großen Wertwechseln
-`tracking_lost:low_score` und später selbstständige Erholung. Bei Faktor 2
-und 5 fehlt VALID in stabilen Referenzfenstern; die Rückstellung ist geprüft.
-Eine unabhängige Ursachenabsicherung steht aus
-([Auswertung](../VALIDATION.md#messpfad-live-werteplan-2026-10-21),
-[OQ-26](../open-questions.md#oq-26)).
-Im Projektverzeichnis starten:
+Die Werkbank richtet die StreamCam ein, prüft die Aufstellung und startet
+nach namentlicher Bestätigung einen Messlauf. Die Einrichtung und der Lauf
+sind ohne angeschlossenen RS232-Adapter möglich. Eine gültige
+[Timing-Kalibrierung](../TIMING.md) und die passenden Lesevorlagen
+werden für einen Messlauf benötigt.
 
-```bash
-./.venv/bin/dispread serve --port 8081
-```
+Die Startwege stehen unter [Start](#start) und
+[Werkbank als Benutzerdienst](#werkbank-dienst). Beim Start aus einem
+Git-Worktree `PYTHONPATH=src` setzen, damit seine Quellen verwendet werden.
 
-Beim Start aus einem Git-Worktree `PYTHONPATH=src` vor den Befehl setzen,
-damit dessen Quellen statt eines anderen editierbar installierten Checkouts
-geladen werden.
-
-`https://<host>:8081/live` öffnen. Ohne Anmeldung führt die Seite zu
-`/login?next=/live`; nach Anmeldung mit dem Linux-Passwort von `me-systeme`
-geht es zurück auf `/live`. API-Aufrufe bleiben ohne Anmeldung bei 401.
+Die beim Start oder in `picam` angezeigte Werkbank-Adresse mit `/live` öffnen.
+Ohne Anmeldung führt die Seite zu `/login?next=/live`; nach Anmeldung mit
+dem Linux-Passwort des konfigurierten Bedienkontos geht es zurück auf `/live`.
+API-Aufrufe bleiben ohne Anmeldung bei 401.
 `CameraOwner` hält die StreamCam für die gesamte Serverlaufzeit; ein
 Harvest-Skript erhält währenddessen „belegt“. Ein Laufstopp gibt die
 Kamera nicht frei, damit die Vorschau weiterlaufen kann.
 
 ### Einrichten, prüfen und bestätigen
 
-1. StreamCam an USB3, GSV-2AS seriell angeschlossen, Kamera senkrecht auf
-   Displaymitte stellen. Reflexionen vermeiden. Vorlagen und gültige
-   Timing-Kalibrierung müssen vorhanden sein; fehlende oder veränderte
-   Dateien sperren den Laufstart.
-2. Zellentext leer lassen, um ihn seriell vom GSV-2AS zu lesen. Alternativ
-   acht Zeichen für Vorzeichen und Zahlenzellen eingeben, etwa
-   `+0.60972`; die neunte, leere Zelle wird ergänzt. Neun Zeichen mit
-   abschließendem Leerzeichen sind ebenfalls zulässig. Bei schwankenden
-   Zellen `?` verwenden. Es ist kein Textfeld für alle 16 Zellen.
-3. **Einrichtung starten**. Die Seite zeigt Schritt und vergangene
-   Sekunden: Fokus, Kamera, Standbilder, Vorschlag. Fokus per Bergsteigen,
-   acht Bilder je gemitteltem Standbild und bis zu drei Suchversuche;
+1. StreamCam an USB 3 anschließen und senkrecht auf die Displaymitte richten.
+   Anzeige und Rahmen gleichmäßig beleuchten, Reflexionen vermeiden. Vorlagen
+   und gültige Timing-Kalibrierung bereithalten.
+2. **Einrichtung starten**. Mit vorhandenem RS232-Adapter liest die Werkbank
+   den Zellentext vom GSV-2AS. Ohne Adapter fragt sie zuerst den aktuellen
+   Anzeigewert ab. Im Eingabefenster sind `+` und `mV/V` vorgegeben, ein
+   Komma wird zum Punkt. Schwankende Zellen lassen sich mit `?` markieren.
+   Gleiche die Vorschau mit dem Display ab. Das Fenster lässt sich an der
+   Titelleiste, mit `Alt` und Pfeiltasten oder über **Verschieben** versetzen.
+3. Die Seite zeigt Fokus, Kamera, Belichtung, Standbilder und Vorschlag.
+   Die Schärfesuche fährt die Fokuswerte von unten an. Je acht Bilder
+   werden zu einem Standbild gemittelt; es gibt bis zu drei Suchversuche.
    Stabilitätsprüfung in der Werkbank 15 s, Harvest-CLI weiterhin 30 s.
    Nach einem Abbruch bleiben Grund und Einrichtungshinweis sichtbar.
 4. Overlays und Prüfungen ansehen: Lage der Anzeige, Zellenraster,
@@ -177,6 +156,10 @@ Kamera nicht frei, damit die Vorschau weiterlaufen kann.
 5. Namen eintragen, „Einheit mV/V und Format geprüft“ abhaken und
    **Bestätigen** drücken. Erst diese namentliche Bestätigung speichert
    das Profil und die Bedienbestätigung (Konzept §4).
+
+**Neu einrichten** ist beim Vorschlag und nach der Bestätigung verfügbar.
+Das Verwerfen einer bestätigten Einrichtung braucht eine Rückfrage. Bilder
+und Prüfberichte der bisherigen Einrichtung bleiben im zugehörigen Ordner.
 
 Die Prüfung **Displayfehler** (`displayfehler`) sucht kleine helle und dunkle
 Glasstörungen ausschließlich in Zellen, die bei dieser Einrichtung leer sein
@@ -219,9 +202,15 @@ nicht aus, meldet **Nachführung: FEHLER** mit Grund und sperrt die Bestätigung
 **mehr Licht auf den Rahmen geben oder einen anderen Blickwinkel wählen
 und neu einrichten**. Die Person prüft und bestätigt weiterhin alle Bereiche;
 die Prüfung ist keine Garantie für spätere Beleuchtungsänderungen.
-Der Einzelbildfilter ist derzeit ein **nicht abgenommener Entwicklungskandidat**:
-Die Gegenläufe zeigen weiterhin vier verlorene Tracks und Fehlvorhersagen
-([Kalibrierung und Grenzen](../VALIDATION.md#r13-25-runde-3)).
+Zusätzlich prüft der Lauf-Tracker mit den regulären Grenzen, ob der gesamte
+Bereichssatz in jedem der acht Einzelbilder eine gemeinsame Lage ergibt.
+In dieser Probe bedeuten sieben oder acht bestandene Bilder **OK**, fünf
+oder sechs **WARNUNG**, höchstens vier **FEHLER**. Eine zusätzliche Warnung in
+**Belichtung** weist auf wenig Licht am Rahmen hin, wenn der Gain am
+Anschlag steht. Läufe mit schwacher Rahmenstruktur und weiter offenen
+Nachführverlusten sind für den 18.11. dokumentiert
+([Validierung](../VALIDATION.md#workbench-2026-11-18),
+[OQ-78](../open-questions.md#oq-78)).
 Auch bei frontalem Blick wird der dunkle Rahmen einbezogen, wenn seine Kontur plausibel erkannt wird. Für die Reserve müssen auf jeder Achsenseite genügend Bereiche deutlich außerhalb der Mittellinie liegen, auch nach dem Ausfall beliebiger zwei Bereiche; sonst neu ausrichten oder Bereiche ergänzen.
 Rahmenprofile von vor R13-11 müssen neu eingerichtet werden; der Laufstart lehnt ihre alte Prüfkonfiguration ab.
 Im Quellbild-Overlay sind die kleinen Rahmenbereiche magenta, ihre gesamten
@@ -301,33 +290,35 @@ seitdem gibt es die Bedienerläufe vom 2026-10-21. Die Einrichtungen vom
 
 ### Schwankende letzte Ziffer
 
-Das Zellentextfeld am besten leer lassen: Dann liest die Werkbank den
-Referenztext vom GSV-2AS vor und nach jedem Standbild. Ändert er sich
+Mit serieller Referenz liest die Werkbank den Zellentext vom GSV-2AS vor
+und nach jedem Standbild. Ändert er sich
 während der Aufnahme, wiederholt sie diese bis zu fünfmal; bleibt die
 Anzeige unruhig, maskiert sie die wechselnden Zellen mit `?`. Bei manueller
-Eingabe schwankende Ziffern selbst mit `?` markieren, etwa `+0.4678?`;
-acht Zeichen werden um die leere neunte Zelle ergänzt. Passt der Text nur
-zum ersten Standbild, weist die Einrichtung gezielt darauf hin.
+Eingabe kannst du schwankende Zellen selbst markieren, etwa `+0.4678?`.
 
-Gegenlesen bedeutet jetzt: Alle unmaskierten Zellen müssen in jedem
-Standbild lesbar sein und mit dessen Referenztext übereinstimmen,
-darunter mindestens fünf der sieben Zahlenzellen. Maskierte Zellen
-bleiben beim Vergleich außen vor; Belichtungs-, Kontrast- und
-Leerzellenfehler bleiben wirksam. Ein gelesenes Zeichen, das dem
-Referenztext widerspricht, ist **FEHLER** und sperrt Bestätigung und Lauf.
-Fehlt Lesbarkeit ohne Widerspruch, lautet das Urteil **WARNUNG**;
-der normale Lauf bleibt gesperrt. Der Referenztext korrigiert niemals
-die Messwerte des Lesers.
+Beim Gegenlesen müssen die unmaskierten Zellen in jedem Standbild lesbar
+sein und mit dessen Vergleichstext übereinstimmen. Mindestens fünf der
+sieben Zahlenzellen müssen vergleichbar sein. Bei manuellem, unmaskiertem
+Wert kann eine vollständig lesbare Anzeige um genau eine Einheit der letzten
+Stelle abweichen, auch bei Übertrag, etwa `0.4679` zu `0.4680`. Der
+Dezimalpunkt muss an derselben Stelle stehen und die Standbilder dürfen
+untereinander höchstens um eine Einheit der letzten Stelle abweichen.
+Die Werkbank nennt die Abweichung in den Prüfungen und in der Bestätigung.
+Trifft keines der lesbaren Standbilder die Eingabe genau, ist eine
+Kenntnisnahme der Warnung erforderlich. Die Rasterprüfung verwendet den
+eingegebenen Wert und kann einen Übertrag über mehrere Stellen ablehnen.
+Andere Widersprüche ergeben **FEHLER**. Der Vergleichstext dient der
+Einrichtungsprüfung, spätere Messwerte kommen aus dem Leser.
 
 ### Lauf gesperrt / Testlauf
 
-„Lauf gesperrt“ bedeutet: Der Leser konnte die Einrichtungsbilder beim
-Gegenlesen nicht erfolgreich vergleichen oder das Gegenlesen fehlt. Bei
-**WARNUNG** ist Bestätigen weiter möglich, ein normaler Lauf bleibt gesperrt.
-Ein Widerspruch zur Referenz ist **FEHLER** und sperrt auch die Bestätigung.
-Kamera senkrecht auf die Displaymitte ausrichten und neu einrichten; das Zellentextfeld dabei leer
-lassen, damit der Text vom GSV-2AS kommt. Andere Warnungen, etwa zu Raster
-oder Kanten, werden wie bisher bei der Bestätigung quittiert.
+„Lauf gesperrt“ erscheint, wenn das Gegenlesen fehlt oder weder mit der
+Standardtoleranz noch mit einer geprüften angepassten Toleranz gelingt.
+Bei **WARNUNG** kann die Einrichtung nach Kenntnisnahme bestätigt werden.
+Ein Widerspruch zum Vergleichstext ergibt **FEHLER** und sperrt auch die
+Bestätigung. Richte die Kamera senkrecht aus, verbessere das Licht und
+starte die Einrichtung erneut. Warnungen zu Raster oder Kanten stehen
+gesondert in den Prüfungen.
 
 Unter „Testmodus (nur zu Testzwecken)“ lässt sich die Lesesperre ausdrücklich
 übergehen. Haken setzen und den zusätzlichen Dialog bestätigen. Der Testlauf
@@ -350,7 +341,8 @@ auditierten, unterdrückten Freigaben. Die einzelnen Records in `records.jsonl`
 tragen keine eigene Testmarkierung: Ein Laufordner mit `TESTLAUF.json` wird nicht geerntet
 und nicht ausgewertet wie ein regulärer Lauf. Für einen regulären Lauf neu und
 erfolgreich einrichten.
-Historische Testläufe mit `status=valid` bleiben von Messnachweisen ausgeschlossen.
+Im Testlauf ist die externe Ausgabe gesperrt. Historische Testläufe mit
+`status=valid` bleiben von Messnachweisen ausgeschlossen.
 
 ### Lauf und Wertstatus
 
@@ -485,9 +477,32 @@ verwenden Fakes.
 
 **Lauf stoppen** beendet den Lauf, die Kamera läuft für Vorschau weiter.
 
+### GSVmulti-Ausgabe
+
+Wähle beim Laufstart **Aus**, **UART direkt**, **UART über Brücke** oder
+**Netzwerk über Brücke**. Bei den Brückenwegen führt **Brücke einrichten…**
+zum passenden Kopplungsablauf. Der Ausgang für die beiden UART-Wege ist in
+der Werkbank-Instanz festgelegt. **UART direkt** verwendet standardmäßig
+115 200 Baud; die Verbindung Pi ↔ Windows-Brücke verwendet 460 800 Baud.
+Die COM-Einstellungen in GSVmulti gehören zur Empfängerseite.
+([Anschluss und Nachweise](../GSVMULTI_PROTOCOL.md#stand-das-format-ist-unbekannt),
+[Portzuordnung am Pi](../HARDWARE_PROFILE.md#pi-5-uarts-an-der-40-poligen-stiftleiste)).
+
+Vorgabe ist der **Vierkanal-Takt**, einstellbar auf 1 bis 10 Hz. Stelle in
+GSVmulti dieselbe Frequenz ein und aktiviere **Record Hidden Channels**.
+Wähle im Recorder die Kanäle der neuen Session. Bei Gültigkeit 0 hält
+Kanal 1 den letzten gültigen Wert dieses Laufs; davor enthält er
+`99999999.0`. Werte nur Zeilen mit Gültigkeit 1 als Messwerte aus. Der
+Zeitkanal ist vorläufig. Bei **Einkanal** werden ungültige Werte ausgelassen;
+GSVmulti kann dadurch den alten Wert weiter anzeigen und Lücken fehlen in
+seiner Aufzeichnung. Bei einer ausgefallenen Verbindung läuft das lokale
+Audit weiter. Eine COM-Quittung bestätigt die Übergabe an den Port.
+
 ### Referenzaufzeichnung und Abgleich
 
-Vor **Lauf starten** ist „Referenz vom GSV-2AS mitschreiben“ eingeschaltet.
+Vor **Lauf starten** folgt die Vorgabe für „Referenz vom GSV-2AS
+mitschreiben“ dem erkannten RS232-Port. Ohne Port ist die Option
+standardmäßig aus und der Werteplan gesperrt.
 Der Lauf hält den Port nur während der Aufzeichnung. Fehlt das Gerät oder
 antwortet es innerhalb von zwei Sekunden nicht mit lesbaren Telegrammen,
 startet die Bildlesung **ohne Referenz**; Seite und `session.json` nennen den
@@ -606,8 +621,7 @@ Der Freigabehinweis bleibt sichtbar:
 
 > Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — andere Lichtquellen und Geräte nicht geprüft.
 
-Es gibt noch keine serielle Ausgabe an GSVmulti ([OQ-07](../open-questions.md#oq-07)).
-Die Bedienerläufe vom 2026-10-21 liefern erste Trackingbefunde bei
+Die Bedienerläufe vom 2026-10-21 liefern frühe Trackingbefunde bei
 Wertwechseln ([Validierung](../VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21)).
 Im inzwischen beendeten strengen Werteplan-Versuch wurde nach dem Wechsel auf
 Faktor 2 dauerhaft `tracking_lost:low_score` beobachtet; bei Faktor 0,5
@@ -784,15 +798,18 @@ Leser kann Laufstopp blockieren und einen Serverneustart erfordern.
 
 ## Zertifikat auf Windows
 
-Ein Firmenzertifikat kann über `--cert` und `--key` verwendet werden. Für das
-lokal erzeugte Zertifikat:
+Verwende das öffentliche Zertifikat, das die Werkbank an der gewählten
+HTTPS-Adresse tatsächlich ausliefert. Beim Standard-Systemdienst exportiert
+es der Installer nach `/var/lib/picam/workbench/tls/cert.pem`. Bei abweichenden
+Pfaden steht der Ort am Ende der Installation.
 
-1. Nur `var/workbench/tls/cert.pem` über deine bekannte SSH-Verbindung nach
-   Windows kopieren. **Den privaten Schlüssel `key.pem` auf dem Pi lassen.**
-2. Fingerabdruck auf dem Pi mit dem bei `init-tls` ausgegebenen Wert vergleichen:
+1. Die öffentliche Zertifikatdatei über die bekannte SSH-Verbindung nach
+   Windows kopieren. Private Schlüssel bleiben auf dem Pi.
+2. Den Fingerabdruck mit der Ausgabe des Installers vergleichen. Beim
+   Standardsystemdienst auf dem Pi so anzeigen:
 
    ```bash
-   openssl x509 -in var/workbench/tls/cert.pem -noout -fingerprint -sha256
+   openssl x509 -in /var/lib/picam/workbench/tls/cert.pem -noout -fingerprint -sha256
    ```
 
 3. Die Zertifikatdatei gegebenenfalls in `picam.crt` umbenennen, öffnen und für
@@ -800,21 +817,21 @@ lokal erzeugte Zertifikat:
    (bei verwalteten Geräten nach Firmenvorgabe durch die IT).
 4. Erst danach über die zum Zertifikat passende Adresse anmelden.
 
-`init-tls --host ADRESSE` nimmt die explizite Adresse sowie localhost/127.0.0.1
-in das Zertifikat auf; die interne IP wird nicht automatisch ermittelt.
-SAN-Adressen und Ablaufdatum des vorhandenen Browserzertifikats zeigt:
+Im Entwicklungscheckout verwendet ein Start ohne Brücke üblicherweise
+`var/workbench/tls/cert.pem`. `init-tls --host ADRESSE` nimmt die explizite
+Adresse sowie localhost/127.0.0.1 ins Zertifikat auf. `init-tls --show`
+zeigt die SAN-Adressen und das Ablaufdatum mit Zeitbasis `UTC`. Beim Start
+mit `scripts/werkbank-dienst.sh` das tatsächlich verwendete
+Brückenzertifikat separat exportieren:
 
 ```bash
-./.venv/bin/dispread init-tls --show
-./.venv/bin/dispread init-tls --directory <zertifikatverzeichnis> --show
+./.venv/bin/dispread bridge identity --export-certificate ./pi-cert.pem
 ```
 
-Die Ausgabe ist JSON mit `san`, `not_after_utc` und Zeitbasis `UTC`; sie benötigt
-keinen privaten Schlüssel und ändert keine Dateien. Die Laufzeit beträgt
-weiterhin 365 Tage. Eine automatische Erneuerung oder Warnung unter 30 Tagen
-ist noch nicht enthalten. Für eine andere Adresse `init-tls --host ADRESSE`
-in einem neuen Zertifikatverzeichnis verwenden. SSH-Tunnel bleiben mit
-`serve --host 127.0.0.1` möglich, ebenfalls mit HTTPS und Anmeldung.
+Das Zertifikat einer installierten Werkbank kann über den Tab Zertifikat
+in `picam` [erneuert werden](../INSTALLER.md#zertifikat-erneuern). Danach
+müssen Browser dem neuen Zertifikat vertrauen. Bei der Windows-Brücke
+das neue `pi.dispread` importieren und erneut koppeln.
 
 ## Oberfläche: Kamera und setup-Tabelle (alte Seite)
 
@@ -1299,13 +1316,18 @@ benachbarten Zellen hin, etwa durch den Kameraschatten. Entferne den Schatten
 oder schatte das ganze Display gleichmäßig ab und richte neu ein. Der Hinweis
 allein ändert das Urteil des Gegenlesens nicht.
 
-Scheitert nur die strikte Zellschwelle, kann die Einrichtung mit einem seriell
-vom GSV-2AS erfassten Referenzwert eine **angepasste Toleranz** anbieten. Sie
-berechnet den Faktor aus beiden Standbildern und liest beide erneut gegen.
-Manuell eingegebener Zellentext reicht hierfür nicht aus. Wähle den Haken
-„Angepasste Toleranz ×… verwenden“ ausdrücklich und bestätige auch die WARNUNG.
-Ohne Auswahl bleibt die Lesesperre bestehen; ein Testlauf ist weiterhin separat
-möglich.
+Scheitert nur die strikte Zellschwelle, kann die Einrichtung eine
+**angepasste Toleranz** anbieten. Sie berechnet den Faktor aus den
+Standbildern und vergleicht deren Lesung erneut. Bei manuell eingegebenem
+Wert verlangt sie zusätzlich, dass die Anzeige in den vergleichbaren
+Zellen unverändert bleibt. Die dokumentierte Ausnahme für das Schwanken
+um eine Einheit der letzten Stelle gilt auch hier.
+
+Wähle im Bestätigungsdialog **Standardtoleranz** oder **Angepasste Toleranz ×…**
+und bestätige eine angezeigte WARNUNG. Gelingt das Gegenlesen nur angepasst,
+ist ein Lauf mit Standardtoleranz weiterhin möglich. Die Werkbank warnt dann
+vor voraussichtlich vielen unlesbaren Werten. Die angepasste Toleranz erhöht
+das Risiko von Fehllesungen.
 
 Die Gegenprobe belegt nur die Übereinstimmung in dieser Aufstellung und ist
 **keine Validierung** gegen eine Referenzaufzeichnung. Die Referenz korrigiert
@@ -1315,8 +1337,7 @@ VALID den Detailtext „erweiterte Toleranz ×… – nicht validiert“.
 `confirmation.json` und `session.json` halten den Faktor als `reader_tolerance`
 fest; `summary.tolerance_frames` zählt vom Gate als gültig bewertete
 Datensätze, bei denen mindestens eine Zelle die ursprüngliche
-Vorlagenschwelle überschritt. Im Testlauf zählt diese Diagnose anhand der
-Gate-Entscheidung vor der Unterdrückung weiter; sie ist keine Wertfreigabe.
+Vorlagenschwelle überschritt.
 
 ## Prüfstand dieser Implementierung
 
@@ -1352,7 +1373,8 @@ Dieser Prototyp folgt nicht dem Kapitelraster aus der
 [Lernpfad-Übersicht](README.md) (kein `Vertrag`, keine `Fallen`-Liste) — diese
 Liste prüft die gebauten Bedienwege und den noch offenen Lauf am Aufbau.
 
-* [ ] Ein fehlgeschlagenes Gegenlesen sperrt den normalen Lauf; ein
+* [ ] Ein fehlendes oder trotz angepasster Toleranz fehlgeschlagenes
+  Gegenlesen sperrt den normalen Lauf; ein
   ausdrücklich gestarteter Testlauf trägt Banner und `TESTLAUF.json`.
   Jede Gate-Freigabe wird vor dem Test-Audit als `UNREADABLE` mit
   `value=null` und `testlauf_keine_freigabe` protokolliert; die Seite zeigt

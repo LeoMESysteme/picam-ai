@@ -22,6 +22,14 @@ breitere Gerätevielfalt bleibt offen ([OQ-04](open-questions.md#oq-04)).
 Synthetische Daten ergänzen, sie zählen nie zum realen Testset.
 Technische Kamerastream-Tests belegen keine Erkennungszuverlässigkeit.
 
+**Stand 2026-11-26:** Die Betriebsabnahme vom 13.11. gilt für die Werkbank
+und drei Ausgabewege am geprüften GSV-2AS-Aufbau. Der
+[Windows-Prüfbericht UX2](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md)
+enthält die Übertragungsbelege und Störfälle. Die
+[Kontrollaufnahmen vom 18.11.](#workbench-2026-11-18) zeigen offene Grenzen
+der Rahmennachführung. Für die Systemabnahme auf Sperrgeräten und den
+72-Stunden-Störlauf stehen eigene Prüfungen in der [Roadmap](ROADMAP.md).
+
 ## Workbench am 18.11.2026 { #workbench-2026-11-18 }
 
 Audit aus `var/live/live-20261118T…Z/run-01`. Die Zeit bis zur

@@ -1,37 +1,40 @@
 # Installer für einen separaten Linux-Rechner
 
-Der neue Installer installiert ausschließlich in neue Zielverzeichnisse.
-Er übernimmt keine vorhandene Werkbank und ändert weder Bootdateien noch
-Benutzergruppen oder Tailscale. Mit Angaben auf der Befehlszeile zeigt er
-ohne `--apply` nur einen Plan und schreibt keine Zieldateien.
+Der Installer richtet eine Werkbank in neuen Zielverzeichnissen ein. Für
+eine vorhandene Release-Installation ist [`picam update`](#update-auf-die-neueste-version)
+der Wartungsweg. Bootdateien, Benutzergruppen und Tailscale bleiben bei der
+Installation unverändert. Ein Aufruf mit Angaben auf der Befehlszeile zeigt
+ohne `--apply` den Plan.
 
 ## Installation in einer Zeile
 
-Ab dem ersten veröffentlichten stabilen Release auf einem neuen Pi als
-normaler Nutzer in einem Terminal oder einer SSH-Sitzung mit TTY ausführen.
+Auf einem neuen Pi mit Debian/Raspberry Pi OS 13 als Bediener in einem
+Terminal oder einer SSH-Sitzung mit TTY ausführen.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash
 ```
 
-Der Bootstrap fragt die öffentliche GitHub-Release-API des Mirrors ab und
-holt Archiv und SHA-256-Datei über HTTPS. Nach Prüfung startet der geführte
-Installer und liest seine Eingaben vom Terminal. Bei SSH ohne TTY zuerst
-`ssh -t` verwenden. Für Skripte das geprüfte Archiv lokal bereitstellen und
+Der Bootstrap holt Archiv und SHA-256-Datei des
+[aktuellen stabilen Release](https://github.com/LeoMESysteme/picam-ai/releases/latest)
+vom öffentlichen GitHub-Mirror. Nach der Prüfung startet er den geführten
+Installer. Bei SSH ohne TTY zuerst `ssh -t` verwenden. Für Skripte das
+geprüfte Archiv lokal bereitstellen und
 [mit ausdrücklichen Angaben installieren](#installation-zuerst-planen).
 Eine bestimmte stabile Version lässt sich mit
-`| bash -s -- --version v1.1.0` am Ende des Befehls auswählen.
+`| bash -s -- --version v1.1.1` am Ende des Befehls auswählen.
 Vorausgesetzt sind Bash, curl, tar, sha256sum und Python 3. Der Installer
 fragt bei einer Systeminstallation selbst nach sudo.
 
 ## Geführt installieren
 
-Releasearchiv (`picam-<version>.tar.gz`) auf den neuen Pi kopieren,
-entpacken und im Terminal ohne weitere Angaben starten:
+Releasearchiv und Prüfsummendatei auf den neuen Pi kopieren. Im Terminal
+zuerst die Prüfsumme prüfen, danach entpacken und den Installer starten.
 
 ```bash
-tar xzf picam-1.0.0.tar.gz
-cd picam && ./install.sh
+sha256sum -c picam-1.1.1.tar.gz.sha256 && \
+  tar xzf picam-1.1.1.tar.gz && \
+  (cd picam && ./install.sh --guided --source ../picam-1.1.1.tar.gz)
 ```
 
 Der geführte Modus prüft zuerst System, Archiv und Debian-Pakete und fragt
@@ -44,9 +47,10 @@ fragt gesondert, ob der Dienst jetzt starten und beim Booten automatisch
 starten soll (`systemctl enable --now`); er wartet, bis `/live` antwortet.
 Ohne Terminal (Skript, Pipe) gelten weiter die Pflichtangaben unten.
 
-Liegt das Archiv neben `install.sh` oder im aktuellen Ordner, findet der
-Installer es selbst; sonst fragt er nach Pfad oder HTTPS-Adresse (dann mit
-getrennt erhaltenem SHA-256).
+Bei `./install.sh` ohne Argumente sucht der geführte Installer das Archiv
+im Skriptordner, dessen Elternordner und im aktuellen Ordner. Findet er
+keines, fragt er nach Pfad oder HTTPS-Adresse. Für eine HTTPS-Adresse
+fragt er zusätzlich nach dem getrennt erhaltenen SHA-256.
 
 Bedienung im Terminal: Auswahlen sind Menüs (`↑`/`↓` oder `j`/`k` wählen,
 `Enter` übernimmt, `Leertaste` schaltet Komponenten an/aus, Ziffern wählen
@@ -129,7 +133,7 @@ Dieselben Aufgaben gibt es als Einzelbefehle für SSH und Skripte:
 | `picam start` / `stop` / `restart` | Dienst; Stopp während eines Laufs: Exit 3 (nur `--force` überstimmt) |
 | `picam config [get KEY]` | Konfiguration lesen |
 | `picam config set KEY WERT` | `port`, `bridge_name`, `bridge_discovery`; geprüft, wirksam nach `picam restart` |
-| `picam update [--source ARCHIV]` / `--rollback` | neueste stabile oder ausdrücklich gewählte Version mit Rückweg |
+| `picam update [--source ARCHIV \| --rollback]` | neueste stabile oder ausdrücklich gewählte Version mit Rückweg |
 | `picam --version` | Version der Werkbank |
 | `picam aufraeumen [--tage N]` | alte Läufe auflisten, nach Rückfrage löschen |
 | `picam setup` | offene Einrichtungspunkte nacheinander, Befehle einzeln nach Rückfrage |
@@ -166,10 +170,10 @@ Zertifikat und in den Kopplungen steht.
   Code, Installer und geprüfter Leservorlage.
 - `serve --config`: ausdrückliche TOML-Konfiguration für die neue Instanz.
 
-Ein öffentlicher Downloadort ist noch nicht festgelegt. Deshalb enthalten
-die Beispiele lokale Archive beziehungsweise eine ausdrücklich vorgegebene
-HTTPS-Adresse. Ein funktionierender öffentlicher One-Liner wird damit nicht
-behauptet. Die Windows-Brücke bleibt eine eigene Installation.
+Der [öffentliche Release v1.1.1](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1)
+enthält picam 1.1.1 mit Prüfsummendatei und die separat zu installierende
+GSVmulti-Brücke 1.1.0 (Setup, portable EXE, Prüfsummen). Version 1.1.1
+korrigiert die Programmdateirechte beim Bootstrap und bei Updates.
 
 ## Systeme und Fallbacks
 
@@ -207,10 +211,10 @@ Im getrennten Entwicklungs-Checkout mit dessen eigener Python-Umgebung:
 
 ```bash
 ./.venv/bin/python scripts/build-release.py \
-  --output /absoluter/lieferordner/picam-1.1.0.tar.gz \
+  --output /absoluter/lieferordner/picam-1.1.1.tar.gz \
   --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json \
-  --release-id 1.1.0
-(cd /absoluter/lieferordner && sha256sum picam-1.1.0.tar.gz > picam-1.1.0.tar.gz.sha256)
+  --release-id 1.1.1
+(cd /absoluter/lieferordner && sha256sum picam-1.1.1.tar.gz > picam-1.1.1.tar.gz.sha256)
 ```
 
 Das Ausgabeverzeichnis muss bereits existieren und außerhalb des
@@ -252,10 +256,10 @@ CHANGELOG und tagge den sauberen Stand als `vX.Y.Z`. Der Tag muss auf
 `HEAD` zeigen und vor dem Upload auf dem GitHub-Mirror vorhanden sein.
 
 ```bash
-./.venv/bin/python scripts/publish-release.py v1.1.0 \
+./.venv/bin/python scripts/publish-release.py vX.Y.Z \
   --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json --dry-run
 
-./.venv/bin/python scripts/publish-release.py v1.1.0 \
+./.venv/bin/python scripts/publish-release.py vX.Y.Z \
   --templates /absoluter/pfad/templates-stufe2c-2026-09-30.json
 ```
 
@@ -263,8 +267,11 @@ Der Probelauf prüft den lokalen Stand und zeigt die Befehle an. Der echte
 Lauf baut lokal, prüft das Manifest auf Tag-Version, Commit und
 `"dirty": false` und lädt `picam-X.Y.Z.tar.gz` und
 `picam-X.Y.Z.tar.gz.sha256` mit der authentifizierten GitHub CLI (`gh`) hoch.
-`--notes-file DATEI` erlaubt eigene Release-Notes. Die Windows-Brücke erhält
-eine eigene Lieferung. Für einen Umzug des Mirrors die Einstellungen in
+`--notes-file DATEI` erlaubt eigene Release-Notes. Die Windows-Dateien
+werden separat gebaut und zum Release hinzugefügt. Auf Forgejo wurde
+v1.1.1 mit Pi-Archiv, Prüfsumme und Windows-Dateien von Hand angelegt.
+Die [Automatisierung des Forgejo-Uploads](../TODO.md#repo-aufraumen-2611)
+steht aus. Für einen Umzug des Mirrors die Einstellungen in
 `src/dispread/release_source.py` und im eigenständigen `get-picam.sh` gemeinsam
 ändern und die dokumentierten Aufrufe aktualisieren.
 
@@ -344,9 +351,11 @@ portablen Modus erlaubt. Pfade durch Symlinks werden nicht übernommen.
 
 ## Nach der Softwareinstallation
 
-Das Ergebnis nennt den Startbefehl. Ein Dienst wird nicht automatisch
-aktiviert oder gestartet. Auf dem neuen Zielrechner erst Konfiguration,
-Gruppe `video`/`dialout`, Kamera, UART und Kalibrierung prüfen.
+Das Ergebnis nennt den Startbefehl. In der geführten Installation startet
+der Dienst nach der gesonderten Bestätigung. Bei einem Aufruf mit `--apply`
+startet und aktiviert der Bediener den Dienst selbst. Auf dem neuen
+Zielrechner Konfiguration, Gruppen `video`/`dialout`, Kamera und UART prüfen
+und anschließend die Anlage kalibrieren.
 
 Für einen Systemdienst sind danach administrativ beispielsweise nötig:
 
@@ -446,11 +455,12 @@ Der aktive Versionslink wird zuletzt angelegt.
 mit `--apply` wird er ausgeführt: Dienst stoppen und abmelden, Unit-Datei,
 `picam`-Verknüpfung (nur wenn sie in die Installation zeigt) und
 `releases/`, `current`, `previous` entfernen. Daten, Konfiguration,
-Kopplungen und Kalibrierung bleiben, damit eine Neuinstallation sie
-wiederfindet; `--purge-data` löscht auch sie. me-fastfetch: entfernt
-werden nur unveränderte Dateien laut Manifest und der markierte
-`.bashrc`-Block (gesichert); das Paket `fastfetch` nur mit
-`--remove-fastfetch-package` und nur, wenn der Installer es eingespielt hat.
+Kopplungen und Kalibrierung bleiben als Bestand erhalten. Der Neuinstaller
+verlangt neue Zielpfade. `--purge-data` löscht auch Daten und Konfiguration.
+Die Deinstallation entfernt unveränderte me-fastfetch-Dateien laut
+Manifest und sichert die `.bashrc`, bevor sie den markierten Block entfernt.
+Hat der Installer das Paket `fastfetch` eingespielt, kann der Bediener es
+mit `--remove-fastfetch-package` ebenfalls entfernen.
 In der Konsole: Einstellungen, `x`. Zuerst zeigt ein Bildschirm den Plan des
 Installers: Karte „Wird entfernt“ (Dienst, Programmversionen, Befehl `picam`
 mit Pfaden), Karte „Bleibt erhalten“ (Daten, Einstellungen mit Pfaden),
@@ -509,12 +519,15 @@ danach den konfigurierten Ausgang und Referenzport; `picam kalibrieren
 
 ## Update auf die neueste Version
 
-**Umstieg von einem Releasekandidaten (`rc-…`, vor 1.1.0):** Ältere Stände kennen die Bezugsquelle noch nicht und melden „Bezugsquelle noch nicht festgelegt“. Einmal von Hand auf 1.1.0 aktualisieren, danach reicht `picam update`:
+**Umstieg von einem Releasekandidaten (`rc-…`, vor 1.1.0):** Wenn
+`picam update` „Bezugsquelle noch nicht festgelegt“ meldet, einmal das
+Archiv einer stabilen Version mit Prüfsumme laden und als Quelle angeben.
+Danach reicht `picam update`.
 
 ```bash
-gh release download v1.1.0 --repo LeoMESysteme/picam-ai   # oder im Browser von der Release-Seite
-sha256sum -c picam-1.1.0.tar.gz.sha256
-picam update --source picam-1.1.0.tar.gz --sha256 "$(cut -d' ' -f1 picam-1.1.0.tar.gz.sha256)"
+gh release download v1.1.1 --repo LeoMESysteme/picam-ai --pattern 'picam-1.1.1.tar.gz*'
+sha256sum -c picam-1.1.1.tar.gz.sha256 && \
+  picam update --source picam-1.1.1.tar.gz --sha256 "$(cut -d' ' -f1 picam-1.1.1.tar.gz.sha256)"
 ```
 
 Portable Installationen haben kein `picam update` (neu installieren).
@@ -524,10 +537,10 @@ Ein erneuter Installeraufruf aktualisiert nichts. Updates laufen über
 
 ```bash
 picam update                               # neueste stabile Version suchen und nach Bestätigung installieren
-picam update --source picam-1.1.0.tar.gz   # bestimmtes Archiv wählen
+picam update --source picam-1.1.1.tar.gz    # bestimmtes, bereits geprüftes Archiv wählen
 picam update --rollback                    # zurück auf die vorige Version
 picam update --check                       # aktive, vorige, installierte Versionen
-picam update --activate 1.1.0              # vorbereitete Version aktivieren
+picam update --activate 1.1.1              # vorbereitete Version aktivieren
 ```
 
 `picam update` liest den neuesten veröffentlichten stabilen Release des
@@ -544,10 +557,11 @@ atomar umschalten (die bisherige wird `previous`), Dienst neu starten und
 auf `/live` warten. Antwortet die neue Version nicht, schaltet picam auf
 die vorige zurück und startet sie neu. Daten, Konfiguration, Identität und
 Kalibrierung bleiben unverändert; die Konfiguration liest die Lesevorlage
-über `current`. In der Konsole: Tab Dienst, `u` bzw. `z`. Nach `u` (Archivpfad
-bzw. HTTPS-Adresse eintippen) zeigt ein Bildschirm Plan, Schrittliste mit
-Fortschritt, Protokoll und Ergebnis (alte → neue Version, Rückweg ausgelöst?);
-bei Erfolg fragt er, ob die Konsole mit der neuen Version neu starten soll
+über `current`. In der Konsole: Tab Dienst, `u` bzw. `z`. Nach `u` den Pfad
+zum geprüften lokalen Archiv eingeben. Für eine eigene HTTPS-Quelle im
+Terminal `picam update --source URL --sha256 HASH` verwenden. Die Konsole
+zeigt Plan, Fortschritt, Protokoll und Ergebnis (alte und neue Version,
+gegebenenfalls den Rückweg). Bei Erfolg bietet sie an, mit der neuen Version neu zu starten
 (sie wird dann durch `<prefix>/current/.venv/bin/picam` ersetzt). Ein
 sudo-Passwort wird nur dafür maskiert abgefragt. `z` schaltet gleich auf die
 vorige Version zurück.

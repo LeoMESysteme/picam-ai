@@ -307,7 +307,7 @@
 
   T.register("regeln-protokoll", (ctx) => {
     const { tl, A, layer, tour } = ctx;
-    const head = heading(layer, "Kein erfundenes Protokoll", "UserDefined ist gebaut. Die GSVmulti-Abnahme bleibt offen.");
+    const head = heading(layer, "Kein erfundenes Protokoll", "Reguläre Läufe verwenden den UserDefined-Zahlenimport.");
 
     const rec = T.group(layer, "regeln-rec");
     T.panel(rec, 40, 200, 170, 64, "t-panel t-flow-box");
@@ -318,7 +318,7 @@
     csvRect.setAttribute("style", PLAN_PANEL);
     T.label(csv, 318, 132, "UserDefinedFormatter", "t-mono t-strong");
     T.label(csv, 318, 156, "provisional = True", "t-mono t-mono-sm t-plan-text");
-    T.label(csv, 318, 180, "Zahlenformat als Prototyp gebaut", "t-small");
+    T.label(csv, 318, 180, "Dokumentiertes Zahlenformat", "t-small");
     const csvBadge = T.badge(csv, 580, 132, "vorläufig", "plan", 86);
     void csvBadge;
 
@@ -327,20 +327,20 @@
     gsvRect.setAttribute("style", BAD_PANEL);
     T.label(gsvFmt, 318, 296, "GsvAsciiFormatter", "t-mono t-strong");
     T.label(gsvFmt, 318, 320, "raise NotImplementedError", "t-mono t-mono-sm t-bad-text");
-    T.label(gsvFmt, 318, 344, "alte Meldung: Format unbekannt", "t-small");
+    T.label(gsvFmt, 318, 344, "Natives Format offen", "t-small");
     tour.docLink(gsvFmt, "docs/open-questions.html#oq-07", "OQ-07 öffnen", [616, 284]);
 
     const toCsv = T.svg("path", { d: "M210 220C250 220 260 150 296 150", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
     const toGsv = T.svg("path", { d: "M210 244C250 244 260 314 296 314", class: "t-bad-line", "marker-end": "url(#tour-arrow-bad)" }, layer);
 
     const target = T.group(layer, "regeln-target");
-    T.panel(target, 720, 200, 200, 64, "t-panel t-planned-box");
+    T.panel(target, 720, 200, 200, 64, "t-panel t-flow-box");
     T.label(target, 820, 228, "GSVmulti", "t-label t-strong", { "text-anchor": "middle" });
-    T.label(target, 820, 250, "DUT gesperrt", "t-small t-plan-text", { "text-anchor": "middle" });
+    T.label(target, 820, 250, "UserDefined-Eingang", "t-small", { "text-anchor": "middle" });
     tour.docLink(target, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Protokoll öffnen", [906, 214]);
-    const toTarget = T.svg("path", { d: "M630 314C680 314 680 250 716 242", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, layer);
+    const toTarget = T.svg("path", { d: "M630 150C680 150 680 222 716 222", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, layer);
     const stop = T.group(layer, "regeln-stop");
-    T.checkMark(stop, 676, 284, "bad");
+    T.checkMark(stop, 654, 314, "bad");
 
     const guess = T.group(layer, "regeln-guess");
     const guessRect = T.panel(guess, 40, 392, 520, 66, "t-panel");
@@ -391,7 +391,7 @@
       ["andere Lichtquellen", "Freigabe bisher nur für Raumlicht", null],
       ["Minuszeichen", "Gerät zeigt nie „−“, der Leser kennt nur „+“", null],
       ["Freigabeschwellen", "an realen Geräten validieren · OQ-14", "docs/open-questions.html#oq-14"],
-      ["GSVmulti-Anbindung", "DUT gesperrt · Abnahme offen", "docs/open-questions.html#oq-07"],
+      ["GSVmulti-Anbindung", "Ende-zu-Ende-Nachweis offen", "docs/GSVMULTI_PROTOCOL.html#abnahme"],
     ].map(([title, sub, href], i) => {
       const g = T.group(open, "regeln-open");
       const y = 146 + i * 48;

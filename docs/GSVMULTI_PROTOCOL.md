@@ -7,91 +7,62 @@ weg: entwickeln
 **Vorher lesen:** [Messpfad und Freigabe](uebersicht/messpfad.md#ausgabe-und-fehlersuche)
 und [Zeitstempel richtig lesen](uebersicht/zeitstempel.md#von-aufnahme-bis-gsvmulti).
 
-**Session-Format (2026-11-11):** Die Werkbank bestimmt pro Lauf Einkanal
-(`record`, ohne `format`) oder Vierkanal (`tick`, `format: '4ch'`). Der
-Windows-Export bietet `single` und `4ch`; allein `DEFAULT_SESSION_FORMAT` in
-`windows/bridge/src/dispread_bridge_app/session_templates.py` bestimmt die
-Vorgabe, bis zum Einspielen von U1 auf dem Pi weiterhin `single`. Die neue
-[Vierkanalvorlage mit mV/V](quellen/gsvmulti-versuche-2026-11-11/vorlage-4kanal-mvv.ucf)
-ist SHA-gepinnt und ersetzt Versuch 2b im Paket, dessen Beleg bleibt erhalten.
-Format und Sessionpfad werden je Weg/Port gespeichert; der Controller meldet
-zusätzlich das aus validierten Nachrichten erkannte Lauf-Format (unbekannt bei
-Laufwechsel/ohne Lauf), damit die Oberfläche Abweichungen anzeigen kann.
-Kanalzahl folgt der erzeugten Session, sonst der Vorgabe; „Record Hidden
-Channels“ bleibt bei Vierkanal erforderlich. Export und Abgleich sind keine
-GSVmulti-Empfangsabnahme.
+## Stand der Anbindung {#stand-das-format-ist-unbekannt}
 
-## Stand: Software-Prototyp gebaut, nicht freigegeben; Brücken-DUT-Ausgabe gesperrt {#stand-das-format-ist-unbekannt}
+Seit Version 1.0 kann ein regulärer Werkbank-Lauf über **UART direkt**,
+**UART über Brücke** oder **Netzwerk über Brücke** an GSVmulti ausgeben.
+Pro Lauf wird ein Weg oder **Aus** gewählt. Auf dem internen v2-Protokoll
+bleibt der Wert von `release` aus Kompatibilitätsgründen `test_unaccepted`.
+Die Bedienoberfläche verlangt die frühere „Testfreigabe“ nicht mehr.
+Ein Diagnose-Testlauf mit übergangener Lesesperre sperrt jede externe Ausgabe.
+Der [v2-Vertrag](BRIDGE_PROTOCOL_V2.md) beschreibt Kopplung, Lease und Quittungen.
 
-**Stand 2026-10-30:** Das bereitgestellte PDF samt Beispiel-ZIP reicht als Grundlage für einen
-**Transportprototyp**, noch nicht für eine freigegebene Messanbindung.
-GSVmulti PRO bietet mit `UserDefined` einen konfigurierbaren seriellen
-Zahlenimport. Ein Nachbau des GSV-2-/GSV-6-/GSV-8-Geräteprotokolls ist für
-diesen Weg nicht erforderlich. Die vorherige Aussage „das Eingangsformat
-ist vollständig unbekannt“ ist damit überholt
-([OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md#oq-07)).
-
-**Stand 2026-11-04:** UserDefined-Formatter, gemeinsame Windows-Brücke und
-Live-Konfiguration für Netzwerk oder UART sind als Software-Prototyp gebaut.
-Die damalige Workbench bot **Aus / UART / Netzwerk**. Pro Lauf war ein Weg gewählt.
-Ein erkannter Verbindungsabbruch unterbricht Kamera und lokales Audit nicht;
-die Brücke versucht die Verbindung erneut aufzubauen. Das ist noch kein
-Nachweis des Empfangs oder der Speicherung durch GSVmulti
-([OQ-07](open-questions.md#oq-07)).
-
-**Ausgabevertrag (Nutzerentscheidung 2026-11-06):** Pro Lauf gibt es genau
-einen Ausgabeweg: `off` = Aus, `serial` = P4-3 direkt, `uart` = UART über
-die Windows-Brücke oder `tcp` = Netzwerk über die Windows-Brücke.
-Bestehende `output`-Objekte ohne `transport`, aber mit `port`, wählen
-weiterhin `serial`. Testläufe erlauben keine externe Ausgabe; die
-Brückenwege bleiben für echte DUT-Werte bis zum Ungültig-/Altwertnachweis
-strukturell gesperrt. „UART direkt“ (P4-3) gibt weiter echte Werte aus, ist
-aber dauerhaft als „Prototyp – nicht am Windows-PC abgenommen, keine
-Messfreigabe“ gekennzeichnet und startet nur nach ausdrücklicher Bestätigung
-dieses Hinweises (`acknowledge_unaccepted`). Ungültige Werte werden dort
-ausgelassen; GSVmulti zeigt dann den letzten Wert unmarkiert weiter
-([OQ-06](open-questions.md#oq-06)).
-
-**Technischer Stand 2026-11-06, Arbeitszweig Windows-Brücke:** Der v2-Hub
-bindet jeden echten Lauf an eine frische ID, auch bei Ausgabe Aus/direkt.
-`tcp` wählt im Produkt den gekoppelten WSS-Weg am ausdrücklich eingerichteten
-HTTPS-Dienst; UART benötigt lokale Vorbereitung, Identitätsnachweis und
-transportgebundene Kopplung. Direkte Ausgabe und Brückenlistener teilen
-dieselbe Portbelegung. Ohne Hub wird die Brückenausgabe abgewiesen; rohe
-v1-Sockets bleiben benannten Demowerkzeugen vorbehalten. Dies ändert weder
-die folgenden historischen Windows-Belege noch die fehlende EXE-/Treiber-/
-Sessionabnahme. [V2-Vertrag](BRIDGE_PROTOCOL_V2.md),
-[Umsetzungsstand](status.md), [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
-
-**Echte DUT-Ausgabe über die Brücke bleibt strukturell gesperrt.** Der Pi beantwortet
-Brücken-Live-Abfragen ohne DUT-Zahlen; die Windows-Brücke lehnt nichtsynthetische
-Messdaten ab. Es gibt keinen Freigabeschalter in der Oberfläche. Erst ein
-belegter Umgang mit ungültigen Werten und Altwerten in den COM-Puffern
-ermöglicht einen weiteren Freigabeschritt. Lokale Live-Läufe bleiben möglich.
-[Arbeitsplan und Abnahme](superpowers/plans/2026-11-04-gsvmulti-anbindung.md).
-
-GSVmulti PRO bietet mit `UserDefined` einen konfigurierbaren Zahlenimport.
-Ein Nachbau des nativen GSV-Geräteprotokolls ist dafür nicht erforderlich.
-Der Nutzer meldet am 2026-11-04 **Windows 11 und GSVmulti 2.03**; Python
-3.15 x64 und der sichtbare Port COM3 wurden per PowerShell zurückgemeldet.
-Nach Aktivierung der PRO-Lizenz bestätigt der Nutzer `UserDefined` als
-verfügbar. Direkte UART-Demowerte und Einzelwertaufzeichnung sind inzwischen belegt;
-die gemeinsame Windows-Brücke und der Umgang mit ungültigen Zeiträumen
-bleiben zu prüfen. Das frühere
-PDF dokumentierte 2.01 Pro und beschreibt damit nicht die aktuelle Installation.
-Die Herstelleranleitung v2.6 ist ein Dokumentstand, kein Versionsnachweis.
-
-| Gebaut | Noch offen |
+| Laufweg | Datenstrecke |
 | --- | --- |
-| Einkanalige `UserDefinedFormatter` als `TelegramFormatter` für einen freigegebenen DUT-Wert pro Zeile, `provisional=True`; Brücken-Formatter erhält vorhandene Dezimalauflösung | Ungültig-/STALE-Verhalten in Anzeige, Datei und Kalibrierauswertung; ungültige Zeiträume und vollständige GSVmulti-Abnahme über die gemeinsame Brücke |
-| Eigenständiger Sender für endliche Demowerte mit festem Zahlenprofil und gemeinsame TCP-/UART-Brücke | Ursprünglicher Prüfauftrag: Annahme und Aufzeichnung in der im PDF dokumentierten 2.01-Pro-Installation. Spätere Windows-Python-/TCP-Demobelege für 2.03 Pro stehen unten; vollständige Abnahme bleibt offen. Portpaar COM5/COM6 inzwischen bidirektional geprüft. |
-| Serielle Ausgabe mit vorhandenem `SerialSink` an einen passenden COM-Transport; versionsgebundenes internes Brückenprotokoll mit Lauf-/Bildkennung und Invalidierungssperre | Port, Treiber, Pufferung, Wiederanlauf und Dauerbetrieb; NaN-/STALE-Verhalten, Puffernachlauf und Zeitachse in GSVmulti |
-| Opt-in-Ausgabe in `/live`, Live-Auswahl und Verbindungsstatus mit parallelem vollständigem JSONL- und Tx-Audit | Tatsächlicher Transport, UART-Kabel/Pinbelegung sowie Hardware- und Ende-zu-Ende-Abnahme am Windows-PC |
+| UART direkt | Pi-Datenport → 3,3-V-USB-UART-Adapter → GSVmulti. Standardmäßig 115 200 Baud, 8N1 |
+| UART über Brücke | Pi ↔ Windows-Brücke mit 460 800 Baud. Die Brücke schreibt auf die erste Seite des virtuellen COM-Paars, GSVmulti liest die Gegenseite |
+| Netzwerk über Brücke | Pi ↔ gekoppelte Windows-Brücke über WSS. Die Brücke schreibt auf das virtuelle COM-Paar |
+| Aus | Lokales Audit |
 
-**Die vollständige Messfreigabe bleibt offen.** P4-1 (Formatter) und P4-2
-(Demo-Sender) sind als Prototyp gebaut und mit pty/Fakes geprüft, **ungeprüft
-am Windows-PC**. P4-3 (Live-Anbindung) ist ebenfalls gebaut und lokal mit
-pty/Fakes geprüft, am Windows-PC ungeprüft; die Phase ist nicht abgenommen.
+Die Werkbank bietet standardmäßig **Vierkanal-Takt** (1–10 Hz, Vorgabe 10 Hz)
+an. Wähle in GSVmulti dieselbe Frequenz und das passende Session-Format.
+Die Windows-Brücke bietet Vierkanal und Einkanal zur Auswahl; ihre Vorgabe
+ist Vierkanal. Für **UART direkt** muss die GSVmulti-Session den COM-Port des
+physischen Adapters verwenden. **Record Hidden Channels** muss in GSVmulti
+für die Vierkanal-Aufzeichnung aktiv sein.
+
+| Kanal | Inhalt im Vierkanal-Takt |
+| --- | --- |
+| 1 | Zahlenwert in mV/V. Bei Gültigkeit 0 hält er den letzten gültigen Wert desselben Laufs. Davor steht der Platzhalter `99999999.0` |
+| 2 | Gültigkeit, 1 oder 0. Nur Zeilen mit 1 für Messwerte auswerten |
+| 3 | Fortlaufende Taktnummer |
+| 4 | Vorläufige Zeitangabe. Zeitbasis und Grenzen stehen in der [Zeitübersicht](uebersicht/zeitstempel.md#von-aufnahme-bis-gsvmulti) |
+
+Bei **Einkanal** werden ungültige Werte ausgelassen. Dadurch bleiben
+Aufzeichnungslücken in GSVmulti unmarkiert und die Anzeige kann den
+zuletzt empfangenen Wert halten. Der Zahlenimport `UserDefined` bleibt
+als `provisional` gekennzeichnet. Das native GSV-Geräteprotokoll ist
+weiterhin offen ([OQ-07](open-questions.md#oq-07)).
+
+Am 13.11. wurden Werkbank und Ausgabewege durch Herrn Kaulitz am konkreten
+Aufbau abgenommen. Der Netzwerk-Empfangstest C-07 belegt 600 lückenlose
+Vierkanal-Zeilen mit exakter Demo-Rampe in TDMS. Bei UART direkt hielt Kanal 1
+wie vorgesehen. Über UART und Brücke blieb der Takt trotz protokolliertem
+`uart_frame_invalid` lückenlos. Am 18.11. prüfte Leonhard die EXE der
+Gestaltungsrunde 3. Der reguläre Installationstest und der Update-Test
+der später veröffentlichten Brücke 1.1.0 auf den vorgesehenen
+Windows-Rechnern stehen aus.
+([UX2-Prüfbericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md),
+[Ausgabewege im Vergleich](quellen/ausgabewege-vergleich-2026-11-13.md),
+[Changelog](../CHANGELOG.md),
+[Release mit Brücke 1.1.0](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1)).
+
+Die vollständige Ende-zu-Ende-Prüfung von Ungültigbehandlung, Zeitachse,
+COM-Puffern und Kalibrierauswertung bleibt offen. Eine Quittung `written`
+belegt das Schreiben an den COM-Port. Erst die GSVmulti-Aufzeichnung zeigt,
+welche Werte das Programm gespeichert hat.
+([OQ-06](open-questions.md#oq-06), [OQ-47](open-questions.md#oq-47),
+[OQ-50](open-questions.md#oq-50), [OQ-51](open-questions.md#oq-51)).
 
 ## Windows-Brücke vorbereiten {#windows-bruecke}
 
@@ -105,8 +76,9 @@ Die kostenfreie Grundlage ist ein com0com-Portpaar. Nach Wechsel zur
 [Vovsoft-verlinkten Ausgabe](https://vovsoft.com/blog/how-to-sniff-serial-port-communication/)
 ist COM5↔COM6 auf dem Zielrechner bidirektional geprüft, SecureBoot und
 Speicherintegrität bleiben aktiv. [Beleg](VALIDATION.md#com0com-pair-ok-20261104).
-Die Brücke öffnet COM5, GSVmulti COM6. Windows-Python-Brücke und Empfang
-durch GSVmulti über dieses Paar sind noch nicht abgenommen.
+Im Beispiel öffnet die Brücke COM5 und GSVmulti COM6. Die späteren
+[Ausgabeversuche vom 13.11.](quellen/ausgabewege-vergleich-2026-11-13.md)
+dokumentieren den Betrieb mit Brücke.
 
 ### Virtuelles Portpaar: com0com oder SerialLoom {#vcom-wahl}
 
@@ -151,6 +123,17 @@ in GSVmulti ankommen; diese Prüfung steht mit SerialLoom noch aus. Die
 Paarprüfung der Brücke kennt bisher nur com0com und meldet bei SerialLoom
 „Ob beide Ports ein com0com-Paar bilden, kann die App noch nicht prüfen“ –
 das ist erwartet.
+
+Für einen regulären Lauf **Brücke einrichten…** in den Laufoptionen öffnen.
+Profil und Kopplungscode gelten für den gewählten Weg. In der Windows-Brücke
+den Ausgang des virtuellen Paars angeben und eine Session für dessen
+Gegenport erzeugen. Der Empfangstest belegt die Zahl der an COM übergebenen
+Werte. Die Zuordnung zur GSVmulti-Aufzeichnung erfolgt über die passende
+Session und Empfängerdatei.
+
+#### Frühere Kommandozeilen-Demoversuche
+
+Die nachfolgenden Befehle dokumentieren die eigenständigen Demowerkzeuge.
 
 1. Windows-/GSVmulti-Version und PRO-Funktion festhalten; den belegten
    Treiberstand samt Hash sichern. Vorhandenes Paar CNCA1=COM5/CNCB1=COM6
@@ -198,9 +181,9 @@ Dann auf Windows den passenden Brückeneingang wählen:
 .\.venv\Scripts\python.exe scripts/gsv-bridge.py --uart-port <USB-TTL-COM> --com-port COM20 --log bridge-uart.jsonl
 ```
 
-Im normalen Live-Lauf erscheint weiterhin die DUT-Ausgabesperre. Ein
-geöffneter COM-Port oder die Brückenbestätigung `written` beweist nur den
-Schreibvorgang zum Treiber, keine Übernahme durch GSVmulti. Für die
+Ein geöffneter COM-Port zeigt die Portbereitschaft. Die Brückenbestätigung
+`written` belegt den Schreibvorgang zum Treiber. Die Übernahme durch
+GSVmulti wird separat in der Aufnahme geprüft. Für die
 Zuordnung dienen Laufkennung und Bildnummer; Zeilennummern allein reichen
 nach einer Lücke nicht aus.
 
@@ -550,7 +533,7 @@ begrenzt noch geglättet werden; nicht darstellbare Werte werden abgelehnt.
 | --- | --- |
 | Wozu | Einen optisch gelesenen DUT-Wert über einen Windows-COM-Port übernehmen. |
 | Im Hintergrund | `Device Type = UserDefined`; `Value String / DEFINE`: `Has Character Prefix`, `%`, `Number of values = 1`, Textfilter aus; Position 1 öffnen. CRLF und Dezimalpunkt im Sender. |
-| Standard | Vorschlag für den ersten Transporttest: 115200 Baud, 8N1, kein Handshake; zunächst konstante Demowerte mit 10 Hz. Das ist noch keine vorhandene Live-Einstellung. |
+| Standard | Für den Einkanal-Transporttest: 115 200 Baud, 8N1, kein Handshake; zunächst konstante Demowerte mit 10 Hz. Den aktuellen Vierkanal-Standard beschreibt der [Überblick](#stand-das-format-ist-unbekannt). |
 | Ändern? | **Nur wenn** Geräteauflösung, Kanalbedarf oder Transport es verlangen; Profil und Windows-Session gemeinsam dokumentieren und erneut prüfen. |
 | Quelle | [ME v2.6, S. 118–121](https://www.me-systeme.de/produkte/software/gsvmulti/anleitungen/ba-gsvmulti-v2.6.pdf#page=118); eigenes einkanaliges Testprofil. |
 
@@ -653,8 +636,8 @@ Transportversuche mit Demodaten, keine Messfreigabe
 | USB-ACM-Gadget | Alternative nach Nachweis von Pi-Modell, Device-Port, OS und Windows-Treiber; kein automatisches Merkmal eines USB-Kabels. |
 
 Gewählt sind Netzwerk und UART als pro Lauf alternative Eingänge derselben
-eigenen Windows-Brücke mit com0com-Portpaar. Ihr Hardware-/Windows-Nachweis
-bleibt offen ([OQ-47](open-questions.md#oq-47)). `COM20`,
+eigenen Windows-Brücke mit virtuellem COM-Portpaar. Nachweise und offene
+Puffer-/Wiederanlaufprüfungen sind in [OQ-47](open-questions.md#oq-47) erfasst. `COM20`,
 `COM21`, IP und Port 5000 im PDF sind Beispiele, keine installierte
 Konfiguration. Raw TCP und RFC2217 sind verschiedene Protokolle.
 Eine pySerial-URL erzeugt keinen Windows-COM-Port. VSPE-Connector mit
@@ -666,9 +649,9 @@ unverschlüsselte Beispiel einen geschützten Transport wie VPN/SSH.
 ### Elektrische Ebene
 
 Das [Hardwareprofil](HARDWARE_PROFILE.md) dokumentiert für diesen Pi 5
-`/dev/ttyAMA0` als geplanten Ausgang; `/dev/serial0` zeigt dort auf den
-Debug-UART `ttyAMA10`. Die generische PDF-Anleitung für `/dev/serial0`
-nicht ungeprüft übernehmen oder vorhandene Overlays ersetzen.
+`/dev/ttyAMA0` als Standardausgang. Der Debug-UART ist `ttyAMA10`.
+Das Ziel von `/dev/serial0` kann je nach Pi abweichen. Deshalb den
+tatsächlichen Gerätenamen für die Instanz verwenden.
 GPIO-TTL darf nicht direkt an RS-232 angeschlossen werden.
 Ein 3,3-V-USB-UART am PC ist eine andere Lösung als ein USB-RS232-Adapter.
 [OQ-09](open-questions.md#oq-09) bleibt für Anschlusswahl und galvanische
@@ -701,7 +684,7 @@ gsv_bridge.py                Windows-Brücke und endliche Demowerte
 | Trennstelle | `TelegramFormatter` (`sink/protocol`) |
 | --- | --- |
 | Vertrag | `capabilities(self) -> FormatterCapabilities` als `@property`; <code>format(self, record: ValueRecord) -&gt; bytes &#124; None</code> liefert Telegrammbytes oder `None`. Fähigkeiten nennen Formatkennung, Zeitstempel, Invalid-Policies, Gerätekommandos, Kanalzahl und `provisional`. |
-| Darf geändert werden | `UserDefinedFormatter` aus `dispread.sink.protocol.userdefined` direkt importieren und gezielt an `SerialSink` übergeben; konkrete Formatter haben keine zentrale Registry. P4-3 bindet ihn über `LiveOutput` an den Live-Lebenszyklus an; API-Option `output`, Standard aus. Der neue `UserDefinedFormatter` erhält Dezimalauflösung und prüft Zahlenlexik/Wertübereinstimmung. Die gemeinsame Brücke verwendet ihn für Demodaten; die echte DUT-Ausgabe bleibt bis zur Windows-Abnahme gesperrt. [Beispiel 16](../examples/16_end_to_end_headless.py) zeigt weiterhin den getrennten alten seriellen Testpfad. |
+| Darf geändert werden | `UserDefinedFormatter` aus `dispread.sink.protocol.userdefined` direkt importieren und gezielt an `SerialSink` übergeben; konkrete Formatter haben keine zentrale Registry. P4-3 bindet ihn über `LiveOutput` an den Live-Lebenszyklus an; API-Option `output`, Standard aus. Der neue `UserDefinedFormatter` erhält Dezimalauflösung und prüft Zahlenlexik/Wertübereinstimmung. Einkanal-Läufe nutzen den entsprechenden UserDefined-Formatter; Vierkanal-Läufe formatieren den Takt im `TickFormatter`. [Beispiel 16](../examples/16_end_to_end_headless.py) zeigt weiterhin den getrennten alten seriellen Testpfad. |
 | Bleibt unverändert | Leser und Freigabe ohne Referenzparameter, Wert und Aufnahmezeit im `ValueRecord`, paralleles JSONL-Audit; `gsv_ascii.py` bleibt der werfende Platzhalter. Die neue Brücke ergänzt den vorhandenen Testpfad, ohne das native Geräteprotokoll zu erfinden. |
 | Tests | [Formatter und SerialSink am pty](../tests/test_userdefined_formatter.py), [Demo-Sender mit pty/Fakes](../tests/test_gsvmulti_demo_sender.py) [Live-Ausgabe mit pty/Fakes](../tests/test_live_output.py) und vorhandene [Gate-/Referenztests](../tests/test_gate_und_referenz.py), insbesondere `test_telegramme_erreichen_die_gegenstelle` und `test_ausgelassener_datensatz_wird_als_ausgelassen_belegt`; zusätzlich `test_gsv_transport.py`, `test_gsv_bridge.py` und `test_live_output.py`; Windows-Abnahme bleibt offen. |
 
@@ -722,7 +705,7 @@ Der einkanalige Brücken-Formatter (`user_defined.py`) deklariert einen Kanal un
 wenn ihre tatsächliche Wirkung belegt ist. Der Prototyp bleibt vorläufig;
 `provisional` und die Fähigkeiten gehören in jedes Runartefakt. Beispiel 16
 schreibt sie nach `report.json`; `Pipeline` erzeugt keinen allgemeinen
-Laufbericht. Der aktuelle `/live`-Pfad speichert nun die Fähigkeiten der optionalen Brücke in `session.json`; die Zahlenweitergabe bleibt gesperrt.
+Laufbericht. Der `/live`-Pfad speichert die Fähigkeiten der optionalen Brücke in `session.json`.
 
 Beide Formatter bleiben wegen unterschiedlicher Zahlenlexik und
 Konsistenzprüfung getrennt; ihre gemeinsamen gültigen Dezimalprofile
@@ -735,7 +718,7 @@ Referenzabgleich darf ihn nicht nachträglich korrigieren.
 
 ### Opt-in im Live-Lauf (P4-3)
 
-**Gebaut 2026-10-30, ungeprüft am Windows-PC, keine Messfreigabe.**
+**Einkanaliger Direktausgang (seit 2026-10-30).**
 `LiveService.start_run(output=None)` lässt die bisherige Ausgabe unverändert.
 Die API `POST /live/run/start` akzeptiert zum Beispiel (Port ist ein Platzhalter
 für einen bestätigten freien Ausgang, die Werkbank-CSRF-Absicherung gilt weiter):
@@ -752,8 +735,9 @@ also 19 Byte × 10 Bit (8N1) = 190 Bit. Bei 2400/4800 Baud dauert das
 sind es 19,79 ms. Nur belegte Baudraten ab 9600 sind zulässig. Längere
 Telegramme sperren den Live-Ausgang mit Fehler, bevor Bytes geschrieben werden.
 
-Referenzport `/dev/ttyUSB0`, Debugport `/dev/serial0` und auflösbare Aliasse
-sind geschützt. Zusätzlich wird über die USB-Eltern im sysfs die Kennung des
+Der konfigurierte Referenzport, der Debugport `/dev/ttyAMA10` und
+auflösbare Aliasse sind geschützt. `serial0` und `serial1` werden als
+mehrdeutige Konfigurationsnamen abgewiesen. Zusätzlich wird über die USB-Eltern im sysfs die Kennung des
 Referenzadapters PL2303 (`067b:2303`, [Hardwareprofil](HARDWARE_PROFILE.md))
 geprüft; damit bleibt er auch etwa als `/dev/ttyUSB1` gesperrt. Nur das
 API-Feld `allow_reference_adapter: true` (Standard `false`) erlaubt den
@@ -875,9 +859,10 @@ tatsächlicher Empfang bleiben Teil der Windows-Abnahme.
 
 ## Abnahme und nächste Schritte {#abnahme}
 
-**Prototypstatus:** P4-1/2 und P4-3 sind gebaut, ungeprüft am
-Windows-PC und nicht für Messungen freigegeben. pty/Fakes prüfen die lokale
-Software; sie belegen weder GSVmulti-Empfang noch elektrische Eignung.
+Die begrenzten Abnahmebelege vom 13.11. stehen im
+[Überblick](#stand-das-format-ist-unbekannt). Die folgenden Schritte
+strukturieren die vollständige Prüfung einschließlich Empfang und Ausfällen
+am jeweiligen Zielaufbau.
 
 1. **Profil und Transport festlegen:** tatsächliche GSVmulti-Version/PRO,
    Ein-Wert-Definition, Einheit, Auflösung, Windows-Port, Treiberversion,
@@ -895,8 +880,9 @@ Software; sie belegen weder GSVmulti-Empfang noch elektrische Eignung.
    (die neue Brücke verwirft sie nicht absichtlich). Ablehnungen, Pause, Burst, Streamstillstand, Kabel-/Netzabbruch
    und Neustarts getrennt auslösen. Keine ausgedachten Grenzzeiten als
    erfüllt markieren; Kriterien vorher mit OQ-02/OQ-06 festlegen.
-4. **Gebauten Live-Pfad am Ziel prüfen:** nur freigegebene `ValueRecord`s, keine
-   Referenzkorrektur, Glättung oder Altwertwiederholung; JSONL und
+4. **Gebauten Live-Pfad am Ziel prüfen:** freigegebene `ValueRecord`s mit dem
+   empfangenen Zahlenkanal vergleichen und Gültigkeit 0 bei gehaltenem
+   Wert prüfen; JSONL und
    Übertragungsbelege behalten. Testlaufdaten dürfen keine Messfreigabe
    erhalten ([OQ-44](open-questions.md#oq-44)).
 5. **Ende-zu-Ende-Nachweis:** Anzeige, Datei und Kalibrierauswertung bei
@@ -973,6 +959,10 @@ Zahlenstrom in der tatsächlichen Windows-Installation prüfen.
 
 
 ## Direkter UART-Demoempfang belegt, Einzelwertprüfung offen
+
+Die folgenden Versuche dokumentieren den Entwicklungsstand vor der
+Betriebsabnahme vom 13.11. Den heutigen Ausgabestand beschreibt der
+[Überblick](#stand-das-format-ist-unbekannt).
 
 Am 2026-11-04 zeigt GSVmulti 2.03 Pro nach Einschalten von
 **Filter Out Non-Numeric** erstmals Zahlen: COM4, 115200/8N1, Präfix %,

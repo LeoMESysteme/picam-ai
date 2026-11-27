@@ -4,19 +4,20 @@
 > statt Raspberry Pi AI Camera; die Kameraangaben unten beschreiben die
 > IMX500 und sind historisch (`docs/project_history.md`, 2026-09-25).
 
-Gerät `raspi06`. Rechner- und IMX500-Bestand unten: Stand 2026-09-07;
-letzte protokollierte StreamCam-Einrichtung: 2026-10-21; Vorschau-Wechsel:
-2026-11-05. Speicherplatz- und Paketangaben
-sind datierte Schnappschüsse, keine laufende Zustandsanzeige.
+Das Profil beschreibt den Entwicklungsaufbau `raspi06` mit datierten
+Schnappschüssen, darunter die jüngere StreamCam-Diagnose vom 18.11.
+Einen zweiten Aufbau dokumentiert die
+[Inbetriebnahme auf raspi01](lab_journal.md#2026-11-25-raspi01-update-auf-rc-51b620f-und-timing-kalibrierung).
 
 ## Datenorte: Produkt und Entwicklung (2026-11-04)
 
 Die NVMe-SSD unter `/mnt/ssd` dient nur zur Entlastung bei Backups, Tests,
 Training und Diagnoseaufnahmen. Das fertige Gerät läuft ohne SSD auf
-SD-Karte. `var/` bleibt deshalb das Produktverzeichnis für Profile,
-Kalibrierung, Vorlagen, aktuelle Live-Läufe und Werkbankdaten. Auch der
-Geräte-Rückstellpunkt
-`var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json` bleibt dort.
+SD-Karte. Im Entwicklungs-Checkout dient `var/` als Datenverzeichnis für
+Profile, Kalibrierung, Vorlagen, Live-Läufe und Werkbankdaten. Die installierte
+Instanz verwendet standardmäßig `/var/lib/picam`. Der Geräte-Rückstellpunkt
+des Entwicklungs-Checkouts liegt unter
+`var/diagnostics/gsv-register-rueckstellpunkt-2026-09-22.json`.
 
 Für Tests und Entwicklungsskripte kann die Ablage gesetzt werden:
 
@@ -84,7 +85,7 @@ Gain 17, Weißabgleich 4832 K; Fokus- und Weißabgleichsautomatik aus,
 Vorschlag WARNUNG; Bestätigung und T13-Lauf noch offen. Diagnose:
 `var/diagnostics/werkbank-t13-20261106/`.
 
-## Aktuelle StreamCam-Sitzung (2026-10-21)
+## StreamCam-Einrichtung zum Werteplan-Lauf (2026-10-21) {#aktuelle-streamcam-sitzung-2026-10-21}
 
 Einrichtung `live-20261021T151835Z` vor dem strengen Werteplan-Lauf:
 USB 3 mit 5000 Mbit/s, 1920×1080 YUYV bei angeforderten 30 Bildern/s.
@@ -137,19 +138,25 @@ CLOCK_BOOTTIME.
 
 ## Serielle Schnittstellen
 
-**Stand 2026-10-21:** Die GSV-2AS-Referenz wird über den bereits am
-2026-09-22 dokumentierten PL2303-USB-RS232-Adapter an `/dev/ttyUSB0`
-mit 38400 Baud, 8N1 gelesen. Sie dient sowohl der Datenernte als auch der
-optionalen Live-Referenzaufzeichnung; sie ist kein GSVmulti-Ausgang.
-Die folgende Portliste ist der frühere Bestand vom 2026-09-07.
+Am Aufbau `raspi06` liest der dokumentierte PL2303-USB-RS232-Adapter die
+GSV-2AS-Referenz mit 38 400 Baud, 8N1. Sie dient der Datenernte, der
+Timing-Kalibrierung und der optionalen Live-Referenzaufzeichnung. Der
+Referenzport kommt bei installierten Instanzen aus der Konfiguration und
+hat `/dev/ttyUSB0` als Vorgabe. Der GSVmulti-Ausgang nutzt einen eigenen Port.
+
+Die folgende Zuordnung gilt für den dokumentierten Aufbau `raspi06`:
 
 | Gerät | Rolle |
 | --- | --- |
 | **`/dev/ttyAMA0`** | **Datenport für GSVmulti.** Aktiv durch `dtparam=uart0=on` |
-| `/dev/ttyAMA10` = `/dev/serial0` | **3-Pin-Debug-Header** — ausdrücklich NICHT der Nutzdatenport |
-| `/dev/ttyUSB*`, `/dev/ttyACM*` | nicht vorhanden, kein USB-Seriell-Adapter angeschlossen |
+| `/dev/ttyAMA10` | **Reservierter 3-Pin-Debug-Header** |
+| `/dev/serial0` | Alias auf `ttyAMA10` bei raspi06, auf `ttyAMA0` bei raspi01 |
 
-`serial-getty@ttyAMA10` ist disabled, beide Ports sind also frei.
+Für die Portkonfiguration den tatsächlichen Gerätenamen angeben. Die
+Werkbank weist `serial0` und `serial1` als Konfigurationsnamen sowie
+`ttyAMA10` und seine Gerätename-Aliasse ab. Das Ziel von `serial0` kann
+ein Datenport sein. Die Abweichung auf raspi01 ist belegt.
+([Laborjournal](lab_journal.md#2026-11-25-abends-raspi01-rc-eaa4ad8-mit-den-konsolen-bildschirmen)).
 
 **Elektrisch offen ([OQ-09](open-questions.md)):** Pi-GPIO-Pegel dürfen nicht
 direkt mit RS-232 verbunden werden. Es braucht einen RS-232-/RS-485-Transceiver,
@@ -261,14 +268,13 @@ unabhängige Gründe.
 
 Ein Transceiver erledigt **beides** — Pegelwandlung und Invertierung.
 
-**Empfohlener Weg: USB-RS232-Adapter** (FTDI-Chipsatz, erscheint als
-`/dev/ttyUSB0`). Gründe: kein Eingriff in die Verdrahtung, und vor allem
-**keine Kollision mit `/dev/ttyAMA0`**, das als ausgehender GSVmulti-Datenport
-vorgesehen ist. `/dev/serial0` scheidet ohnehin aus (Debug-Header). Vor dem
-Anschluss am 2026-09-22 fehlte `/dev/ttyUSB*`; anschließend wurde der unten
-dokumentierte PL2303 angeschlossen. Der Benutzer ist bereits in `dialout`.
-Für stabile
-Namen bei mehreren Adaptern eine udev-Regel auf die Seriennummer vorsehen.
+Ein **USB-RS232-Adapter** führt die Referenz über einen eigenen Port ein.
+Der GSVmulti-Ausgang verwendet standardmäßig `/dev/ttyAMA0`. Den
+tatsächlichen Gerätenamen wählen, da `/dev/serial0` je nach Pi auf
+einen anderen UART verweist. Vor dem Anschluss am 2026-09-22 fehlte
+`/dev/ttyUSB*`; anschließend wurde der unten dokumentierte PL2303
+angeschlossen. Stabile Gerätenamen unter `/dev/serial/by-id/` sind für
+die Auswahl in `picam` vorzuziehen, sofern der Adapter einen bereitstellt.
 
 Galvanische Trennung ist im Laboraufbau zu bewerten
 ([OQ-09](open-questions.md)); isolierte USB-RS232-Adapter gibt es fertig.

@@ -3,13 +3,14 @@
 Optische Auslesung von Messverstärkeranzeigen im Kalibrierlabor. Erkannte
 Werte werden mit Zeitbasis, Freigabestatus und Begründung dokumentiert.
 
-Auf einem neuen Pi im SSH-Terminal installieren (sobald der erste stabile Release veröffentlicht ist):
+Auf einem neuen Pi mit Debian/Raspberry Pi OS 13 im Terminal oder per SSH
+mit TTY installieren.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash
 ```
 
-[Installer und Updates](docs/INSTALLER.md)
+[Installer und Updates](docs/INSTALLER.md) · [Aktueller Release](https://github.com/LeoMESysteme/picam-ai/releases/latest)
 
 <div class="wiki-messkette" data-messkette></div>
 
@@ -30,24 +31,26 @@ Kamera, Licht und Messverstärker kommen an ihren Platz, bevor Software ins Spie
 
 Die Werkbank läuft auf dem Pi; für GSVmulti kommt eine Brücke auf den Windows-Rechner.
 
-* [Neuen Pi geführt installieren und mit `picam` verwalten](docs/INSTALLER.md) — `./install.sh` aus dem Releasearchiv fragt Art, Konto, Adresse und Port, danach Konsole `picam` für Status, Diagnose, Dienst, Protokoll und Konfiguration
-* [Werkbank auf dem Pi installieren und starten](docs/anleitung/10-kamera-livevorschau.md#start) — `scripts/install-workbench.sh` (Paketliste `packaging/apt-packages.txt`), einmal `init-tls --host <Adresse für Windows>`, dann Dienst mit `scripts/werkbank-dienst.sh` ([Betrieb](docs/anleitung/10-kamera-livevorschau.md#werkbank-dienst))
-* [Windows-Brücke und GSVmulti vorbereiten](docs/GSVMULTI_PROTOCOL.md#windows-bruecke) — virtuelles COM-Portpaar (com0com oder SerialLoom), Windows-App GSVmulti-Brücke 1.0 (`windows/bridge`), GSVmulti am zweiten Port
+* [Neuen Pi geführt installieren und mit `picam` verwalten](docs/INSTALLER.md) — Installation aus dem Release, danach Konsole und Einzelbefehle für Status, Diagnose, Dienst und Updates
+* [Werkbank aus einem Entwicklungscheckout starten](docs/anleitung/10-kamera-livevorschau.md#werkbank-dienst) — `scripts/install-workbench.sh` und `scripts/werkbank-dienst.sh` für den getrennten Entwicklungsbetrieb
+* [Windows-Brücke und GSVmulti vorbereiten](docs/GSVMULTI_PROTOCOL.md#windows-bruecke) — GSVmulti-Brücke 1.1.0 als Setup oder portable EXE, virtuelles COM-Portpaar mit com0com oder SerialLoom
 
 ### Einrichten
 
 Im Browser wird die Anzeige eingerichtet, geprüft und mit Namen bestätigt.
+Eine neue Release-Installation braucht außerdem eine gültige Timing-Kalibrierung.
 
 * [Werkbank im Browser öffnen](docs/anleitung/10-kamera-livevorschau.md#zertifikat-auf-windows) — HTTPS: dem Zertifikat des Pi auf Windows vertrauen
 * [Anzeige einrichten und bestätigen](docs/anleitung/10-kamera-livevorschau.md#einrichten-prufen-und-bestatigen) — Vorschlag prüfen, Befunde lesen, namentlich bestätigen
 * [Kamera einstellen](docs/anleitung/10-kamera-livevorschau.md#kamera-einstellen) — Fokus und Automatiken
+* [Timing bei der Inbetriebnahme kalibrieren](docs/INSTALLER.md#timing-kalibrierung-bei-der-inbetriebnahme-rs232-nur-einmal) — `picam kalibrieren` mit vorübergehend angeschlossenem USB-RS232-Adapter
 
 ### Messen
 
 Erst nach der Bestätigung startet ein Messlauf; jeder Wert trägt seinen Status.
 
 * [Messlauf fahren und Wertstatus verstehen](docs/anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus) — VALID, TRANSITION, UNREADABLE und STALE
-* [Werte an GSVmulti ausgeben](docs/GSVMULTI_PROTOCOL.md) — Software-Prototyp gebaut, echte DUT-Ausgabe gesperrt
+* [Werte an GSVmulti ausgeben](docs/GSVMULTI_PROTOCOL.md) — Netzwerk über Brücke, UART direkt oder UART über Brücke, im Vierkanalprofil Gültigkeit über Kanal 2 auswerten
 * [Referenz aufzeichnen](docs/anleitung/10-kamera-livevorschau.md#referenzaufzeichnung-und-abgleich) — GSV-2AS seriell mitschreiben und abgleichen
 
 ### Prüfen
@@ -100,8 +103,8 @@ Zum Einstieg ohne Vorwissen: die [Projekt-Tour](docs/uebersicht/projekt-tour.md)
 <div class="wiki-stand" markdown="1">
 
 * **Kamera:** Logitech StreamCam (UVC), aktiv seit 2026-09-25; die IMX500 ist außer Betrieb.
-* **Messpfad:** live gebaut über `dispread serve --port 8081` und `/live` (Einrichtung, namentliche Bestätigung, Messlauf, JSONL-Audit); real geprüft nur an GSV-2AS / Displaytech 161A, Raumlicht, mV/V — siehe [offene Grenzen](docs/status.md).
-* **GSVmulti:** UserDefined-Zahlenimport, Formatter und gemeinsame TCP-/UART-Brücke sind als Software-Prototyp gebaut. Windows-Demoläufe belegen Zahlenimport und Prozesswiederanlauf; ungültige Werte und Altwertpuffer sind nicht ausreichend geprüft. Echte DUT-Ausgabe bleibt gesperrt, Messfreigabe ist offen ([Bewertung](docs/GSVMULTI_PROTOCOL.md), [Roadmap](docs/ROADMAP.md), [OQ-07](docs/open-questions.md#oq-07)).
+* **Messpfad:** In der Werkbank unter `/live` stehen Einrichtung, namentliche Bestätigung, Messlauf und JSONL-Audit zur Verfügung. Reale Prüfläufe betreffen den GSV-2AS mit Displaytech 161A, Raumlicht und mV/V ([Belege und offene Grenzen](docs/status.md)).
+* **GSVmulti:** Werkbank und drei Ausgabewege wurden am 13.11. am GSV-2AS-Aufbau für die Bedienung abgenommen. Das native GSV-ASCII-Format ([OQ-07](docs/open-questions.md#oq-07)), die Systemabnahme auf Sperrgeräten und der 72-Stunden-Dauerlauf stehen aus. [Bewertung](docs/GSVMULTI_PROTOCOL.md) · [Roadmap](docs/ROADMAP.md)
 
 </div>
 
@@ -142,7 +145,7 @@ Die [Dokumentationsübersicht](docs/README.md) erklärt die Rolle der Quellen.
 | [6 · Aufnahme und Replay](docs/anleitung/06-kamera-aufnahme-replay.md) | Frames aufzeichnen und wiedergeben |
 | [7 · Lokalisierung](docs/anleitung/07-lokalisierung.md) | Anzeige finden und verfolgen |
 | [8 · OCR-Backends](docs/anleitung/08-ocr-backends.md) | Leser vergleichen |
-| [9 · Betrieb](docs/anleitung/09-betrieb.md) | geplanter Dienst und Dauerlauf |
+| [9 · Betrieb](docs/anleitung/09-betrieb.md) | Dienst prüfen und Dauerlauf vorbereiten |
 | [Kamera-Livevorschau](docs/anleitung/10-kamera-livevorschau.md) | Workbench bedienen |
 | [Datensatz sammeln](docs/anleitung/11-datensatz-sammeln.md) | geführter Sammelmodus |
 | [Rezepte](docs/anleitung/rezepte.md) | kurze ausführbare Beispiele |

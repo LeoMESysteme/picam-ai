@@ -293,7 +293,7 @@
     const r3 = rule(644, "plan", "schräg", "Raster von Hand:", "profile-regrid.py still");
     T.label(layer, 480, 310, "Bestätigung mit Namen · Live zusätzlich: Einheit und Format geprüft", "t-label t-strong", { "text-anchor": "middle" });
     const rulesHead = layer.lastChild;
-    const tolerance = T.label(layer, 480, 516, "Angepasste Toleranz: serielle Gegenprobe + eigenes Häkchen · weiterhin nicht validiert", "t-small t-plan-text", { "text-anchor": "middle" });
+    const tolerance = T.label(layer, 480, 516, "Angepasste Toleranz: Gegenprobe und Auswahl · Validierung offen", "t-small t-plan-text", { "text-anchor": "middle" });
 
     T.hidden(proposal, look, grid.children, who, confirm, profile, r1, r2, r3, rulesHead, tolerance);
     T.fadeUp(tl, proposal, {}, 100);
@@ -355,13 +355,13 @@
     const bCam = box(620, 70, 230, "StreamCam", "v4l2:// · Bildquelle fertig", "t-panel");
     const bRead = box(620, 186, 230, "Lesen · Freigabe", "Dot-Matrix · am Aufbau gelaufen", "t-panel t-flow-box");
     const bLog = box(560, 300, 160, "JSONL-Audit", "je Lauf", "t-panel t-flow-box");
-    const bGsv = box(750, 300, 170, "GSVmulti", "Abnahme offen · OQ-07", "t-planned-box");
-    tour.docLink(bGsv, "docs/open-questions.html#oq-07", "OQ-07 öffnen", [904, 314]);
+    const bGsv = box(750, 300, 170, "GSVmulti", "UART oder Brücke", "t-panel t-flow-box");
+    tour.docLink(bGsv, "docs/GSVMULTI_PROTOCOL.html", "GSVmulti-Anbindung öffnen", [904, 314]);
     const links = T.group(layer, "run-links");
     T.svg("path", { d: "M735 128V182", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, links);
     T.label(links, 745, 160, "laufendes Lesen", "t-small");
     T.svg("path", { d: "M690 244L650 296", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, links);
-    T.svg("path", { d: "M780 244L825 296", class: "t-plan-line", "marker-end": "url(#tour-arrow-plan)" }, links);
+    T.svg("path", { d: "M780 244L825 296", class: "t-flow-line", "marker-end": "url(#tour-arrow)" }, links);
     const next = T.group(layer, "next");
     T.badge(next, 740, 410, "Offen: große Wertwechsel · Live-Abnahme", "plan", 360);
     T.label(next, 740, 460, "reference.jsonl optional · Gegenprobe nachträglich", "t-small", { "text-anchor": "middle" });

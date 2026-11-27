@@ -597,7 +597,7 @@ Lesediagnose für die Anzahl unlesbarer Zellen. Gehört zum faktischen Gate-Vert
 
 ### `VALID`
 
-Status eines freigegebenen Werts. Er allein hebt eine Testlaufmarkierung nicht auf: Ein Testlauf kann einzelne VALID-Records enthalten, deren Messnutzung durch die Laufkennzeichnung untersagt bleibt.
+Status eines freigegebenen Werts. In einem heutigen Testlauf werden Gate-Freigaben als `UNREADABLE` ohne Zahlenwert auditiert. Historische Laufordner mit `TESTLAUF.json` sind von Messnachweisen ausgeschlossen.
 
 *Weg:* Bedienen · *Quelle:* [Verträge und Datensätze](../../api/vertraege.md)
 
@@ -1272,7 +1272,7 @@ Herkunftsmerkmal eines Datensatzlabels: `manual` oder `serial_ascii`. Seit Schem
 
 ### `records.jsonl`
 
-Audit-Datei der Pipelineentscheidungen eines Live-Laufs. Sie kann auch im Testlauf einzelne `VALID`-Records enthalten; für die Messnutzung müssen `TESTLAUF.json` und die Laufmarkierung in `session.json` mit ausgewertet werden.
+Audit-Datei der Pipelineentscheidungen eines Live-Laufs. In Testläufen steht bei unterdrückten Freigaben `UNREADABLE` mit `value=null`. `TESTLAUF.json` und `session.json` kennzeichnen den gesamten Lauf, auch in historischen Laufordnern.
 
 *Weg:* Bedienen · *Quelle:* [Daten und Abnahme](../uebersicht/daten-und-abnahme.md)
 
@@ -1308,7 +1308,7 @@ Generierte Bilder für Funktionsprüfungen und gezielte Fehlerfälle. Sie ergän
 
 ### `TESTLAUF.json`
 
-Datei zur Kennzeichnung eines Laufs mit übergangener Lesesperre. Der gesamte Lauf liefert keine freigegebenen Messwerte, auch wenn einzelne Pipeline-Records `VALID` melden; die technische Sperre im Audit ist noch unvollständig.
+Datei zur Kennzeichnung eines Laufs mit übergangener Lesesperre. Sie hält Sperrgrund, Bedienperson und UTC-Startzeit fest. Vor dem Audit werden Gate-Freigaben als `UNREADABLE` mit `testlauf_keine_freigabe` protokolliert.
 
 *Weg:* Bedienen · *Quelle:* [Kamera-Livevorschau](10-kamera-livevorschau.md)
 
@@ -1406,7 +1406,7 @@ Suche nach dem schärfsten Fokuswert im geführten Ernte-Assistenten. Sie steht 
 
 ### Gegenlesen
 
-Prüfung des Lesers an Einrichtungsstandbildern gegen deren Referenztext. Unmaskierte Zellen müssen lesbar sein und übereinstimmen; ein Widerspruch sperrt Bestätigung und Lauf. Der Referenztext korrigiert keinen Messwert.
+Vergleicht die unmaskierten Zellen der Standbilder mit dem seriellen oder manuell eingegebenen Text. Bei manueller Eingabe kann die Anzeige um eine Einheit der letzten Stelle schwanken. Andere Widersprüche sperren Bestätigung und Lauf.
 
 *Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
 
@@ -1418,7 +1418,7 @@ Geführter Ernte-Assistent: `assist` sucht Fokus und Raster und erzeugt einen Vo
 
 ### Lesesperre
 
-Sperre des normalen Live-Laufstarts bei fehlendem oder nicht erfolgreichem Gegenlesen. Bei WARNUNG kann die Einrichtung bestätigt werden; ein Widerspruch zur Referenz sperrt auch die Bestätigung.
+Sperre des normalen Live-Laufstarts bei fehlendem oder trotz angepasster Toleranz erfolglosem Gegenlesen. Ein Widerspruch zum Vergleichstext sperrt auch die Bestätigung.
 
 *Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
 
@@ -1442,7 +1442,7 @@ Gespeicherter Registerzustand des GSV-2AS, gegen den ein Werteplan vor dem Schre
 
 ### Testlauf
 
-Ausdrücklich markierter Live-Lauf, der die Lesesperre zu Testzwecken übergeht. Alle Daten des Laufordners sind von Messungen auszuschließen: Auch mögliche VALID-Records heben die Testmarkierung nicht auf; die Auditsperre ist unvollständig.
+Ausdrücklich markierter Live-Lauf, der die Lesesperre für die Diagnose übergeht. Die Werkbank unterdrückt Wertfreigaben vor dem Audit und sperrt die externe Ausgabe. Der Laufordner ist von Messnachweisen ausgeschlossen.
 
 *Weg:* Bedienen · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
 
@@ -1454,7 +1454,7 @@ Zusätzlich bestätigte Folge von Normierungsfaktoren und Haltezeiten für kontr
 
 ### Workbench
 
-Bedienoberfläche mit Kamerabild, Log und Bash-Tabs. `/live` steuert Einrichtung und Messlauf; die ältere Werkbankseite erhält gedrosselte Bilder desselben Kamerabesitzers, ihr Modus `run` bleibt ein Vorschauzustand.
+Geschützte Bedienoberfläche mit Kamerabild für Einrichtung, Bestätigung und Messlauf unter `/live`. Die ältere Seite erhält gedrosselte Bilder desselben Kamerabesitzers, ihr Modus `run` dient der Vorschau.
 
 *Weg:* Bedienen · *Auch:* Werkbank · *Quelle:* [Kamera-Workbench](10-kamera-livevorschau.md)
 

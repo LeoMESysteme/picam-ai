@@ -4,7 +4,7 @@
  * Glasknoten mit Zustandspunkt, darüber ein Anzeigewert, der von Stufe zu
  * Stufe wandert und sich dabei verwandelt (Bildausschnitt → gefundene
  * Anzeige → nachgeführtes Viereck → entzerrtes Raster → gelesene Ziffern →
- * Datensatz VALID → Audit, DUT-Ausgabe gesperrt). Die Bewegung erklärt die
+ * Datensatz VALID → Audit, im Beispiel ohne GSVmulti-Ausgabe). Die Bewegung erklärt die
  * Reihenfolge der Kette; sie läuft nur, solange die Bühne im Blick ist.
  *
  * - Platzhalter im Markdown: <div class="wiki-messkette" data-messkette>.
@@ -64,7 +64,7 @@
     rectify: "entzerrtes Raster",
     ocr: `gelesen: ${READ}`,
     validate: "Datensatz · VALID",
-    sink: "Audit · DUT gesperrt",
+    sink: "Audit · Ausgabe aus",
   };
 
   function el(tag, attrs, parent) {
@@ -200,7 +200,7 @@
       el("rect", { x: 6, y: 48, width: 148, height: 30, rx: 8, class: "wmk-karte wmk-karte--gesperrt" }, svg);
       lock(svg, 14, 54);
       text(svg, 32, 61, "GSVmulti", "wmk-karte-titel");
-      text(svg, 32, 72, "DUT-Ausgabe gesperrt", "wmk-gesperrt");
+      text(svg, 32, 72, "Ausgeschaltet", "wmk-gesperrt");
     },
   };
 
@@ -209,10 +209,6 @@
     svg.dataset.form = id;
     FORMS[id](svg);
     return svg;
-  }
-
-  function lockedOutput(stage) {
-    return /gesperrt/i.test(`${stage.zweck} ${stage.einstellung}`);
   }
 
   function mount(host, stages) {
@@ -252,9 +248,8 @@
       dot.setAttribute("aria-hidden", "true");
       const sign = make("span", "wmk-schild");
       sign.append(make("span", "wmk-titel", stage.titel), make("span", "wmk-zustand", stage.zustand));
-      if (stage.id === "sink" && lockedOutput(stage)) {
-        // Ehrlicher Zustand der Ausgabe: gebaut bis zur Brücke, DUT gesperrt.
-        sign.append(make("span", "wmk-sperre", "DUT gesperrt"));
+      if (stage.id === "sink") {
+        sign.append(make("span", "wmk-sperre", "Beispiel: aus"));
         link.dataset.gesperrt = "";
       }
       link.append(dot, sign);

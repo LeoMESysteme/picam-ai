@@ -1,23 +1,26 @@
 # Kritischer Blocker: Workbench vor Bridge-/EXE-Weiterentwicklung stabilisieren
 
-**Stand 2026-11-13: Werkbank und Ausgabewege von Herrn Kaulitz abgenommen.** Offene Restpunkte (Nachführung bei Fokusunterschied, Rasterbestimmung) stehen in [TODO.md](../TODO.md) und sind an Codex übergeben. Ursprünglicher Auftrag: **Offen, höchste Arbeitspriorität seit 2026-11-11.** Die wiederholt
+**Historischer Wiederherstellungsauftrag vom 11.11.2026.** Herr Kaulitz
+nahm Werkbank und Ausgabewege am 13.11. am geprüften Aufbau ab. Leonhard
+prüfte die EXE der Gestaltungsrunde 3 am 18.11. Den Umfang der Abnahme und
+offene Ende-zu-Ende-Prüfungen beschreibt der
+[Stand der GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#stand-das-format-ist-unbekannt).
+Für verbleibende Fokus-, Raster- und Nachführbefunde siehe die
+[Arbeitsliste](../TODO.md) und die
+[Aufnahmen vom 18.11.](VALIDATION.md#workbench-2026-11-18).
+
+Im ursprünglichen Auftrag hatten die wiederholt
 fehlschlagende Einrichtung, der gemeldete Fokusrückfall, fehlende Auswege
-und zeitweilige Verbindungsverlust blockieren Bridge-/EXE-Weiterentwicklung,
+und der zeitweilige Verbindungsverlust Vorrang vor Bridge-/EXE-Weiterentwicklung,
 ausführliche Systemtests und die geplante teilweise Abnahme durch Herrn
-Kaulitz. Der Nutzer erwartet eine wieder zuverlässig benutzbare Workbench
-und passende EXE bei seiner Rückkehr am **Freitag, 2026-11-13**.
+Kaulitz. Ziel war ein benutzbarer Werkbank- und EXE-Stand am **13.11.2026**.
 
-Claude soll nach dem Limit-Reset **hiermit beginnen**, bevor frühere
-Bridge-Featureaufgaben fortgesetzt werden. Dies ist ein offener
-Wiederherstellungsauftrag, keine Behauptung einer bereits erreichten
-Fehlerbehebung oder Messfreigabe.
-
-## Sofortiger Einstieg
+## Ursprünglicher Einstieg {#sofortiger-einstieg}
 
 1. [Ausführlicher Auftrag an Claude](superpowers/handoffs/2026-11-11-einrichtungsfehler-an-claude.md).
-2. [Aktueller Status](status.md), danach die dort verlinkten Belegpakete.
+2. [Projektstatus](status.md), danach die dort verlinkten Belegpakete.
 3. Tatsächlichen Betriebsstand und getesteten Zielstand feststellen, bevor
-   ein einzelner alter Fehler erneut implementiert wird. Der Dienst läuft
+   ein einzelner alter Fehler erneut implementiert wird. Der Dienst lief damals
    auf `bruecke-run/08ac9b9`; neuere Zweige und uncommittete Arbeiten sind
    gesondert gesichert. Ein Neustart war kein Update.
 4. Fehler und positive Kontrollen offline wiederholen. Einen konsistenten
@@ -42,7 +45,7 @@ ein alter unvollständig abgedeckter Fall oder ein veralteter Betriebsstand
 ursächlich ist, muss anhand der gespeicherten Versionen unterschieden werden.
 Nicht alle Symptome haben nachgewiesen dieselbe Ursache.
 
-## Neuester zusätzlicher Fehlerfall
+## Zusätzlicher Fehlerfall vom 11.11. {#neuester-zusatzlicher-fehlerfall}
 
 [Aufstellung `170836Z`](quellen/setup-focus-failure-2026-11-11-170836.md):
 Raster sofort OK, Kanten-FEHLER in den letzten Leerzellen 14/15,
@@ -74,7 +77,7 @@ Die spätere Meldung `Zellentext: the ninth cell ...` entstand laut Nutzer
 durch versehentlich eingegebenen Text mit „hatte“. Das ist geklärte falsche
 Eingabe und **kein weiterer belegter Softwareblocker**.
 
-## Wann der Blocker geschlossen werden kann
+## Ursprüngliche Abschlusskriterien {#wann-der-blocker-geschlossen-werden-kann}
 
 * Tatsächlicher, versionierter Dienststand und dazu passende EXE eindeutig
   ausgewiesen; kein unbemerkter Rückfall auf einen älteren Worktree.

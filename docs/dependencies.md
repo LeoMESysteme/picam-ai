@@ -8,25 +8,25 @@ Projekt-venv mit Debian-Systempaketen gilt weiterhin.
 
 ## Pi-Werkbank installieren {#pi-werkbank-installieren}
 
-Der [getrennte Neuinstaller](INSTALLER.md) prüft die gewählte Laufzeit ab
-Python 3.13 durch tatsächliche Modulimporte. Er verwendet dieselbe zentrale
-apt-Liste und installiert ein lokales Release mit `--no-index --no-deps
---no-build-isolation` in eine neue Systempaket-venv. Der Bootstrap selbst
-verwendet nur die Standardbibliothek ab Python 3.9. Es kommt keine neue
-Produktabhängigkeit hinzu. Auf anderen Distributionen werden passende
-Systemmodule manuell bereitgestellt; optionale TUI/Discovery sind kein
-Hindernis für eine Installation ohne diese Funktionen.
+Der [Release-Installer](INSTALLER.md) lädt über den Bootstrap ein geprüftes
+Archiv oder liest es lokal. Er prüft die gewählte Produktlaufzeit ab Python
+3.13 durch Modulimporte und installiert mit `--no-index --no-deps
+--no-build-isolation` in eine neue Systempaket-venv. Im Systemmodus kann er
+fehlende Debian-Pakete nach Bestätigung installieren. Auf anderen
+Distributionen müssen passende Systemmodule bereitstehen. Die optionale
+Verwaltungskonsole braucht Textual, Discovery braucht Zeroconf.
 
 **Verbindliche Installationsliste:** `packaging/apt-packages.txt`. Sie enthält
-pro Paket den tatsächlichen Zweck und wird direkt von
+pro Paket den tatsächlichen Zweck und wird vom Release-Installer und von
 `scripts/install-workbench.sh` gelesen. Die Bestandstabellen weiter unten
 dokumentieren historische Versionen und optionale Werkzeuge, nicht eine
 zweite Installationsliste. Der statische Test `tests/test_install_workbench.py`
 gleicht alle Drittmodulimporte aus `src/` einschließlich des dynamischen
 Discovery-Imports mit der Paketliste ab.
 
-Der Installer installiert nur fehlende Debian-Pakete, legt die Projekt-venv
-mit `--system-site-packages` an und installiert das Projekt editierbar mit
+Für einen Entwicklungscheckout installiert `scripts/install-workbench.sh`
+nur fehlende Debian-Pakete, legt die Projekt-venv mit
+`--system-site-packages` an und installiert das Projekt editierbar mit
 `--no-deps --no-build-isolation`. Setuptools und Wheel kommen ebenfalls aus
 Debian; es werden keine Build-Abhängigkeiten von PyPI nachgeladen. Eine
 passende vorhandene Editable-Installation wird mit „bereits vorhanden“
@@ -39,8 +39,6 @@ NumPy, OpenCV und pySerial gehören zum aktiven Messpfad; `v4l-utils` liefert
 kein Zertifikatsvertrauensnachweis. Für stabile Release-Downloads nutzen
 Bootstrap und Update ebenfalls curl, dort mit TLS-Zertifikatsprüfung,
 HTTPS-Pflicht bei Weiterleitungen und Größen- und Zeitlimits.
-Die bestehende TUI und die optionale
-Discovery bleiben in der Liste, damit ihre CLI-Optionen nutzbar sind.
 
 **Optional:** `tesseract-ocr` und `tesseract-ocr-eng` nur für das ausdrücklich
 gewählte alte Backend `tesseract_cli` und OCR-Vergleiche installieren. Der
@@ -48,22 +46,22 @@ Live-Dot-Matrix-Pfad verwendet sie nicht; der alte Controller erzeugt den
 Tesseract-Leser erst bei Backend-Auswahl. Picamera2/libcamera und IMX500-Pakete
 gehören ebenfalls nicht zur aktiven UVC-Installation.
 
-Gruppen `dialout`/`video`, UART0-Boot-Eintrag, serielle Konsole und Getty werden
-nur geprüft. Abweichungen geben manuell auszuführende Befehle aus; der Installer
-ändert weder Gruppen noch Boot-Konfiguration und startet keinen Dienst.
-Ein erfolgreicher Softwareinstallationslauf ist keine Hardwareabnahme.
-[Folgeschritte und Dienstbefehle](anleitung/10-kamera-livevorschau.md#werkbank-dienst).
+Das Entwicklungsskript prüft zusätzlich `dialout`/`video`, UART0-Boot-Eintrag,
+serielle Konsole und Getty und zeigt bei Bedarf manuelle Schritte an. Der
+geführte Release-Installer kann nach separater Bestätigung den Dienst starten
+und den Autostart aktivieren. Die [Inbetriebnahme](INSTALLER.md#nach-der-softwareinstallation)
+umfasst außerdem die Kamera-, UART- und Timing-Prüfungen.
 
 ## Windows-Brücke {#windows-bruecke}
 
-Die neue GSVmulti-Brücke benötigt auf Windows Python **3.13 oder neuer**
-und **pySerial 3.5**. Dies ist dieselbe Bibliothek, die auf dem Pi bereits
-als Debian-Systempaket vorliegt; es kommt keine neue Python-Bibliothek für
-die Linux-Messpipeline hinzu. Die Brücke importiert nur die leichtgewichtigen
-Datensatz-/Format-/Transportmodule, keine Kamera-, NumPy- oder OpenCV-Module.
+Das [Windows-Setup und die portable EXE](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1)
+für die GSVmulti-Brücke 1.1.0 bringen ihre Python-Laufzeit mit. Für die
+Weitergabe an GSVmulti wird zusätzlich das unten beschriebene virtuelle
+COM-Portpaar eingerichtet.
 
-Auf Windows im bereitgestellten Projektverzeichnis eine eigene Umgebung
-anlegen und nur Brückenabhängigkeiten installieren:
+Für die separate Konsolenprobe aus dem Quellcode unter Windows Python
+**3.13 oder neuer** und **pySerial 3.5** in einer eigenen Umgebung verwenden.
+Die Probe importiert die Datensatz-, Format- und Transportmodule.
 
 ```powershell
 py -3.13 -m venv --system-site-packages .venv
@@ -96,30 +94,27 @@ Auf dem Pi gelten unverändert die untenstehenden Regeln: Projekt-`.venv`
 mit `--system-site-packages`, Projektinstallation mit `--no-deps` und keine
 PyPI-Kopien der Debian-Kamera-/CV-/Serialpakete.
 
-## Windows-EXE: getrennte Buildvorbereitung
+## Windows-EXE: Release-Build {#windows-exe-getrennte-buildvorbereitung}
 
-Die technische Umsetzung unter `windows/bridge/` verwendet einen eigenen
-Windows-Build und bündelt die Laufzeit. Die vorhandene Pi-venv bleibt
-unverändert; Qt/PyInstaller werden dort nicht installiert. Kandidaten für
-Windows-Laufzeit/Build stehen in den `.in`-Dateien des Windows-Pakets.
-Verifizierte, hashgesperrte Locks und tatsächlicher Freeze-Nachweis fehlen,
-solange kein entsprechend geprüfter Windows-Build vorliegt. Der Build darf
-fehlende oder ungeprüfte Lock-Evidenz nicht als erfolgreich ersetzen.
+`windows\bridge\build-release.cmd` baut auf Windows 11 x64 mit Python
+ab 3.13 x64 sowie Inno Setup die portable EXE und das Benutzer-Setup.
+PySide6, PyInstaller und die übrigen Build- und Laufzeitabhängigkeiten
+werden in der Windows-Buildumgebung installiert. Die Eingaben stehen in
+`requirements-runtime.in` und `requirements-build.in` unter `windows/bridge/`.
+Beide EXEs durchlaufen beim Bauen Selbsttests. Details und Ausgabedateien
+stehen in `windows/bridge/README.md` im Abschnitt „Release-Build“.
 
-Device-/VCOM-Adapter werden lokal mit injizierten Betriebssystemantworten
-geprüft. Die tatsächliche Windows-PnP-/Treiberinstallation und Freigabe der
-Weitergabe sind getrennte Nachweise. Kein neuer Treiber oder Qt-Paket wurde
-bei dieser Vorbereitung auf dem Pi installiert. [Spec](superpowers/specs/2026-11-06-windows-bruecke-design.md),
+Für die separate N1-Runtime-Probe gelten die Anforderungen an hashgesperrte
+Locks und Windows-VM-Nachweise aus dem
 [Nachweisplan](superpowers/plans/2026-11-06-windows-bruecke-nachweise.md).
 
 ## Windows-Verbindungskern
 
-Der reale WSS-Client verwendet aiohttp **3.14.3** als exakt geprüften
-API-Kandidaten in der getrennten Windows-`.in`-Datei. Ein enger Connector-Hook
+Der WSS-Client bindet aiohttp **3.14.3** in der Windows-`.in`-Datei.
+Ein Connector-Hook
 prüft den tatsächlichen Peer vor dem HTTP-Schreiben; weil diese API privat
 ist, verweigert ein anderer SDK-Stand den Betrieb. Gültigkeit, Pi-ID und Pin
-werden vor Zugangsdaten geprüft. Die Sperre ersetzt keine qualifizierten
-Windows-Wheels/Hashlocks; keine Bibliothek wurde hier installiert.
+werden vor Zugangsdaten geprüft.
 
 Zunächst unterstützt sind direkte HTTPS/WSS-Verbindungen zu konfigurierten
 Origins oder `/bridge/v2`. CONNECT-Proxys und Reverse-Proxy-Pfadpräfixe
@@ -140,42 +135,36 @@ physische Löschung auch während Leerlauf braucht, plant `prune()` regelmäßig
 im Backend ein. Globale Laufbereinigung bleibt OQ-60.
 
 Die Prozessinstanz verwendet native Win32-SID/DACL-/Mutex-/Event-APIs über
-`ctypes`, ohne zusätzliche Bibliothek und ohne GUI-Fenstercode. Linux-Fakes
-sind vom echten Windows-Prozesstest getrennt; dessen Ergebnis steht aus.
-GSVmulti wird nicht beendet. Die GUI muss Aktivierungswunsch, explizites
-Beenden, Abmelden und Standby an die vorhandenen Kernoperationen anbinden.
+`ctypes`. Ein zweiter Start signalisiert der laufenden App die Aktivierung.
+Bei Abmeldung oder Standby beendet die App die Übertragung über den Port.
 
 ## Windows-Installer und Updateverträge
 
-W3 verwendet Standardbibliothek plus die bereits getrennt deklarierte
-cryptography-Bibliothek für Ed25519-Manifestprüfung. Vertrauensschlüssel und
-erlaubter HTTPS-Release-Ursprung müssen ausdrücklich provisioniert werden;
-Testschlüssel sind keine Produktvorgabe. OQ-65 führt Kanal-/Schlüsselwechsel
-und Schutz gegen alte signierte Releases. Native Deployment-/UAC-Anbieter
-fehlen weiterhin und bleiben ohne Qualifikation gesperrt.
+Das veröffentlichte Inno-Setup der Brücke 1.1.0 installiert für den aktuellen
+Windows-Benutzer und ist unsigniert. Für ein Update führt der Bediener das
+neuere Setup aus. Die Windows-Dateien des Release enthalten SHA-256-Prüfsummen.
 
-Optionales Inno-Setup-Rezept paketiert ausschließlich die interne N1-Probe
-nach bestandenen N1-Buildgates. Es ist kein signierter Produktinstaller und
-enthält keinen Treiber-/GUI-Start. Kein Windows-Runner ist bereitgestellt;
-deshalb wurde keine zusätzliche CI-Jobdatei angelegt. Konkrete Inno-Version,
-Signierung und VM-Nachweise sind externe Voraussetzungen, keine Installation
-in der Pi-venv.
+Der getrennte W3-Updatekern verwendet `cryptography` für die
+Ed25519-Manifestprüfung und braucht provisionierte Vertrauensschlüssel und
+einen festgelegten HTTPS-Release-Ursprung. Signierung, ein qualifizierter
+automatischer Updatepfad und Schutz gegen Rückstufung sind in
+[OQ-65](open-questions.md#oq-65) offen. Der Windows-Bau in CI steht unter
+[OQ-68](open-questions.md#oq-68).
 
 ## Brücke v2: optionale Discovery und HTTPS-Zugang
 
 Debian `python3-zeroconf` wird im Workbench-Installationsskript deklariert.
-Es wird erst für ausdrücklich aktivierte DNS-SD-Veröffentlichung benötigt;
-SDK-Fehler lassen konfigurierte HTTPS/WSS-Endpunkte verwendbar. Hier wurde
-das Paket nicht installiert. Windows führt `zeroconf` als eigenen, noch zu
-qualifizierenden Buildkandidaten. Die Adapter-API wurde gegen die
+Es wird für ausdrücklich aktivierte DNS-SD-Veröffentlichung benötigt.
+Konfigurierte HTTPS/WSS-Endpunkte bleiben bei SDK-Fehlern verwendbar.
+Das Windows-Paket deklariert `zeroconf` in seinen Laufzeitabhängigkeiten.
+Die Adapter-API wurde gegen die
 [primäre SDK-Dokumentation](https://python-zeroconf.readthedocs.io/en/latest/api.html)
 und freigegebenen Quelltext geprüft, nicht am installierten Netzwerk.
 
 Die Suche läuft per `multiprocessing` mit `spawn` in einem begrenzten
-Kindprozess, einschließlich SDK-Start und Aufräumen. Der spätere eingefrorene
-Windows-Einstieg braucht `multiprocessing.freeze_support()` und eine echte
-Windows-Suchprüfung. Dies betrifft keine Kameraprozesse. Veröffentlichung
-ist separat optional; explizite Endpunkte bleiben unabhängig davon erhalten.
+Kindprozess, einschließlich SDK-Start und Aufräumen. Der Windows-Einstieg
+ruft `multiprocessing.freeze_support()` auf. Die Abnahme über LAN und
+Tailscale steht in [OQ-64](open-questions.md#oq-64).
 
 `--bridge-directory` lädt ausschließlich eine vorhandene provisionierte
 Identität und verwendet deren Zertifikat am HTTPS-Dienst. Vorhandene
@@ -300,9 +289,10 @@ Kamera bleiben ausführbar ([Bildquellen-API](../api/frames.md)).
 
 ## Kamera-Workbench (2026-09-08)
 
-Installation: `bash scripts/install-workbench.sh`. Weiterhin nur die Projekt-
-venv mit Systempaketen und `pip install --no-deps -e .` verwenden. Der
-Konsolenbefehl `dispread` ist in `pyproject.toml` registriert.
+Die Tabelle hält den Bestand bei der Implementierung fest. Die aktuelle
+Installation und Paketliste stehen unter
+[Pi-Werkbank installieren](#pi-werkbank-installieren). Die Befehle `dispread`
+und `picam` sind in `pyproject.toml` registriert.
 
 | Paket | Installierte Version bei Implementierung | Zweck |
 | --- | --- | --- |

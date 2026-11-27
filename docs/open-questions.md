@@ -7,10 +7,18 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 
 | OQ | Fokus | Status | Titel |
 | --- | --- | --- | --- |
+| [OQ-78](#oq-78) | Jetzt | offen | Warum bricht die Rahmennachführung im Lauf vom 18.11. ein? |
+| [OQ-74](#oq-74) | Jetzt | offen | Warum wird das Bild nach erfolgreich geprüfter Fokussuche wieder unscharf? |
+| [OQ-73](#oq-73) | Jetzt | offen | Warum aktualisiert die Werkbank während der Einrichtung verzögert? |
+| [OQ-75](#oq-75) | Jetzt | offen | Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus? |
+| [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
+| [OQ-79](#oq-79) | Jetzt | teilweise geklärt | Reicht die sudo-Freigabe für Stopp und Wiederanlauf aus der Konsole? |
+| [OQ-80](#oq-80) | Jetzt | offen | Welche Gerätenamen meldet der Pi nach Aktivierung zusätzlicher Header-UARTs? |
 | [OQ-62](#oq-62) | Jetzt | in Arbeit | Wie wird die Windows-Brücke mit EXE, Verbindungsassistent und GSVmulti-Session eingerichtet? |
 | [OQ-64](#oq-64) | Jetzt | in Arbeit | Wie findet und koppelt die Windows-Brücke verschiedene Pi über LAN und Tailscale? |
 | [OQ-65](#oq-65) | Jetzt | offen | Wie werden Windows-Releases signiert, aktualisiert und gegen Rückstufung geschützt? |
-| [OQ-26](#oq-26) | Jetzt | offen | Grenzen der Nachführung an realen Geräten validieren |
+| [OQ-68](#oq-68) | Jetzt | offen | Auf welchem Windows-Rechner wird der Installer der Brücke automatisch gebaut? |
+| [OQ-77](#oq-77) | Jetzt | offen | Was verursacht die drei UART-Timeouts beim Anmelden der Windows-Brücke? |
 | [OQ-07](#oq-07) | Jetzt | teilweise geklärt | GSVmulti-Telegrammspezifikation beschaffen |
 | [OQ-06](#oq-06) | Jetzt | teilweise geklärt | Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt? |
 | [OQ-50](#oq-50) | Jetzt | teilweise geklärt | Bleiben GSVmulti-Einzelwerte bei Anzeige und Aufzeichnung unverändert? |
@@ -61,18 +69,8 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-57](#oq-57) | — | teilweise geklärt | Wie genau hält der lokale Windows-Demosender seine Zielrate ein? |
 | [OQ-63](#oq-63) | — | teilweise geklärt | Warum bleibt nach Displaybewegungen dauerhaft der zweite Nachführfit nötig und wie soll das UI ihn anzeigen? |
 | [OQ-67](#oq-67) | — | offen | Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test? |
-| [OQ-68](#oq-68) | — | offen | Auf welchem Windows-Rechner wird der Installer der Brücke automatisch gebaut? |
-| [OQ-69](#oq-69) | — | offen | Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage? |
+| [OQ-69](#oq-69) | — | teilweise geklärt | Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage? |
 | [OQ-70](#oq-70) | — | teilweise geklärt | Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen? |
-| [OQ-71](#oq-71) | — | offen | Wie kann ein fehlerhafter Einrichtungsvorschlag abgebrochen oder neu gestartet werden? |
-| [OQ-72](#oq-72) | — | offen | Warum lehnt die Kantenprüfung die letzte Ziffer der neuen Aufstellung ab? |
-| [OQ-73](#oq-73) | — | offen | Warum aktualisiert die Werkbank während der Einrichtung verzögert? |
-| [OQ-74](#oq-74) | — | offen | Warum wird das Bild nach erfolgreich geprüfter Fokussuche wieder unscharf? |
-| [OQ-75](#oq-75) | — | offen | Warum fielen Kamerabild und Workbench-Verbindung gleichzeitig kurz aus? |
-| [OQ-77](#oq-77) | — | offen | Was verursacht die drei UART-Timeouts beim Anmelden der Windows-Brücke? |
-| [OQ-78](#oq-78) | — | offen | Warum bricht die Rahmennachführung im Lauf vom 18.11. ein? |
-| [OQ-79](#oq-79) | — | offen | Reicht die sudo-Freigabe für Stopp und Wiederanlauf aus der Konsole? |
-| [OQ-80](#oq-80) | — | offen | Welche Gerätenamen meldet der Pi nach Aktivierung zusätzlicher Header-UARTs? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -86,6 +84,8 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-49](#oq-49) | — | geklärt | Wo wird der SSH-taugliche Ein-Befehl-Installer bereitgestellt? |
 | [OQ-54](#oq-54) | — | geklärt | Welche GSV-Bibliotheksversionen lädt die getestete Windows-Installation? |
 | [OQ-66](#oq-66) | — | geklärt | Warum wählt der Session-Explorer-Test nach Tastaturfokus gelegentlich den falschen Tag? |
+| [OQ-71](#oq-71) | — | geklärt | Wie kann ein fehlerhafter Einrichtungsvorschlag abgebrochen oder neu gestartet werden? |
+| [OQ-72](#oq-72) | — | geklärt | Warum lehnt die Kantenprüfung die letzte Ziffer der neuen Aufstellung ab? |
 | [OQ-76](#oq-76) | — | geklärt | Warum verliert ein Lauf nach bestätigter Einrichtung sämtliche Rahmenmerkmale? |
 
 <!-- OQ-INDEX:END -->
@@ -236,8 +236,21 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 
 ## OQ-06 — Wie werden ungültige Werte in GSVmulti und in der Kalibrierauswertung behandelt?
 
-* **Status:** teilweise geklärt (2026-11-04) · **Zuständig:** ME-Systeme intern + QM
-* **Blockiert:** die Freigabe von P4, zusammen mit OQ-01.
+* **Status:** teilweise geklärt (2026-11-13) · **Zuständig:** ME-Systeme intern + QM
+* **Teilantwort 2026-11-13:** Im geprüften Vierkanalprofil hält Kanal 1
+  beim ungültigen Takt den letzten gültigen Wert desselben Laufs. Kanal 2
+  markiert den Takt mit `0`. Vor dem ersten gültigen Wert sendet Kanal 1
+  den Fehlwert `99999999.0`. Die Windows-Prüfung zeigt bei allen drei
+  Ausgabewegen lückenlose Taktzähler und das Halten bei ungültigen Takten.
+  Für die Auswertung zählen ausschließlich Zeilen mit Gültigkeit `1`,
+  daher muss GSVmulti auch die ausgeblendeten Kanäle aufzeichnen.
+  [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md),
+  [Gültigkeitsregeln](GSVMULTI_PROTOCOL.md#ungultige-werte).
+* **Offen für P4:** Durchgängig nachweisen, dass die Kalibrierauswertung
+  ungültige und veraltete Zeilen beim Import, bei Unterbrechungen und beim
+  Wiederanlauf ausschließt. Bei Verwendung des Einkanalprofils bleiben
+  Gültigkeitsmarkierung und Haltedauer im Empfänger offen. Den gültigen
+  Zahlenimport belegt [OQ-01](#oq-01).
 * **Vorabdefault:** `InvalidValuePolicy` als austauschbarer Adapterparameter
   mit den drei Varianten `omit_record`, `send_nan`, `status_flag`. Alle drei
   sind implementiert und getestet, die Wahl ist eine Konfiguration.
@@ -250,13 +263,11 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   Aufzeichnung und Kalibrierauswertung gemeinsam prüfen; ungültige Zeiträume
   dürfen keine Messfreigabe erhalten. [Prüffälle](GSVMULTI_PROTOCOL.md#ungultige-werte).
 
-* **Testfreigabe mit Bestätigung seit 2026-11-09 (Nutzerentscheidung), keine
-  Abnahme:** Echte Werte dürfen auch über die GSVmulti-Brücke (UART und
-  Netzwerk) laufen, wenn der Pi-Bediener den Lauf mit
-  `acknowledge_unaccepted: true` startet – wie bei UART direkt. Ungültige und
-  veraltete Werte werden ausgelassen (`omit_record`, Brücke quittiert
-  `omitted`); GSVmulti zeigt dann den letzten Wert unmarkiert weiter, genau so
-  steht es im Hinweis. Diese Frage bleibt damit offen.
+* **Historische Testfreigabe vom 2026-11-09:** Echte Werte durften über
+  die GSVmulti-Brücke (UART und Netzwerk) mit Bestätigung
+  `acknowledge_unaccepted: true` laufen, wie bei UART direkt. Im
+  Einkanalprofil ließ `omit_record` ungültige und veraltete Werte aus, und
+  GSVmulti zeigte den letzten Wert ohne Gültigkeitsmarkierung weiter.
   [BRIDGE_PROTOCOL_V2.md](BRIDGE_PROTOCOL_V2.md#testfreigabe-echter-werte-seit-2026-11-09-additiv-v2-bleibt-v2)
 
 * **Teilantwort 2026-11-04:** Lauf 08: 30,000983790 s absichtliche
@@ -266,8 +277,8 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
   verdichtet die Pause vollständig: weder Zeitlücke noch Ungültigmarkierung
   im Messkanal. Omit/Senderpause allein ist in dieser Konfiguration für
   Kalibrierdaten unzureichend. Timeout-Verzögerung, Altwertanzeige davor,
-  explizite Ungültigmarkierung und NaN-Semantik weiter offen; reale DUT-Ausgabe
-  bleibt gesperrt. [Antwort und Messbeleg](VALIDATION.md#uart-demo-20261104-08).
+  explizite Ungültigmarkierung und NaN-Semantik blieben im Einkanalprofil
+  offen. [Antwort und Messbeleg](VALIDATION.md#uart-demo-20261104-08).
 
 * **NaN-Teilbefund 2026-11-04:** Lauf 09 sendet 200 %NaN-Telegramme über
   demo-only SEND_NAN. TXT/TDMS enthalten nur die gültigen Zahlen, weder NaN
@@ -323,11 +334,14 @@ einem neuen OQ, Status- oder TODO-Wechsel ausführen; `--check` prüft den Stand
 
 ## OQ-07 — GSVmulti-Telegrammspezifikation beschaffen
 
-* **Update 2026-11-04:** Nutzer bestätigt Windows 11 / GSVmulti 2.03,
-  aktivierte PRO-Lizenz und verfügbares `UserDefined`. Software-Prototyp
-  vorhanden; COM-Portpaar, Empfang, Ungültigbehandlung und Zeitachse sind
-  weiterhin nicht abgenommen. [Aktueller Teststand](GSVMULTI_PROTOCOL.md#windows-bruecke).
-* **Status:** teilweise geklärt (2026-10-28) · **Zuständig:** ME-Systeme intern
+* **Status:** teilweise geklärt (2026-11-13) · **Zuständig:** ME-Systeme intern
+* **Aktueller Stand:** Einkanaliger Zahlenimport in GSVmulti 2.03 Pro
+  ist belegt (OQ-01). Die Prüfung vom 13.11. belegt den Vierkanal-Takt
+  für die drei Ausgabewege im geprüften Aufbau. Spezifikation für native
+  GSV-Telegramme, Ungültigbehandlung in der Kalibrierauswertung (OQ-06)
+  und Interpretation der GSVmulti-Zeitachse (M8) stehen weiter aus.
+  [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md#windows-bruecke),
+  [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md).
 * **Neuer Befund:** Das bereitgestellte PDF
   [GSVmulti und Raspberry Pi](quellen/GSVmulti_Raspberry_Pi_Sensoranbindung.pdf)
   nennt den Weg `UserDefined`. Die verlinkte
@@ -2480,13 +2494,21 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-47 — Welcher Windows-COM-Transport trägt UserDefined ohne Altwertnachlauf?
 
-* **Status:** teilweise geklärt (2026-11-04) · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs; zuvor offen (Stand 2026-10-30).
+* **Status:** teilweise geklärt (2026-11-13) · erkannt 2026-10-28 bei der Prüfung des GSVmulti-PDFs.
 
-* **Testfreigabe mit Bestätigung seit 2026-11-09 (Nutzerentscheidung), keine
-  Abnahme:** Die Brücke gibt echte Werte nach ausdrücklicher Bestätigung je
-  Lauf weiter (UART und Netzwerk), nur VALID an COM, Bytes wie UART direkt.
-  Ende zu Ende nur auf Linux belegt (pty-Kabel, lokales TLS, Fake-COM); kein
-  Windows-Treiber, kein GSVmulti, kein Altwertverhalten geprüft.
+* **Teilantwort 2026-11-13:** Im geprüften Aufbau verbindet sich die
+  Windows-Brücke nach gezogenem LAN-Kabel wieder, und der Netzwerk-
+  Empfangstest liefert 600 von 600 erwarteten Werten. Die protokollierten
+  Vierkanal-Läufe haben lückenlose Taktzähler. Bei UART über die Brücke
+  registrierte die Prüfung Rahmenfehler und gefüllte Takte nach Abbrüchen.
+  Verhalten der Treiberpuffer bei weiteren Störfällen und die
+  Anmelde-Timeouts bleiben separat zu prüfen. Das Vierkanalprofil markiert
+  gehaltene Werte über Kanal 2 (OQ-06).
+  [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md),
+  [OQ-77](#oq-77).
+* **Historischer Zwischenstand 2026-11-09:** Die Testfreigabe gab nur
+  VALID-Werte nach ausdrücklicher Bestätigung weiter. Die Prüfung lief
+  zunächst mit pty-Kabel, lokalem TLS und Fake-COM unter Linux.
 
 * **Live-Prototyp (2026-10-30):** P4-3 hat höchstens einen offenen
   Senderauftrag, verwirft neue Frames bei Stau mit Tx-Beleg und liefert sie
@@ -2676,8 +2698,13 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   mit der SHA-256-Datei, bevor er den geführten Installer im SSH-Terminal
   startet. Ohne TTY gibt es den lokalen Installer mit ausdrücklichen
   Angaben. Für Windows ist eine getrennte Lieferung vorgesehen.
-* **Beleg:** [Installer und Veröffentlichung](INSTALLER.md#installation-in-einer-zeile).
-  Erster Upload und Abnahme auf einem neuen Pi stehen aus.
+* **Beleg:** Der GitHub-Mirror enthält das Archiv und die Prüfsumme für
+  picam 1.1.1. Der Bootstrap ist dort veröffentlicht. Die Prüfungen mit
+  Releasekandidaten auf raspi01 stehen im Laborjournal. Die stabile
+  Frischinstallation bis zum ersten Messlauf ist ein eigener Prüfpunkt unter P7.
+  [Installer](INSTALLER.md#installation-in-einer-zeile),
+  [Release 1.1.1](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1),
+  [Laborjournal](lab_journal.md), [Roadmap](ROADMAP.md#roadmap-schritte).
 
 ---
 
@@ -3191,22 +3218,22 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   integriert. Native Windows-Provider und Qualifikation fehlen weiterhin;
   EXE-/Workbench-Oberflächen folgen durch Claude gemäß
   [Übergabe](superpowers/handoffs/2026-11-06-windows-bruecke-claude.md).
-* **Offen:** Paketierung und Verteilung, benötigte Treiber und virtuelle
-  Portpaare, Installation mit den erforderlichen Windows-Rechten, sichere
-  Zuordnung/Erkennung von USB- und virtuellen Ports, Netzwerk-Verbindung
-  sowie belegte Sessionerzeugung für die unterstützten GSVmulti-Versionen.
-  Kein Sessionformat erfinden; OQ-53 enthält die offene Filterkodierung.
-  Bestehende Einstellungen dürfen nicht ungeprüft überschrieben werden.
-* **Abgrenzung:** OQ-49 beschreibt den Pi-Bootstrap; hier geht es um den
-  Windows-Verbindungsassistenten. Die aktuelle Python-ZIP ist ein Prüfwerkzeug,
-  kein fertiger Installer. „Verbunden“ oder COM-Schreibbestätigung beweist
-  keinen GSVmulti-Empfang und keine Messfreigabe (OQ-47/OQ-06).
-* **Klärung:** Nach den laufenden Abnahmearbeiten den Bedienablauf spezifizieren,
-  echte Referenz-Sessiondateien und Import-/Öffnen-Verhalten prüfen, dann
-  Installation und Erstverbindung auf einem frisch eingerichteten Windows-PC
-  einschließlich fehlendem Adapter und Wiederanlauf abnehmen.
-* **Antwort landet in:** [Geplante Funktionen](../PLANNED_FEATURES.md),
-  [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md) und einer späteren Umsetzungsspec.
+* **Stand 2026-11-26:** Die Prüfung vom 13.11. belegt für den damaligen
+  Windows-Build den Verbindungsablauf, die Vierkanal-Session im
+  Empfangstest und reale Läufe über drei Wege. Seit dem Release stehen
+  Benutzer-Setup, portable EXE und SHA-256-Liste für die Brücke 1.1.0 bereit.
+  [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md),
+  [Release 1.1.1](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1).
+* **Offen:** Das veröffentlichte Paket auf den vorgesehenen Windows-
+  Rechnern prüfen, einschließlich Erstinstallation ohne Python, Benutzerrechten,
+  Upgrade und portabler EXE. Treiber und virtuelle Portpaare im Zielumfeld
+  prüfen, einschließlich fehlendem USB-Adapter, Anschlusswechsel und
+  Wiederanlauf. In den unterstützten GSVmulti-Versionen die erzeugte
+  Session öffnen und den Empfang mit ihr belegen. Den Transport behandelt
+  OQ-47, die Filterkodierung OQ-53.
+  Der Pi-Bootstrap steht in OQ-49.
+* **Antwort landet in:** [Windows-Brücken-Spezifikation](superpowers/specs/2026-11-06-windows-bruecke-design.md)
+  und [Einrichtung der Windows-Brücke](GSVMULTI_PROTOCOL.md#windows-bruecke).
 
 
 ---
@@ -3294,7 +3321,8 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   authentifizierter Netzwerkpfad, vorzugsweise am vorhandenen HTTPS-Dienst.
   Keine automatische Auswahl eines anderen Pi oder eines anderen
   Ausgabewegs während eines Laufs.
-* **Offen:** erste Netzaufnahme eines noch nicht erreichbaren Pi (OQ-49),
+* **Offen:** erste Netzaufnahme eines noch nicht erreichbaren Pi
+  (der Bootstrap aus OQ-49 setzt SSH-Erreichbarkeit voraus),
   Vertrauen bei Erstkopplung, SD-Karten-Klone, mehrere Geräte/NICs, IPv6,
   VLAN/Multicast-Sperren und Client-Isolation, Tailscale-Anmeldung/Freigabe,
   Firewalls, Proxy, Zertifikatswechsel und erlaubte Wiederanlaufsemantik.
@@ -3308,8 +3336,12 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   des konkreten Endpunkts und Erstkonfiguration bleiben App-/Dienstaufgaben.
   Keine reale Zwei-Pi-/Netzwechselabnahme daraus ableiten.
   [Plan](superpowers/plans/2026-11-06-windows-bruecke.md).
-* **Klärung:** Freigegebenen Entwurf umsetzen, Kopplungs-,
-  Berechtigungs- und Zustandsvertrag spezifizieren. Tests mit zwei Pi,
+* **Stand 2026-11-26:** Der UX2-Build verband sich am Laborplatz nach
+  gezogenem LAN-Kabel wieder mit demselben Pi. Die veröffentlichte
+  Brücke 1.1.0 zeigt den übermittelten Pi-Namen nach dem Verbindungsaufbau.
+  [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md),
+  [Changelog](../CHANGELOG.md).
+* **Klärung:** Tests mit zwei Pi,
   DHCP-/Netzwechsel, gesperrtem Multicast, Ausfall/Neustart und falscher
   Identität; Altwerte/Doppelausgabe strukturell verhindern. OQ-62 führt den
   Windows-Installer und OQ-53 die tatsächliche GSVmulti-Sessionkodierung.
@@ -3319,9 +3351,9 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   [MagicDNS](https://tailscale.com/docs/features/magicdns),
   [Windows-Treibersignaturen](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/driver-signing),
   [USB-Portmetadaten](https://pyserial.readthedocs.io/en/latest/tools.html).
-* **Antwort landet in:** spätere Windows-Brücken-Spezifikation,
-  [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md), [Abhängigkeiten](dependencies.md)
-  und [Geplante Funktionen](../PLANNED_FEATURES.md).
+* **Antwort landet in:** [Windows-Brücken-Spezifikation](superpowers/specs/2026-11-06-windows-bruecke-design.md),
+  [Einrichtung der Windows-Brücke](GSVMULTI_PROTOCOL.md#windows-bruecke) und
+  [Abhängigkeiten](dependencies.md#windows-bruecke).
 
 
 ---
@@ -3341,10 +3373,12 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   und ausdrücklich freigegebene Rückkehr zur Vorgängerversion. Die dafür
   nötigen Kanal-/Versionsdaten sind noch nicht festgelegt. Anwendungssignatur
   und Treibersignatur brauchen zusätzlich echte Windows-Nachweise.
-* **Grenze:** Ohne diese Provisionierung und Nachweise bleibt der Produkt-
-  Release gesperrt. Interne Probe-Installer und Unit-Tests mit Testschlüsseln
-  sind kein verteilter Vertrauensanker. Aktive Ausgabe blockiert Updates;
-  vorhandene Konfiguration und Audits dürfen nicht still verloren gehen.
+* **Veröffentlichung 2026-11-25:** Setup und portable Brücke 1.1.0 sind
+  mit SHA-256-Liste zum manuellen Download veröffentlicht. Für einen
+  signierten Windows-Updatekanal fehlen Provisionierung, Schutz vor
+  Rückstufung und die Nachweise am Zielsystem. Aktive Ausgabe blockiert
+  Updates. Konfiguration und Audits müssen dabei erhalten bleiben.
+  [Release](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1).
 * **Antwort landet in:** [Windows-Spec §4](superpowers/specs/2026-11-06-windows-bruecke-design.md#4-installation-und-wiederholung),
   [Abhängigkeiten und Buildgrenzen](dependencies.md#windows-installer-und-updatevertrage);
   im Repository zusätzlich `windows/bridge/README.md` und
@@ -3430,12 +3464,17 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 * **Offen:** Gibt es einen Windows-Rechner, der dauerhaft im Labornetz
   erreichbar ist und als Forgejo-Runner `Setup.exe` bei Tag/Merge baut und
   als Release-Anhang ablegt? Wer betreut ihn?
-* **Ziel danach:** Die Werkbank bietet im Brücken-Dialog Schritt 1 genau
-  den zum Pi-Stand passenden Installer an; die App meldet beim Verbinden,
-  wenn sie veraltet ist. Übergang bis dahin: `build.cmd` als
-  Doppelklick-Starter. Signatur und Updatekanal: [OQ-65](#oq-65).
-* **Antwort landet in:** `TODO.md` (Abschnitt „Danach offen (Brücke)“),
-  `windows/bridge/README.md`.
+* **Stand 2026-11-26:** Der manuelle Bau läuft über
+  `windows/bridge/build-release.cmd` auf Windows mit Inno Setup.
+  Setup, portable EXE und Prüfsummen sind für Brücke 1.1.0 als
+  Release-Anhänge verfügbar. Automatischer Bau bei Tags und Pflege des
+  Windows-Runners stehen aus.
+  [Release](https://github.com/LeoMESysteme/picam-ai/releases/tag/v1.1.1).
+* **Ziel danach:** Die Werkbank bietet zum Pi-Stand passend den Installer
+  an. Die App meldet beim Verbinden, wenn sie veraltet ist. Signatur und
+  Updatekanal behandelt [OQ-65](#oq-65).
+* **Antwort landet in:** [Arbeitsliste zur Windows-Brücke](../TODO.md#windows-brucke-und-gsvmulti)
+  und im Abschnitt „Release-Build“ in `windows/bridge/README.md`.
 
 ---
 
@@ -3443,14 +3482,21 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-69 — Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage?
 
-* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Status:** teilweise geklärt (2026-11-13)
+* **Teilantwort 2026-11-12:** Glaskanten lieferten Schein-Plus-Anker.
+  Einzelne flache Artefakte lösten zudem fälschlich `leerzelle_belegt` aus.
+  Nach der Korrektur finden alle vier archivierten Fehlerbilder ein Raster.
+  Die alternative Unterkantenrichtung vom 13.11. deckt weitere
+  archivierte Fälle ab. Übertragbarkeit auf neue Aufstellungen und
+  optische Bedingungen bleibt am Aufbau zu prüfen.
+  [Changelog](../CHANGELOG.md), [Korpus](quellen/raster-recherche-2026-11-13/README.md).
 * **Befund:** Einrichtung `live-20261111T154459Z` im laufenden Worktree
   `bruecke-run` auf `08ac9b9`: Fokus und Belichtung abgeschlossen, danach
   alle drei Startversuche `keine_startlage`. Das gespeicherte Bild zeigt
   eine scharfe, ausreichend große, leicht gedrehte GSV-2AS-Anzeige mit Plus.
   `fit_lattice` reproduziert den Fehler offline mit der automatisch gefundenen
   grünen Hinweisbox. Es entsteht kein Einrichtungsvorschlag.
-* **Offen:** Welche Startkandidaten oder nachfolgenden Prüfungen verwerfen
+* **Ausgangsfrage:** Welche Startkandidaten oder nachfolgenden Prüfungen verwerfen
   diese Geometrie? Die pauschale Empfehlung „näher heran“ ist durch das Bild
   nicht belegt. Ein Zusammenhang mit der Windows-EXE ist nicht erkennbar;
   der Abbruch liegt vor der Ausgabe.
@@ -3556,7 +3602,14 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-71 — Wie kann ein fehlerhafter Einrichtungsvorschlag abgebrochen oder neu gestartet werden?
 
-* **Status:** offen (2026-11-11) · **Priorität:** hoch, Bedienablauf blockiert · **Priorität:** kritisch, Workbench-Blocker
+* **Status:** geklärt (2026-11-12)
+* **Antwort:** „Neu einrichten“ ist sowohl beim fertigen Vorschlag als
+  auch nach der Bestätigung erreichbar. Nach Bestätigung fragt die
+  Werkbank vor dem Verwerfen nach. Bei Gesamturteil FEHLER bleibt
+  Bestätigen gesperrt. Ein neuer Einrichtungsordner erhält die bisherigen
+  Belege. Der Ablauf ist in Backend-, Node- und Browserregressionen belegt.
+  [Bedienung der Werkbank](anleitung/10-kamera-livevorschau.md#einrichten-prufen-und-bestatigen),
+  [Changelog](../CHANGELOG.md).
 * **Bedienermeldung:** Bei der aktuellen Einrichtung wird Bestätigen angeboten,
   der Server lehnt den fehlerhaften Vorschlag korrekt ab. Danach fehlen
   Abbrechen und Neu einrichten. Die Meldung gehört zum Zustand
@@ -3597,14 +3650,20 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-72 — Warum lehnt die Kantenprüfung die letzte Ziffer der neuen Aufstellung ab?
 
-* **Status:** offen (2026-11-11) · **Priorität:** kritisch, Workbench-Blocker
+* **Status:** geklärt (2026-11-12)
+* **Antwort:** In den Aufnahmen `161702Z` und `161955Z` erzeugen ein
+  Glanzfleck und die hellere Glasfläche neben der letzten Ziffer den
+  gemessenen Helligkeitsschritt. Im Vergleichsfall `170836Z` liegt
+  eine dunkle Spiegelung über den rechten Leerzellen. Die Prüfung erklärt
+  die betroffenen Zellen und Abhilfen in der Werkbank.
+  [Changelog](../CHANGELOG.md), [Bildbelege](quellen/setup-followup-2026-11-11.md).
 * **Befund:** Nach dem ausdrücklich beauftragten Workbench-Neustart scheitert
   `live-20261111T161702Z` in der Vorprüfung: `kanten (Zelle 7)`; Stabilitätsprüfung
   nicht gestartet. Fokus und Belichtung abgeschlossen. Erster Rasterversuch
   `keine_startlage`, zweiter `ok`. Die Kantenprüfung untersucht Helligkeitsstufen,
   nicht ausschließlich Fokus oder Bildschärfe. Der Zellindex 7 bezeichnet
   die letzte Zahlzelle des angezeigten Texts `+0.69551`.
-* **Offen:** Tatsächliche Reflex-/Helligkeitskante, Geometrie-/Entzerrungseffekt
+* **Ausgangsfrage:** Tatsächliche Reflex-/Helligkeitskante, Geometrie-/Entzerrungseffekt
   oder Fehlalarm der Vorprüfung? Die Rastererfolge ersetzen die Vorprüfung
   nicht; deren Grenzen nicht ohne positiven und negativen Beleg lockern.
 * **Belege:** Standbild, Kameraregler, Zellentexte, Fehler und Status unter
@@ -3854,16 +3913,22 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
 
 ## OQ-79 — Reicht die sudo-Freigabe für Stopp und Wiederanlauf aus der Konsole?
 
-* **Status:** offen · **Zuständig:** ME-Systeme
+* **Status:** teilweise geklärt (2026-11-25) · **Zuständig:** ME-Systeme
 * **Befund (2026-11-25):** Der Kalibrierworker kann `sudo -S -p '' -v` für
   denselben Prozesskontext nutzen. Die nachfolgenden Dienstbefehle nutzen
   `sudo -n`. Die installierte sudoers-Regel bestimmt, ob die Freigabe bis zum
   Wiederanlauf gilt. Die Durchläufe mit Dienst-Fakes decken die Befehle
   und den Aufräumpfad ab.
-* **Günstigstes Experiment:** Auf einem installierten System-Pi als
-  Bedienerkonto einmal regulär kalibrieren und einmal während der Aufnahme
-  abbrechen. In beiden Fällen die Rückstellung und den HTTPS-Wiederanlauf
-  prüfen. Die wirksame sudoers-Regel für dieses Konto festhalten.
+* **Teilantwort 2026-11-25:** Auf raspi01 wurde zunächst `picam kalibrieren`
+  mit `rc-51b620f` durchgeführt. Mit `rc-eaa4ad8` meldete Leonhard
+  anschließend auch die Konsolen-Bildschirme einschließlich Kalibrierung
+  als funktionsfähig. Die Rückmeldung enthält weder die wirksame
+  sudoers-Regel noch ein Protokoll des Abbruchpfads.
+  [Laborjournal](lab_journal.md).
+* **Nächster Beleg:** Auf einem installierten System-Pi als Bedienerkonto
+  den regulären Durchlauf und einen Abbruch während der Aufnahme
+  protokollieren. Rückstellung und HTTPS-Wiederanlauf in beiden Fällen
+  erfassen und die wirksame sudoers-Regel festhalten.
 * **Zielort:** [Validierung](VALIDATION.md) und [Laborjournal](lab_journal.md).
 
 <span id="oq-80"></span>

@@ -31,6 +31,7 @@ in der [Sammelmodus-Anleitung](../anleitung/11-datensatz-sammeln.md#grenzen-der-
 | --- | --- | --- |
 | synthetische Bilder | Funktion der Kette und gezielte Fehlerfälle | Trefferquote an realen Geräten |
 | reale Entwicklungsgeräte | Schwellen und Fehleranalyse während der Entwicklung | unabhängige Abnahme |
+| Betriebsabnahme am GSV-2AS vom 13.11.2026 | Werkbank und drei Ausgabewege im geprüften Aufbau | Freigabe weiterer Geräte, 72-h-Dauerlauf und P7-Systemabnahme |
 | vor Entwicklung gesperrte Geräte | einmaliger Test gegen vorab festgelegte Kriterien | nachträgliches Tuning auf denselben Geräten |
 | technischer Kamerastream-Test | Bildfluss, Metadaten und Betriebsverhalten | korrekte Werterkennung |
 
@@ -57,16 +58,30 @@ Bei großen Wertwechseln ist ein Nachführverlust belegt
 ([OQ-26](../open-questions.md#oq-26)); Ausbeute und Fehlablesungsrate müssen
 deshalb getrennt ausgewertet werden.
 
-Ein Lauf mit <code>TESTLAUF.json</code> liefert keine freigegebenen
-Messwerte. Die Live-Sitzung setzt jede Gate-Freigabe vor dem Audit auf
+Bei der Abnahme am 13.11.2026 zeigten die protokollierten Läufe
+lückenlose Vierkanal-Taktzähler über Netzwerk, UART über Brücke und UART
+direkt. Der UART-Weg über die Brücke hatte auch Rahmenfehler und gefüllte
+Takte. In der Auswertung zählen ausschließlich Zeilen mit Gültigkeit
+`1` in Kanal 2. Bei ungültigen Takten kann in Kanal 1 ein gehaltener
+Altwert stehen. Die Kalibrierauswertung und der Zeitbezug der
+Übertragung brauchen eigene Nachweise.
+[Windows-Prüfbericht UX2](../quellen/ux2-pruefung-2026-11-13/ux2-bericht.md),
+[OQ-06](../open-questions.md#oq-06), [Zeitverhalten](../TIMING.md).
+
+Der Diagnose-Testlauf schreibt <code>TESTLAUF.json</code> und sperrt die
+externe Ausgabe. Die Live-Sitzung setzt jede Gate-Freigabe vor dem Audit auf
 <code>UNREADABLE</code>, mit <code>value=null</code> und dem ersten
 Ablehnungsgrund <code>testlauf_keine_freigabe</code>. Die Oberfläche zeigt
-nur die getrennte Leser-Vermutung als Diagnose
-([OQ-44](../open-questions.md#oq-44)). Historische Testläufe können noch
-<code>valid</code>-Records enthalten; auch sie bleiben für Messungen gesperrt
-und sind mit der Laufmarkierung auszuwerten. Läufe mit angepasster Toleranz
-tragen <code>reader_tolerance</code> und bleiben als nicht validiert markiert.
-Diese Gruppen getrennt von strengen Läufen berichten.
+die Leser-Vermutung als Diagnose. Auch historische Läufe mit dieser
+Laufmarkierung bleiben selbst bei vorhandenen <code>valid</code>-Records
+von der Messauswertung ausgeschlossen.
+[OQ-44](../open-questions.md#oq-44).
+
+Die angepasste Toleranz ist eine Option für reguläre Läufe und wird als
+<code>reader_tolerance</code> protokolliert. Berichte ihre Ausbeute und
+Fehlablesungen getrennt von Läufen mit Standardtoleranz. Die Validierung
+der Toleranz am Aufbau bleibt offen.
+[Lesetoleranz](../open-questions.md#oq-14), [Changelog](../../CHANGELOG.md).
 
 ## Welche Fehler einzeln zählen?
 

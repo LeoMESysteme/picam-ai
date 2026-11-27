@@ -42,9 +42,12 @@ USB-RS232-Adapter automatisch ab, auf Wunsch im Kalibrierbildschirm der Konsole
 (Ablauf: [INSTALLER.md](INSTALLER.md)).
 Ohne RS232 ist dieselbe Größe (Telegramm → Display) nicht messbar; eine
 LED am GPIO würde eine andere Größe messen (Kamera-Latenz, M2) und wäre
-als eigenes Schema zu führen. Am Aufbau zu prüfen: ein voller Lauf auf
-raspi01, ob 180 s genug Ereignisse liefern, Dauer der Auswertung,
-Rückstellung der Normierung am echten Gerät.
+als eigenes Schema zu führen. Am 25.11. wurde die Kalibrierung mit
+`picam kalibrieren` auf raspi01 erfolgreich gemeldet. Die Kalibrierwerte
+und Auswertungsdauer liegen auf dem Gerät. Für den Konsolenablauf stehen
+die dokumentierte Rückstellung und der Dienstwiederanlauf nach einem
+Abbruch während der Aufnahme noch aus.
+[Laborjournal](lab_journal.md) · [OQ-79](open-questions.md#oq-79)
 
 ## Messprogramm
 
@@ -56,7 +59,7 @@ Rückstellung der Normierung am echten Gerät.
 | **M4** | Pipeline-Latenzverteilung je Stufe | eingebaute Instrumentierung (`PipelineTrace`), p50/p95/max je Stufe | **teilweise** — synthetische Stufen-Rechenzeiten unten; reale Dot-Matrix-/Live-Rechenzeiten und Durchsatz in [VALIDATION.md](VALIDATION.md#messpfad-live-langlauf-2026-10-21). Vollständige Verteilung über den freizugebenden Umfang fehlt |
 | **M5** | **Displayaktualisierung und Haltezeit je Gerätetyp** | Sprunganregung, gleichzeitig Highspeed-Aufnahme und elektrischer Sprungzeitpunkt über GPIO, ≥ 30 Wiederholungen je Typ | **teilweise** — serielle Anzeigezuordnung und Mischzeit am GSV-2AS für die Ernte kalibriert (2026-09-29, siehe unten); interne DUT-Verzögerung und andere Geräte fehlen |
 | **M6** | Pi gegen Referenz: Offset und Drift | abhängig von [OQ-03](open-questions.md). Bester Fall gemeinsame Zeitquelle, schlechtester Fall gemeinsames Ereignis und Kreuzkorrelation | offen |
-| **M7** | Serielle Strecke | Loopback bei Zielbaudrate, `write()` bis Empfang, Backpressure bei voller Leitung | **teilweise** — ausgehende Strecke gegen pty geprüft, GPIO-Ausgang nicht elektrisch ([OQ-09](open-questions.md#oq-09)). Eingehende USB-RS232-Referenzaufzeichnung am GSV-2AS ist ein getrennter Beleg |
+| **M7** | Serielle Strecke | Loopback bei Zielbaudrate, `write()` bis Empfang, Backpressure bei voller Leitung | **teilweise** — ausgehende Strecke gegen pty geprüft. Reale UART-Ausgabe und Störfälle sind seit 13.11. belegt. Latenz und Backpressure bei Zielbaudrate bleiben Prüfaufgaben. [UX2-Bericht](quellen/ux2-pruefung-2026-11-13/ux2-bericht.md) · [OQ-09](open-questions.md#oq-09) |
 | **M8** | **Welche Zeitachse verwendet GSVmulti für den DUT-Import?** | UserDefined: bekannte Sendefolge, Pausen und gebündelten Empfang gegen Anzahl und Zeitachse der gespeicherten Werte prüfen; einen Zeitstempelversatz nur bei nachgewiesenem Aufnahmezeitfeld testen | offen — UserDefined hat kein definiertes Aufnahmezeitfeld; [Prüfplan und Grenzen](GSVMULTI_PROTOCOL.md#die-wichtigste-einzelfrage-m8) |
 
 **M8 bleibt für die zeitliche Integration entscheidend.** Seit 2026-10-28

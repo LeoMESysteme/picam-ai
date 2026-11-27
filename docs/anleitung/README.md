@@ -58,7 +58,7 @@ die ersten fünf brauchen **keine Hardware**.
 | 6 | [Kamera, Aufnahme, `replay://`](06-kamera-aufnahme-replay.md) | echte Frames aufnehmen und reproduzierbar abspielen | Kamera | 1–2 Tage | P1/P2 |
 | 7 | [Lokalisierung ohne Bediener](07-lokalisierung.md) | Anzeige im Bild finden und verfolgen | Kamera (Test: nein) | 1–2 Tage | P0/P3 |
 | 8 | [Weitere OCR-Backends](08-ocr-backends.md) | zweites Backend gegen das Segmentverfahren messen | – (Daten: ja) | 2–3 Tage | P3 |
-| 9 | [Betrieb: Installation, Dienst, Dauerlauf](09-betrieb.md) | Dienst starten, 72 h laufen lassen, Doku-Test | Kamera + UART | 2–3 Tage | P6 |
+| 9 | [Betrieb: Installation, Dienst, Dauerlauf](09-betrieb.md) | Installierte Werkbank prüfen und 72-h-Dauerlauf vorbereiten | Kamera + gewählter Ausgabeweg | ab 72 h für den Dauerlauf | P6 |
 
 Zwei fertige Workbench-Prototypen ergänzen den Lernpfad: [Kapitel 10](10-kamera-livevorschau.md)
 beschreibt Vorschau, Einrichtung und Live-Messlauf; [Kapitel 11](11-datensatz-sammeln.md)
@@ -86,8 +86,10 @@ hilft bei Splits, Fehlerklassen und der Aussagekraft eines Benchmarks.
 
 Vollständig in [../../AGENTS.md](../../AGENTS.md), hier nur als Merkzettel:
 
-1. **Ein veralteter Wert läuft nie unmarkiert weiter.** Kein Modul darf den
-   letzten guten Wert „vorsichtshalber" wiederholen.
+1. **Ein veralteter Wert läuft nie unmarkiert weiter.** Er bleibt in der
+   Freigabe ungültig. Im GSVmulti-Vierkanalformat darf Kanal 1 den
+   letzten gültigen Wert halten. Kanal 2 kennzeichnet diesen Takt mit
+   Gültigkeit 0. [Ausgaberegeln](../GSVMULTI_PROTOCOL.md)
 2. **Der Referenzwert der Kalibriermaschine erreicht die Erkennung nicht.**
    Wenn eine Signatur ihn bräuchte, ist die Signatur falsch.
 3. **Unlesbares wird abgelehnt, nicht geraten.** Eine Falschablehnung ist
@@ -95,10 +97,11 @@ Vollständig in [../../AGENTS.md](../../AGENTS.md), hier nur als Merkzettel:
 4. **Konfidenz ist keine Fehlerwahrscheinlichkeit.**
    `declares_confidence_calibrated` bleibt `False`, bis eine Kalibriermessung
    in [../VALIDATION.md](../VALIDATION.md) steht.
-5. **Kein Protokoll erfinden.** Der UserDefined-Einstieg ist dokumentiert,
-   der Adapter noch nicht implementiert oder abgenommen
-   ([OQ-07](../open-questions.md)); alles Neue geht über einen
-   `TelegramFormatter` mit `provisional=True`.
+5. **Kein Protokoll erfinden.** Die Werkbank nutzt den dokumentierten
+   UserDefined-Zahlenimport. Das native GSV-ASCII-Format bleibt offen.
+   Formatänderungen laufen über den `TelegramFormatter`. Vorläufige
+   Formate tragen `provisional=True`.
+   [OQ-07](../open-questions.md#oq-07)
 
 Dazu die Zeitregel: **jeder Zeitstempel trägt seine Zeitbasis.** Aus
 `SYNTHETIC` und `FILE_MTIME` darf keine Latenzaussage werden.
