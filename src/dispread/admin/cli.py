@@ -309,7 +309,13 @@ def run_hint_command(command: str, instance) -> int:
         if instance.config:
             argv += ['--config', instance.config]
         return subprocess.call(argv + shlex.split(command)[1:])
-    return subprocess.call(command, shell=True, cwd=instance.root or None)
+    # Ohne Shell: alle Hinweisbefehle sind feste Zeichenketten oder per shlex.join gebaut (probes.py).
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:
+        print(f'Befehl nicht ausführbar ({exc}): {command}', file=sys.stderr)
+        return 2
+    return subprocess.call(argv, cwd=instance.root or None)
 
 
 def setup_calibration(instance, style, ask=input, run=None, interactive: bool | None = None) -> int:

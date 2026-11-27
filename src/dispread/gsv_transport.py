@@ -59,7 +59,10 @@ class OutputConfig:
     transport: str = "off"
     serial_port: str = GSV_UART_PORT
     baudrate: int = UART_BAUD
-    tcp_host: str = "0.0.0.0"
+    # Begründung für nosec B104: Altfeld der v1-Brücke. Produktiv öffnet nur PairedOutputPublisher (WSS am HTTPS-Dienst) einen
+    # Listener, `tcp_host` bleibt reine Konfigurationskompatibilität (docs/BRIDGE_PROTOCOL_V2.md). Der v1-Listener
+    # in OutputPublisher ist nur per Demo-/Test-Factory erreichbar.
+    tcp_host: str = "0.0.0.0"  # nosec B104
     tcp_port: int = 5000
     max_frame_age_ms: int = 1000
 

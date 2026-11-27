@@ -5,6 +5,13 @@ was ist die Konsequenz.
 
 ## Unveröffentlicht
 
+* 2026-11-27: **bandit-Funde bewertet (B602, B104, B301).** `run_hint_command` (admin/cli.py) startet Hinweisbefehle
+  jetzt ohne Shell (`shlex.split`), vorher `shell=True`; alle Befehle stammen aus `probes.py` und sind feste
+  Zeichenketten oder per `shlex.join` gebaut, das Verhalten bleibt gleich. Unbalancierte Anführungszeichen geben Code 2
+  statt eines Shell-Fehlers. Der Standard `tcp_host = "0.0.0.0"` (gsv_transport.py) und die `pickle`-Aufrufe über die
+  Pipe des eigenen Probenprozesses (live/region_probe.py, live/session.py) sind mit `# nosec` und Begründung im Code
+  markiert; Werte und Verhalten unverändert. Hintergrund und Restrisiken: docs/security-scan.md.
+
 * 2026-11-25: Aufräumen nach dem Hauptcheckout. Doku-Einträge vom 5./11./13.11. (Laborjournal, VALIDATION, Projektgeschichte, Hardware-Profil, USER ENTRIES), WLAN-Wächter-Quellen (`scripts/picam-wlan-watchdog*`, `systemd/picam-wlan-watchdog.*`, `docs/HOST_NETZWERK.md`), Analyse 2026-11-10 und TUI-Wunschliste nach master übernommen; Repowise-Verweise aus Agent-Anweisungen, Hooks und Pflegeprompt entfernt; CI installiert Doku-Werkzeuge mit `PIP_CONFIG_FILE=/dev/null` ohne piwheels (dessen Proxy brach am 11.11. 9 von 20 TLS-Handshakes ab; auf aarch64 kommen alle Pakete von PyPI). Kein Messpfadcode geändert.
 
 ## 1.1.1 — 2026-11-25 (Installer: Rechte der Programmdateien)

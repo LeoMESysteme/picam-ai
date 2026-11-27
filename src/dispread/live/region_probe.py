@@ -31,7 +31,8 @@ def main() -> None:
     except OSError:
         pass
     try:
-        payload, base, target = pickle.loads(sys.stdin.buffer.read())
+        # Begründung für nosec B301: stdin ist die Pipe des eigenen Elternprozesses (live/session.py), kein Netz- oder Dateikanal.
+        payload, base, target = pickle.loads(sys.stdin.buffer.read())  # nosec B301
         outcome = ("ok", run(payload, base, target))
     except Exception as exc:  # noqa: BLE001 - Ergebnis ist dann "keine Stilllegung"
         outcome = ("error", f"{type(exc).__name__}: {exc}")

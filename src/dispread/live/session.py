@@ -235,7 +235,8 @@ class ProbeProcess:
         def talk():
             try:
                 out, _ = self._process.communicate(job)
-                self._outcome = (pickle.loads(out) if out else
+                # Begründung für nosec B301: Ausgabe des selbst gestarteten Probenprozesses (Pipe), kein Netz- oder Dateikanal.
+                self._outcome = (pickle.loads(out) if out else  # nosec B301
                                  ('error', f'Probenprozess ohne Ergebnis beendet (Code {self._process.returncode})'))
             except Exception as exc:  # noqa: BLE001 - ohne Probe keine Stilllegung
                 self._outcome = ('error', f'{type(exc).__name__}: {exc}')
