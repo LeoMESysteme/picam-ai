@@ -97,8 +97,9 @@ Hinweise zur Aufteilung in der CI:
 * Die eingefrorene Lesevorlage ist nicht im Repo (`var/` ist ignoriert). `ci.py` sucht sie unter
   `var/dotmatrix/templates-stufe2c-2026-09-30.json` oder unter dem Pfad aus `PICAM_RELEASE_TEMPLATES`.
   Ohne beides wird der Build-Trockenlauf **übersprungen** und als "NICHT geprüft" gemeldet; gesetzt, aber
-  fehlend ist ein Fehler. Auf dem Runner gibt es die Datei nicht (kein Zugriff auf `/home`), der Release-Build
-  wird dort also nicht geprüft, bis eine Kopie unter `/var/lib/forgejo-runner/` liegt.
+  fehlend ist ein Fehler. Auf dem Runner liegt eine Kopie unter
+  `/var/lib/forgejo-runner/picam-templates/` (Besitzer `forgejo-runner`, Modus 0640; `ci-release.yml` setzt
+  `PICAM_RELEASE_TEMPLATES` darauf). Ändert sich die eingefrorene Vorlage, muss die Kopie dort erneuert werden.
 * Fix: Versionsstände angleichen, den Tag neu setzen, Vorlagendatei bereitstellen. Den Build lokal prüfen:
   `scripts/ci.py t3 --only release`.
 

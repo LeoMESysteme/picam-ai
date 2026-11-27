@@ -25,6 +25,8 @@ jobs:
       # Runner-Grenzen (systemd-Unit forgejo-runner): 2 Kerne, 2 GB, Nice 19 -> Details in docs/ci-failures.md
       PICAM_CI_WORKERS: '2'
       PICAM_PERF_GATE: skip
+      # Lesevorlage fuer den Release-Trockenlauf (build-release.py), vom Admin bereitgestellt, kein Repo-Inhalt.
+      PICAM_RELEASE_TEMPLATES: /var/lib/forgejo-runner/picam-templates/templates-stufe2c-2026-09-30.json
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
