@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# pre-commit (T0): ruff, gitleaks, bandit und CHANGELOG-Regel auf gestagten Dateien.
+# Aktivierung: scripts/setup-hooks.sh. Ueberspringen im Notfall: git commit --no-verify
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+PY="$ROOT/.venv/bin/python"
+[ -x "$PY" ] || PY="python3"
+exec "$PY" "$ROOT/scripts/ci.py" t0 --staged

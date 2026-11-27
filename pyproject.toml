@@ -17,7 +17,16 @@ requires-python = ">=3.13"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-xdist>=3.8", "ruff>=0.6"]
+# Mit --no-deps installiert pip die Abhaengigkeiten der Dev-Werkzeuge NICHT mit;
+# sie stehen explizit in docs/dependencies.md (Abschnitt "Dev-Werkzeuge").
+dev = [
+    "pytest>=8",
+    "pytest-xdist>=3.8",
+    "pytest-timeout>=2.3",
+    "pytest-cov>=5",
+    "bandit>=1.8",
+    "ruff>=0.6",
+]
 
 [project.scripts]
 dispread = "dispread.workbench.cli:main"
@@ -44,7 +53,17 @@ target-version = "py313"
 select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["E501", "B008"]
 
+[tool.bandit]
+# Gate: scripts/ci.py ruft bandit mit -ll (medium und hoeher) auf; Bestandsfunde
+# stehen in der Baseline, damit nur neue Funde brechen. Installation: .venv-tools
+# (scripts/install-security-tools.sh), NICHT in .venv.
+exclude_dirs = ["tests", ".worktrees", ".venv", ".venv-tools", "node_modules", "test-results", "var"]
+
 [tool.pytest.ini_options]
+# --strict-config macht unbekannte Optionen zu Fehlern. Deshalb steht "timeout"
+# (pytest-timeout) und "--cov" (pytest-cov) hier NICHT: beide Plugins sind per
+# --no-deps optional. scripts/ci.py setzt --timeout und --cov, wenn das Plugin da ist.
+addopts = "-ra --tb=short --strict-markers --strict-config --durations=15"
 testpaths = ["tests"]
 pythonpath = ["src", "windows/bridge/src"]
 tmp_path_retention_policy = "failed"
@@ -54,4 +73,5 @@ markers = [
     "serial: braucht UART oder Transceiver",
     "slow: laeuft laenger als 5 s",
     "timing: misst Wanduhr-Laufzeit; bei pytest -n uebersprungen, getrennt mit -m timing",
+    "perf: Leistungsmessung (Durchsatz/Latenz); laeuft nicht in T0/T1, Gate ueber scripts/perf-report.py",
 ]

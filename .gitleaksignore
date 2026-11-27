@@ -1,0 +1,7 @@
+# Fingerprints bewusst akzeptierter gitleaks-Fehlalarme in der Git-Historie.
+# Format: <commit>:<datei>:<regel>:<zeile>. Triage und Begruendung: docs/security-scan.md
+# Hash eines Dateinamens/Dateiinhalts in Experiment-Ergebnissen ("auth.py": "<sha>"), kein Zugangsdatum.
+6a18bdf3e56fd4c8633136901713f21917c7c36e:experiments/automatic_seven_segment/results/frozen.json:generic-api-key:61
+6a18bdf3e56fd4c8633136901713f21917c7c36e:experiments/automatic_seven_segment/results/results.json:generic-api-key:106
+# Minifizierte Fremdbibliothek xterm.js (Tabellenname FourKeyMap), kein Zugangsdatum.
+2ecafab9ee49e3edfea222b17e0b97d8655e6ee5:src/dispread/workbench/static/vendor/xterm.js:generic-api-key:1

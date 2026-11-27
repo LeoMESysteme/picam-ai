@@ -37,6 +37,23 @@ Zwei harte Sätze:
 * **Kein Commit an `src/` ohne CHANGELOG-Eintrag.**
 * **Vor Sessionende `docs/status.md` aktualisieren.**
 
+## Teststufen {#teststufen}
+
+* `scripts/ci.py <t0|t1|t2|t3|nightly>` ist der einzige Einstieg, lokal und in der CI
+  gleich; `--dry-run` zeigt vorab Stufe, Testauswahl und Schritte. Fehlerkatalog und
+  Stufentabelle: [docs/ci-failures.md](docs/ci-failures.md).
+* **Gezielte Tests genügen** bei kleinen Änderungen mit Zuordnung (`scripts/test-select.py`,
+  `scripts/test-map.toml`): vor dem Commit `scripts/ci.py t1`.
+* **Die volle Suite (T2) ist Pflicht** bei Änderung an Kernpfaden (`pipeline.py`, `rectify*`,
+  `ocr/`, `validate.py`, `records.py`, `live/`, `pyproject.toml`, `tests/conftest.py`,
+  `packaging/`, `scripts/ci*`), bei mehr als 25 geänderten Dateien oder mehr als 3 Bereichen, bei
+  Quellen ohne Test-Zuordnung und vor jedem Merge nach master. `ci.py t1` eskaliert dann selbst.
+  Vor einem Release gilt T3 (`scripts/ci.py t3`).
+* Für die Prüfnachweise (siehe oben) gelten die Stufen als getrennte Nachweise: gezielt (T1),
+  voll (T2/T3), CI-Lauf und Geräteabnahme (`--mode=real`) jeweils mit eigenem Commit, Befehl,
+  Exitcode und Testzähler. Ein grünes T1 belegt nie die volle Suite; übersprungene Schritte
+  ("uebersprungen", fehlendes Werkzeug) sind als offen zu melden.
+
 ## Zensical-Übersichten pflegen
 
 * Den erzeugten Block in `docs/open-questions.md` zwischen `OQ-INDEX:START`

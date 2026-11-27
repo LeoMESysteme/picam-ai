@@ -1,0 +1,70 @@
+# Nightly: Security voll, volle Suite, Perf-Trend, Hardware-Tests im real-Modus (nur wenn
+# ein Geraet am Runner haengt, sonst meldet ci.py "uebersprungen"). Zeitplan wie
+# docs-maintenance.yml in Europe/Berlin, aber vor dessen 06:00-Lauf (gleicher Runner).
+name: CI Nightly
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+      timezone: Europe/Berlin
+  workflow_dispatch:
+
+concurrency:
+  group: ci-nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  nightly:
+    runs-on: picam-docs
+    timeout-minutes: 75
+    env:
+      CI: 'true'
+      # Runner-Grenzen (systemd-Unit forgejo-runner): 2 Kerne, 2 GB, Nice 19 -> Details in docs/ci-failures.md
+      PICAM_CI_WORKERS: '2'
+      PICAM_PERF_GATE: skip
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Reproduzierbares Setup laut docs/dependencies.md (Dev-Werkzeuge):
+      # venv mit Systempaketen (OpenCV/NumPy/aiohttp, ABI-Regel in pyproject.toml),
+      # Dev-Plugins in die venv, gitleaks/bandit nutzerlokal. Ohne piwheels
+      # (PIP_CONFIG_FILE=/dev/null), Begruendung in docs.yml.
+      - name: Python-Umgebung und Dev-Werkzeuge
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install pytest pytest-xdist execnet pytest-timeout pytest-cov coverage ruff
+      - name: Security-Werkzeuge (gitleaks, bandit)
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          if [ -x scripts/install-security-tools.sh ]; then
+            scripts/install-security-tools.sh
+          else
+            echo "scripts/install-security-tools.sh fehlt (Paket B): gitleaks/bandit nicht installiert"
+          fi
+      - name: Nightly ausfuehren
+        shell: bash
+        run: |
+          mkdir -p reports
+          .venv/bin/python scripts/ci.py nightly 2>&1 | tee reports/ci-nightly.log
+      - name: Zusammenfassung
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          .venv/bin/python scripts/ci-summary.py --title "Nightly" --stage nightly --repro "scripts/ci.py nightly" --log reports/ci-nightly.log >> "$GITHUB_STEP_SUMMARY"
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        if: ${{ !cancelled() }}
+        with:
+          name: ci-nightly-reports
+          path: |
+            reports/
+            perf/results/
+          if-no-files-found: ignore
+          retention-days: 30

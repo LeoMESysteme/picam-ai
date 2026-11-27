@@ -1,0 +1,53 @@
+# gitleaks-Konfiguration fuer picam-ai.
+# Die Standardregeln bleiben aktiv (useDefault); hier stehen nur begruendete
+# Ausnahmen. Neue Eintraege immer mit Kommentar, WARUM kein echtes Geheimnis
+# (oder warum nie im Repo). Details und Triage: docs/security-scan.md
+# Einzelne Fehlalarme in der Git-Historie stehen als Fingerprints in
+# .gitleaksignore (nicht hier).
+title = "picam-ai gitleaks"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Bewusst nie versionierte oder erzeugte Verzeichnisse und Artefakte"
+condition = "OR"
+paths = [
+  # Lokale Agent-Worktrees: Kopien bereits versionierten Codes, per .git/info/exclude ausgeschlossen.
+  '''(^|/)\.worktrees/''',
+  # Abhaengigkeiten von npm; Fremdcode, nicht von uns.
+  '''(^|/)node_modules/''',
+  # Playwright-Ausgaben (laut .gitignore nie im Repo): Traces/Reports enthalten Zufalls-IDs.
+  '''(^|/)test-results/''',
+  '''(^|/)playwright-report[^/]*/''',
+  '''(^|/)blob-report/''',
+  # Erzeugte Doku-Seite (.gitignore: /site/), reines Build-Ergebnis.
+  '''^site/''',
+  # Build-Ausgaben der Cockpit-Seite (z. B. zufaelliger prerenderSecret je Build, wird neu erzeugt).
+  '''^sites/[^/]+/dist/''',
+  # Laufzeit-/Diagnosedaten (.gitignore: var/): Datensaetze enthalten je Aufnahme eine
+  # Zufalls-ID (capture_token), Diagnosen Journal-Auszuege. var/ enthaelt lokal auch Schluessel
+  # (var/workbench/tls, bridge/identity.json) - die gehoeren dorthin und sind nie versioniert;
+  # ein erzwungenes git add -f faengt der Historien-Scan (security-scan.sh history).
+  '''^var/''',
+  # Lokale Werkzeug-Zustaende (per .git/info/exclude ausgeschlossen): Fragen-Seeds, SDD-Logs.
+  '''^\.impeccable/''',
+  '''^\.superpowers/''',
+  # Python-Bytecode (.gitignore: __pycache__/): Konstantenpool enthaelt Namen wie "key.pem".
+  '''\.py[cod]$''',
+  '''(^|/)__pycache__/''',
+  # Eigene Venvs der Werkzeuge (.venv, .venv-docs, .venv-tools): Fremdcode.
+  '''(^|/)\.venv[^/]*/''',
+  # Archive und Ernte-Exporte: Rohdaten aus Setup-/Ausfall-Analysen, enthalten Zufalls-IDs.
+  '''^docs/quellen/.*\.zip$''',
+  '''(^|/)big-session-export-[^/]*''',
+  # Testfixtures: absichtlich kuenstliche Werte; Fixtures duerfen Beispielschluessel enthalten.
+  '''^tests/fixtures/''',
+  # Lokale Zugangsdaten der Cockpit-Seite (Forgejo-Token): echtes Geheimnis, aber nur auf diesem
+  # Rechner; sites/picam-ai-cockpit/ steht in .git/info/exclude und ist nie im Repo. Rotation
+  # empfohlen, falls die Datei je geteilt wurde (Pfad:Zeile sites/picam-ai-cockpit/.env.local:1).
+  '''^sites/[^/]+/\.env\.local$''',
+  # SSH-Schluesselpaar der Fernwartung: per .gitignore:2 ausgeschlossen, nie im Repo.
+  # Pfadeintrag nur, damit der Arbeitsbaum-Scan nicht dauerhaft rot ist.
+  '''^remoteclaude$''',
+]

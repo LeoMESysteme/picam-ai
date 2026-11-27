@@ -1,0 +1,136 @@
+# T2 voll: komplette pytest-Suite (mock, -n 4), ruff/gitleaks/bandit voll, Coverage und
+# Playwright. pytest und Playwright sind getrennte Jobs (20-Minuten-Grenze und ein
+# einzelner Pi-Runner). Ausloeser: PR gegen master/main, Label full-ci, manuell.
+#
+# Doppelarbeit mit playwright.yml: Fuer PRs gegen master/main fuehrt playwright.yml
+# dieselben Playwright-Tests (docs + live) bereits aus. Der Playwright-Job hier laeuft
+# deshalb nur manuell oder bei Label full-ci auf PRs gegen andere Branches.
+name: CI voll (T2)
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened, labeled ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-voll-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    # Beim Hinzufuegen fremder Labels nicht neu starten.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      ((github.event.action != 'labeled' || github.event.label.name == 'full-ci') &&
+       (github.base_ref == 'master' || github.base_ref == 'main' ||
+        contains(github.event.pull_request.labels.*.name, 'full-ci')))
+    runs-on: picam-docs
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      # Runner-Grenzen (systemd-Unit forgejo-runner): 2 Kerne, 2 GB, Nice 19 -> Details in docs/ci-failures.md
+      PICAM_CI_WORKERS: '2'
+      PICAM_PERF_GATE: skip
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Reproduzierbares Setup laut docs/dependencies.md (Dev-Werkzeuge):
+      # venv mit Systempaketen (OpenCV/NumPy/aiohttp, ABI-Regel in pyproject.toml),
+      # Dev-Plugins in die venv, gitleaks/bandit nutzerlokal. Ohne piwheels
+      # (PIP_CONFIG_FILE=/dev/null), Begruendung in docs.yml.
+      - name: Python-Umgebung und Dev-Werkzeuge
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install pytest pytest-xdist execnet pytest-timeout pytest-cov coverage ruff
+      - name: Security-Werkzeuge (gitleaks, bandit)
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          if [ -x scripts/install-security-tools.sh ]; then
+            scripts/install-security-tools.sh
+          else
+            echo "scripts/install-security-tools.sh fehlt (Paket B): gitleaks/bandit nicht installiert"
+          fi
+      - name: T2 ausfuehren (Lint, Security, pytest)
+        shell: bash
+        run: |
+          mkdir -p reports
+          .venv/bin/python scripts/ci.py t2 --only lint,security,pytest 2>&1 | tee reports/ci-t2-pytest.log
+      - name: Zusammenfassung
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          .venv/bin/python scripts/ci-summary.py --title "T2 pytest" --stage t2 --repro "scripts/ci.py t2 --only lint,security,pytest" --log reports/ci-t2-pytest.log >> "$GITHUB_STEP_SUMMARY"
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        if: ${{ !cancelled() }}
+        with:
+          name: ci-t2-pytest-reports
+          path: |
+            reports/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  playwright:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      ((github.event.action != 'labeled' || github.event.label.name == 'full-ci') &&
+       github.base_ref != 'master' && github.base_ref != 'main' &&
+       contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    runs-on: picam-docs
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      # Runner-Grenzen (systemd-Unit forgejo-runner): 2 Kerne, 2 GB, Nice 19 -> Details in docs/ci-failures.md
+      PICAM_CI_WORKERS: '2'
+      PICAM_PERF_GATE: skip
+      PLAYWRIGHT_BROWSERS_PATH: /var/lib/forgejo-runner/playwright-browsers
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Werkbank-Tests brauchen die venv (tests/live_ui_server.py), wie in playwright.yml.
+      - name: Python-Umgebung fuer die Werkbank
+        run: python3 -m venv --system-site-packages .venv
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Node-Abhaengigkeiten und Playwright-Browser
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --only-shell chromium
+      - name: Doku-Werkzeuge
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          python3 -m venv .venv-docs
+          .venv-docs/bin/pip install -r requirements-docs.txt
+      - name: T2 ausfuehren (Playwright)
+        shell: bash
+        run: |
+          mkdir -p reports
+          .venv/bin/python scripts/ci.py t2 --only playwright 2>&1 | tee reports/ci-t2-playwright.log
+      - name: Zusammenfassung
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          .venv/bin/python scripts/ci-summary.py --title "T2 Playwright" --stage t2 --repro "scripts/ci.py t2 --only playwright" --log reports/ci-t2-playwright.log >> "$GITHUB_STEP_SUMMARY"
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        if: ${{ !cancelled() }}
+        with:
+          name: ci-t2-playwright-reports
+          path: |
+            reports/
+            test-results/
+            test-results-live/
+            playwright-report/
+            playwright-report-live/
+          if-no-files-found: ignore
+          retention-days: 30

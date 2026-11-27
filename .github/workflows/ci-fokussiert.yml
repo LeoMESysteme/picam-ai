@@ -1,0 +1,98 @@
+# T1 fokussiert: ruff, gitleaks/bandit auf geaenderte Dateien, CHANGELOG-Regel und nur
+# die betroffenen Tests. Eskaliert scripts/ci.py selbst auf T2 (Kernpfade, > 25 Dateien,
+# Quelle ohne Test-Zuordnung) und meldet das im Log. Stufenueberblick: docs/ci-failures.md.
+#
+# Pull Requests gegen master/main laufen in ci-voll.yml (T2 ist die Obermenge), daher hier
+# nur Push auf Nicht-master-Branches und PRs gegen andere Branches.
+# Liegt in .github/workflows/ (ein .forgejo/workflows/ wuerde diesen Ordner verdraengen).
+name: CI fokussiert (T1)
+
+on:
+  push:
+    branches-ignore: [ master, main ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'packaging/**'
+      - 'examples/**'
+      - 'systemd/**'
+      - 'udev/**'
+      - 'pyproject.toml'
+      - 'CHANGELOG.md'
+      - '.github/workflows/ci-fokussiert.yml'
+  pull_request:
+    branches-ignore: [ master, main ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'packaging/**'
+      - 'examples/**'
+      - 'systemd/**'
+      - 'udev/**'
+      - 'pyproject.toml'
+      - 'CHANGELOG.md'
+      - '.github/workflows/ci-fokussiert.yml'
+
+# Push und PR desselben Branches teilen sich die Gruppe; aeltere Laeufe werden abgebrochen.
+concurrency:
+  group: ci-fokussiert-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  t1:
+    runs-on: picam-docs
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      # Runner-Grenzen (systemd-Unit forgejo-runner): 2 Kerne, 2 GB, Nice 19 -> Details in docs/ci-failures.md
+      PICAM_CI_WORKERS: '2'
+      PICAM_PERF_GATE: skip
+      # Basis fuer "geaenderte Dateien": Ziel-Branch des PR, sonst master.
+      BASE_REF: ${{ github.base_ref || 'master' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Reproduzierbares Setup laut docs/dependencies.md (Dev-Werkzeuge):
+      # venv mit Systempaketen (OpenCV/NumPy/aiohttp, ABI-Regel in pyproject.toml),
+      # Dev-Plugins in die venv, gitleaks/bandit nutzerlokal. Ohne piwheels
+      # (PIP_CONFIG_FILE=/dev/null), Begruendung in docs.yml.
+      - name: Python-Umgebung und Dev-Werkzeuge
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install pytest pytest-xdist execnet pytest-timeout pytest-cov coverage ruff
+      - name: Security-Werkzeuge (gitleaks, bandit)
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          if [ -x scripts/install-security-tools.sh ]; then
+            scripts/install-security-tools.sh
+          else
+            echo "scripts/install-security-tools.sh fehlt (Paket B): gitleaks/bandit nicht installiert"
+          fi
+      - name: T1 ausfuehren
+        shell: bash
+        run: |
+          mkdir -p reports
+          .venv/bin/python scripts/ci.py t1 --base "origin/$BASE_REF" 2>&1 | tee reports/ci-t1.log
+      - name: Zusammenfassung
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          .venv/bin/python scripts/ci-summary.py --title "T1 fokussiert" --stage t1 --repro "scripts/ci.py t1 --base origin/master" --log reports/ci-t1.log >> "$GITHUB_STEP_SUMMARY"
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        if: ${{ !cancelled() }}
+        with:
+          name: ci-t1-reports
+          path: |
+            reports/
+          if-no-files-found: ignore
+          retention-days: 30

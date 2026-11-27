@@ -152,7 +152,7 @@ def check_glossary(md_text: str) -> list[str]:
         paragraphs = list(re.finditer(r"\S[^\n]*(?:\n(?!\s*\n)[^\n]+)*", md_text[header.end():end]))
         prefix = f"glossar.md:{number}: {term}: "
 
-        def paragraph_line(paragraph: re.Match[str]) -> int:
+        def paragraph_line(paragraph: re.Match[str], header: re.Match[str] = header) -> int:
             return md_text.count("\n", 0, header.end() + paragraph.start()) + 1
 
         first = paragraphs[0] if paragraphs else None

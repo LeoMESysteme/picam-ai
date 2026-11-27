@@ -27,6 +27,12 @@ node_modules/
 # Doku-Seite (Zensical-Prototyp)
 /site/
 /.venv-docs
+/.venv-tools/
+
+# Lokale Geheimnisse (gitleaks findet sie sonst nur nachträglich)
+.env
+.env.*
+!.env.example
 /docs-site/*
 !/docs-site/api/
 !/docs-site/assets/
@@ -40,3 +46,7 @@ node_modules/
 /windows/bridge/dist-test/
 /windows/bridge/dist-release/
 /windows/bridge/src/dispread_bridge_app/build_info.py
+
+# CI-Berichte (scripts/ci.py)
+/reports/
+.coverage

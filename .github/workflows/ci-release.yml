@@ -1,0 +1,123 @@
+# T3 Release: T2 plus timing-Tests seriell, Perf-Gate gegen perf/baseline.json,
+# Versions-Konsistenz (VERSION, CHANGELOG, Tag) und build-release.py-Trockenlauf.
+# Ausloeser: Tag v*, manuell. Laeufe werden nicht abgebrochen (Release-Nachweis).
+# Der Perf-Gate braucht einen ruhigen Runner: Playwright laeuft erst nach dem ersten Job.
+name: CI Release (T3)
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pruefen:
+    runs-on: picam-docs
+    timeout-minutes: 60
+    env:
+      CI: 'true'
+      # Runner-Grenzen (systemd-Unit forgejo-runner): 2 Kerne, 2 GB, Nice 19 -> Details in docs/ci-failures.md
+      PICAM_CI_WORKERS: '2'
+      PICAM_PERF_GATE: skip
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Reproduzierbares Setup laut docs/dependencies.md (Dev-Werkzeuge):
+      # venv mit Systempaketen (OpenCV/NumPy/aiohttp, ABI-Regel in pyproject.toml),
+      # Dev-Plugins in die venv, gitleaks/bandit nutzerlokal. Ohne piwheels
+      # (PIP_CONFIG_FILE=/dev/null), Begruendung in docs.yml.
+      - name: Python-Umgebung und Dev-Werkzeuge
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install pytest pytest-xdist execnet pytest-timeout pytest-cov coverage ruff
+      - name: Security-Werkzeuge (gitleaks, bandit)
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          if [ -x scripts/install-security-tools.sh ]; then
+            scripts/install-security-tools.sh
+          else
+            echo "scripts/install-security-tools.sh fehlt (Paket B): gitleaks/bandit nicht installiert"
+          fi
+      - name: T3 ausfuehren (ohne Playwright)
+        shell: bash
+        run: |
+          mkdir -p reports
+          .venv/bin/python scripts/ci.py t3 --skip playwright 2>&1 | tee reports/ci-t3-pruefen.log
+      - name: Zusammenfassung
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          .venv/bin/python scripts/ci-summary.py --title "T3 Release-Pruefung" --stage t3 --repro "scripts/ci.py t3 --skip playwright" --log reports/ci-t3-pruefen.log >> "$GITHUB_STEP_SUMMARY"
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        if: ${{ !cancelled() }}
+        with:
+          name: ci-t3-reports
+          path: |
+            reports/
+            perf/results/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  playwright:
+    needs: pruefen
+    runs-on: picam-docs
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      # Runner-Grenzen (systemd-Unit forgejo-runner): 2 Kerne, 2 GB, Nice 19 -> Details in docs/ci-failures.md
+      PICAM_CI_WORKERS: '2'
+      PICAM_PERF_GATE: skip
+      PLAYWRIGHT_BROWSERS_PATH: /var/lib/forgejo-runner/playwright-browsers
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Python-Umgebung fuer die Werkbank
+        run: python3 -m venv --system-site-packages .venv
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Node-Abhaengigkeiten und Playwright-Browser
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --only-shell chromium
+      - name: Doku-Werkzeuge
+        env:
+          PIP_CONFIG_FILE: /dev/null
+        run: |
+          python3 -m venv .venv-docs
+          .venv-docs/bin/pip install -r requirements-docs.txt
+      - name: T3 ausfuehren (Playwright)
+        shell: bash
+        run: |
+          mkdir -p reports
+          .venv/bin/python scripts/ci.py t3 --only playwright 2>&1 | tee reports/ci-t3-playwright.log
+      - name: Zusammenfassung
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          .venv/bin/python scripts/ci-summary.py --title "T3 Playwright" --stage t3 --repro "scripts/ci.py t3 --only playwright" --log reports/ci-t3-playwright.log >> "$GITHUB_STEP_SUMMARY"
+      - uses: https://code.forgejo.org/forgejo/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        if: ${{ !cancelled() }}
+        with:
+          name: ci-t3-playwright-reports
+          path: |
+            reports/
+            test-results/
+            test-results-live/
+            playwright-report/
+            playwright-report-live/
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,66 @@
+# Zuordnung Quelle -> Tests fuer scripts/test-select.py (Stufe T1).
+# Zusaetzlich zur Namenskonvention (siehe scripts/test-select.py: convention_globs).
+# Schluessel sind fnmatch-Muster ("*" ueberschreitet "/"); Werte sind Test-Globs.
+# tests/test_ci_tiers.py prueft: jede Quelle in src/dispread hat Konvention, Mapping,
+# [full]-Eintrag oder ist Kernpfad; kein Eintrag ist verwaist.
+
+# Quellen, bei denen jede Aenderung die volle Suite (T2) ausloest. Wert = Begruendung.
+[full]
+"src/dispread/__init__.py" = "Paket-Init, Wirkung auf alle Importeure"
+"src/dispread/calibration/__init__.py" = "Paket-Init, Wirkung auf alle Importeure"
+"src/dispread/calibration/schedule.py" = "kein Test importiert das Modul; Zuordnung unbekannt"
+"src/dispread/detect/__init__.py" = "Paket-Init, Wirkung auf alle Importeure"
+"src/dispread/paths.py" = "Pfadkonstanten, praktisch von allem importiert"
+"src/dispread/sink/__init__.py" = "Paket-Init, Wirkung auf alle Importeure"
+"src/dispread/sink/protocol/__init__.py" = "Paket-Init, Wirkung auf alle Importeure"
+"src/dispread/sink/protocol/gsv_ascii.py" = "kein Test importiert das Modul (wirft absichtlich, OQ-07)"
+
+[map]
+"src/dispread/admin/cli.py" = ["tests/test_admin.py", "tests/test_admin_calibrate.py", "tests/test_admin_intro.py", "tests/test_admin_onboarding.py", "tests/test_admin_uart_ports.py", "tests/test_admin_update.py"]
+"src/dispread/admin/configedit.py" = ["tests/test_admin.py"]
+"src/dispread/admin/instance.py" = ["tests/test_admin.py", "tests/test_admin_calibrate.py", "tests/test_admin_edit_input.py", "tests/test_admin_intro.py", "tests/test_admin_tui.py", "tests/test_admin_uart_ports.py", "tests/test_admin_update.py", "tests/test_installer_uninstall.py", "tests/test_workbench_cli_identity_renew.py"]
+"src/dispread/admin/probes.py" = ["tests/test_admin.py", "tests/test_admin_calibrate.py", "tests/test_admin_tui.py", "tests/test_admin_update.py", "tests/test_admin_view_betrieb.py", "tests/test_workbench_cli_identity_renew.py"]
+"src/dispread/admin/service.py" = ["tests/test_admin.py", "tests/test_admin_tui.py"]
+"src/dispread/admin/ui.py" = ["tests/test_admin_calibrate.py", "tests/test_admin_kalibrieren_screen.py", "tests/test_admin_palette.py", "tests/test_admin_tui.py", "tests/test_admin_update_screen.py"]
+"src/dispread/admin/views/ausgabe.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/base.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/dashboard.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/dienst.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/einstellungen.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/kamera.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/konto.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/lauf.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/netzwerk.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/onboarding_screen.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/protokoll.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/speicher.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/views/worker_screen.py" = ["tests/test_admin*.py"]
+"src/dispread/admin/widgets.py" = ["tests/test_admin_palette.py"]
+"src/dispread/bridge/baud.py" = ["tests/test_live_output.py"]
+"src/dispread/bridge/resources.py" = ["tests/test_bridge_hub.py", "tests/test_bridge_uart.py"]
+"src/dispread/bridge/types.py" = ["tests/test_bridge_end_to_end.py", "tests/test_bridge_routes.py"]
+"src/dispread/calibration/build.py" = ["tests/test_admin_calibrate.py"]
+"src/dispread/calibration/offset.py" = ["tests/test_display_offset.py"]
+"src/dispread/defaults.py" = ["tests/test_product_defaults.py"]
+"src/dispread/detect/manual_roi.py" = ["tests/test_gate_und_referenz.py", "tests/test_live_session.py", "tests/test_live_tracking.py"]
+"src/dispread/detect/vision.py" = ["tests/test_camera_preview.py", "tests/test_glassquad.py", "tests/test_lcd_quad.py", "tests/test_workbench.py"]
+"src/dispread/frames/synthetic_source.py" = ["tests/test_autofit.py", "tests/test_benchmark.py", "tests/test_dataset_benchmark.py", "tests/test_sevenseg.py", "tests/test_track.py", "tests/test_workbench.py"]
+"src/dispread/frames/types.py" = ["tests/test_sync_record.py"]
+"src/dispread/gsv2as_serial.py" = ["tests/test_admin_calibrate.py", "tests/test_gsv_registers.py", "tests/test_live_reference.py", "tests/test_live_service.py", "tests/test_live_session.py"]
+"src/dispread/hardware_ports.py" = ["tests/test_admin_uart_ports.py", "tests/test_product_defaults.py"]
+"src/dispread/layout.py" = ["tests/test_autofit.py", "tests/test_benchmark.py", "tests/test_dataset_benchmark.py", "tests/test_dotlattice_start_bench.py", "tests/test_dotmatrix_reader.py", "tests/test_dotmatrix_train_eval.py", "tests/test_dotmatrix_vectorized.py", "tests/test_gate_und_referenz.py", "tests/test_session_profile.py", "tests/test_sevenseg.py", "tests/test_tesseract_reader.py", "tests/test_track.py", "tests/test_workbench.py", "tests/test_workbench_client.py"]
+"src/dispread/leading_zeros.py" = ["tests/test_gsv2as_cell_text.py"]
+"src/dispread/sink/protocol/ascii_csv.py" = ["tests/test_gate_und_referenz.py"]
+"src/dispread/sink/protocol/user_defined.py" = ["tests/test_bridge_hub.py", "tests/test_gsv_transport.py", "tests/test_live_output.py"]
+"src/dispread/sink/serial_out.py" = ["tests/test_bridge_hub.py", "tests/test_gate_und_referenz.py", "tests/test_live_output.py", "tests/test_product_defaults.py", "tests/test_userdefined_formatter.py"]
+"src/dispread/workbench/auth.py" = ["tests/test_bridge_identity.py", "tests/test_workbench.py"]
+"src/dispread/workbench/config.py" = ["tests/test_admin_uart_ports.py", "tests/test_install_config.py"]
+"src/dispread/workbench/controller.py" = ["tests/test_bridge_routes.py", "tests/test_camera_preview.py", "tests/test_dataset_api.py", "tests/test_dataset_capture.py", "tests/test_workbench.py", "tests/test_workbench_client.py"]
+"src/dispread/workbench/fields.py" = ["tests/test_workbench.py"]
+"src/dispread/workbench/profiles.py" = ["tests/test_sevenseg.py", "tests/test_workbench.py"]
+"src/dispread/workbench/server.py" = ["tests/test_admin_uart_ports.py", "tests/test_bridge_hub.py", "tests/test_bridge_routes.py", "tests/test_camera_preview.py", "tests/test_dataset_api.py", "tests/test_install_config.py", "tests/test_live_api.py", "tests/test_live_camera_restart.py", "tests/test_live_session.py", "tests/test_workbench.py"]
+"src/dispread/workbench/tui.py" = ["tests/test_workbench.py"]
+
+# Nicht-Python-Dateien mit Testbezug.
+"src/dispread/workbench/static/*" = ["tests/test_workbench*.py", "tests/test_live_api.py"]
+"windows/*" = ["tests/test_bridge*.py", "tests/test_release_bundle.py"]

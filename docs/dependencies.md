@@ -238,6 +238,33 @@ for m in (cv2, numpy, serial, picamera2, libcamera): print(m.__name__, m.__file_
 Projekt, und PEP 668 (`externally-managed-environment`) betrifft nur das
 System-pip, nicht das venv.
 
+## Dev-Werkzeuge für die Teststufen {#dev-werkzeuge}
+
+`scripts/ci.py` (Stufen T0 bis T3 und nightly) nutzt Werkzeuge, die wegen
+`--no-deps` samt Abhängigkeiten **explizit** installiert werden. Fehlt ein
+optionales Plugin, läuft pytest trotzdem; `scripts/ci.py` meldet das als
+Hinweis. `pyproject.toml` setzt bewusst weder `timeout` noch `--cov`, weil
+`--strict-config` unbekannte Optionen als Fehler wertet. `ci.py` übergibt
+`--timeout` und `--cov`, sobald das Plugin importierbar ist.
+
+| Werkzeug | Ort | Abhängigkeiten (mit `--no-deps` selbst nachinstallieren) |
+| --- | --- | --- |
+| `pytest`, `pytest-xdist`, `ruff` | `.venv` | xdist: `execnet` |
+| `pytest-timeout` | `.venv` | nur `pytest` |
+| `pytest-cov` | `.venv` | `coverage` (und `pluggy`, `pytest`) |
+| `bandit` | `.venv-tools`, **nicht** `.venv` | `PyYAML`, `rich` (`markdown-it-py`, `mdurl`, `Pygments`), `stevedore` |
+| `gitleaks` | `~/.local/bin` | Go-Binary ohne Abhängigkeiten |
+
+```bash
+./.venv/bin/pip install pytest pytest-xdist execnet pytest-timeout pytest-cov coverage ruff
+scripts/install-security-tools.sh     # gitleaks und bandit (idempotent)
+scripts/setup-hooks.sh                # setzt core.hooksPath lokal auf .githooks/
+```
+
+Reproduzieren: `scripts/ci.py <t0|t1|t2|t3|nightly> [--dry-run]`. Testauswahl
+für T1: `scripts/test-select.py`, Zuordnung in `scripts/test-map.toml`;
+JUnit-Berichte liegen in `reports/`.
+
 ## Dokumentierter Systempaketbestand
 
 | Paket | Version | Zweck |

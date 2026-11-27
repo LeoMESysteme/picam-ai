@@ -1,0 +1,221 @@
+{
+  "schema": 1,
+  "commit": "d943766-dirty",
+  "created": "2026-11-27T14:44:24+0100",
+  "host": {
+    "model": "Raspberry Pi 5 Model B Rev 1.1",
+    "cores": 4,
+    "python": "3.13.5",
+    "opencv": "4.10.0",
+    "source": "synthetic",
+    "hostname_hash": null
+  },
+  "repetitions": 3,
+  "repetitions_valid": 3,
+  "invalid_reasons": [],
+  "metrics": {
+    "latency.build.max_ms": 0.028204,
+    "latency.build.p50_ms": 0.009814999999999999,
+    "latency.build.p95_ms": 0.010407999999999999,
+    "latency.build.p99_ms": 0.011852,
+    "latency.gate.max_ms": 0.062037,
+    "latency.gate.p50_ms": 0.025519,
+    "latency.gate.p95_ms": 0.028445,
+    "latency.gate.p99_ms": 0.03637,
+    "latency.locate.max_ms": 0.0077220000000000006,
+    "latency.locate.p50_ms": 0.0012410000000000001,
+    "latency.locate.p95_ms": 0.001685,
+    "latency.locate.p99_ms": 0.007352,
+    "latency.read.max_ms": 9.092599,
+    "latency.read.p50_ms": 5.066787000000001,
+    "latency.read.p95_ms": 5.570692,
+    "latency.read.p99_ms": 7.010148,
+    "latency.rectify.max_ms": 4.875011000000001,
+    "latency.rectify.p50_ms": 2.164304,
+    "latency.rectify.p95_ms": 2.365876,
+    "latency.rectify.p99_ms": 2.660115,
+    "latency.total.max_ms": 11.795307,
+    "latency.total.p50_ms": 7.253979,
+    "latency.total.p95_ms": 7.911902,
+    "latency.total.p99_ms": 9.622559,
+    "ops.cpu_freq_ratio_min": 1.0,
+    "ops.cpu_percent_foreign": 12.780560353496227,
+    "ops.cpu_percent_own": 70.7909453208373,
+    "ops.rss_end_mb": 165.390625,
+    "ops.rss_growth_mb": 1.03125,
+    "ops.rss_start_mb": 164.359375,
+    "ops.soc_c_max": 54.0,
+    "quality.recognition_percent": 100.0,
+    "quality.rejected_percent": 0.0,
+    "quality.wrong_percent": 0.0,
+    "startup.first_valid_ms": 7.869827997637913,
+    "throughput.fps30.achieved_fps": 29.99960483322073,
+    "throughput.fps30.dropped_percent": 0.0013172225975661101,
+    "throughput.max_fps": 132.35992430011993
+  },
+  "spread": {
+    "latency.build.max_ms": [
+      0.014278,
+      0.031833
+    ],
+    "latency.build.p50_ms": [
+      0.009518,
+      0.009833
+    ],
+    "latency.build.p95_ms": [
+      0.010166999999999999,
+      0.010536
+    ],
+    "latency.build.p99_ms": [
+      0.011759,
+      0.012202999999999999
+    ],
+    "latency.gate.max_ms": [
+      0.044908000000000003,
+      0.081166
+    ],
+    "latency.gate.p50_ms": [
+      0.025259,
+      0.025833
+    ],
+    "latency.gate.p95_ms": [
+      0.028074,
+      0.030167000000000003
+    ],
+    "latency.gate.p99_ms": [
+      0.034777999999999996,
+      0.043778
+    ],
+    "latency.locate.max_ms": [
+      0.007704,
+      0.008037
+    ],
+    "latency.locate.p50_ms": [
+      0.001222,
+      0.0012410000000000001
+    ],
+    "latency.locate.p95_ms": [
+      0.001611,
+      0.001778
+    ],
+    "latency.locate.p99_ms": [
+      0.007333,
+      0.007593
+    ],
+    "latency.read.max_ms": [
+      8.058697,
+      9.46982
+    ],
+    "latency.read.p50_ms": [
+      5.048491,
+      5.071398
+    ],
+    "latency.read.p95_ms": [
+      5.4801,
+      5.732876
+    ],
+    "latency.read.p99_ms": [
+      6.895259,
+      7.107313
+    ],
+    "latency.rectify.max_ms": [
+      3.418,
+      5.457933
+    ],
+    "latency.rectify.p50_ms": [
+      2.152933,
+      2.165025
+    ],
+    "latency.rectify.p95_ms": [
+      2.340598,
+      2.3990050000000003
+    ],
+    "latency.rectify.p99_ms": [
+      2.6003380000000003,
+      2.843892
+    ],
+    "latency.total.max_ms": [
+      10.689646,
+      11.809622
+    ],
+    "latency.total.p50_ms": [
+      7.248646,
+      7.272906
+    ],
+    "latency.total.p95_ms": [
+      7.828717,
+      8.254863
+    ],
+    "latency.total.p99_ms": [
+      9.473245,
+      9.900669
+    ],
+    "ops.cpu_freq_ratio_min": [
+      1.0,
+      1.0
+    ],
+    "ops.cpu_percent_foreign": [
+      10.957655240387183,
+      13.764906034609453
+    ],
+    "ops.cpu_percent_own": [
+      70.55776810553004,
+      70.88469390015429
+    ],
+    "ops.rss_end_mb": [
+      165.09375,
+      165.53125
+    ],
+    "ops.rss_growth_mb": [
+      1.03125,
+      1.03125
+    ],
+    "ops.rss_start_mb": [
+      164.0625,
+      164.5
+    ],
+    "ops.soc_c_max": [
+      52.9,
+      54.55
+    ],
+    "quality.recognition_percent": [
+      100.0,
+      100.0
+    ],
+    "quality.rejected_percent": [
+      0.0,
+      0.0
+    ],
+    "quality.wrong_percent": [
+      0.0,
+      0.0
+    ],
+    "startup.first_valid_ms": [
+      7.84938398282975,
+      8.032252982957289
+    ],
+    "throughput.fps30.achieved_fps": [
+      29.999528731404972,
+      29.999614168846215
+    ],
+    "throughput.fps30.dropped_percent": [
+      0.0012861038459504514,
+      0.0015708953167562212
+    ],
+    "throughput.max_fps": [
+      132.1494313020278,
+      134.6794557725245
+    ]
+  },
+  "operating": {
+    "ops.soc_sensor": "verfuegbar",
+    "ops.throttle_bits": "nicht verfuegbar (vcgencmd fehlt oder nicht ausfuehrbar; CPU-Takt nur als Information, ohne Ungueltig-Wirkung)"
+  },
+  "open_items": [
+    "Echte Kamera-Latenz und Aufnahme-bis-Wert (M2/M5, docs/TIMING.md): braucht Kamera/Kalibriermaschine.",
+    "Startzeit inkl. Vorlagen laden, Kamera oeffnen und Setup: nur Pipeline-Kaltstart bis erster VALID gemessen.",
+    "Erkennungsrate auf realen Geraeten/Lichtbedingungen: nur synthetische Bilder (reale Daten liegen nicht im Repo).",
+    "Speicherwachstum ueber Stunden: nur wenige Minuten Lauf, Leck unterhalb dieser Dauer nicht auszuschliessen."
+  ],
+  "created_for": "baseline"
+}

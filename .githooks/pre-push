@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# pre-push (T1): T0 plus betroffene Tests; eskaliert bei Kernpfaden auf die volle Suite.
+# Aktivierung: scripts/setup-hooks.sh. Ueberspringen im Notfall: git push --no-verify
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+PY="$ROOT/.venv/bin/python"
+[ -x "$PY" ] || PY="python3"
+exec "$PY" "$ROOT/scripts/ci.py" t1

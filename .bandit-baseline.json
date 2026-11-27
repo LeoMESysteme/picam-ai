@@ -1,0 +1,3413 @@
+{
+  "errors": [],
+  "generated_at": "2026-11-27T13:56:01Z",
+  "metrics": {
+    "_totals": {
+      "CONFIDENCE.HIGH": 67,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 7,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 68,
+      "SEVERITY.MEDIUM": 6,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 36438,
+      "nosec": 0,
+      "skipped_tests": 3
+    },
+    "src/dispread/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 18,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 5,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/calibrate.py": {
+      "CONFIDENCE.HIGH": 4,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 4,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 1212,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/cli.py": {
+      "CONFIDENCE.HIGH": 7,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 7,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 519,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/configedit.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 126,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/edit_input.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 126,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/instance.py": {
+      "CONFIDENCE.HIGH": 2,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 2,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 190,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/intro.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 340,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/probes.py": {
+      "CONFIDENCE.HIGH": 2,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 2,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 747,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/service.py": {
+      "CONFIDENCE.HIGH": 6,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 6,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 196,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/tui.py": {
+      "CONFIDENCE.HIGH": 5,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 1,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 6,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 890,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/uart_ports.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 523,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/ui.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 463,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/uninstall.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 39,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/update.py": {
+      "CONFIDENCE.HIGH": 3,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 3,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 329,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 16,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/ausgabe.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 178,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/base.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 124,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/dashboard.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 347,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/dienst.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 102,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/einstellungen.py": {
+      "CONFIDENCE.HIGH": 2,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 2,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 211,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/kalibrieren_screen.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 266,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/kamera.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 168,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/konto.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 79,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/lauf.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 276,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/netzwerk.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 121,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/onboarding_screen.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 348,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/protokoll.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 55,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/speicher.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 118,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/uart.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 216,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/uart_screen.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 490,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/uninstall_screen.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 112,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/update_screen.py": {
+      "CONFIDENCE.HIGH": 2,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 2,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 188,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/worker_screen.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 574,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/zertifikat.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 117,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/views/zertifikat_screen.py": {
+      "CONFIDENCE.HIGH": 2,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 2,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 314,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/admin/widgets.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 384,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/benchmark.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 794,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 3,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/baud.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 7,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/discovery.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 266,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/hub.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 387,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/identity.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 317,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/output_state.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 394,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/pairing.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 113,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/protocol.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 407,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/publisher.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 54,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/resources.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 1,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 1,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 52,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/routes.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 349,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/types.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 32,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/bridge/uart.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 197,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/calibration/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 14,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/calibration/build.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 36,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/calibration/offset.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 975,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/calibration/record.py": {
+      "CONFIDENCE.HIGH": 3,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 3,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 1354,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/calibration/schedule.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 1,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 1,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 67,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/camera_settings.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 125,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/charcells.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 106,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/defaults.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 12,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/detect/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 37,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/detect/manual_roi.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 42,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/detect/vision.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 267,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/dotlattice.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 637,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/focus_sweep.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 153,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/frame_alignment.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 188,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/frames/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 143,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/frames/replay_source.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 86,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/frames/synthetic_source.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 251,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/frames/types.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 57,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/frames/uvc_source.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 305,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/glassquad.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 166,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/gsv2as_cell_text.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 147,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/gsv2as_serial.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 192,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/gsv_bridge.py": {
+      "CONFIDENCE.HIGH": 2,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 2,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 563,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/gsv_transport.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 177,
+      "nosec": 0,
+      "skipped_tests": 1
+    },
+    "src/dispread/hardware_ports.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 83,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/lattice_offsets.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 185,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/layout.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 130,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/leading_zeros.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 26,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 15,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/benchmark.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 39,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/camera.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 259,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/causes.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 35,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/clock.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 67,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/diagnostics.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 1,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 1,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 294,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/frame_tracking.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 1494,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/output.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 390,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/preview.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 110,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/recent.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 41,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/recording.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 110,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/reference.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 318,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/reference_eval.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 133,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/region_hint.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 258,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/region_probe.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 33,
+      "nosec": 0,
+      "skipped_tests": 1
+    },
+    "src/dispread/live/service.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 1,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 1,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 1336,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/session.py": {
+      "CONFIDENCE.HIGH": 3,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 1,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 3,
+      "SEVERITY.MEDIUM": 1,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 1022,
+      "nosec": 0,
+      "skipped_tests": 1
+    },
+    "src/dispread/live/setup.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 1293,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/storage.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 79,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/texts.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 67,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/tick.py": {
+      "CONFIDENCE.HIGH": 3,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 3,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 143,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/tracking.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 58,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/live/tracking_advice.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 196,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/ocr/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 59,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/ocr/autofit.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 203,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/ocr/dotmatrix.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 151,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/ocr/dotmatrix_font.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 35,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/ocr/dotmatrix_sampling.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 200,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/ocr/dotmatrix_templates.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 204,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/ocr/sevenseg.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 160,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/ocr/tesseract_cli.py": {
+      "CONFIDENCE.HIGH": 5,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 5,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 201,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/paths.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 26,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/pipeline.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 197,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/records.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 276,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/rectify.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 78,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/release_source.py": {
+      "CONFIDENCE.HIGH": 2,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 2,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 117,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/session_profile.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 170,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/setup_checks.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 698,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/setup_hint.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 65,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/setup_overlays.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 44,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 24,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/jsonl.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 81,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/protocol/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 35,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/protocol/ascii_csv.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 74,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/protocol/gsv_ascii.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 37,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/protocol/user_defined.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 52,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/protocol/userdefined.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 60,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/protocol/userdefined_4ch.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 49,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/sink/serial_out.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 189,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/timing_calibration.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 238,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/track.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 96,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/validate.py": {
+      "CONFIDENCE.HIGH": 1,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 1,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 191,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/__init__.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 1,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/auth.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 67,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/cli.py": {
+      "CONFIDENCE.HIGH": 5,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 1,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 5,
+      "SEVERITY.MEDIUM": 1,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 417,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/config.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 150,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/controller.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 1162,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/dataset_capture.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 63,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/datasets.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 826,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/fields.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 583,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/live_api.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 154,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/profiles.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 190,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/server.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 392,
+      "nosec": 0,
+      "skipped_tests": 0
+    },
+    "src/dispread/workbench/tui.py": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 210,
+      "nosec": 0,
+      "skipped_tests": 0
+    }
+  },
+  "results": [
+    {
+      "code": "42 import signal\n43 import subprocess\n44 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/calibrate.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 43,
+      "line_range": [
+        43
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "1078     target = _calibration_target(instance)\n1079     assert target is not None and pre.profile is not None\n1080     started = deps.now()\n",
+      "col_offset": 4,
+      "end_col_offset": 57,
+      "filename": "src/dispread/admin/calibrate.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 1079,
+      "line_range": [
+        1079
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "1259             return finish('ungueltig', EXIT_FAIL, grund=str(error))\n1260         assert calibration is not None\n1261         _check_cancelled(deps)\n",
+      "col_offset": 8,
+      "end_col_offset": 38,
+      "filename": "src/dispread/admin/calibrate.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 1260,
+      "line_range": [
+        1260
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "1338         return _complete(console, 'ungueltig', EXIT_FAIL, reason=problem, metrics=metrics)\n1339     assert calibration is not None\n1340     if source.resolve() == target.resolve():\n",
+      "col_offset": 4,
+      "end_col_offset": 34,
+      "filename": "src/dispread/admin/calibrate.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 1339,
+      "line_range": [
+        1339
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "15 import shlex\n16 import subprocess\n17 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 16,
+      "line_range": [
+        16
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "168     try:\n169         return subprocess.call(command)\n170     except KeyboardInterrupt:\n",
+      "col_offset": 15,
+      "end_col_offset": 39,
+      "filename": "src/dispread/admin/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 169,
+      "line_range": [
+        169
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "229                 print('F\u00fcr die Systeminstallation fragt sudo nach dem Passwort.', file=sys.stderr)\n230                 return subprocess.call(['sudo', '-v']) == 0\n231 \n",
+      "col_offset": 23,
+      "end_col_offset": 54,
+      "filename": "src/dispread/admin/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Starting a process with a partial executable path",
+      "line_number": 230,
+      "line_range": [
+        230
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b607_start_process_with_partial_path.html",
+      "test_id": "B607",
+      "test_name": "start_process_with_partial_path"
+    },
+    {
+      "code": "229                 print('F\u00fcr die Systeminstallation fragt sudo nach dem Passwort.', file=sys.stderr)\n230                 return subprocess.call(['sudo', '-v']) == 0\n231 \n",
+      "col_offset": 23,
+      "end_col_offset": 54,
+      "filename": "src/dispread/admin/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 230,
+      "line_range": [
+        230
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "269             print('F\u00fcr die Systeminstallation fragt sudo nach dem Passwort.', file=sys.stderr)\n270             return subprocess.call(update.sudo_command(argv))\n271         echo = lambda text: print(text, file=sys.stderr)  # noqa: E731\n",
+      "col_offset": 19,
+      "end_col_offset": 61,
+      "filename": "src/dispread/admin/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 270,
+      "line_range": [
+        270
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "310             argv += ['--config', instance.config]\n311         return subprocess.call(argv + shlex.split(command)[1:])\n312     # Ohne Shell: alle Hinweisbefehle sind feste Zeichenketten oder per shlex.join gebaut (probes.py).\n",
+      "col_offset": 15,
+      "end_col_offset": 63,
+      "filename": "src/dispread/admin/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 311,
+      "line_range": [
+        311
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "317         return 2\n318     return subprocess.call(argv, cwd=instance.root or None)\n319 \n",
+      "col_offset": 11,
+      "end_col_offset": 59,
+      "filename": "src/dispread/admin/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 318,
+      "line_range": [
+        318
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "16 import shlex\n17 import subprocess\n18 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/instance.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 17,
+      "line_range": [
+        17
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "103     try:\n104         done = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)\n105         return done.returncode, done.stdout, done.stderr\n",
+      "col_offset": 15,
+      "end_col_offset": 100,
+      "filename": "src/dispread/admin/instance.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 104,
+      "line_range": [
+        104
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "110     order = list(range(sum(char != ' ' for char in text)))\n111     random.Random(23).shuffle(order)\n112     settle = {index: 0.18 + 0.64 * rank / max(1, len(order) - 1) for rank, index in enumerate(order)}\n",
+      "col_offset": 4,
+      "end_col_offset": 21,
+      "filename": "src/dispread/admin/intro.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 330,
+        "link": "https://cwe.mitre.org/data/definitions/330.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Standard pseudo-random generators are not suitable for security/cryptographic purposes.",
+      "line_number": 111,
+      "line_range": [
+        111
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random",
+      "test_id": "B311",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "22 import ssl\n23 import subprocess\n24 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/probes.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 23,
+      "line_range": [
+        23
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "104     try:\n105         done = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)\n106         return done.returncode, done.stdout, done.stderr\n",
+      "col_offset": 15,
+      "end_col_offset": 100,
+      "filename": "src/dispread/admin/probes.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 105,
+      "line_range": [
+        105
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "13 import re\n14 import subprocess\n15 import time\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/service.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 14,
+      "line_range": [
+        14
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "106             elif interactive:\n107                 code = subprocess.call(command)\n108             else:\n",
+      "col_offset": 23,
+      "end_col_offset": 47,
+      "filename": "src/dispread/admin/service.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 107,
+      "line_range": [
+        107
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "108             else:\n109                 code = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True,\n110                                       timeout=COMMAND_TIMEOUT_S).returncode\n111         except (OSError, subprocess.TimeoutExpired) as error:\n",
+      "col_offset": 23,
+      "end_col_offset": 64,
+      "filename": "src/dispread/admin/service.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 109,
+      "line_range": [
+        109,
+        110
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "114             if instance.kind == 'dev' and 'stop' in command:\n115                 subprocess.call(systemctl(instance) + ['reset-failed', instance.unit],\n116                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n117             return False, f'Befehl fehlgeschlagen (Exit {code}): {\" \".join(command)}'\n",
+      "col_offset": 16,
+      "end_col_offset": 85,
+      "filename": "src/dispread/admin/service.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 115,
+      "line_range": [
+        115,
+        116
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "118         if instance.kind == 'dev' and 'stop' in command:\n119             subprocess.call(systemctl(instance) + ['reset-failed', instance.unit],\n120                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n121             _ensure_socket_dir(instance)\n",
+      "col_offset": 12,
+      "end_col_offset": 81,
+      "filename": "src/dispread/admin/service.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 119,
+      "line_range": [
+        119,
+        120
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "234         else:\n235             done = subprocess.run(command, capture_output=True, text=True, timeout=10)\n236             code, out, err = done.returncode, done.stdout, done.stderr\n",
+      "col_offset": 19,
+      "end_col_offset": 86,
+      "filename": "src/dispread/admin/service.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 235,
+      "line_range": [
+        235
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "18 import select\n19 import subprocess\n20 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/tui.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 19,
+      "line_range": [
+        19
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "878             print(f'\\n{title}\\n')\n879             code = subprocess.call(command)\n880             print(f'\\nExit {code}. Enter dr\u00fccken, um zur Konsole zur\u00fcckzukehren.')\n",
+      "col_offset": 19,
+      "end_col_offset": 43,
+      "filename": "src/dispread/admin/tui.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 879,
+      "line_range": [
+        879
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "972             # stderr in denselben Strom: kein Volllaufen einer zweiten Pipe.\n973             self._log_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,\n974                                                  text=True, bufsize=1)\n975         except (ValueError, OSError) as error:\n",
+      "col_offset": 32,
+      "end_col_offset": 70,
+      "filename": "src/dispread/admin/tui.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 973,
+      "line_range": [
+        973,
+        974
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "977             return\n978         assert self._log_process.stdout is not None\n979         stream = self._log_process.stdout\n",
+      "col_offset": 8,
+      "end_col_offset": 51,
+      "filename": "src/dispread/admin/tui.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 978,
+      "line_range": [
+        978
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "1059         try:\n1060             os.execv(app.relaunch[0], app.relaunch)  # ersetzt diesen Prozess; kehrt nur bei Fehler zur\u00fcck\n1061         except OSError as error:\n",
+      "col_offset": 12,
+      "end_col_offset": 51,
+      "filename": "src/dispread/admin/tui.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Starting a process without a shell.",
+      "line_number": 1060,
+      "line_range": [
+        1060
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b606_start_process_with_no_shell.html",
+      "test_id": "B606",
+      "test_name": "start_process_with_no_shell"
+    },
+    {
+      "code": "1071     try:\n1072         return subprocess.call(command)\n1073     except OSError as error:\n",
+      "col_offset": 15,
+      "end_col_offset": 39,
+      "filename": "src/dispread/admin/tui.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 1072,
+      "line_range": [
+        1072
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "10 import os\n11 import subprocess\n12 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/update.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 11,
+      "line_range": [
+        11
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "144     echo('$ ' + ' '.join(command))\n145     if subprocess.call(command, stdin=subprocess.DEVNULL, stdout=output, stderr=output,\n146                        timeout=service.COMMAND_TIMEOUT_S) != 0:\n147         return False\n",
+      "col_offset": 7,
+      "end_col_offset": 57,
+      "filename": "src/dispread/admin/update.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 145,
+      "line_range": [
+        145,
+        146
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "338     with tempfile.TemporaryFile(mode='w+t') as errors:\n339         with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors,\n340                               text=True, encoding='utf-8', bufsize=1) as process:\n341             for line in process.stdout:\n",
+      "col_offset": 13,
+      "end_col_offset": 69,
+      "filename": "src/dispread/admin/update.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 339,
+      "line_range": [
+        339,
+        340
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "6 import shlex\n7 import subprocess\n8 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/views/einstellungen.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 7,
+      "line_range": [
+        7
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "225             with app.suspend():\n226                 code = subprocess.call(sudo)\n227         if code == 0:\n",
+      "col_offset": 23,
+      "end_col_offset": 44,
+      "filename": "src/dispread/admin/views/einstellungen.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 226,
+      "line_range": [
+        226
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "481                 app.instance = discover(app.instance.config)\n482             except Exception:  # noqa: BLE001\n483                 pass\n484         app._setup_at = 0.0\n",
+      "col_offset": 12,
+      "end_col_offset": 20,
+      "filename": "src/dispread/admin/views/uart_screen.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Try, Except, Pass detected.",
+      "line_number": 482,
+      "line_range": [
+        482,
+        483
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b110_try_except_pass.html",
+      "test_id": "B110",
+      "test_name": "try_except_pass"
+    },
+    {
+      "code": "14 \n15 import subprocess\n16 from dataclasses import replace\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/views/update_screen.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 15,
+      "line_range": [
+        15
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "131                 app.instance = discover(app.instance.config)\n132             except Exception:  # noqa: BLE001 - die Anzeige bleibt mit der alten Instanz benutzbar\n133                 pass\n134         app._setup_at = 0.0\n",
+      "col_offset": 12,
+      "end_col_offset": 20,
+      "filename": "src/dispread/admin/views/update_screen.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Try, Except, Pass detected.",
+      "line_number": 132,
+      "line_range": [
+        132,
+        133
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b110_try_except_pass.html",
+      "test_id": "B110",
+      "test_name": "try_except_pass"
+    },
+    {
+      "code": "20 import ssl\n21 import subprocess\n22 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/admin/views/zertifikat_screen.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 21,
+      "line_range": [
+        21
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "71     try:\n72         done = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120,\n73                               check=False)\n74     except (OSError, subprocess.SubprocessError) as error:\n",
+      "col_offset": 15,
+      "end_col_offset": 42,
+      "filename": "src/dispread/admin/views/zertifikat_screen.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 72,
+      "line_range": [
+        72,
+        73
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "10 import socket\n11 import subprocess\n12 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/bridge/discovery.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 11,
+      "line_range": [
+        11
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "33             key = str(canonical)\n34         directory = self.directory or Path(f'/tmp/dispread-serial-{os.getuid()}')\n35         directory.mkdir(mode=0o700, parents=True, exist_ok=True)\n",
+      "col_offset": 45,
+      "end_col_offset": 66,
+      "filename": "src/dispread/bridge/resources.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 377,
+        "link": "https://cwe.mitre.org/data/definitions/377.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Probable insecure usage of temp file/directory.",
+      "line_number": 34,
+      "line_range": [
+        34
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html",
+      "test_id": "B108",
+      "test_name": "hardcoded_tmp_directory"
+    },
+    {
+      "code": "484         if norm_schedule is not None:\n485             assert commands_path is not None and restore_point is not None\n486             f_cmd = _QueuedLineFile(open(commands_path, \"a\", encoding=\"utf-8\"))\n",
+      "col_offset": 12,
+      "end_col_offset": 74,
+      "filename": "src/dispread/calibration/record.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 485,
+      "line_range": [
+        485
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "583                 ser.close()\n584             except Exception:  # noqa: BLE001 - Aufraeumen, kein neuer Fehler beim Beenden\n585                 pass\n586         serial_queue.put(_QUEUE_DONE)\n",
+      "col_offset": 12,
+      "end_col_offset": 20,
+      "filename": "src/dispread/calibration/record.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Try, Except, Pass detected.",
+      "line_number": 584,
+      "line_range": [
+        584,
+        585
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b110_try_except_pass.html",
+      "test_id": "B110",
+      "test_name": "try_except_pass"
+    },
+    {
+      "code": "689     else:\n690         assert camera_settings is not None\n691         yield from _uvc_frames(camera_settings, camera_device, state)\n",
+      "col_offset": 8,
+      "end_col_offset": 42,
+      "filename": "src/dispread/calibration/record.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 690,
+      "line_range": [
+        690
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "33 #: gemessenen Schreibhaenger der SD-Karte (siehe `dispread.calibration.record`).\n34 RECORD_STAGING_ROOT = Path(\"/dev/shm\")\n35 \n",
+      "col_offset": 27,
+      "end_col_offset": 37,
+      "filename": "src/dispread/calibration/schedule.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 377,
+        "link": "https://cwe.mitre.org/data/definitions/377.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Probable insecure usage of temp file/directory.",
+      "line_number": 34,
+      "line_range": [
+        34
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html",
+      "test_id": "B108",
+      "test_name": "hardcoded_tmp_directory"
+    },
+    {
+      "code": "62 \n63     rng = random.Random(seed)\n64     log_lo, log_hi = math.log(lo), math.log(hi)\n",
+      "col_offset": 10,
+      "end_col_offset": 29,
+      "filename": "src/dispread/calibration/schedule.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 330,
+        "link": "https://cwe.mitre.org/data/definitions/330.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Standard pseudo-random generators are not suitable for security/cryptographic purposes.",
+      "line_number": 63,
+      "line_range": [
+        63
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_calls.html#b311-random",
+      "test_id": "B311",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "13 import re\n14 import subprocess\n15 import time\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/frames/uvc_source.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 14,
+      "line_range": [
+        14
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "306                     com.reset_output_buffer()\n307                 except Exception:\n308                     pass\n309             driver_failed = admitted or not configured\n",
+      "col_offset": 16,
+      "end_col_offset": 24,
+      "filename": "src/dispread/gsv_bridge.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Try, Except, Pass detected.",
+      "line_number": 307,
+      "line_range": [
+        307,
+        308
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b110_try_except_pass.html",
+      "test_id": "B110",
+      "test_name": "try_except_pass"
+    },
+    {
+      "code": "473                     com.reset_output_buffer()\n474                 except Exception:\n475                     pass\n476             driver_failed = admitted or not configured\n",
+      "col_offset": 16,
+      "end_col_offset": 24,
+      "filename": "src/dispread/gsv_bridge.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Try, Except, Pass detected.",
+      "line_number": 474,
+      "line_range": [
+        474,
+        475
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b110_try_except_pass.html",
+      "test_id": "B110",
+      "test_name": "try_except_pass"
+    },
+    {
+      "code": "64 class DiagnosticRecorder:\n65     def __init__(self, out_dir, *, enabled=False, staging_root=Path('/dev/shm'),\n66                  monotonic=time.monotonic, memory_available=None):\n",
+      "col_offset": 68,
+      "end_col_offset": 78,
+      "filename": "src/dispread/live/diagnostics.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 377,
+        "link": "https://cwe.mitre.org/data/definitions/377.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Probable insecure usage of temp file/directory.",
+      "line_number": 65,
+      "line_range": [
+        65
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html",
+      "test_id": "B108",
+      "test_name": "hardcoded_tmp_directory"
+    },
+    {
+      "code": "331                 self._port.close()\n332             except Exception:  # noqa: BLE001 - Abschluss auch bei Portfehler\n333                 pass\n334 \n",
+      "col_offset": 12,
+      "end_col_offset": 20,
+      "filename": "src/dispread/live/reference.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Try, Except, Pass detected.",
+      "line_number": 332,
+      "line_range": [
+        332,
+        333
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b110_try_except_pass.html",
+      "test_id": "B110",
+      "test_name": "try_except_pass"
+    },
+    {
+      "code": "13 import os\n14 import pickle\n15 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 13,
+      "filename": "src/dispread/live/region_probe.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 502,
+        "link": "https://cwe.mitre.org/data/definitions/502.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with pickle module.",
+      "line_number": 14,
+      "line_range": [
+        14
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b403-import-pickle",
+      "test_id": "B403",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "225         monotonic: Callable[[], float] | None = None,\n226         diagnostic_staging_root: Path = Path('/dev/shm'),\n227         disk_usage: Callable[[Path], Any] | None = None,\n",
+      "col_offset": 45,
+      "end_col_offset": 55,
+      "filename": "src/dispread/live/service.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 377,
+        "link": "https://cwe.mitre.org/data/definitions/377.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Probable insecure usage of temp file/directory.",
+      "line_number": 226,
+      "line_range": [
+        226
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html",
+      "test_id": "B108",
+      "test_name": "hardcoded_tmp_directory"
+    },
+    {
+      "code": "213     def __init__(self, payload, base, index, *, command=None):\n214         import pickle\n215         import subprocess\n",
+      "col_offset": 8,
+      "end_col_offset": 21,
+      "filename": "src/dispread/live/session.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 502,
+        "link": "https://cwe.mitre.org/data/definitions/502.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with pickle module.",
+      "line_number": 214,
+      "line_range": [
+        214
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b403-import-pickle",
+      "test_id": "B403",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "214         import pickle\n215         import subprocess\n216         import sys\n",
+      "col_offset": 8,
+      "end_col_offset": 25,
+      "filename": "src/dispread/live/session.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 215,
+      "line_range": [
+        215
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "229         env['PYTHONPATH'] = os.pathsep.join(p for p in (root, env.get('PYTHONPATH', '')) if p)\n230         self._process = subprocess.Popen(command or [sys.executable, '-m', 'dispread.live.region_probe'],\n231                                          stdin=subprocess.PIPE, stdout=subprocess.PIPE,\n232                                          stderr=subprocess.DEVNULL, env=env)\n233         job = pickle.dumps((payload, sorted(self.base), sorted(self.base | {index})))\n",
+      "col_offset": 24,
+      "end_col_offset": 76,
+      "filename": "src/dispread/live/session.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 230,
+      "line_range": [
+        230,
+        231,
+        232
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "304         diagnostics: bool = False,\n305         diagnostic_staging_root: Path = Path('/dev/shm'),\n306         reader_d_max_factor: float = 1.0,\n",
+      "col_offset": 45,
+      "end_col_offset": 55,
+      "filename": "src/dispread/live/session.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 377,
+        "link": "https://cwe.mitre.org/data/definitions/377.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Probable insecure usage of temp file/directory.",
+      "line_number": 305,
+      "line_range": [
+        305
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html",
+      "test_id": "B108",
+      "test_name": "hardcoded_tmp_directory"
+    },
+    {
+      "code": "2 import math\n3 import subprocess\n4 import time\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/live/tick.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 3,
+      "line_range": [
+        3
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "79     try:\n80         result = subprocess.run(['timedatectl', 'show', '--property=NTPSynchronized', '--value'],\n81                                 capture_output=True, text=True, timeout=1, check=True)\n82         value = result.stdout.strip()\n",
+      "col_offset": 17,
+      "end_col_offset": 86,
+      "filename": "src/dispread/live/tick.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Starting a process with a partial executable path",
+      "line_number": 80,
+      "line_range": [
+        80,
+        81
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b607_start_process_with_partial_path.html",
+      "test_id": "B607",
+      "test_name": "start_process_with_partial_path"
+    },
+    {
+      "code": "79     try:\n80         result = subprocess.run(['timedatectl', 'show', '--property=NTPSynchronized', '--value'],\n81                                 capture_output=True, text=True, timeout=1, check=True)\n82         value = result.stdout.strip()\n",
+      "col_offset": 17,
+      "end_col_offset": 86,
+      "filename": "src/dispread/live/tick.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 80,
+      "line_range": [
+        80,
+        81
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "22 import shutil\n23 import subprocess\n24 import tempfile\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/ocr/tesseract_cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 23,
+      "line_range": [
+        23
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "50     \"\"\"`tesseract --version`s erste Zeile in eine kurze Versionskennung zerlegen.\"\"\"\n51     result = subprocess.run([\"tesseract\", \"--version\"], capture_output=True, text=True, timeout=_TIMEOUT_S)\n52     first_line = result.stdout.splitlines()[0] if result.stdout else \"\"\n",
+      "col_offset": 13,
+      "end_col_offset": 107,
+      "filename": "src/dispread/ocr/tesseract_cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Starting a process with a partial executable path",
+      "line_number": 51,
+      "line_range": [
+        51
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b607_start_process_with_partial_path.html",
+      "test_id": "B607",
+      "test_name": "start_process_with_partial_path"
+    },
+    {
+      "code": "50     \"\"\"`tesseract --version`s erste Zeile in eine kurze Versionskennung zerlegen.\"\"\"\n51     result = subprocess.run([\"tesseract\", \"--version\"], capture_output=True, text=True, timeout=_TIMEOUT_S)\n52     first_line = result.stdout.splitlines()[0] if result.stdout else \"\"\n",
+      "col_offset": 13,
+      "end_col_offset": 107,
+      "filename": "src/dispread/ocr/tesseract_cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 51,
+      "line_range": [
+        51
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "111         cv2.imwrite(tmp_path, image)\n112         result = subprocess.run(\n113             [\n114                 \"tesseract\",\n115                 tmp_path,\n116                 \"stdout\",\n117                 \"--psm\",\n118                 \"7\",\n119                 \"-c\",\n120                 f\"tessedit_char_whitelist={whitelist}\",\n121                 \"tsv\",\n122             ],\n123             capture_output=True,\n124             text=True,\n125             timeout=_TIMEOUT_S,\n126         )\n127     finally:\n",
+      "col_offset": 17,
+      "end_col_offset": 9,
+      "filename": "src/dispread/ocr/tesseract_cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Starting a process with a partial executable path",
+      "line_number": 112,
+      "line_range": [
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b607_start_process_with_partial_path.html",
+      "test_id": "B607",
+      "test_name": "start_process_with_partial_path"
+    },
+    {
+      "code": "111         cv2.imwrite(tmp_path, image)\n112         result = subprocess.run(\n113             [\n114                 \"tesseract\",\n115                 tmp_path,\n116                 \"stdout\",\n117                 \"--psm\",\n118                 \"7\",\n119                 \"-c\",\n120                 f\"tessedit_char_whitelist={whitelist}\",\n121                 \"tsv\",\n122             ],\n123             capture_output=True,\n124             text=True,\n125             timeout=_TIMEOUT_S,\n126         )\n127     finally:\n",
+      "col_offset": 17,
+      "end_col_offset": 9,
+      "filename": "src/dispread/ocr/tesseract_cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 112,
+      "line_range": [
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "293         capture = _ts(data[\"capture_timestamp\"])\n294         assert capture is not None  # capture_timestamp ist Pflichtfeld\n295         return cls(\n",
+      "col_offset": 8,
+      "end_col_offset": 34,
+      "filename": "src/dispread/records.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 294,
+      "line_range": [
+        294
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "6 import re\n7 import subprocess\n8 import tempfile\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/release_source.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 7,
+      "line_range": [
+        7
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "66     try:\n67         response = subprocess.run(command, capture_output=True, text=True, timeout=timeout + 1)\n68     except subprocess.TimeoutExpired as error:\n",
+      "col_offset": 19,
+      "end_col_offset": 95,
+      "filename": "src/dispread/release_source.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 67,
+      "line_range": [
+        67
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "205         # --- Mehrbildbestaetigung -------------------------------------------\n206         assert read.value is not None\n207         if self._candidate is not None and self._candidate.value == read.value:\n",
+      "col_offset": 8,
+      "end_col_offset": 37,
+      "filename": "src/dispread/validate.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 703,
+        "link": "https://cwe.mitre.org/data/definitions/703.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+      "line_number": 206,
+      "line_range": [
+        206
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b101_assert_used.html",
+      "test_id": "B101",
+      "test_name": "assert_used"
+    },
+    {
+      "code": "8 import os\n9 import subprocess\n10 import sys\n",
+      "col_offset": 0,
+      "end_col_offset": 17,
+      "filename": "src/dispread/workbench/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Consider possible security implications associated with the subprocess module.",
+      "line_number": 9,
+      "line_range": [
+        9
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/blacklists/blacklist_imports.html#b404-import-subprocess",
+      "test_id": "B404",
+      "test_name": "blacklist"
+    },
+    {
+      "code": "21 def default_socket():\n22     return os.environ.get(\"DISPREAD_SOCKET\", f\"/tmp/dispread-{os.getuid()}/control.sock\")\n23 \n",
+      "col_offset": 47,
+      "end_col_offset": 61,
+      "filename": "src/dispread/workbench/cli.py",
+      "issue_confidence": "MEDIUM",
+      "issue_cwe": {
+        "id": 377,
+        "link": "https://cwe.mitre.org/data/definitions/377.html"
+      },
+      "issue_severity": "MEDIUM",
+      "issue_text": "Probable insecure usage of temp file/directory.",
+      "line_number": 22,
+      "line_range": [
+        22
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b108_hardcoded_tmp_directory.html",
+      "test_id": "B108",
+      "test_name": "hardcoded_tmp_directory"
+    },
+    {
+      "code": "55     \"\"\"Selbstsigniertes Zertifikat wie bei init-tls; ``key_args`` waehlt neuen oder vorhandenen Schluessel.\"\"\"\n56     subprocess.run(\n57         [\"openssl\", \"req\", \"-x509\", *key_args, \"-days\", str(days), \"-out\", str(cert),\n58          \"-subj\", TLS_SUBJECT, \"-addext\", f\"subjectAltName={san}\"],\n59         check=True,\n60     )\n61 \n",
+      "col_offset": 4,
+      "end_col_offset": 5,
+      "filename": "src/dispread/workbench/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Starting a process with a partial executable path",
+      "line_number": 56,
+      "line_range": [
+        56,
+        57,
+        58,
+        59,
+        60
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b607_start_process_with_partial_path.html",
+      "test_id": "B607",
+      "test_name": "start_process_with_partial_path"
+    },
+    {
+      "code": "55     \"\"\"Selbstsigniertes Zertifikat wie bei init-tls; ``key_args`` waehlt neuen oder vorhandenen Schluessel.\"\"\"\n56     subprocess.run(\n57         [\"openssl\", \"req\", \"-x509\", *key_args, \"-days\", str(days), \"-out\", str(cert),\n58          \"-subj\", TLS_SUBJECT, \"-addext\", f\"subjectAltName={san}\"],\n59         check=True,\n60     )\n61 \n",
+      "col_offset": 4,
+      "end_col_offset": 5,
+      "filename": "src/dispread/workbench/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 56,
+      "line_range": [
+        56,
+        57,
+        58,
+        59,
+        60
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    },
+    {
+      "code": "73     print(f\"Zertifikat: {cert}\\nVor Anmeldung auf Windows vertrauen. Fingerabdruck:\")\n74     subprocess.run([\"openssl\", \"x509\", \"-in\", str(cert), \"-noout\", \"-fingerprint\", \"-sha256\"], check=True)\n75 \n",
+      "col_offset": 4,
+      "end_col_offset": 106,
+      "filename": "src/dispread/workbench/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "Starting a process with a partial executable path",
+      "line_number": 74,
+      "line_range": [
+        74
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b607_start_process_with_partial_path.html",
+      "test_id": "B607",
+      "test_name": "start_process_with_partial_path"
+    },
+    {
+      "code": "73     print(f\"Zertifikat: {cert}\\nVor Anmeldung auf Windows vertrauen. Fingerabdruck:\")\n74     subprocess.run([\"openssl\", \"x509\", \"-in\", str(cert), \"-noout\", \"-fingerprint\", \"-sha256\"], check=True)\n75 \n",
+      "col_offset": 4,
+      "end_col_offset": 106,
+      "filename": "src/dispread/workbench/cli.py",
+      "issue_confidence": "HIGH",
+      "issue_cwe": {
+        "id": 78,
+        "link": "https://cwe.mitre.org/data/definitions/78.html"
+      },
+      "issue_severity": "LOW",
+      "issue_text": "subprocess call - check for execution of untrusted input.",
+      "line_number": 74,
+      "line_range": [
+        74
+      ],
+      "more_info": "https://bandit.readthedocs.io/en/1.8.6/plugins/b603_subprocess_without_shell_equals_true.html",
+      "test_id": "B603",
+      "test_name": "subprocess_without_shell_equals_true"
+    }
+  ]
+}
