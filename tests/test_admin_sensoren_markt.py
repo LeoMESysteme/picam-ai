@@ -41,6 +41,16 @@ def text_of(widget) -> str:
     return console.export_text()
 
 
+async def press_button(pilot, app, selector):
+    """Knopf im aktuellen Dialog auslösen, sobald er aufgebaut ist (Klicks direkt nach dem
+    Öffnen trafen unter Last gelegentlich ins Leere)."""
+    from textual.widgets import Button
+
+    await until(pilot, lambda: bool(app.screen.query(selector)))
+    app.screen.query_one(selector, Button).press()
+    await pilot.pause(0.05)
+
+
 async def until(pilot, predicate, limit_s=10.0):
     for _ in range(int(limit_s / 0.05)):
         if predicate():
@@ -109,24 +119,24 @@ def test_settings_switch_shows_and_hides_tab(market):
         async with app.run_test(size=(120, 50)) as pilot:
             await pilot.pause(0.3)
             await pilot.press('c')
-            await pilot.pause(0.3)
+            await until(pilot, lambda: bool(app.query('#cfg-feature')))
             box = app.query_one('#cfg-feature', Checkbox)
             assert box.value is False
             box.value = True
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
-            await pilot.click('#ok')
+            await press_button(pilot, app, '#ok')
             await until(pilot, lambda: 'sensoren' in app.tab_ids())
             assert market['enabled'] is True
             # abbrechen stellt den Schalter zurück
             box.value = False
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
-            await pilot.click('#cancel')
+            await press_button(pilot, app, '#cancel')
             await until(pilot, lambda: box.value is True)
             assert 'sensoren' in app.tab_ids()
             # ausschalten blendet den Tab wieder aus
             box.value = False
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
-            await pilot.click('#ok')
+            await press_button(pilot, app, '#ok')
             await until(pilot, lambda: 'sensoren' not in app.tab_ids())
             assert market['enabled'] is False and isinstance(app.query_one(EinstellungenView), EinstellungenView)
     asyncio.run(main())
@@ -146,7 +156,7 @@ def test_settings_switch_failure_reverts(market, monkeypatch):
             box.value = True
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
             await until(pilot, lambda: bool(app.screen.query('#ok')))
-            await pilot.click('#ok')
+            await press_button(pilot, app, '#ok')
             await until(pilot, lambda: box.value is False and not isinstance(app.screen, ConfirmScreen))
             assert 'sensoren' not in app.tab_ids()
     asyncio.run(main())
@@ -173,7 +183,7 @@ def test_search_covers_catalog_and_install(market):
             view.install_selected()
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
             assert 'vorläufig' in str(app.screen.c.lines)
-            await pilot.click('#ok')
+            await press_button(pilot, app, '#ok')
             await until(pilot, lambda: any(c[0] == 'install' for c in market['calls']))
             assert market['calls'][-1][1] == ('zeta-9',)
     asyncio.run(main())
@@ -210,12 +220,12 @@ def test_submit_asks_consent_then_masked_token(market):
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
             assert 'öffentlich im Katalog' in str(app.screen.c.lines)
             assert 'keine Bilder' in str(app.screen.c.lines)
-            await pilot.click('#ok')
+            await press_button(pilot, app, '#ok')
             await until(pilot, lambda: isinstance(app.screen, TokenScreen))
             field = app.screen.query_one('#ask-input', Input)
             assert field.password is True
             field.value = TOKEN
-            await pilot.click('#ok')
+            await press_button(pilot, app, '#ok')
             await until(pilot, lambda: any(c[0] == 'submit' for c in market['calls']))
             names = [c[0] for c in market['calls']]
             assert names.index('save_token') < names.index('submit')
@@ -238,7 +248,7 @@ def test_submit_with_saved_token_skips_token_dialog(market):
             await pilot.pause(0.2)
             view.submit_selected()
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
-            await pilot.click('#ok')
+            await press_button(pilot, app, '#ok')
             await until(pilot, lambda: any(c[0] == 'submit' for c in market['calls']))
             assert not any(c[0] == 'save_token' for c in market['calls'])
     asyncio.run(main())
@@ -256,7 +266,7 @@ def test_submit_declined_sends_nothing(market):
             await pilot.pause(0.2)
             view.submit_selected()
             await until(pilot, lambda: isinstance(app.screen, ConfirmScreen))
-            await pilot.click('#cancel')
+            await press_button(pilot, app, '#cancel')
             await pilot.pause(0.3)
             assert market['calls'] == []
     asyncio.run(main())

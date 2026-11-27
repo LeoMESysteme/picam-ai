@@ -6,7 +6,7 @@
 - T2/T4: 2.781 Golden-Proben byte-identisch. T4: 129 Backend-/Pakettests bestanden und Leseprobe auf archiviertem GSV-Bild belegt. [Validierung](VALIDATION.md#sensor-p0-2026-11-27)
 - Außerhalb der Sandbox bestanden 394 gezielte Tests (Sensoren-Tab, Konsole, Eingabefokus, Onboarding-Backend, Pakete, Live-API, Installationskonfiguration) mit `-n 4`.
 - raspi06: Paket ohne KI und mit Claude-Agent erzeugt, statisch geprüft und aktiviert. [Laborjournal](lab_journal.md#sensor-p0-onboarding-2026-11-27)
-- Offen bleiben die volle Suite auf dem Integrationsstand, der erste Lauf mit Kamera am Aufbau und Review/Merge nach `master` durch Leonhard. Die Ergänzung von `Konzept.md` braucht seine Freigabe.
+- Seit 27.11. auf `master` (Leonhards Freigabe): Sensorpakete, KI-Sensoreinrichtung und Marktplatz als optionales Experimentalfeature (Standard aus). Volle Suite: 5342 bestanden, 2 sporadische Oberflächentests (einzeln grün). Offen: Forgejo-Einrichtung für Einreichungen (Label, Maschinenkonto, `SENSOR_BOT_TOKEN`, Spiegelung von `sensor-katalog`), erster Lauf eines neuen Sensors mit Kamera am Aufbau, Konzept.md-Ergänzung (Freigabe Leonhard), helle Anzeigen (OQ-84).
 
 ## GitHub-Einstieg
 
