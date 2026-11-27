@@ -1,5 +1,13 @@
 # Status und Übergabe — 2026-11-27
 
+## Sensorpakete (Branch feat/sensor-p0)
+
+- GSV-2AS-Paket, Laufzeit, `picam sensor` und Konsolenassistent sind gebaut. Lokale Pakete sind vorläufig. [Paketformat und Bedienung](SENSOR_PACKAGES.md)
+- T2/T4: 2.781 Golden-Proben byte-identisch. T4: 129 Backend-/Pakettests bestanden und Leseprobe auf archiviertem GSV-Bild belegt. [Validierung](VALIDATION.md#sensor-p0-2026-11-27)
+- Außerhalb der Sandbox bestanden 394 gezielte Tests (Sensoren-Tab, Konsole, Eingabefokus, Onboarding-Backend, Pakete, Live-API, Installationskonfiguration) mit `-n 4`.
+- raspi06: Paket ohne KI und mit Claude-Agent erzeugt, statisch geprüft und aktiviert. [Laborjournal](lab_journal.md#sensor-p0-onboarding-2026-11-27)
+- Seit 27.11. auf `master` (Leonhards Freigabe): Sensorpakete, KI-Sensoreinrichtung und Marktplatz als optionales Experimentalfeature (Standard aus). Volle Suite: 5342 bestanden, 2 sporadische Oberflächentests (einzeln grün). Offen: Forgejo-Einrichtung für Einreichungen (Label, Maschinenkonto, `SENSOR_BOT_TOKEN`, Spiegelung von `sensor-katalog`), erster Lauf eines neuen Sensors mit Kamera am Aufbau, Konzept.md-Ergänzung (Freigabe Leonhard), helle Anzeigen (OQ-84).
+
 ## GitHub-Einstieg
 
 Leonhard hat den GitHub-Quickstart für `master` freigegeben. Er führt vom
@@ -44,6 +52,19 @@ mit Beispieldaten.
 Die vollständigen nächsten Aufgaben stehen in der [Arbeitsliste](../TODO.md).
 Die [Roadmap](ROADMAP.md) führt die Abnahmekriterien je Phase und die
 [offenen Fragen](open-questions.md) enthalten Belege und Prüfschritte.
+
+## Teststufen und Security-Scans
+
+- Branch `ci/stufen-einfuehrung` führt `scripts/ci.py <t0|t1|t2|t3|nightly>` ein
+  (Hooks in `.githooks/`, Workflows `ci-fokussiert`, `ci-voll`, `ci-release`, `ci-nightly`),
+  gitleaks und bandit (`scripts/security-scan.sh`) sowie `scripts/perf-report.py`.
+  Stufen, Eskalationsregeln und Fehlerkatalog: [AGENTS.md](../AGENTS.md#teststufen) ·
+  [ci-failures](ci-failures.md) · [Security-Scan](security-scan.md).
+- Offen: `perf/baseline.json` ist noch vom Arbeitsbaum erzeugt (`-dirty`) und muss auf einem
+  ruhigen Pi neu geschrieben werden (`./.venv/bin/python scripts/perf-report.py --update-baseline`).
+  Der erste CI-Lauf auf dem Forgejo-Runner (SHA-Pins, gitleaks/bandit-Installation,
+  Playwright-Browser, T3-Trockenlauf) ist noch nicht beobachtet.
+  Die Runner-Kopie der Stufe-2c-Vorlage liegt unter `/var/lib/forgejo-runner/picam-templates/`.
 
 ## Doku-Abgleich und Integration
 

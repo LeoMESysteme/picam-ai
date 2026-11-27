@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shlex
 import subprocess
@@ -13,7 +14,7 @@ from textual import on, work
 from textual.containers import Vertical
 from textual.widgets import Button, Checkbox, Input, Static
 
-from .. import probes
+from .. import probes, sensor_client
 from ..edit_input import EDIT_HINT, EditInput, NavCheckbox
 from ..ui import MUTED, Action, Confirmation, ConfirmScreen
 from ..widgets import (
@@ -57,6 +58,10 @@ def risk_text(level: str, risk: str) -> Table:
     return table
 
 
+FEATURE_RISK = ('schaltet den Tab „Sensoren“ mit KI-Assistent, Katalog und Einreichung frei; der Messpfad '
+                'mit mitgelieferten Sensoren bleibt unverändert')
+
+
 class EinstellungenView(TabView):
     TAB_ID, TITLE, KEY = 'einstellungen', 'Einstellungen', 'c'
     INFO_TITLE = 'Einstellungen'
@@ -69,12 +74,19 @@ class EinstellungenView(TabView):
     DEFAULT_CSS = 'EinstellungenView #cfg-fields { height: auto; }'
 
     def compose(self):
+        self._feature_state = sensor_client.feature_enabled(self.app.instance)
         with TabBody(classes='tab-body'):
             with CardBox(id='cfg-values'):
                 yield Static(id='cfg-head')
                 yield Static(id='cfg-intro')
                 yield Vertical(id='cfg-fields')
                 yield Static(id='cfg-help')
+            with CardBox(id='cfg-experimental'):
+                yield Static(id='cfg-exp-head')
+                with Vertical(classes='field'):
+                    yield Static('KI-Sensoreinrichtung und Marktplatz', classes='field-label')
+                    yield NavCheckbox('eingeschaltet', value=self._feature_state, id='cfg-feature')
+                    yield Static(risk_text(probes.WARN, 'mittel – ' + FEATURE_RISK), classes='field-risk')
             yield SectionCard(id='cfg-paths')
         yield ActionBar()
 
@@ -122,6 +134,8 @@ class EinstellungenView(TabView):
         else:
             intro = fields([('Datei', value(inst.config), True)], width, label_w=8)
         self.query_one('#cfg-intro', Static).update(intro)
+        self.query_one('#cfg-exp-head', Static).update(
+            header('values', 'Experimentell', badge(probes.OFF, 'jederzeit umschaltbar', 'off'), width))
         self._hint = hint
         self._show_hint(width)
         config = value(inst.config) if inst.config else join(value(None), '  Startbefehl des Dienstes')
@@ -163,6 +177,42 @@ class EinstellungenView(TabView):
         actions.append(Action('x', 'Deinstallieren …', self.app.start_uninstall, icon='remove',
                               blocked=self.app.uninstall_blocker()))
         return actions
+
+    @on(Checkbox.Changed, '#cfg-feature')
+    def _feature_changed(self, event: Checkbox.Changed) -> None:
+        event.stop()
+        if bool(event.value) == self._feature_state:   # zurückgestellt oder schon so
+            return
+        self._feature_flow(bool(event.value))
+
+    @work(exclusive=True, group='feature')
+    async def _feature_flow(self, want: bool) -> None:
+        app = self.app
+        box = self.query_one('#cfg-feature', Checkbox)
+
+        def revert() -> None:
+            box.value = self._feature_state
+
+        lines = ['Experimentell: KI-Sensoreinrichtung und Marktplatz '
+                 + ('einschalten.' if want else 'ausschalten.'),
+                 'Der Tab „Sensoren“ erscheint.' if want else 'Der Tab „Sensoren“ verschwindet; '
+                 'mitgelieferte Sensoren bleiben nutzbar.',
+                 'Der Messpfad mit dem mitgelieferten Sensor gsv2as-161a ändert sich nicht.']
+        if want:
+            lines.append('Einreichen sendet Paketdateien (keine Bilder) an das Firmen-Forgejo.')
+        ok = await app.push_screen_wait(ConfirmScreen(Confirmation(
+            'Experimentellen Schalter ändern', lines, [], 'Einschalten' if want else 'Ausschalten')))
+        if not ok:
+            revert()
+            return
+        done, message, restart = await asyncio.to_thread(sensor_client.set_feature, app.instance, want)
+        if not done:
+            revert()
+            app.message(probes.FAIL, message)
+            return
+        self._feature_state = want
+        app.sync_feature_tabs()
+        app.message(probes.OK, message + (' Wirksam nach Neustart der Konsole/Werkbank.' if restart else ''))
 
     @on(Input.Submitted)
     def _submitted(self) -> None:

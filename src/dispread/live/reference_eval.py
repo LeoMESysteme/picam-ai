@@ -8,7 +8,9 @@ from statistics import median
 
 from dispread.gsv2as_cell_text import cell_text_from_telegram
 from dispread.records import to_boottime_ns
+from dispread.sensors import get_sensor
 
+_REFERENCE_UNIT = get_sensor().unit
 GUARD_NS = 695_000_000
 # OQ-40 (2026-10-30, 7245 ungestoerte Abstaende unter Kameralast): Periode
 # 533,3 ms, max 561 ms; ein ausgefallenes Telegramm gibt >= ~1039 ms.
@@ -111,7 +113,7 @@ def evaluate_records(session, reference, records):
         if known:
             key = _text(texts[i])
             displays.setdefault(key, {'stable': Counter(), 'changing': Counter()})[group][state] += 1
-            matches = (_text(record.get('raw_text')) == key and record.get('unit') == 'mV/V'
+            matches = (_text(record.get('raw_text')) == key and record.get('unit') == _REFERENCE_UNIT
                        and record.get('value') == values[i])
             if state == 'valid' and matches:
                 first_valid.setdefault(starts[i], t)

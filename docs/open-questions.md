@@ -71,6 +71,10 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-67](#oq-67) | — | offen | Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test? |
 | [OQ-69](#oq-69) | — | teilweise geklärt | Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage? |
 | [OQ-70](#oq-70) | — | teilweise geklärt | Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen? |
+| [OQ-81](#oq-81) | — | offen | Wie startet die Rastersuche bei HD44780-Anzeigen ohne festes Plus in Zelle 0? |
+| [OQ-82](#oq-82) | — | offen | Wer hebt Sensorpakete auf verifiziert, nach welchem Kriterium? |
+| [OQ-83](#oq-83) | — | offen | Wie kennzeichnet die Ausgabe an GSVmulti Werte eines vorläufigen Sensorpakets? |
+| [OQ-84](#oq-84) | — | offen | Wie liest picam Anzeigen mit hellen Zeichen auf dunklem oder farbigem Grund? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3944,3 +3948,63 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   den Pi nach Bestätigung neu starten und seine Zuordnung in der Konsole
   mit sysfs vergleichen. TX mit passendem Pegelwandler am Empfänger prüfen.
 * **Zielort:** [Hardwareprofil](HARDWARE_PROFILE.md#pi-5-uarts-an-der-40-poligen-stiftleiste).
+
+
+<span id="oq-81"></span>
+
+## OQ-81 — Wie startet die Rastersuche bei HD44780-Anzeigen ohne festes Plus in Zelle 0?
+
+* **Status:** offen · **Zuständig:** ME-Systeme
+* **Befund (2026-11-27):** Der Paketgenerator lehnt solche Anzeigen ab.
+  Der vorhandene Rasterstart und die Rasterbelege erwarten die
+  Plus-Glyphe in Zelle 0.
+* **Günstigstes Experiment:** Reale Aufnahmen ohne Plus-Anker mit
+  bestätigtem Quad sammeln. Einen Rasterstart über eine sichtbare
+  Ziffernzelle gegen einen Fit ohne Zeichenanker prüfen. Kandidaten mit
+  Verschiebung um eine ganze Zelle müssen erkennbar abgelehnt werden.
+* **Zielort:** [Validierung](VALIDATION.md) und [Projekt-Historie](project_history.md).
+
+---
+
+<span id="oq-82"></span>
+
+## OQ-82 — Wer hebt Sensorpakete auf verifiziert, nach welchem Kriterium?
+
+* **Status:** offen · **Zuständig:** Leonhard/Labor
+* **Vorabdefault (2026-11-27):** Neue Pakete bleiben bis zur Klärung
+  vorläufig. Es gibt keine automatische Verifizierung.
+* **Zu klären:** Wer entscheidet über die Hochstufung, und welche
+  Prüfbelege sind dafür für ein Gerät und seine Aufstellungen nötig?
+* **Zielort:** [Sensorpakete](SENSOR_PACKAGES.md) und [Validierung](VALIDATION.md).
+
+---
+
+<span id="oq-83"></span>
+
+## OQ-83 — Wie kennzeichnet die Ausgabe an GSVmulti Werte eines vorläufigen Sensorpakets?
+
+* **Status:** offen · **Zuständig:** ME-Systeme intern
+* **Befund (2026-11-27):** Werkbank und Laufaudit führen `sensor_status`.
+  Die Kennzeichnung in GSVmulti hängt von den unterstützten
+  Ausgabeformaten ab. [OQ-07](#oq-07)
+* **Zu klären:** Welche Kennzeichnung bleibt beim Import und in der
+  Kalibrierauswertung erhalten? Einen dokumentierten Weg bis in die
+  Auswertung prüfen.
+* **Zielort:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md).
+
+---
+
+<span id="oq-84"></span>
+
+## OQ-84 — Wie liest picam Anzeigen mit hellen Zeichen auf dunklem oder farbigem Grund?
+
+* **Status:** offen · **Zuständig:** Entwicklung
+* **Befund (2026-11-27):** Das GSV-2TSD-DI am Aufbau raspi01 zeigt weiße
+  Zeichen auf blau hinterleuchtetem LCD (`+ 0.1489 mV/V`). Abtastung,
+  Normierung (`bg_closing_v1`), Rastersuche und Vorlagen setzen dunkle
+  Punkte auf hellem Glas voraus. Der Sensor-Assistent fragt die Polarität
+  jetzt ab und bricht bei hellen Zeichen mit Hinweis ab.
+* **Zu klären:** Eigene Normierung und Vorlagen je Polarität oder
+  Invertierung vor der Abtastung; Abnahme auf frischen Aufstellungen.
+  Aufwandsschätzung aus der Analyse vom 10.11.: 2–6 Wochen.
+* **Zielort:** [Sensorpakete](SENSOR_PACKAGES.md) und [Validierung](VALIDATION.md).

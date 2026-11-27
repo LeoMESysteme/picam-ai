@@ -12,10 +12,14 @@ synthetische Daten ergänzen, sie ersetzen kein reales Testset).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 from dispread.charcells import CharGrid
+from dispread.sensors import DisplayDefinition, SensorDefinition, get_sensor
 from dispread.session_profile import SessionProfile
+
+_DEFAULT_SENSOR = get_sensor()
+_DEFAULT_DISPLAY = _DEFAULT_SENSOR.display
 
 #: Segmentreihenfolge in allen Masken dieses Projekts.
 #:
@@ -166,14 +170,24 @@ class CharLayout:
 
     grid: CharGrid
     unit: str
-    format_id: str = "gsv2as_v1"
-    classified_cells: int = 9
+    format_id: str = _DEFAULT_DISPLAY.format.rule
+    classified_cells: int = _DEFAULT_DISPLAY.classified_cells
     #: Zellen, die immer leer sein müssen ("Rest", Zellen 9-15 abzüglich der
     #: nicht gelesenen Einheit 9-12) - siehe `DotMatrixReader.read`.
-    blank_cells: tuple[int, ...] = (13, 14, 15)
+    blank_cells: tuple[int, ...] = _DEFAULT_DISPLAY.blank_cells
+    display: DisplayDefinition = field(default=_DEFAULT_DISPLAY, repr=False)
 
     @classmethod
-    def from_profile(cls, profile: SessionProfile, unit: str) -> CharLayout:
+    def from_definition(cls, definition: SensorDefinition, grid: CharGrid | None = None) -> CharLayout:
+        """Baut das Leserlayout mit dem Paketraster oder einem bestaetigten Raster."""
+        display = definition.display
+        return cls(grid=CharGrid.from_display(display) if grid is None else grid, unit=definition.unit,
+                   format_id=display.format.rule, classified_cells=display.classified_cells,
+                   blank_cells=display.blank_cells, display=display)
+
+    @classmethod
+    def from_profile(cls, profile: SessionProfile, unit: str | None = None,
+                     definition: SensorDefinition | None = None) -> CharLayout:
         """Baut ein `CharLayout` aus einem bestätigten `SessionProfile`.
 
         Wirft `ValueError`, wenn das Profil das Auflösungs-Gate nicht
@@ -184,4 +198,8 @@ class CharLayout:
             raise ValueError("Profil nicht bestaetigt: resolution_ok ist False")
         if not profile.confirmed_by:
             raise ValueError("Profil nicht bestaetigt: confirmed_by ist leer")
-        return cls(grid=profile.grid, unit=unit)
+        definition = _DEFAULT_SENSOR if definition is None else definition
+        layout = cls.from_definition(definition, grid=profile.grid)
+        if unit is not None:
+            return replace(layout, unit=unit)
+        return layout

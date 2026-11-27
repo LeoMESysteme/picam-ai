@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import os
 import pwd
@@ -266,6 +267,15 @@ async def handle_local_op(op, args, controller, live, bridge_hub=None):
             return web.json_response(controller.command(op, args))
         if op == "live.status":
             return web.json_response(await asyncio.to_thread(live.status))
+        if op == 'live.snapshot':
+            if (args or {}).get('confirmed') is True:
+                image, profile = await asyncio.to_thread(live.confirmed_capture)
+                return web.json_response({'image': base64.b64encode(image).decode('ascii'), 'profile': profile})
+            jpeg = await asyncio.to_thread(live.preview_jpeg)
+            return web.json_response({
+                'jpeg': None if jpeg is None else base64.b64encode(jpeg).decode('ascii'),
+                'camera_running': bool((await asyncio.to_thread(live.status))['camera']['running']),
+            })
         if op == 'live.aufraeumen':
             return web.json_response(await asyncio.to_thread(live.cleanup, **(args or {})))
         if op == "live.setup":

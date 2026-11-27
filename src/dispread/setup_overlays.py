@@ -7,10 +7,12 @@ import numpy as np
 
 from dispread.charcells import CharGrid
 from dispread.ocr.dotmatrix_sampling import dot_centers
+from dispread.sensors import get_sensor
 
-TARGET_SIZE = (400, 160)
+_DISPLAY = get_sensor().display
+TARGET_SIZE = _DISPLAY.lattice.target_size
 OVERLAY_SCALE = 4
-GRID = CharGrid(n_cells=16, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0)
+GRID = CharGrid.from_display(_DISPLAY)
 
 
 def _bgr(image: np.ndarray) -> np.ndarray:

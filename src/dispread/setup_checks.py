@@ -31,10 +31,15 @@ from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, background_opening, raw_cell_depths, sample_image
 from dispread.rectify import rectify
+from dispread.sensors import SensorDefinition, get_sensor
+from dispread.sensors.definitions import CHAR_NUMBER_FORMAT_RULE
+
+_DEFAULT_SENSOR = get_sensor()
+_DISPLAY = _DEFAULT_SENSOR.display
 
 # Vorabwerte, aus den Aufstellungen vom 2026-09-29.
-TARGET_SIZE = (400, 160)
-GRID = CharGrid(16, 0.0, 25.0, 160.0 / 9.0, 160.0)
+TARGET_SIZE = _DISPLAY.lattice.target_size
+GRID = CharGrid.from_display(_DISPLAY)
 POINT_CONTRAST_ERROR = 15.0
 POINT_CONTRAST_WARNING = 17.0
 # Vorabgrenze 2026-10-28: gute Aufstellungen p80 >=112, dunkle <=98.
@@ -72,7 +77,7 @@ STABILITY_MIN_ELAPSED_S = 30.0
 STABILITY_ERROR_PX = 0.5
 STABILITY_WARNING_PX = 0.2
 BORDER_DARK_RATIO_ERROR = 0.7
-BLANK_CELLS = (8, 13, 14, 15)
+BLANK_CELLS = _DISPLAY.empty_cells
 
 
 def _glass_defects(image: np.ndarray, quad, grid: CharGrid, blank_cells: Sequence[int]) -> list[dict]:
@@ -226,22 +231,23 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
     # fuer Leerzellen kommen unabhaengig vom Leser aus dem Hochpasssignal.
     gray = warped_gray.astype(np.float32)
     highpass = cv2.GaussianBlur(gray, (0, 0), 5) - cv2.GaussianBlur(gray, (0, 0), 0.8)
-    peak = [float(np.percentile(highpass[25:140, k * 25:(k + 1) * 25], 99)) for k in range(16)]
+    pitch = round(GRID.pitch)
+    peak = [float(np.percentile(highpass[25:140, k * pitch:(k + 1) * pitch], 99)) for k in range(GRID.n_cells)]
     median_peak = float(np.median(sorted(peak)[4:12]))
     blank_limit = max(EDGE_BLANK_ABSOLUTE_HIGHPASS, EDGE_BLANK_RELATIVE_HIGHPASS * median_peak)
     background = cv2.morphologyEx(warped_gray, cv2.MORPH_CLOSE, np.ones((5, 9), np.uint8)).astype(np.float32)
     horizontal_step = np.abs(background[25:140, 8:] - background[25:140, :-8])
     blank_start, blank_stop = EDGE_BLANK_STEP_WINDOW
     scores = []
-    for k in range(16):
+    for k in range(GRID.n_cells):
         # Links bleiben 2 px Rand. Rechts mindestens 6 px fuer x+8, aber nur
         # vor einer belegten Nachbarzelle: deren weichgezeichnete Glyphe
         # wuerde sonst in den Befund einfliessen. Vor einer Leerzelle (und in
         # Zelle 15) bleibt das alte Fenster, sonst entstuende dort ein blinder
         # Bereich fuer echte Kanten an der Zellgrenze.
-        neighbour_occupied = k < 15 and peak[k + 1] >= blank_limit
-        stop = 25 * k + blank_stop if neighbour_occupied else 25 * (k + 1) - EDGE_BLANK_STEP_FREE_RIGHT
-        region = horizontal_step[:, 25 * k + blank_start:stop]
+        neighbour_occupied = k < GRID.n_cells - 1 and peak[k + 1] >= blank_limit
+        stop = pitch * k + blank_stop if neighbour_occupied else pitch * (k + 1) - EDGE_BLANK_STEP_FREE_RIGHT
+        region = horizontal_step[:, pitch * k + blank_start:stop]
         scores.append(float(np.max(np.percentile(region, 75, axis=0))))
     # Fuer belegte Zellen: obere Helligkeitshuelse entlang der Punktzeilen.
     # Die Addition des Hochpasses hebt dunkle Glyphen an; eine breite
@@ -251,10 +257,10 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
     envelope = cv2.GaussianBlur(envelope[None].astype(np.float32), (0, 0), 1)[0]
     step = np.abs(envelope[8:] - envelope[:-8])
     occupied_scores = []
-    for k in range(16):
-        values = step[k * 25 + 2:(k + 1) * 25 - 10]
+    for k in range(GRID.n_cells):
+        values = step[k * pitch + 2:(k + 1) * pitch - 10]
         occupied_scores.append(float(np.max(values)))
-    flagged = tuple(k for k in range(16) if (
+    flagged = tuple(k for k in range(GRID.n_cells) if (
         scores[k] > EDGE_WARNING if peak[k] < blank_limit
         else occupied_scores[k] > EDGE_OCCUPIED_WARNING
     ))
@@ -277,16 +283,16 @@ def _edge_check(warped_gray: np.ndarray) -> CheckResult:
                        flagged, _edge_reason(status, details))
 
 
-# OQ-72: Lage der Zellen im GSV-2AS-Format (Zahlenblock 0-7, Trennzelle 8,
-# Einheit 9-12, Rest 13-15), nur fuer den Bedienertext.
+# OQ-72: Zellrolle fuer den Bedienertext.
 def _cell_position(cell: int) -> str:
-    if cell == 0:
+    roles = _DISPLAY.roles
+    if cell in roles.sign:
         return 'Vorzeichen'
-    if cell <= 7:
+    if cell in roles.number:
         return 'Zahl'
-    if cell == 8:
+    if cell in roles.separator:
         return 'Trennzelle'
-    return 'Einheit' if cell <= 12 else 'rechts der Einheit'
+    return 'Einheit' if cell in roles.unit else 'rechts der Einheit'
 
 
 def _edge_reason(status: str, details: list[dict]) -> str | None:
@@ -315,25 +321,26 @@ def _edge_reason(status: str, details: list[dict]) -> str | None:
 
 def _border_check(sampled: SampledImage) -> CheckResult:
     """Sucht dunkle, vom Rahmen verdeckte aeussere Punktreihen in Leerzellen."""
-    raw = sampled.raw[:, SHIFTS.index((0, 0)), :].reshape(16, 8, 5)
+    raw = sampled.raw[:, SHIFTS.index((0, 0)), :].reshape(GRID.n_cells, 8, 5)
     ratios: dict[int, dict[str, float]] = {}
     flagged: list[int] = []
     # Zelle 0 traegt normalerweise das Plus. Dessen Querstrich betrifft nur
     # eine Zeile; der Median der Randspalte kann dennoch geprueft werden.
     # Die Randzeilen vergleichen wir dort nur, wenn die Zelle innen leer ist.
-    first_inner = raw[0, 1:7, 1:5]
+    sign = _DISPLAY.anchor.cell
+    first_inner = raw[sign, 1:7, 1:5]
     first_blank = np.percentile(first_inner, 10) >= 0.9 * np.median(first_inner)
-    for cell in (0, *BLANK_CELLS):
+    for cell in (sign, *BLANK_CELLS):
         dots = raw[cell]
         interior = max(1.0, float(np.median(dots[1:6, :])))
-        measures = {} if cell == 0 and not first_blank else {
+        measures = {} if cell == sign and not first_blank else {
             'row_0': float(np.median(dots[0, :])) / interior,
             'row_6': float(np.median(dots[6, :])) / interior,
         }
-        if cell == 0:
+        if cell == sign:
             measures['column_0'] = float(np.median(dots[:, 0])) / max(
                 1.0, float(np.median(dots[:, 1:3])))
-        if cell == 15:
+        if cell == GRID.n_cells - 1:
             measures['column_4'] = float(np.median(dots[:, 4])) / max(
                 1.0, float(np.median(dots[:, 2:4])))
         ratios[cell] = measures
@@ -455,12 +462,13 @@ def never_exact_hint(notes: list[dict]) -> str:
 
 def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[float]],
                     template_path: Path, template_sha256: str, *,
-                    reference_kind: str = 'eingabe') -> CheckResult:
+                    reference_kind: str = 'eingabe', definition: SensorDefinition = _DEFAULT_SENSOR) -> CheckResult:
     """Vergleicht Zellentscheidungen mit dem Solltext, ohne Lesewerte zu korrigieren."""
     if not frames:
         raise ValueError('Mindestens ein Standbild ist fuer das Gegenlesen erforderlich')
     reader = DotMatrixReader.from_file(Path(template_path), template_sha256)
-    layout = CharLayout(grid=GRID, unit='')
+    layout = CharLayout.from_definition(definition, grid=GRID)
+    generic = definition.display.format.rule == CHAR_NUMBER_FORMAT_RULE
     reasons: dict[str, int] = {}
     masked_cells: list[list[int]] = []
     contradictions: list[dict] = []
@@ -469,17 +477,28 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
     verdicts = []
     depths = []
     for frame_index, (frame, reference) in enumerate(frames):
-        if len(reference) != 9:
-            raise ValueError('Gegenlesen braucht neun Referenzzellen')
+        if len(reference) != layout.classified_cells:
+            raise ValueError(f'Gegenlesen braucht {layout.classified_cells} Referenzzellen' if generic
+                             else 'Gegenlesen braucht neun Referenzzellen')
         masked = [i for i, ch in enumerate(reference) if ch == '?']
         masked_cells.append(masked)
         crop = rectify(frame, quad, target_size=TARGET_SIZE).image
         result = reader.read(crop, layout)
         diag = result.diagnostics
-        reason, frame_contradictions, note = _frame_verdict(diag, reference, frame_index, reference_kind)
+        if generic:
+            cells = diag.get('cells', ())
+            frame_contradictions = [
+                {'frame': frame_index, 'cell': i, 'read': cell['text'], 'reference': ch}
+                for i, (ch, cell) in enumerate(zip(reference, cells, strict=False))
+                if cell['text'] not in (None, ch)
+            ]
+            reason = 'zelle_widerspricht_referenz' if frame_contradictions else diag.get('reject_reason')
+            note = None
+        else:
+            reason, frame_contradictions, note = _frame_verdict(diag, reference, frame_index, reference_kind)
         verdicts.append([reason, frame_contradictions, note])
         observations.append([crop, reference, diag, reason])
-        depths.append(raw_cell_depths(sample_image(_gray(crop), GRID, range(9))).tolist())
+        depths.append(raw_cell_depths(sample_image(_gray(crop), GRID, range(layout.classified_cells))).tolist())
     notes = [note for _, _, note in verdicts if note is not None]
     if notes:
         # Schwanken heisst: die Standbilder liegen hoechstens 1 Einheit der letzten
@@ -531,7 +550,7 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
         metrics['tolerance'] = {'possible': False, 'factor': None, 'max_d_best': None, 'd_max': None,
                                 'reason': NEVER_EXACT_CODE, 'reference_kind': reference_kind}
         metrics['hinweis'] = ' '.join(filter(None, (metrics.get('hinweis'), NEVER_EXACT_TOLERANCE)))
-    elif status == 'WARNUNG':
+    elif status == 'WARNUNG' and not generic:
         tolerance = _tolerance_proposal(observations, reader, layout, template_path, template_sha256, reference_kind)
         metrics['tolerance'] = tolerance
         if tolerance['possible']:
@@ -807,7 +826,7 @@ def check_setup(image_bgr: np.ndarray, lattice_fit: Any, *,
         raise ValueError('Ungueltige Punktzahlen im Rasterbefund')
     warped = rectify(image_bgr, lattice_fit.quad, target_size=TARGET_SIZE).image
     warped_gray = _gray(warped)
-    sampled = sample_image(warped_gray, GRID, tuple(range(16)))
+    sampled = sample_image(warped_gray, GRID, tuple(range(GRID.n_cells)))
     contrast = _point_contrast(gray, quad)
     contrast_status = ('FEHLER' if contrast < POINT_CONTRAST_ERROR else
                        'WARNUNG' if contrast < POINT_CONTRAST_WARNING else 'OK')

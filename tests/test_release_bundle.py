@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -12,15 +12,14 @@ from pathlib import Path
 import pytest
 
 BUILDER_PATH = Path(__file__).parents[1] / "packaging" / "release.py"
-TEMPLATE_NAME = "src/dispread/data/templates-stufe2c-2026-09-30.json"
+SENSOR_DIR = "src/dispread/data/sensors/gsv2as-161a"
+TEMPLATE_NAME = f"{SENSOR_DIR}/templates.json"
+LEGACY_TEMPLATE = "src/dispread/data/templates-stufe2c-2026-09-30.json"
+SHA256 = "6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a"
+sys.path.insert(0, str(BUILDER_PATH.parent))
 
 
-def build_release(*args):
-    assert BUILDER_PATH.is_file(), "release builder is missing"
-    spec = importlib.util.spec_from_file_location("picam_release_builder", BUILDER_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.build_release(*args)
+from release import build_release  # noqa: E402
 
 
 def git(root, *args):
@@ -31,14 +30,10 @@ def git(root, *args):
 def source(tmp_path):
     root = tmp_path / "source"
     root.mkdir()
-    template = tmp_path / "templates.json"
-    template.write_bytes(b'{"templates":[]}\n')
+    shutil.copytree(BUILDER_PATH.parents[1] / SENSOR_DIR, root / SENSOR_DIR, copy_function=shutil.copyfile)
     files = {
         "src/dispread/__init__.py": "",
-        "src/dispread/live/__init__.py": (
-            "raise RuntimeError('never import the product while building')\n"
-            f'DEFAULT_TEMPLATES_SHA256 = "{hashlib.sha256(template.read_bytes()).hexdigest()}"\n'
-        ),
+        "src/dispread/live/__init__.py": "raise RuntimeError('kein Produktimport beim Bauen')\n",
         "src/dispread/workbench/static/app.js": "console.log('product');\n",
         "pyproject.toml": '[project]\nname = "test-product"\n',
         "VERSION": "1.2.3\n",
@@ -55,17 +50,18 @@ def source(tmp_path):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
+    shutil.copyfile(BUILDER_PATH.parent / "picam_installer/archive.py", root / "packaging/picam_installer/archive.py")
     (root / "install.sh").chmod(0o755)
     git(root, "init", "--quiet")
     git(root, "add", ".")
     git(root, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "fixture")
-    return root, template
+    return root
 
 
 def test_bundle_contains_verified_payload_manifest_and_executable(source, tmp_path):
-    root, template = source
+    root = source
     output = tmp_path / "release.tar.gz"
-    assert build_release(root, output, template, "1.2.3") == output
+    assert build_release(root, output, "1.2.3") == output
     with tarfile.open(output, "r:gz") as archive:
         files = {m.name.removeprefix("picam/"): m for m in archive if m.isfile()}
         assert all(m.name == "picam" or m.name.startswith("picam/") for m in archive)
@@ -77,7 +73,10 @@ def test_bundle_contains_verified_payload_manifest_and_executable(source, tmp_pa
         assert set(manifest["files"]) == set(files)
         for name, member in files.items():
             assert hashlib.sha256(archive.extractfile(member).read()).hexdigest() == manifest["files"][name]
-        assert archive.extractfile(files[TEMPLATE_NAME]).read() == template.read_bytes()
+        assert archive.extractfile(files[TEMPLATE_NAME]).read() == (root / TEMPLATE_NAME).read_bytes()
+        assert manifest["files"][TEMPLATE_NAME] == manifest["files"][LEGACY_TEMPLATE] == SHA256
+        for name in ("sensor.json", "display.json", "README.md"):
+            assert f"{SENSOR_DIR}/{name}" in files
         assert files["install.sh"].mode == 0o755
         assert "scripts/install.py" in files
         assert "packaging/picam_installer/__main__.py" in files
@@ -87,10 +86,10 @@ def test_bundle_contains_verified_payload_manifest_and_executable(source, tmp_pa
 
 
 def test_me_fastfetch_extras_are_not_bundled(source, tmp_path):
-    root, template = source
+    root = source
     for name in ("packaging/me-fastfetch/me-logo.py.bak", "packaging/me-fastfetch/notes.md"):
         (root / name).write_text("private\n")
-    output = build_release(root, tmp_path / "bundle.tar.gz", template, "release-1")
+    output = build_release(root, tmp_path / "bundle.tar.gz", "release-1")
     with tarfile.open(output) as archive:
         names = set(archive.getnames())
     assert "picam/packaging/me-fastfetch/config.jsonc" in names
@@ -98,19 +97,19 @@ def test_me_fastfetch_extras_are_not_bundled(source, tmp_path):
 
 
 def test_reproducible_bytes_ignore_source_mtime(source, tmp_path):
-    root, template = source
-    first = build_release(root, tmp_path / "first.tar.gz", template, "release-1")
+    root = source
+    first = build_release(root, tmp_path / "first.tar.gz", "release-1")
     import os
     for path in root.rglob("*"):
         if path.is_file():
             os.utime(path, (345678, 345678))
-    second = build_release(root, tmp_path / "second.tar.gz", template, "release-1")
+    second = build_release(root, tmp_path / "second.tar.gz", "release-1")
     assert first.read_bytes() == second.read_bytes()
     assert first.read_bytes()[4:8] == b"\0\0\0\0"
 
 
 def test_bundle_uses_current_product_sources_and_excludes_private_files(source, tmp_path):
-    root, template = source
+    root = source
     additions = {
         "src/dispread/new_module.py": b"NEW = True\n",
         "src/dispread/.env": b"SECRET=private",
@@ -120,6 +119,7 @@ def test_bundle_uses_current_product_sources_and_excludes_private_files(source, 
         "src/dispread/__pycache__/module.pyc": b"cache",
         "src/dispread/token.pem": b"private",
         "src/dispread/private.sqlite": b"private",
+        f"{SENSOR_DIR}/unerwartet.py": b"kein Paketcode",
         "var/templates.json": b"runtime",
         ".venv/private.py": b"venv",
         "scripts/unrelated.py": b"private",
@@ -129,7 +129,7 @@ def test_bundle_uses_current_product_sources_and_excludes_private_files(source, 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
     (root / "src/dispread/__init__.py").write_text("CHANGED = True\n")
-    output = build_release(root, tmp_path / "bundle.tar.gz", template, "release-1")
+    output = build_release(root, tmp_path / "bundle.tar.gz", "release-1")
     with tarfile.open(output) as archive:
         names = set(archive.getnames())
         assert "picam/src/dispread/new_module.py" in names
@@ -140,16 +140,17 @@ def test_bundle_uses_current_product_sources_and_excludes_private_files(source, 
 
 @pytest.mark.parametrize("release_id", ["", "../bad", "a/b", ".", "..", "-bad", "white space", "x\ny", "x" * 129])
 def test_rejects_unsafe_release_id_without_artifact(source, tmp_path, release_id):
-    root, template = source
+    root = source
     output = tmp_path / "release.tar.gz"
     with pytest.raises(ValueError, match="release"):
-        build_release(root, output, template, release_id)
+        build_release(root, output, release_id)
     assert not output.exists()
 
 
 @pytest.mark.parametrize("problem", ["missing", "wrong", "symlink"])
-def test_rejects_invalid_external_template_before_output(source, tmp_path, problem):
-    root, template = source
+def test_rejects_invalid_packaged_template_before_output(source, tmp_path, problem):
+    root = source
+    template = root / TEMPLATE_NAME
     if problem == "missing":
         template.unlink()
     elif problem == "wrong":
@@ -159,24 +160,25 @@ def test_rejects_invalid_external_template_before_output(source, tmp_path, probl
         template.symlink_to(original)
     output = tmp_path / "release.tar.gz"
     with pytest.raises((ValueError, FileNotFoundError), match="[Tt]emplate|[Vv]orlage|[Ss]ymlink"):
-        build_release(root, output, template, "release-1")
+        build_release(root, output, "release-1")
     assert not output.exists()
 
 
 @pytest.mark.parametrize("missing", ["scripts/install.py", "install.sh", "packaging/picam_installer/engine.py", "VERSION",
-                                     "packaging/me-fastfetch/me-logo.py"])
+                                     "packaging/me-fastfetch/me-logo.py", f"{SENSOR_DIR}/sensor.json",
+                                     f"{SENSOR_DIR}/display.json"])
 def test_rejects_incomplete_source_without_artifact(source, tmp_path, missing):
-    root, template = source
+    root = source
     (root / missing).unlink()
     output = tmp_path / "release.tar.gz"
     with pytest.raises((ValueError, FileNotFoundError), match=missing):
-        build_release(root, output, template, "release-1")
+        build_release(root, output, "release-1")
     assert not output.exists()
 
 
 @pytest.mark.parametrize("kind", ["existing", "symlink", "inside_source"])
 def test_rejects_output_that_could_overwrite_inputs(source, tmp_path, kind):
-    root, template = source
+    root = source
     output = tmp_path / "release.tar.gz"
     if kind == "existing":
         output.write_bytes(b"preserve")
@@ -185,7 +187,7 @@ def test_rejects_output_that_could_overwrite_inputs(source, tmp_path, kind):
     else:
         output = root / "release.tar.gz"
     with pytest.raises((ValueError, FileExistsError)):
-        build_release(root, output, template, "release-1")
+        build_release(root, output, "release-1")
     if kind == "existing":
         assert output.read_bytes() == b"preserve"
     elif kind == "symlink":
@@ -196,68 +198,74 @@ def test_rejects_output_that_could_overwrite_inputs(source, tmp_path, kind):
 
 @pytest.mark.parametrize("linked", ["src/dispread/new_module.py", "src/dispread/link", "packaging/picam_installer/engine.py"])
 def test_rejects_symlink_input(source, tmp_path, linked):
-    root, template = source
+    root = source
     target = root / linked
     if target.exists():
         target.unlink()
-    target.symlink_to(template)
+    target.symlink_to(root / TEMPLATE_NAME)
     output = tmp_path / "release.tar.gz"
     with pytest.raises(ValueError, match="[Ss]ymlink"):
-        build_release(root, output, template, "release-1")
+        build_release(root, output, "release-1")
     assert not output.exists()
 
 
-def test_ignored_source_and_embedded_template_are_not_used(source, tmp_path):
-    root, template = source
+def test_ignored_source_and_legacy_template_are_not_used(source, tmp_path):
+    root = source
     (root / ".gitignore").write_text("src/dispread/local_only.py\n")
     (root / "src/dispread/local_only.py").write_text("LOCAL_SECRET = True\n")
-    embedded = root / TEMPLATE_NAME
-    embedded.parent.mkdir(parents=True)
+    embedded = root / LEGACY_TEMPLATE
+    embedded.parent.mkdir(parents=True, exist_ok=True)
     embedded.write_text("unverified source copy")
-    output = build_release(root, tmp_path / "bundle.tar.gz", template, "release-1")
+    output = build_release(root, tmp_path / "bundle.tar.gz", "release-1")
     with tarfile.open(output) as archive:
         assert "picam/src/dispread/local_only.py" not in archive.getnames()
-        assert archive.extractfile(f"picam/{TEMPLATE_NAME}").read() == template.read_bytes()
+        assert archive.extractfile(f"picam/{LEGACY_TEMPLATE}").read() == (root / TEMPLATE_NAME).read_bytes()
 
 
-@pytest.mark.parametrize("hash_source", ["", 'DEFAULT_TEMPLATES_SHA256 = "invalid"\n', 'DEFAULT_TEMPLATES_SHA256 = dangerous()\n'])
-def test_missing_or_nonliteral_template_hash_is_rejected(source, tmp_path, hash_source):
-    root, template = source
-    (root / "src/dispread/live/__init__.py").write_text(hash_source)
+@pytest.mark.parametrize("metadata", [{}, {"file": "templates.json", "sha256": "0" * 64},
+                                      {"file": "andere.json", "sha256": SHA256}])
+def test_bad_template_reference_is_rejected(source, tmp_path, metadata):
+    root = source
+    path = root / SENSOR_DIR / "sensor.json"
+    sensor = json.loads(path.read_text())
+    sensor["templates"] = metadata
+    path.write_text(json.dumps(sensor))
     output = tmp_path / "bundle.tar.gz"
-    with pytest.raises(ValueError):
-        build_release(root, output, template, "release-1")
+    with pytest.raises(ValueError, match="Vorlage"):
+        build_release(root, output, "release-1")
     assert not output.exists()
 
 
 def test_cli_requires_explicit_inputs_and_builds_without_product_import(source, tmp_path):
-    import shutil
-    import sys
-
-    root, template = source
+    root = source
     script = root / "scripts/build-release.py"
     shutil.copyfile(BUILDER_PATH.parents[1] / "scripts/build-release.py", script)
     shutil.copyfile(BUILDER_PATH, root / "packaging/release.py")
     incomplete = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
     assert incomplete.returncode == 2
-    assert "--templates" in incomplete.stderr
     assert "--output" in incomplete.stderr
     assert "--release-id" in incomplete.stderr
     output = tmp_path / "cli-release.tar.gz"
     built = subprocess.run(
-        [sys.executable, str(script), "--output", str(output), "--templates", str(template), "--release-id", "cli-1"],
+        [sys.executable, str(script), "--output", str(output), "--release-id", "cli-1"],
         capture_output=True, text=True, cwd=tmp_path,
     )
     assert built.returncode == 0, built.stderr
+    obsolete = subprocess.run(
+        [sys.executable, str(script), "--output", str(output), "--release-id", "cli-1", "--templates", str(root / TEMPLATE_NAME)],
+        capture_output=True, text=True,
+    )
+    assert obsolete.returncode == 2
+    assert "--templates" in obsolete.stderr
     with tarfile.open(output) as archive:
         assert json.load(archive.extractfile("picam/release.json"))["release_id"] == "cli-1"
 
 
 def test_stable_bundle_sets_delivery_version_only(source, tmp_path):
-    root, template = source
+    root = source
     (root / "VERSION").write_text('0.1.0.dev0\n')
-    stable = build_release(root, tmp_path / 'stable.tar.gz', template, '1.1.0')
-    dev = build_release(root, tmp_path / 'rc.tar.gz', template, 'rc-abcdef')
+    stable = build_release(root, tmp_path / 'stable.tar.gz', '1.1.0')
+    dev = build_release(root, tmp_path / 'rc.tar.gz', 'rc-abcdef')
     for path, release_id, version in [(stable, '1.1.0', b'1.1.0\n'), (dev, 'rc-abcdef', b'0.1.0.dev0\n')]:
         with tarfile.open(path, 'r:gz') as bundle:
             assert bundle.extractfile('picam/VERSION').read() == version
@@ -271,7 +279,7 @@ def test_stable_bundle_sets_delivery_version_only(source, tmp_path):
 def test_publish_dry_run(source, tmp_path, monkeypatch, state):
     from dispread.release_source import REPOSITORY
 
-    root, template = source
+    root = source
     actual = BUILDER_PATH.parents[1]
     script = root / 'scripts/publish-release.py'
     script.write_bytes((actual / 'scripts/publish-release.py').read_bytes())
@@ -289,7 +297,7 @@ def test_publish_dry_run(source, tmp_path, monkeypatch, state):
     git(root, 'tag', 'v1.1.0', 'HEAD^' if state == 'wrong-tag' else 'HEAD')
     if state == 'dirty':
         (root / 'untracked').touch()
-    result = subprocess.run([sys.executable, str(script), 'v1.1.0', '--templates', str(template), '--dry-run'],
+    result = subprocess.run([sys.executable, str(script), 'v1.1.0', '--dry-run'],
                             text=True, capture_output=True, check=False)
     assert not (tmp_path / 'external-call').exists()
     if state == 'clean':
@@ -302,3 +310,11 @@ def test_publish_dry_run(source, tmp_path, monkeypatch, state):
     else:
         assert result.returncode == 1
         assert ('Arbeitsbaum muss sauber sein' if state == 'dirty' else 'muss auf HEAD zeigen') in result.stderr
+
+
+def test_agent_prompt_is_product_file():
+    # Ohne den Prompt bricht der KI-Assistent im installierten Release sofort ab.
+    from release import _product_path
+
+    assert _product_path("src/dispread/sensors/agent_prompt.md")
+    assert not _product_path("src/dispread/sensors/notes.md")

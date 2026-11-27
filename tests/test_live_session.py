@@ -300,6 +300,8 @@ def test_new_value_is_transition_then_valid_and_audited(tmp_path):
     assert data["timing_calibration"]["guard_margin_ms"] == 325.9
     assert data["timing_calibration"]["sha256"] == hashlib.sha256((tmp_path / "timing.json").read_bytes()).hexdigest()
     assert data["release_notice"].startswith("Validiert nur:")
+    assert data["sensor"] == "gsv2as-161a@1"
+    assert second.profile_id == f'{data["device_id"]}/{data["session_id"]}'
     assert data["reader_tolerance"] is None
     assert summary["tolerance_frames"] == 0
 

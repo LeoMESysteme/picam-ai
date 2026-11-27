@@ -40,6 +40,11 @@ def parser():
     cli.add_argument('--without-fastfetch', dest='fastfetch', action='store_false',
                      help='me-fastfetch nicht einrichten (Vorgabe ohne gefuehrte Installation)')
     cli.set_defaults(fastfetch=None)
+    cli.add_argument('--with-sensor-assistant', dest='sensor_assistant', action='store_true',
+                     help='Experimentell: KI-gestuetzte Sensoreinrichtung und Sensor-Marktplatz aktivieren')
+    cli.add_argument('--without-sensor-assistant', dest='sensor_assistant', action='store_false',
+                     help='KI-Sensoreinrichtung und Marktplatz nicht aktivieren (Vorgabe)')
+    cli.set_defaults(sensor_assistant=False)
     cli.add_argument('--json', action='store_true', help='Maschinenlesbarer Plan/Ergebnis auf stdout')
     return cli
 
@@ -165,6 +170,9 @@ def config_text(args, paths, release):
     # Ueber current: nach einem Update liest der Dienst die Vorlage der aktiven Version.
     lines.extend(['', '[live]', 'templates = ' + json.dumps(str(release.parent.parent / 'current' / TEMPLATE)),
                   'calibration = ' + json.dumps(str(data / 'calibration/timing-streamcam.json')), ''])
+    # Optional und experimentell; in den Einstellungen jederzeit umschaltbar (dispread.sensors.features).
+    lines.extend(['[features]',
+                  'sensor_assistant = ' + ('true' if getattr(args, 'sensor_assistant', False) else 'false'), ''])
     return '\n'.join(lines)
 
 

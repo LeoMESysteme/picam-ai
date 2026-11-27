@@ -1,0 +1,154 @@
+# Sensor-Marktplatz: prüft eingereichte Sensorpakete und schreibt sie in den Katalogzweig.
+#
+# Ablauf: Ein Bediener reicht in picam ein Paket ein (Issue mit Anhang, Label sensor-einreichung). Dieser
+# Lauf prüft den Anhang mit dem Code von master, übernimmt ihn in den Zweig sensor-katalog (nur sensors/**),
+# erzeugt sensors/index.json neu und antwortet im Issue. Das Issue wird danach geschlossen.
+#
+# Sicherheit: Issue-Titel, -Text und Dateinamen des Anhangs werden NIE in ein run: eingesetzt und nie als
+# Pfad benutzt. Es gelangen nur die Issue-Nummer (Ganzzahl) und die per check-bundle geprüfte Sensor-id
+# (Regex im Skript) in Befehle. Den Anhang prüft dispread.sensors.catalog.check_bundle (keine Links, nur
+# vier erlaubte Dateinamen, Größenlimits, Vorlagen-Prüfsumme). Geheimnis: SENSOR_BOT_TOKEN (Forgejo-Benutzer
+# mit Schreibrecht auf Issues und den Zweig sensor-katalog). Läuft auf dem Pi-Runner wie docs.yml.
+name: Sensor-Einreichung
+
+on:
+  issues:
+    types: [opened, labeled]
+
+concurrency:
+  group: sensor-katalog
+  cancel-in-progress: false
+
+jobs:
+  einreichung:
+    runs-on: picam-docs
+    timeout-minutes: 15
+    env:
+      SERVER_URL: ${{ github.server_url }}
+      REPO: ${{ github.repository }}
+      ISSUE: ${{ github.event.issue.number }}
+      # Optional: nur Einreichungen dieses Forgejo-Benutzers annehmen (Repo-Variable SENSOR_SUBMITTER,
+      # z. B. das Maschinenkonto, dessen Token die Pis nutzen). Leer = jeder mit Label-Recht.
+      SUBMITTER: ${{ vars.SENSOR_SUBMITTER }}
+      AUTHOR: ${{ github.event.issue.user.login }}
+      SENSOR_BOT_TOKEN: ${{ secrets.SENSOR_BOT_TOKEN }}
+      PIP_CONFIG_FILE: /dev/null
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Einreichung prüfen und in den Katalog übernehmen
+        run: |
+          set -euo pipefail
+          api="$SERVER_URL/api/v1/repos/$REPO"
+          auth=(-H "Authorization: token $SENSOR_BOT_TOKEN")
+          [[ "$ISSUE" =~ ^[0-9]+$ ]] || { echo 'Ungültige Issue-Nummer'; exit 1; }
+          if [[ -n "${SUBMITTER:-}" && "${AUTHOR:-}" != "$SUBMITTER" ]]; then
+            echo 'Issue stammt nicht vom Einreichungskonto, übersprungen'; exit 0
+          fi
+
+          comment() {
+            python3 -c 'import json,sys; print(json.dumps({"body": sys.argv[1]}))' "$1" > comment.json
+            curl -fsS -X POST "${auth[@]}" -H 'Content-Type: application/json' -d @comment.json \
+              "$api/issues/$ISSUE/comments" > /dev/null
+          }
+          close_issue() {
+            curl -fsS -X PATCH "${auth[@]}" -H 'Content-Type: application/json' -d '{"state":"closed"}' \
+              "$api/issues/$ISSUE" > /dev/null
+          }
+          reject() {
+            comment "Die Einreichung wurde nicht übernommen: $1"
+            close_issue
+            echo "Abgelehnt: $1"
+            exit 0
+          }
+
+          curl -fsS "${auth[@]}" "$api/issues/$ISSUE" -o issue.json
+          # Label und Zustand aus der API lesen (nicht aus dem Ereignis); Text bleibt in der Datei.
+          state=$(python3 - <<'PY'
+          import json
+          issue = json.load(open('issue.json'))
+          labels = {item.get('name') for item in issue.get('labels') or []}
+          print('go' if issue.get('state') == 'open' and 'sensor-einreichung' in labels else 'skip')
+          PY
+          )
+          [ "$state" = go ] || { echo 'Kein offenes Issue mit Label sensor-einreichung: nichts zu tun'; exit 0; }
+
+          # Anhang: erster Eintrag der Anhangsliste, Name wird nie als Pfad benutzt.
+          curl -fsS "${auth[@]}" "$api/issues/$ISSUE/assets" -o assets.json
+          url=$(python3 - <<'PY'
+          import json
+          assets = json.load(open('assets.json'))
+          urls = [a.get('browser_download_url', '') for a in assets
+                  if isinstance(a, dict) and str(a.get('name', '')).endswith('.tar.gz')]
+          print(urls[0] if len(urls) == 1 else '')
+          PY
+          )
+          [ -n "$url" ] || reject 'Es muss genau ein Anhang mit der Endung .tar.gz hängen.'
+          case "$url" in "$SERVER_URL"/*) ;; *) reject 'Der Anhang liegt nicht auf diesem Server.';; esac
+          curl -fsS --max-filesize 4194304 "${auth[@]}" "$url" -o bundle.tar.gz \
+            || reject 'Der Anhang ist nicht ladbar oder größer als 4 MiB.'
+
+          # Prüfer mit dem Code von master (dieser Checkout), nicht mit Code aus der Einreichung.
+          python3 -m venv --system-site-packages --without-pip .venv-sensor
+          export PYTHONPATH="$PWD/src"
+
+          # Katalogzweig (anlegen, falls er fehlt).
+          git config user.name 'picam-sensor-bot'
+          git config user.email 'picam-sensor-bot@users.noreply.invalid'
+          basic=$(printf 'x-access-token:%s' "$SENSOR_BOT_TOKEN" | base64 -w0)
+          gitx() { git -c "http.extraheader=Authorization: Basic $basic" "$@"; }
+          if gitx ls-remote --exit-code --heads origin sensor-katalog > /dev/null; then
+            gitx fetch --depth 1 origin sensor-katalog
+            git worktree add --detach catalog FETCH_HEAD
+          else
+            git worktree add --detach catalog
+            git -C catalog checkout --orphan sensor-katalog
+            git -C catalog rm -rf --quiet . || true
+          fi
+          mkdir -p catalog/sensors
+          index_args=()
+          [ -f catalog/sensors/index.json ] && index_args=(--index catalog/sensors/index.json)
+
+          set +e
+          ./.venv-sensor/bin/python -m dispread.admin.cli sensor catalog check-bundle bundle.tar.gz \
+            "${index_args[@]}" > result.json 2> check.err
+          set -e
+          verdict=$(python3 - <<'PY'
+          import json, re
+          try:
+              result = json.load(open('result.json'))
+          except ValueError:
+              print('error\tPrüfer lieferte kein Ergebnis')
+              raise SystemExit
+          errors = '; '.join(str(e) for e in result.get('errors', []))[:1500]
+          sensor_id = str(result.get('sensor_id') or '')
+          if result.get('ok') is True and re.fullmatch(r'[a-z0-9][a-z0-9-]{1,62}', sensor_id):
+              print('ok\t' + sensor_id)
+          else:
+              print('error\t' + (errors or 'Prüfung fehlgeschlagen'))
+          PY
+          )
+          status=${verdict%%$'\t'*}
+          detail=${verdict#*$'\t'}
+          [ "$status" = ok ] || reject "$detail"
+          sensor_id="$detail"
+          [[ "$sensor_id" =~ ^[a-z0-9][a-z0-9-]{1,62}$ ]] || reject 'Ungültige Sensor-id.'
+
+          rm -rf "catalog/sensors/$sensor_id"
+          mkdir "catalog/sensors/$sensor_id"
+          tar -xzf bundle.tar.gz --no-same-owner --no-same-permissions -C "catalog/sensors/$sensor_id"
+          python3 scripts/sensor-catalog-index.py --sensors catalog/sensors
+
+          git -C catalog add -A sensors
+          # Wächter: der Commit darf nur sensors/** berühren.
+          outside=$(git -C catalog diff --cached --name-only | grep -v '^sensors/' || true)
+          [ -z "$outside" ] || reject 'Interner Fehler: Änderung außerhalb von sensors/ verhindert.'
+          if git -C catalog diff --cached --quiet; then
+            reject 'Das Paket ist bereits unverändert im Katalog.'
+          fi
+          git -C catalog commit --quiet -m "Sensorpaket $sensor_id aus Einreichung #$ISSUE"
+          cd catalog
+          gitx push origin HEAD:refs/heads/sensor-katalog
+          cd ..
+          comment "Das Paket $sensor_id wurde geprüft und in den Katalog aufgenommen (vorläufig, bis es per Release verifiziert wird)."
+          close_issue

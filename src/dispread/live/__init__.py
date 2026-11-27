@@ -9,16 +9,32 @@ from __future__ import annotations
 from pathlib import Path
 
 from dispread.defaults import LIVE_DATA_DIR as LIVE_DATA_DIR
+from dispread.sensors import SensorDefinition, get_sensor
+
+_DEFAULT_SENSOR = get_sensor()
+_LEGACY_NAME = "templates-stufe2c-2026-09-30.json"
+_LEGACY_TEMPLATE_SUFFIXES = (
+    Path("src/dispread/data", _LEGACY_NAME).parts,
+    Path("var/dotmatrix", _LEGACY_NAME).parts,
+)
 
 #: Eingefrorene Vorlagen Stufe 2c (Abnahme 3, 215/0/0).
-DEFAULT_TEMPLATES = Path("var/dotmatrix/templates-stufe2c-2026-09-30.json")
-DEFAULT_TEMPLATES_SHA256 = "6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a"
+DEFAULT_TEMPLATES = _DEFAULT_SENSOR.templates_path
+DEFAULT_TEMPLATES_SHA256 = _DEFAULT_SENSOR.templates.sha256
 #: Pflicht beim Start einer Live-Sitzung; wird aufgezeichnet, nicht angewandt.
 DEFAULT_CALIBRATION = Path("var/calibration/timing-streamcam.json")
 #: OpenCV-Threads fuer `dispread serve`, einmal beim Start gesetzt
 #: (workbench/server.py), damit der Pi bedienbar bleibt.
 LIVE_CV_THREADS = 2
-RELEASE_NOTICE = (
-    "Validiert nur: GSV-2AS/Displaytech 161A, Raumlicht, Einheit mV/V — "
-    "andere Lichtquellen und Geräte nicht geprüft."
-)
+RELEASE_NOTICE = _DEFAULT_SENSOR.release_notice
+
+
+def resolve_templates_path(definition: SensorDefinition, configured: Path | None) -> Path:
+    """Waehlt die Paketvorlage auch fuer fehlende Pfade aelterer Installationen."""
+    if configured is None or definition.id != _DEFAULT_SENSOR.id:
+        return definition.templates_path
+    if (definition.id == _DEFAULT_SENSOR.id
+            and any(configured.parts[-len(suffix):] == suffix for suffix in _LEGACY_TEMPLATE_SUFFIXES)
+            and not configured.exists()):
+        return definition.templates_path
+    return configured

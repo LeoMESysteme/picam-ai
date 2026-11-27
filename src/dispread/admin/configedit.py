@@ -13,6 +13,7 @@ import json
 import os
 import re
 import tempfile
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,15 +71,13 @@ def _section_bounds(lines: list[str], name: str) -> tuple[int, int]:
     return start, len(lines)
 
 
-def _replace_key(lines: list[str], key: str, value) -> object:
-    start, end = _section_bounds(lines, 'workbench')
+def _replace_key(lines: list[str], key: str, value, *, section: str = 'workbench') -> object:
+    start, end = _section_bounds(lines, section)
     pattern = re.compile(rf'^\s*{re.escape(key)}\s*=\s*(.*?)\s*$')
     encoded = json.dumps(value, ensure_ascii=False) if not isinstance(value, bool) else str(value).lower()
     for index in range(start, end):
         match = pattern.match(lines[index])
         if match:
-            import tomllib
-
             try:
                 old = tomllib.loads(f'v = {match.group(1)}')['v']
             except tomllib.TOMLDecodeError as error:
@@ -120,28 +119,70 @@ def propose(path: str | Path, key: str, raw: str) -> tuple[str, list[Change]]:
                 changes.append(Change('bridge_endpoint', endpoints, updated,
                                       'bridge_endpoint folgt dem Port'))
     new_text = '\n'.join(lines) + '\n'
-    with tempfile.NamedTemporaryFile('w', dir=source.parent, suffix='.pruefung.toml', delete=False) as tmp:
-        tmp.write(new_text)
-    try:
-        load_config(tmp.name)
-    finally:
-        os.unlink(tmp.name)
+    from dispread.workbench.config import parse_config
+
+    parse_config(tomllib.loads(new_text), source.resolve().parent)
     return new_text, changes
 
 
-def apply(path: str | Path, new_text: str) -> None:
-    source = Path(path)
-    if not os.access(source.parent, os.W_OK) or not os.access(source, os.W_OK):
+def propose_sensor(path: Path, sensor_id: str, *, dev_data: str | None = None) -> str:
+    """Aendert die Sensorauswahl ueber denselben validierten TOML-Schreibweg."""
+    from dispread.workbench.config import parse_config
+
+    if path.exists():
+        text = path.read_text(encoding='utf-8')
+    elif dev_data is not None:
+        text = '[workbench]\ndata = ' + json.dumps(dev_data, ensure_ascii=False) + '\n'
+    else:
+        raise FileNotFoundError(f'Konfiguration fehlt: {path}')
+    lines = text.splitlines()
+    if 'live' not in tomllib.loads(text):
+        lines.extend(('', '[live]'))
+    old = _replace_key(lines, 'sensor', sensor_id, section='live')
+    updated = text if old == sensor_id else '\n'.join(lines) + '\n'
+    parse_config(tomllib.loads(updated), path.resolve().parent)
+    return updated
+
+
+def propose_features(path: Path, sensor_assistant: bool, *, dev_data: str | None = None) -> str:
+    """Aendert den Schalter [features] sensor_assistant ueber denselben validierten TOML-Schreibweg."""
+    from dispread.workbench.config import parse_config
+
+    if path.exists():
+        text = path.read_text(encoding='utf-8')
+    elif dev_data is not None:
+        text = '[workbench]\ndata = ' + json.dumps(dev_data, ensure_ascii=False) + '\n'
+    else:
+        raise FileNotFoundError(f'Konfiguration fehlt: {path}')
+    lines = text.splitlines()
+    if 'features' not in tomllib.loads(text):
+        lines.extend(('', '[features]'))
+    old = _replace_key(lines, 'sensor_assistant', bool(sensor_assistant), section='features')
+    updated = text if old is bool(sensor_assistant) else '\n'.join(lines) + '\n'
+    parse_config(tomllib.loads(updated), path.resolve().parent)
+    return updated
+
+
+def apply(path: str | Path, new_text: str, *, create: bool = False) -> None:
+    source = Path(path).resolve()
+    existing = source.exists()
+    if not existing and not create:
+        raise FileNotFoundError(source)
+    if not os.access(source.parent, os.W_OK) or (existing and not os.access(source, os.W_OK)):
         raise PermissionError(f'{source} ist nicht schreibbar – mit sudo ausführen')
-    stat = source.stat()
+    stat = source.stat() if existing else None
     fd, tmp = tempfile.mkstemp(dir=source.parent, prefix='.config.', suffix='.toml')
     try:
         with os.fdopen(fd, 'w') as stream:
             stream.write(new_text)
-        os.chmod(tmp, stat.st_mode & 0o777)
-        if os.geteuid() == 0:
-            os.chown(tmp, stat.st_uid, stat.st_gid)
-        os.replace(tmp, source)
+        if stat is not None:
+            os.chmod(tmp, stat.st_mode & 0o777)
+            if os.geteuid() == 0:
+                os.chown(tmp, stat.st_uid, stat.st_gid)
+            os.replace(tmp, source)
+        else:
+            os.link(tmp, source)
+            os.unlink(tmp)
     except BaseException:
         if os.path.exists(tmp):
             os.unlink(tmp)

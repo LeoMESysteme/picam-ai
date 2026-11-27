@@ -14,6 +14,7 @@ from pathlib import Path
 
 from dispread.gsv2as_serial import REFERENCE_PORT
 from dispread.hardware_ports import GSV_UART_PORT, validate_port_pair
+from dispread.sensors import get_sensor, local_root
 
 _PATHS = {
     'data': 'directory', 'live_data': 'directory', 'socket': 'socket',
@@ -23,6 +24,8 @@ _FIELDS = frozenset(_PATHS) | {
     'host', 'port', 'pam_user', 'bridge_endpoint', 'bridge_name',
     'bridge_discovery', 'camera', 'simulate', 'output_port', 'reference_port',
 }
+# Schalter fuer optionale, experimentelle Funktionen (Vorgabe: aus).
+FEATURES = frozenset({'sensor_assistant'})
 # Include non-configurable serve options so argparse abbreviations stay unambiguous.
 _SERVE_OPTIONS = _FIELDS | {
     'config', 'help', 'width', 'height', 'fps', 'min_area', 'max_area',
@@ -119,6 +122,28 @@ def _workbench(values, base):
     return result
 
 
+def parse_features(config) -> dict:
+    """Schalter des Abschnitts [features]; fehlt er, ist alles aus (Vorgabe)."""
+    values = config.get('features', {})
+    if not isinstance(values, dict):
+        raise ValueError('features: TOML-Tabelle erforderlich')
+    if unknown := values.keys() - FEATURES:
+        raise ValueError(f'features: unbekannte Schluessel: {", ".join(sorted(unknown))}')
+    for name, value in values.items():
+        if type(value) is not bool:
+            raise ValueError(f'features.{name}: TOML true/false erforderlich')
+    return {name: values.get(name, False) for name in sorted(FEATURES)}
+
+
+def load_features(path) -> dict:
+    """Validierte Schalter einer Konfigurationsdatei (ganze Datei wird geprueft)."""
+    source = Path(path).resolve()
+    with source.open('rb') as stream:
+        config = tomllib.load(stream)
+    parse_config(config, source.parent)
+    return parse_features(config)
+
+
 def _explicit_options(argv):
     explicit = set()
     for arg in argv:
@@ -142,37 +167,55 @@ def load_config(path):
 
 
 def parse_config(config, base):
-    if unknown := config.keys() - {'workbench', 'live'}:
+    if unknown := config.keys() - {'workbench', 'live', 'features'}:
         raise ValueError(f'unbekannte Abschnitte: {", ".join(sorted(unknown))}')
-    for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration'})):
+    for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration', 'sensor'}),
+                             ('features', FEATURES)):
         values = config.get(section, {})
         if not isinstance(values, dict):
             raise ValueError(f'{section}: TOML-Tabelle erforderlich')
         if unknown := values.keys() - allowed:
             raise ValueError(f'{section}: unbekannte Schluessel: {", ".join(sorted(unknown))}')
+    parse_features(config)
     workbench = _workbench(config.get('workbench', {}), base)
-    live = {name: _path(value, f'live.{name}', base, 'file')
-            for name, value in config.get('live', {}).items()}
+    live = {}
+    for name, value in config.get('live', {}).items():
+        if name == 'sensor':
+            live[name] = get_sensor(_text(value, 'live.sensor'), instance=workbench).id
+        else:
+            live[name] = _path(value, f'live.{name}', base, 'file')
     return workbench, live, 'live' in config
 
 
 def apply_config(args, argv=None):
     """Apply a serve TOML file, preserving options explicitly passed on the CLI."""
-    if getattr(args, 'command', None) != 'serve' or getattr(args, 'config', None) is None:
+    if getattr(args, 'command', None) != 'serve':
         return args
-    source = Path(args.config)
+    source = getattr(args, 'config', None)
+    if source is None:
+        source = dev_sensor_config(args.data)
+        if not source.is_file():
+            return args
+    explicit = _explicit_options(sys.argv[1:] if argv is None else argv)
     try:
-        source = source.resolve()
+        source = Path(source).resolve()
         values, live, has_live = load_config(source)
         if has_live:
             from dispread.live.session import LiveConfig
 
-            values['live_config'] = LiveConfig(**live)
+            data = {name: getattr(args, name) if name in explicit else values.get(name)
+                    for name in ('data', 'live_data')}
+            if getattr(args, 'config', None) is None:
+                data['data'] = args.data
+            values['live_config'] = LiveConfig(**live, sensor_root=local_root(data))
     except (OSError, ValueError, RuntimeError) as error:
         raise ValueError(f'Konfiguration {source}: {error}') from error
-    explicit = _explicit_options(sys.argv[1:] if argv is None else argv)
     for name, value in values.items():
         if name not in explicit:
             setattr(args, name, value)
     return args
 
+
+def dev_sensor_config(data) -> Path:
+    """Konfiguration der Sensorauswahl fuer Starts ohne --config."""
+    return local_root({'data': data}).parent / 'sensor-config.toml'

@@ -52,7 +52,7 @@ from .ui import (  # noqa: F401  (für Tests und Tabs erneut exportiert)
     fade_in,
     symbol,
 )
-from .views import TABS
+from .views import TABS, visible_tabs
 from .views.uninstall_screen import UninstallScreen
 from .views.update_screen import UpdateScreen
 
@@ -174,7 +174,7 @@ class HelpScreen(InfoScreen):
     KEYS = (
         ('Tab  ⇧Tab', 'nächster / voriger Tab (oder Klick auf den Tab)'),
         ('1 … 9  0', 'Dashboard, Lauf, Dienst, Kamera, Ausgabe, Zertifikat, Speicher, Netzwerk, UART, Konto'),
-        ('l   c', 'Protokoll, Einstellungen'),
+        ('l   o   c', 'Protokoll, Sensoren, Einstellungen'),
         ('↑ ↓ ← →', 'im Tab: Knopf, Listeneintrag oder Feld wählen'),
         ('Enter', 'Knopf oder Listeneintrag auslösen'),
         ('i', 'Erklärung zum aktuellen Tab'),
@@ -263,9 +263,10 @@ class PicamApp(App[int]):
     def compose(self) -> ComposeResult:
         with Horizontal(id='top'):
             yield Static(Text('picam', style='bold'), id='brand')
-            yield Tabs(*[Tab(view.TITLE, id=f'tab-{view.TAB_ID}') for view in TABS], id='tabs')
+            shown = visible_tabs(self.instance)
+            yield Tabs(*[Tab(view.TITLE, id=f'tab-{view.TAB_ID}') for view in shown], id='tabs')
         with ContentSwitcher(id='body', initial='dashboard'):
-            for view in TABS:
+            for view in shown:
                 yield view(id=view.TAB_ID)
         yield Canvas(id='status')
         yield Canvas(id='footer')
@@ -328,8 +329,35 @@ class PicamApp(App[int]):
     def view(self, tab_id: str | None = None):
         return self.main_screen.query_one(f'#{tab_id or self.current}')
 
+    def tab_ids(self) -> list[str]:
+        """Sichtbare Tabs in Anzeigereihenfolge (optionale Tabs fehlen bei ausgeschaltetem Feature)."""
+        return [tab.id[4:] for tab in self.main_screen.query_one('#tabs', Tabs).query(Tab) if tab.id]
+
     def open_tab(self, tab_id: str) -> None:
+        if tab_id not in self.tab_ids():
+            return
         self.main_screen.query_one('#tabs', Tabs).active = f'tab-{tab_id}'
+
+    def sync_feature_tabs(self) -> None:
+        """Optionale Tabs (Schalter in den Einstellungen) ein- oder ausblenden, ohne die anderen zu stören."""
+        tabs = self.main_screen.query_one('#tabs', Tabs)
+        body = self.main_screen.query_one('#body', ContentSwitcher)
+        want = {view.TAB_ID: view for view in visible_tabs(self.instance)}
+        have = set(self.tab_ids())
+        for view in TABS:
+            if not getattr(view, 'FEATURE', ''):
+                continue
+            if view.TAB_ID in want and view.TAB_ID not in have:
+                order = [v.TAB_ID for v in TABS]
+                later = [t for t in self.tab_ids() if order.index(t) > order.index(view.TAB_ID)]
+                tabs.add_tab(Tab(view.TITLE, id=f'tab-{view.TAB_ID}'),
+                             before=f'tab-{later[0]}' if later else None)
+                body.add_content(view(id=view.TAB_ID))
+            elif view.TAB_ID not in want and view.TAB_ID in have:
+                if self.current == view.TAB_ID:
+                    self.open_tab('einstellungen')
+                tabs.remove_tab(f'tab-{view.TAB_ID}')
+                self.main_screen.query_one(f'#{view.TAB_ID}').remove()
 
     def action_open_tab(self, tab_id: str) -> None:
         if self.typing():
@@ -342,7 +370,7 @@ class PicamApp(App[int]):
             return
         if self.main_screen.query('#intro'):
             return
-        ids = [view.TAB_ID for view in TABS]
+        ids = self.tab_ids()
         self.open_tab(ids[(ids.index(self.current) + step) % len(ids)])
 
     def _view_focusables(self) -> list:

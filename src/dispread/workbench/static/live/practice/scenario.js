@@ -381,6 +381,7 @@ export function createScenario({clock = () => globalThis.performance.now(), wall
       storage: base?.storage ? copy(base.storage) : {free_bytes: 18_400_000_000, reserve_bytes: 2_000_000_000, level: 'ok', message: '18.40 GB frei'},
       system: Number.isFinite(base?.system?.cpu_window_s) ? copy(base.system) : {...SYSTEM},
       release_notice: typeof base?.release_notice === 'string' ? base.release_notice : '',
+      sensor_name: typeof base?.sensor_name === 'string' ? base.sensor_name : '',
       // Wie an der Werkbank: konfigurierter Ausgangsport (Übung schreibt nie).
       output_port: typeof base?.output_port === 'string' ? base.output_port : '/dev/ttyAMA0',
       output_port_managed: typeof base?.output_port_managed === 'boolean' ? base.output_port_managed : false,

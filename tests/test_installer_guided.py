@@ -177,3 +177,58 @@ def test_apply_starts_service_only_after_yes(env, monkeypatch):
     assert guided.apply(args, out=guided.Out(io.StringIO(), color=False), input_=answers(''), runner=runner,
                         installer=fake_installer(calls)) == 0
     assert ['systemctl', '--user', 'enable', '--now', 'picam-werkbank.service'] in commands
+
+
+# --- Optional: KI-Sensoreinrichtung und Marktplatz (Konfiguration [features], Vorgabe aus) ---------
+
+def _config_for(sensor_assistant):
+    args = engine.parser().parse_args(['--source', 'x', '--mode', 'portable', '--user', 'labor', '--host', 'h',
+                                       '--port', '8080'] + (['--with-sensor-assistant'] if sensor_assistant else []))
+    paths = {'data': Path('/d'), 'runtime': Path('/r')}
+    return engine.config_text(args, paths, Path('/opt/picam/releases/9.9.9'))
+
+
+def test_config_text_writes_features_off_by_default_and_on_with_flag():
+    import tomllib
+
+    from dispread.workbench.config import parse_config
+
+    for flag in (False, True):
+        text = _config_for(flag)
+        data = tomllib.loads(text)
+        assert data['features'] == {'sensor_assistant': flag}
+        assert parse_config(data, Path('/tmp'))  # der Server liest die Datei
+    assert engine.parser().parse_args(['--source', 'x', '--mode', 'portable', '--user', 'u', '--host', 'h',
+                                       '--port', '1', '--without-sensor-assistant']).sensor_assistant is False
+
+
+def test_guided_offers_sensor_assistant_default_no_and_passes_choice(env, monkeypatch):
+    seen = []
+
+    class Recording(guided.Typed):
+        def multi(self, label, items):
+            seen.append({key: on for key, _, _, on in items})
+            return {'sensor_assistant'} if self.choose_assistant else {key for key, _, _, on in items if on}
+
+        choose_assistant = False
+
+    monkeypatch.setattr(os, 'geteuid', lambda: 1000)
+    for choose in (False, True):
+        Recording.choose_assistant = choose
+        calls = []
+        input_ = answers('3', '', '1', '8095', str(env.tmp / 'p'), 'j')
+        out = guided.Out(io.StringIO(), color=False)
+        code = guided.run([], input_=input_, out=out, runner=fake_runner(), installer=fake_installer(calls),
+                          installer_root=env.tmp, ui=Recording(out, input_))
+        assert code == 0
+        assert seen[-1] == {'fastfetch': True, 'sensor_assistant': False}  # Vorgabe: nein
+        assert calls[0][0].sensor_assistant is choose and calls[1][0].sensor_assistant is choose
+
+
+def test_guided_flag_skips_question_and_reaches_sudo_handover(env, monkeypatch):
+    calls, execs = [], []
+    monkeypatch.setattr(os, 'geteuid', lambda: 1000)
+    guided.run(['--with-sensor-assistant', '--without-fastfetch'], input_=answers('1', '', '1', '8080', 'j'),
+               out=guided.Out(io.StringIO(), color=False), runner=fake_runner(), installer=fake_installer(calls),
+               installer_root=env.tmp, execvp=lambda name, argv: execs.append(argv))
+    assert calls[0][0].sensor_assistant is True and '--with-sensor-assistant' in execs[0]

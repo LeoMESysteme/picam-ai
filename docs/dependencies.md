@@ -397,3 +397,14 @@ heruntergeladen, Debian-NumPy weiter verwendet. Wheelhash und Importpfad
 stehen in `recording-comparison.json` von Lauf 05.
 [Reader-Dokumentation](https://nptdms.readthedocs.io/en/stable/reading.html),
 [Auswertung](VALIDATION.md#uart-demo-20261104-05).
+
+## Optionales KI-Onboarding für Sensoren
+
+`picam sensor onboard` nutzt die lokal installierte und angemeldete CLI
+von Claude Code oder Codex. Zum Begrenzen der Schreibzugriffe braucht der
+Agent unter Linux `libseccomp2` sowie Landlock ab ABI 6 oder `bwrap`
+(Debian-Paket `bubblewrap`) mit nutzbaren Benutzer-Namespaces. Die Kernelkonfiguration
+von raspi06 für `6.12.34+rpt-rpi-2712` enthält kein Landlock.
+`bubblewrap` war dort am 27.11. für den Test verfügbar. Die
+deterministische Einrichtung mit `--assistant none` verwendet diese
+optionalen Werkzeuge nicht.

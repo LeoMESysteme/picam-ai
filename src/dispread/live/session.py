@@ -20,7 +20,7 @@ import time
 from collections import Counter, deque
 from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -33,12 +33,7 @@ from dispread.bridge.protocol import TEST_RELEASE
 from dispread.bridge.publisher import PairedOutputPublisher
 from dispread.gsv_transport import OutputConfig
 from dispread.layout import CharLayout
-from dispread.live import (
-    DEFAULT_CALIBRATION,
-    DEFAULT_TEMPLATES,
-    DEFAULT_TEMPLATES_SHA256,
-    RELEASE_NOTICE,
-)
+from dispread.live import DEFAULT_CALIBRATION, resolve_templates_path
 from dispread.live.causes import RejectionWindow
 from dispread.live.clock import ClockLog
 from dispread.live.diagnostics import DiagnosticRecorder
@@ -59,9 +54,10 @@ from dispread.live.recent import RecentStrip
 from dispread.live.region_hint import RegionConsistency
 from dispread.live.tracking import ConfirmedRegionLocator, TrackedQuadLocator
 from dispread.live.tracking_advice import TrackingAdvice, empty_summary
-from dispread.ocr.dotmatrix import DotMatrixReader
+from dispread.ocr.dotmatrix import BACKEND_ID, DotMatrixReader
 from dispread.pipeline import Pipeline, PipelineConfig
 from dispread.records import ValueRecord, ValueStatus, to_boottime_ns
+from dispread.sensors import DEFAULT_SENSOR_ID, SensorDefinition, get_sensor
 from dispread.session_profile import SessionProfile, require_live_profile
 from dispread.sink.jsonl import JsonlSink
 from dispread.sink.protocol.userdefined_4ch import checked_value_text
@@ -86,12 +82,29 @@ class AuditFailed(RuntimeError):
 
 @dataclass(frozen=True)
 class LiveConfig:
-    templates: Path = DEFAULT_TEMPLATES
-    templates_sha256: str = DEFAULT_TEMPLATES_SHA256
+    templates: Path | None = None
+    templates_sha256: str | None = None
     calibration: Path = DEFAULT_CALIBRATION
-    unit: str = "mV/V"
+    unit: str | None = None
     confirm_frames: int = 2
     clock_interval_s: float = 60.0
+    sensor: str = DEFAULT_SENSOR_ID
+    sensor_root: Path | None = None
+    definition: SensorDefinition = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        instance = {"sensor_root": self.sensor_root}
+        definition = get_sensor(self.sensor, instance=instance)
+        configured = Path(self.templates) if self.templates is not None else None
+        path = resolve_templates_path(definition, configured)
+        if definition.id == DEFAULT_SENSOR_ID and configured is not None and configured != path:
+            _LOG.warning("Alte Vorlagendatei %s fehlt; verwende Paketvorlage %s", configured, path)
+        object.__setattr__(self, "definition", definition)
+        object.__setattr__(self, "templates", path)
+        if self.templates_sha256 is None:
+            object.__setattr__(self, "templates_sha256", definition.templates.sha256)
+        if self.unit is None:
+            object.__setattr__(self, "unit", definition.unit)
 
 
 def _sha256(path: Path) -> str:
@@ -130,7 +143,7 @@ def build_live_pipeline(
         profile = SessionProfile.load(profile_path)
         if not allow_offline:
             require_live_profile(profile)
-        layout = CharLayout.from_profile(profile, cfg.unit)
+        layout = CharLayout.from_profile(profile, cfg.unit, definition=cfg.definition)
     except (OSError, ValueError, KeyError) as exc:
         raise StartRefused(f"Profil {profile_path}: {exc}") from exc
     try:
@@ -186,7 +199,8 @@ def build_live_pipeline(
     elif locator is None:
         locator = TrackedQuadLocator(image, profile.quad)
     gate = ReleaseGate(
-        default_gate_config("dotmatrix", confirm_frames=cfg.confirm_frames, expected_unit=cfg.unit)
+        default_gate_config(BACKEND_ID, confirm_frames=cfg.confirm_frames, expected_unit=cfg.unit,
+                            require_decimal_point=cfg.definition.display.format.decimal == "point")
     )
     pipeline = Pipeline(
         source=source,
@@ -195,7 +209,8 @@ def build_live_pipeline(
         gate=gate,
         sinks=[],
         config=PipelineConfig(
-            profile_id=f"{profile.device_id}/{profile.session_id}", layout=layout, locate_every=0
+            profile_id=f"{profile.device_id}/{profile.session_id}", layout=layout, locate_every=0,
+            target_size=cfg.definition.display.lattice.target_size,
         ),
     )
     if reference_loaded is not None:
@@ -452,6 +467,8 @@ class LiveSession:
             "reader_tolerance": self._reader_tolerance,
             "session_id": profile.session_id,
             "device_id": profile.device_id,
+            "sensor": cfg.definition.profile_ref,
+            **({"sensor_status": "provisional"} if cfg.definition.status == "provisional" else {}),
             "profile": {"path": str(self._profile_path), "sha256": _sha256(self._profile_path)},
             "templates": {"path": str(cfg.templates), "sha256": cfg.templates_sha256},
             "timing_calibration": {
@@ -461,11 +478,12 @@ class LiveSession:
                 "guard_margin_ms": calibration.guard_margin_ms,
                 "applied": False,
             },
-            "gate": {"backend": "dotmatrix", "confirm_frames": cfg.confirm_frames, "expected_unit": cfg.unit},
+            "gate": {"backend": BACKEND_ID, "confirm_frames": cfg.confirm_frames, "expected_unit": cfg.unit},
             "camera": owner_status.get("source", {}),
-            "release_notice": RELEASE_NOTICE,
+            "release_notice": cfg.definition.release_notice,
             "started_at_utc": self._wall().isoformat(),
-            "audit": {"rotation": False, "path": "records.jsonl"},
+            "audit": {"rotation": False, "path": "records.jsonl",
+                      **({"sensor_status": "provisional"} if cfg.definition.status == "provisional" else {})},
         }
         confirmation_path = self._profile_path.parent / "confirmation.json"
         if confirmation_path.exists():

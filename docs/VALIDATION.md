@@ -30,6 +30,25 @@ enthält die Übertragungsbelege und Störfälle. Die
 der Rahmennachführung. Für die Systemabnahme auf Sperrgeräten und den
 72-Stunden-Störlauf stehen eigene Prüfungen in der [Roadmap](ROADMAP.md).
 
+## P0-Sensorpaket auf GSV-Aufnahme am 27.11.2026 { #sensor-p0-2026-11-27 }
+
+Der Rauchtest lädt ein aus dem Zellbeispiel `+ 0.4678 mV/V` erzeugtes und
+aktiviertes Paket. Quelle ist
+`DISPREAD_DEV_DATA/diagnostics/ab4-still/frames/frame_000016.png` mit dem
+Quad aus `diagnostics/ab4-profile-regrid1.json`. Pro Paket liefen zwei
+Durchgänge auf demselben Bild für die Mehrbildbestätigung.
+
+| Sensorpaket | Gültige Datensätze | Wert (mV/V) | Rohtext |
+| --- | ---: | ---: | --- |
+| `gsv2as-161a@1` | 1 | 0,4678 | `+0.46780` |
+| `smoke-161a@1` | 1 | 0,4678 | `+0.46780` |
+
+Die neue Session führt `sensor_status: provisional` auch im Auditeintrag.
+Der Backend-Status liefert den Hinweis für die Live-Seite. Die Probe
+verwendet vorhandene Entwicklungsdaten und belegt den Softwaredurchstich.
+Eine Übertragung auf andere Geräte bleibt offen. Aufbau und Deutung
+stehen im [Laborjournal](lab_journal.md#sensor-p0-rauchtest-2026-11-27).
+
 ## Workbench am 18.11.2026 { #workbench-2026-11-18 }
 
 Audit aus `var/live/live-20261118T…Z/run-01`. Die Zeit bis zur

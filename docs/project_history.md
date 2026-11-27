@@ -9,6 +9,44 @@ Messergebnisse gehören nach [VALIDATION.md](VALIDATION.md) bzw.
 
 ---
 
+## 2026-11-27 — Lokale Sensorpakete mit Bedienerbestätigung
+
+Das Onboarding trennt Modellvorschläge vom Messpfad. Claude und Codex
+reichen Werkzeugaufrufe an einen lokalen Prozess weiter. Die Laufmappe
+enthält Eingaben, Fragen und Antworten. Der Werkzeugprozess prüft die
+Antworten und schreibt erst dann ein vorläufiges Paket bzw. die neue
+Einstellung. Direkter Zugriff des Agenten auf Konfiguration und
+Geräteschnittstellen hätte diese Bestätigungen umgangen. Linux beschränkt
+Schreibzugriffe auf die Arbeitsbereiche unter `.agent/` in der Laufmappe.
+Die Agentenprozesse können den Unix-Socket der Werkbank nur über den
+Werkzeugprozess nutzen.
+
+Die generische Formatregel übernimmt das gezählte Minimum aus dem Beispiel
+und die maximale Ziffernzahl aus dem Platz im Zahlenblock. Aus
+`+ 0.4678 mV/V` ergeben sich fünf bis sechs Ziffern. Eine exakte
+Ziffernzahl lässt sich mit `--digits` festlegen. Die Entscheidung steht
+in der Zellenvorschau, bevor das Paket erzeugt wird.
+
+Ein Rasterstart über die erste Ziffer ist für diesen Durchstich ungeprüft.
+Die Werkbank verwendet deshalb weiter die Suche mit festem Plus in
+Zelle 0. Paketvorschläge für andere Anker bleiben bis zu einer Prüfung
+gesperrt. [OQ-81](open-questions.md#oq-81)
+
+## 2026-11-27 — GSV-2AS als Datenpaket ausliefern
+
+Die externe Stufe-2c-Datei war bisher eine zusätzliche Eingabe beim
+Release-Bau. Gerätebeschreibung, Displayraster und geprüfte Vorlagen
+liegen jetzt gemeinsam im Sensorpaket. Builder und Installer prüfen die
+Vorlagenbytes gegen dieselbe festgelegte SHA-256-Prüfsumme. Lokale
+Paketwurzeln dürfen keine mitgelieferte Kennung überschreiben und kein
+Paket als `verified` auszeichnen.
+
+Ein sofortiges Entfernen des bisherigen Vorlagenpfads hätte Updates von
+1.1.1 verhindert. Sowohl dessen Archivprüfer als auch die vorhandene
+Dienstkonfiguration erwarten diesen Pfad. Der Builder legt deshalb im
+Archiv eine zweite reguläre Datei aus denselben geprüften Bytes ab. Der
+neue Installer trägt bei der Ersteinrichtung den Paketpfad ein.
+
 ## 2026-11-25 — Pi-Releases über den GitHub-Mirror
 
 Der öffentliche GitHub-Mirror liefert vorerst Bootstrap und versionierte

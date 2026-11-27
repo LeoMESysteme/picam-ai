@@ -1,7 +1,6 @@
 """Build a reproducible, explicit delivery without importing the product."""
 from __future__ import annotations
 
-import ast
 import gzip
 import hashlib
 import io
@@ -14,12 +13,14 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-TEMPLATE_PATH = "src/dispread/data/templates-stufe2c-2026-09-30.json"
+from picam_installer.archive import DISPLAY, LEGACY_TEMPLATE, SENSOR, TEMPLATE, check_template
+
 INSTALLER_MODULES = ("__init__", "platform", "archive", "engine", "guided", "tui", "fastfetch", "update", "uninstall",
                      "__main__")
 # Optionale Komponente me-fastfetch: der Installer kopiert sie ins Home des Bedienerkontos.
 FASTFETCH_FILES = ("me-logo.py", "me-fastfetch.in", "config.jsonc", "me-logo.txt")
 REQUIRED_FILES = (
+    SENSOR, DISPLAY, TEMPLATE,
     "pyproject.toml",
     "VERSION",
     "packaging/apt-packages.txt",
@@ -68,28 +69,15 @@ def _product_path(name: str) -> bool:
         return path.suffix == ".py"
     if name.startswith("packaging/me-fastfetch/"):
         return path.name in FASTFETCH_FILES
-    if not name.startswith("src/dispread/") or name == TEMPLATE_PATH:
+    if name.startswith("src/dispread/data/sensors/"):
+        return path.suffix in {".json", ".md"}
+    if not name.startswith("src/dispread/"):
         return False
     if path.suffix == ".py":
         return True
     if name.startswith("src/dispread/workbench/static/"):
         return path.suffix in STATIC_SUFFIXES or path.name == "LICENSE.noto"
-    return name == "src/dispread/workbench/PRODUCT.md"
-
-
-def _template_hash(live_source: bytes) -> str:
-    values = []
-    for node in ast.parse(live_source).body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "DEFAULT_TEMPLATES_SHA256" for target in node.targets
-        ):
-            values.append(ast.literal_eval(node.value))
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            if node.target.id == "DEFAULT_TEMPLATES_SHA256":
-                values.append(ast.literal_eval(node.value))
-    if len(values) != 1 or not isinstance(values[0], str) or not re.fullmatch(r"[0-9a-f]{64}", values[0]):
-        raise ValueError("Product template SHA256 constant is missing or invalid")
-    return values[0]
+    return name in {"src/dispread/workbench/PRODUCT.md", "src/dispread/sensors/agent_prompt.md"}
 
 
 def _tar_entry(name: str, mode: int, size: int = 0, *, directory: bool = False) -> tarfile.TarInfo:
@@ -104,7 +92,7 @@ def _tar_entry(name: str, mode: int, size: int = 0, *, directory: bool = False) 
     return info
 
 
-def build_release(root: Path, output: Path, templates: Path, release_id: str) -> Path:
+def build_release(root: Path, output: Path, release_id: str) -> Path:
     """Snapshot allowlisted worktree files into a new tar.gz outside the source.
 
     ``commit`` identifies HEAD; ``dirty`` explicitly records deviations and new
@@ -113,7 +101,7 @@ def build_release(root: Path, output: Path, templates: Path, release_id: str) ->
     """
     if not isinstance(release_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", release_id):
         raise ValueError("Invalid release ID: use 1–128 ASCII letters, digits, dot, dash or underscore")
-    root, output, templates = Path(root).absolute(), Path(output).absolute(), Path(templates).absolute()
+    root, output = Path(root).absolute(), Path(output).absolute()
     _no_symlink(root)
     _no_symlink(output)
     if output.exists():
@@ -126,12 +114,7 @@ def build_release(root: Path, output: Path, templates: Path, release_id: str) ->
     contents: dict[str, tuple[bytes, int]] = {}
     for name in REQUIRED_FILES:
         contents[name] = _read_regular(root / name)
-    try:
-        template_data, _ = _read_regular(templates)
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(f"Template file is missing: {templates}") from exc
-    if hashlib.sha256(template_data).hexdigest() != _template_hash(contents["src/dispread/live/__init__.py"][0]):
-        raise ValueError("Template SHA256 does not match the frozen product template")
+    check_template(contents[SENSOR][0], contents[TEMPLATE][0])
 
     commit = _git(root, "rev-parse", "HEAD").strip()
     dirty = bool(_git(root, "status", "--porcelain", "--untracked-files=normal"))
@@ -147,7 +130,8 @@ def build_release(root: Path, output: Path, templates: Path, release_id: str) ->
     for name in sorted(set(candidates)):
         if _product_path(name) and name not in contents:
             contents[name] = _read_regular(root / name)
-    contents[TEMPLATE_PATH] = (template_data, 0o644)
+    # Installierte Updater und bestehende Konfigurationen verwenden den bisherigen Pfad.
+    contents[LEGACY_TEMPLATE] = contents[TEMPLATE]
     if re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", release_id):
         contents["VERSION"] = ((release_id + "\n").encode("ascii"), contents["VERSION"][1])
     manifest = {

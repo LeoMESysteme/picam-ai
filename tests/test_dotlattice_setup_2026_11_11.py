@@ -7,7 +7,6 @@ Ohne Entwicklungsmedium werden die Tests uebersprungen.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,11 +16,11 @@ import numpy as np
 import pytest
 
 from dispread.dotlattice import LatticeFit, fit_lattice
+from dispread.live import DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256
 from dispread.setup_checks import diagnose_reader, raster_offset_check
 from dispread.setup_hint import find_green_hint_box
 
 EMPTY_CELLS = (8, 13, 14, 15)
-TEMPLATES = Path(__file__).resolve().parents[1] / "var/dotmatrix/templates-stufe2c-2026-09-30.json"
 
 # Bezugsquads: fuer bisher erfolgreiche Aufstellungen das Ergebnis vor dem
 # Fix (Stand 070d69f), fuer die vier Fehlerfaelle das neue Ergebnis, das
@@ -86,10 +85,8 @@ def test_failure_stills_now_find_text_confirmed_lattice(name):
     assert "?" not in text
     offset = raster_offset_check([(image, text)], result.quad)
     assert offset.status == "OK", offset.metrics
-    if TEMPLATES.exists():
-        reader = diagnose_reader([(image, text)], result.quad, TEMPLATES,
-                                 hashlib.sha256(TEMPLATES.read_bytes()).hexdigest())
-        assert reader.metrics["contradictions"] == []
+    reader = diagnose_reader([(image, text)], result.quad, DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256)
+    assert reader.metrics["contradictions"] == []
 
 
 def test_ambiguous_pair_finds_lattice_of_same_setup():

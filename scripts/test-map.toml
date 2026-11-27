@@ -61,6 +61,11 @@
 "src/dispread/workbench/server.py" = ["tests/test_admin_uart_ports.py", "tests/test_bridge_hub.py", "tests/test_bridge_routes.py", "tests/test_camera_preview.py", "tests/test_dataset_api.py", "tests/test_install_config.py", "tests/test_live_api.py", "tests/test_live_camera_restart.py", "tests/test_live_session.py", "tests/test_workbench.py"]
 "src/dispread/workbench/tui.py" = ["tests/test_workbench.py"]
 
+# Sensorpakete und Sensor-Onboarding (P0).
+"src/dispread/sensors/*" = ["tests/test_sensor_*.py", "tests/test_admin_sensoren*.py"]
+"src/dispread/admin/sensor_*.py" = ["tests/test_admin_sensoren*.py", "tests/test_sensor_*.py"]
+"src/dispread/admin/views/sensor_*.py" = ["tests/test_admin_sensoren*.py"]
+
 # Nicht-Python-Dateien mit Testbezug.
 "src/dispread/workbench/static/*" = ["tests/test_workbench*.py", "tests/test_live_api.py"]
 "windows/*" = ["tests/test_bridge*.py", "tests/test_release_bundle.py"]

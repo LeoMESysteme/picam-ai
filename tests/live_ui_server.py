@@ -283,6 +283,7 @@ class FakeLiveService:
             self._status = {
                 "state": "idle", "error": None, "setup": None, "run": None, "reader_tolerance": None,
                 "session_id": "test-session", "release_notice": "Validiert nur: Testaufbau",
+                "sensor_name": "GSV-2AS (Displaytech 161A)",
                 "output_port": "/dev/ttyAMA0", "output_port_managed": False,
                 "camera": {"running": True, "stalled": False, "error": None, "frames": 1, "gaps": 0,
                            "source": copy.deepcopy(CAMERA_SOURCE), "last_start": None}, "diagnostic_leftovers": [],

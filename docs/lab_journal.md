@@ -5299,3 +5299,34 @@ Konsolen-Bildschirme funktionieren laut Leonhard („funktioniert alles“).
 **Schluss:** Releasetests starten seitdem auch den Dienst der neuen Version und prüfen
 die HTTPS-Antwort. Ein Pi mit `serial0 → ttyAMA0` ist im Test nachgebildet, nicht am
 Entwicklungs-Pi.
+
+
+## 2026-11-27 — Lokales Sensorpaket auf aufgezeichnetem GSV-Bild { #sensor-p0-rauchtest-2026-11-27 }
+
+**Aufbau.** Auf raspi06 ein vorläufiges Paket aus `+ 0.4678 mV/V` in
+einer temporären Instanz erzeugt und als `live.sensor` gespeichert.
+Die normale Startkonfiguration lud das Paket. Der Live-Leser bekam
+das archivierte Bild der Aufstellung AB4 und deren gespeichertes Quad.
+Pro Paket wurden zwei Frames aus demselben Bild eingespeist. Die
+Zeitbasis stammt aus dem Test und diente allein der Reihenfolge. Kamera,
+UART und laufender Werkbankdienst wurden dabei nicht verwendet.
+
+**Ergebnis.** Beide Pakete gaben nach der Mehrbildbestätigung
+`+0.46780` aus. Beim lokalen Paket war `sensor_status` im Status und in
+`session.json` auf `provisional` gesetzt.
+[Validierung](VALIDATION.md#sensor-p0-2026-11-27)
+
+**Schluss.** Das aus einem Beispiel abgeleitete Format kann den
+gespeicherten Wert in diesem Raster lesen. Die Einrichtung, Nachführung
+und Geräteabnahme am Aufbau bleiben eigene Prüfungen.
+
+## 2026-11-27 — Sensor-Onboarding ohne Kamera auf raspi06 { #sensor-p0-onboarding-2026-11-27 }
+
+**Aufbau und Ergebnis.** Zum Stand `6247023` liefen die Einrichtung ohne KI
+und mit Claude-Agent je einmal durch. Beide erzeugten ein vorläufiges Paket,
+prüften es statisch und testeten die Aktivierung. Die Testpakete wurden danach
+entfernt. Der einzige Hardwarezugriff war die Kamerasuche.
+
+**Schluss.** Der Durchstich belegt Paketerzeugung und Auswahl ohne Standbild.
+Einrichtung und erster Lauf mit Kamera auf `/live` stehen aus.
+[Bedienablauf](SENSOR_PACKAGES.md#neuen-sensor-hinzufuegen)

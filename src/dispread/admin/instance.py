@@ -21,6 +21,7 @@ from pathlib import Path
 
 from dispread.gsv2as_serial import REFERENCE_PORT
 from dispread.hardware_ports import GSV_UART_PORT
+from dispread.sensors import DEFAULT_SENSOR_ID
 
 SYSTEM_CONFIG = Path('/etc/picam/config.toml')
 INSTALLED_UNIT = 'picam-werkbank.service'
@@ -79,6 +80,8 @@ class Instance:
     problem: str | None = None   # Konfiguration unlesbar o. ä.
     output_port: str = GSV_UART_PORT
     reference_port: str = REFERENCE_PORT
+    sensor: str = DEFAULT_SENSOR_ID
+    sensor_assistant: bool = False   # [features] sensor_assistant (experimentell, Vorgabe aus)
 
     @property
     def label(self) -> str:
@@ -122,6 +125,8 @@ def _from_config(path: Path, kind: str) -> Instance:
                  'bridge_name', 'bridge_discovery', 'output_port', 'reference_port'):
         if name in workbench:
             setattr(instance, name, workbench[name])
+    instance.sensor = live.get('sensor', DEFAULT_SENSOR_ID)
+    instance.sensor_assistant = _features_of(path)
     instance.templates = str(live['templates']) if 'templates' in live else None
     instance.calibration = str(live['calibration']) if 'calibration' in live else None
     root = code_root()
@@ -130,6 +135,15 @@ def _from_config(path: Path, kind: str) -> Instance:
         root = current.resolve()  # nach einem Update zählt die aktive Version
     instance.root = str(root)
     return instance
+
+
+def _features_of(path: Path) -> bool:
+    try:
+        from dispread.workbench.config import load_features
+
+        return load_features(path)['sensor_assistant']
+    except (OSError, ValueError):
+        return False
 
 
 def parse_exec_start(text: str) -> list[str]:
@@ -168,10 +182,20 @@ def _dev_from_argv(argv: list[str], workdir: str | None) -> Instance:
                         socket=_option(argv, '--socket'), data=absolute(_option(argv, '--data') or 'var/workbench'),
                         live_data=absolute(_option(argv, '--live-data') or 'var/live'),
                         bridge_directory=absolute(_option(argv, '--bridge-directory')),
-                        templates=absolute(str(DEFAULT_TEMPLATES)),
+                        templates=str(DEFAULT_TEMPLATES),
                         calibration=absolute(str(DEFAULT_CALIBRATION)),
                         root=str(base))
     instance.pam_user = os.environ.get('USER')
+    from dispread.workbench.config import dev_sensor_config, load_config
+
+    sensor_config = dev_sensor_config(instance.data)
+    if sensor_config.is_file():
+        try:
+            _, live, _ = load_config(sensor_config)
+            instance.sensor = live.get('sensor', DEFAULT_SENSOR_ID)
+            instance.sensor_assistant = _features_of(sensor_config)
+        except (OSError, ValueError) as error:
+            instance.problem = f'Sensorkonfiguration {sensor_config}: {error}'
     return instance
 
 

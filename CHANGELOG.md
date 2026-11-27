@@ -5,6 +5,66 @@ was ist die Konsequenz.
 
 ## Unveröffentlicht
 
+* 2026-11-27: Sensor-Marktplatz (Backend) und optionaler Schalter. Neu: `[features] sensor_assistant`
+  in der Instanzkonfiguration (Vorgabe aus; Dev-Instanzen in `sensor-config.toml`), `dispread.sensors.features`,
+  `picam sensor features on|off|status`. Aus: `onboard`, `propose` und `catalog pull|submit|pending|token set`
+  verweigern mit Hinweis auf die Einstellungen; `list`, `activate`, `agents`, `ports`, `catalog refresh|search|
+  check-bundle|token status|token delete` bleiben, der Messpfad mit `gsv2as-161a` ändert sich nicht. Neu:
+  `dispread.sensors.catalog` (Index mit Schemaprüfung und Cache, Suche, `pull` mit SHA256-/Größenprüfung immer als
+  vorläufig, deterministisches `bundle`, `check_bundle` ohne Links/fremde Dateien/Übergröße, Forgejo-Token 0600,
+  `submit` als Issue mit Anhang und Einwilligung, Ausgang für Offline-Fälle) und `picam sensor catalog …`. Der
+  Installer fragt optional (Vorgabe nein) und schreibt `[features]` (`--with/--without-sensor-assistant`).
+  `.github/workflows/sensor-submission.yml` prüft Einreichungen und schreibt nur `sensors/**` in den Zweig
+  `sensor-katalog` (`scripts/sensor-catalog-index.py`). Nur gegen echtes Forgejo prüfbar: Issue-Ereignisse der
+  Actions, Anhangs-API, Label-Anlage, Push des Bot-Tokens, Spiegelung des Zweigs nach GitHub.
+
+* 2026-11-27: Konsole, Tab „Sensoren“: Karte „Marktplatz“ ist echt. Die Suche
+  deckt lokale Sensoren und Katalogeinträge ab (Kennzeichen „Marktplatz“);
+  Aktionen „Katalog laden“ (k), „Installieren“ (v, immer vorläufig),
+  „Einreichen“ (u; Einwilligungsdialog, danach bei fehlendem Token
+  maskierte Tokeneingabe) und „Ausstehende senden“ (s). Neu in den
+  Einstellungen: Schalter „Experimentell: KI-Sensoreinrichtung und
+  Marktplatz“. Ist er aus, fehlt der Tab „Sensoren“ (Tasten o und Tab-Taste
+  überspringen ihn); Umschalten blendet ihn ohne Neustart der Konsole ein
+  oder aus. `sensor_client` kapselt Katalog und Schalter, importiert das
+  Backend erst beim Aufruf und meldet ein fehlendes Modul ehrlich. Das Token
+  steht in keiner Meldung. Der Messpfad ist unverändert.
+* 2026-11-27: `picam sensor` kann HD44780-Anzeigen einrichten, vorläufige
+  Sensorpakete aus einem Zellbeispiel erzeugen und den aktiven Sensor setzen.
+  Der Assistent arbeitet mit Bedienerbestätigung, optional über Claude oder
+  Codex. Die Werkbank übernimmt die Auswahl beim Neustart und kennzeichnet
+  vorläufige Pakete im Status und im Laufaudit. Die vorhandene Rastersuche
+  verlangt ein festes Plus in Zelle 0. Die Projekt-Tour übernimmt ihre
+  GSV-2AS-Zellrollen aus der Paketdatei.
+
+* 2026-11-27: Das Forgejo-Token für Sensor-Einreichungen wird über die Repo-Labels geprüft
+  statt über `/api/v1/user`. Forgejo erlaubt bei Tokens, die auf ein Repository beschränkt
+  sind, nur die Scopes issue und repository.
+
+* 2026-11-27: Werkbank-Einrichtung mit vorläufigem Sensorpaket nimmt getippte Werte
+  (`0.1489`, `+0,1489`, `0.1489 mV/V`) an und setzt sie eindeutig in die Paketzellen;
+  vorher war nur der exakte Zellentext mit Leerzellen gültig. Der Sensor-Assistent fragt
+  die Polarität ab und lehnt helle Zeichen auf dunklem/farbigem Grund mit Hinweis ab
+  (OQ-84, GSV-2TSD-DI weiß auf blau). Der Werkbank-Kopf nennt vorläufige Sensoren.
+
+* 2026-11-27: Das Releasearchiv liefert `dispread/sensors/agent_prompt.md` mit; im
+  installierten Testpaket `rc-cccf6b8` brach der KI-Assistent ohne diese Datei sofort ab.
+  Im Konsolenassistenten „Neuen Sensor hinzufügen“ scrollt nur der Formularteil,
+  „Abbrechen“ und „Sensor einrichten“ bleiben auch in kleinen Terminals (80×24) sichtbar.
+
+* 2026-11-27: `picam sensor capture` öffnet die Kamera für ein direktes
+  Standbild mit Formatvorgabe, ohne Kameraregler zu setzen. Im Onboarding ohne KI wird bei
+  fehlendem Standbild statisch geprüft. Die Kameraeinrichtung folgt in `/live`.
+
+* 2026-11-27: Das Sensorpaket `gsv2as-161a@1` enthält die Gerätebeschreibung,
+  das Displayraster und die geprüften Stufe-2c-Vorlagen. Wheel und Releasearchiv
+  liefern das Paket mit. Release-Bau und Veröffentlichung benötigen keine
+  externe Vorlagendatei mehr. Einrichtung und Live-Leser beziehen Raster,
+  Format, Einheit und Vorlagen aus dem Paket. Die Laufmetadaten nennen die
+  Sensorversion. Vorhandene konfigurierte Vorlagen bleiben mit passender
+  Prüfsumme nutzbar. Fehlt die alte Stufe-2c-Datei, verwendet die Laufzeit
+  die Paketvorlage und meldet den Wechsel. Die [Sensorpaket-Doku](docs/SENSOR_PACKAGES.md)
+  beschreibt Schema, Einrichtung und Golden-Vergleich.
 * 2026-11-27: **bandit-Funde bewertet (B602, B104, B301).** `run_hint_command` (admin/cli.py) startet Hinweisbefehle
   jetzt ohne Shell (`shlex.split`), vorher `shell=True`; alle Befehle stammen aus `probes.py` und sind feste
   Zeichenketten oder per `shlex.join` gebaut, das Verhalten bleibt gleich. Unbalancierte Anführungszeichen geben Code 2

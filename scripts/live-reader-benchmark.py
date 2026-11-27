@@ -28,8 +28,10 @@ from _devdata import input_path
 from dispread.charcells import CharGrid
 from dispread.layout import CharLayout
 from dispread.live import DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_SHA256, LIVE_CV_THREADS
+from dispread.live.setup import DEFAULT_TARGET_SIZE
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.rectify import rectify
+from dispread.sensors import get_sensor
 
 
 def evaluate_limits(cpu_percent: float, temperature_c: float | None, throttled: int | None) -> list[str]:
@@ -97,7 +99,7 @@ def measure_run(reader, image, quad, layout, *, repeats: int, duration: float | 
     sample(start)
     while (time.perf_counter() - start < duration if duration is not None else len(reader_ms) < repeats):
         t0 = time.perf_counter()
-        crop = rectify(image, quad, target_size=(400, 160))
+        crop = rectify(image, quad, target_size=DEFAULT_TARGET_SIZE)
         t_read = time.perf_counter()
         result = reader.read(crop.image, layout)
         end = time.perf_counter()
@@ -167,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f'Bild nicht lesbar: {args.still}', file=sys.stderr)
         return 2
     proposal = json.loads(args.proposal.read_text(encoding='utf-8'))
-    layout = CharLayout(grid=CharGrid.from_dict(proposal['grid']), unit='mV/V')
+    layout = CharLayout.from_definition(get_sensor(), grid=CharGrid.from_dict(proposal['grid']))
     previous_threads = cv2.getNumThreads()
     cv2.setNumThreads(LIVE_CV_THREADS)
     try:

@@ -21,11 +21,11 @@ interaktive Bühne und die Tabellen verwenden denselben Stand.
 <div id="codebase-stage" class="wiki-codebase-stage"></div>
 
 <!-- CODEBASE-FACTS:BEGIN -->
-Stand: Commit `197959a` auf `master`, erzeugt am 26.11.2026.
+Stand: Commit `6247023` auf `feat/sensor-p0`, erzeugt am 27.11.2026.
 
 ## Wachstum {#wachstum}
 
-Der Bestand wuchs von 2.322 Zeilen am 07.09.2026 auf 271.190 Zeilen in 1.048 Dateien; davon sind 84.163 Code (Kern, Werkbank, Brücke, Skripte), 81.504 Tests und 104.494 Doku. Daten- und Fremddateien zählen nicht mit.
+Der Bestand wuchs von 2.322 Zeilen am 07.09.2026 auf 276.935 Zeilen in 1.072 Dateien; davon sind 88.554 Code (Kern, Werkbank, Brücke, Skripte), 82.582 Tests und 104.768 Doku. Daten- und Fremddateien zählen nicht mit.
 
 <div class="wiki-chart" data-chart="bar" data-title="Zeilen am Ende jeder Kalenderwoche" data-unit="Zeilen" markdown="1">
 
@@ -42,13 +42,13 @@ Der Bestand wuchs von 2.322 Zeilen am 07.09.2026 auf 271.190 Zeilen in 1.048 Dat
 | KW 45 (ab 02.11.) | 163.187 |
 | KW 46 (ab 09.11.) | 216.891 |
 | KW 47 (ab 16.11.) | 251.063 |
-| KW 48 (ab 23.11.) | 271.190 |
+| KW 48 (ab 23.11.) | 276.935 |
 
 </div>
 
 ## Branches {#branches}
 
-Neben dem Fokus `master` gibt es 10 Refs: 10 still, 0 offen und 0 gemergt. Insgesamt enthält die Historie 760 Commits und 53 Merges.
+Neben `master` und dem Fokus `feat/sensor-p0` gibt es 10 Refs: 10 still, 0 offen und 0 gemergt. Insgesamt enthält die Historie 766 Commits und 53 Merges.
 
 | Branch | Zustand | Commits (nicht im Fokus) | letzter Commit |
 | --- | --- | --- | --- |
@@ -65,7 +65,7 @@ Neben dem Fokus `master` gibt es 10 Refs: 10 still, 0 offen und 0 gemergt. Insge
 
 ## Rhythmus {#rhythmus}
 
-Freitag ist mit 263 von 760 Commits (35 %) der stärkste Tag, die Spitzenstunde liegt bei 14 Uhr (96 Commits). An 47 von 81 Tagen gab es Commits (Zeiten in Berlin).
+Freitag ist mit 269 von 766 Commits (35 %) der stärkste Tag, die Spitzenstunde liegt bei 14 Uhr (98 Commits). An 48 von 82 Tagen gab es Commits (Zeiten in Berlin).
 
 <div class="wiki-chart" data-chart="bar" data-title="Commits je Wochentag" data-unit="Commits" markdown="1">
 
@@ -75,7 +75,7 @@ Freitag ist mit 263 von 760 Commits (35 %) der stärkste Tag, die Spitzenstunde 
 | Dienstag | 69 | 9 % |
 | Mittwoch | 220 | 29 % |
 | Donnerstag | 98 | 13 % |
-| Freitag | 263 | 35 % |
+| Freitag | 269 | 35 % |
 | Samstag | 26 | 3 % |
 | Sonntag | 6 | 1 % |
 
@@ -83,25 +83,25 @@ Freitag ist mit 263 von 760 Commits (35 %) der stärkste Tag, die Spitzenstunde 
 
 ## Struktur {#struktur}
 
-Die 1.048 Dateien verteilen sich auf sieben Bereiche; am größten ist „Doku“ mit 104.494 Zeilen. Auf Tests kommen 0,97 Zeilen je Codezeile.
+Die 1.072 Dateien verteilen sich auf sieben Bereiche; am größten ist „Doku“ mit 104.768 Zeilen. Auf Tests kommen 0,93 Zeilen je Codezeile.
 
 <div class="wiki-chart" data-chart="bar" data-title="Zeilen je Bereich" data-unit="Zeilen" markdown="1">
 
 | Bereich | Zeilen | Dateien | größte Datei (Zeilen) |
 | --- | --- | --- | --- |
-| Kern | 29.575 | 108 | `src/dispread/calibration/record.py` (1.734) |
-| Werkbank & Live | 24.595 | 81 | `src/dispread/live/frame_tracking.py` (1.720) |
+| Kern | 33.646 | 125 | `src/dispread/calibration/record.py` (1.734) |
+| Werkbank & Live | 24.700 | 81 | `src/dispread/live/frame_tracking.py` (1.720) |
 | Windows-Brücke | 15.206 | 57 | `windows/bridge/src/dispread_bridge_app/app_controller.py` (1.511) |
-| Skripte | 14.787 | 63 | `scripts/codebase-facts.py` (1.177) |
-| Tests | 81.504 | 231 | `tests/test_live_service.py` (3.912) |
-| Doku | 104.494 | 302 | `docs/VALIDATION.md` (7.066) |
-| Infrastruktur | 1.029 | 24 | `zensical.toml` (184) |
+| Skripte | 15.002 | 64 | `scripts/codebase-facts.py` (1.177) |
+| Tests | 82.582 | 235 | `tests/test_live_service.py` (3.913) |
+| Doku | 104.768 | 302 | `docs/VALIDATION.md` (7.093) |
+| Infrastruktur | 1.031 | 24 | `zensical.toml` (184) |
 
 </div>
 
 ## Komplexität {#komplexitaet}
 
-Von 3.402 Python-Funktionen außerhalb der Tests haben 392 (11,5 %) eine Komplexität über 10 und 33 über 40. Die komplexeste ist `Controller.command` mit 91.
+Von 3.577 Python-Funktionen außerhalb der Tests haben 427 (11,9 %) eine Komplexität über 10 und 34 über 40. Die komplexeste ist `Controller.command` mit 91.
 
 <div class="wiki-chart" data-chart="bar" data-title="Die zwölf komplexesten Funktionen" data-unit="Komplexität" markdown="1">
 
@@ -111,12 +111,12 @@ Von 3.402 Python-Funktionen außerhalb der Tests haben 392 (11,5 %) eine Komplex
 | `BridgeSession.exchange` | 84 | `src/dispread/gsv_bridge.py:139` | 191 |
 | `chips` | 83 | `windows/bridge/src/dispread_bridge_app/ui/texts.py:676` | 160 |
 | `collect` | 82 | `scripts/codebase-facts.py:547` | 183 |
-| `_auto_fit` | 75 | `src/dispread/dotlattice.py:545` | 202 |
-| `LiveSession.step` | 69 | `src/dispread/live/session.py:516` | 151 |
+| `_auto_fit` | 75 | `src/dispread/dotlattice.py:552` | 202 |
+| `LiveSession.step` | 69 | `src/dispread/live/session.py:534` | 151 |
 | `run` | 67 | `scripts/import-harvest.py:385` | 376 |
 | `_calibrate` | 63 | `src/dispread/admin/calibrate.py:1043` | 241 |
+| `LiveService.start_run` | 63 | `src/dispread/live/service.py:1201` | 191 |
 | `validate` | 63 | `src/dispread/workbench/profiles.py:67` | 98 |
-| `LiveService.start_run` | 62 | `src/dispread/live/service.py:1166` | 188 |
 | `compare` | 61 | `scripts/r13-coarse-eval.py:106` | 82 |
 | `setup_spec` | 61 | `windows/bridge/src/dispread_bridge_app/ui/texts.py:1283` | 98 |
 
@@ -124,11 +124,11 @@ Von 3.402 Python-Funktionen außerhalb der Tests haben 392 (11,5 %) eine Komplex
 
 ## Zustand {#zustand}
 
-Die Suche findet 4 ungenutzte Definitionen (33 Zeilen), 1 verwaiste Skripte, 10 stille Branches und 22 Quelldateien über 800 Zeilen. Das sind Hinweise zum Aufräumen, keine geprüften Fehler.
+Die Suche findet 7 ungenutzte Definitionen (41 Zeilen), 1 verwaiste Skripte, 10 stille Branches und 22 Quelldateien über 800 Zeilen. Das sind Hinweise zum Aufräumen, keine geprüften Fehler.
 
 | Befund | Anzahl | Methode |
 | --- | --- | --- |
-| Ungenutzte Definitionen | 4 | Top-Level-Funktionen und -Klassen (per ast, ohne Decorator, ohne test_*, main und dunder) in Kern, Werkbank, Brücke und Skripten, deren Name im gesamten getrackten Repo-Text nur an der Definition vorkommt. |
+| Ungenutzte Definitionen | 7 | Top-Level-Funktionen und -Klassen (per ast, ohne Decorator, ohne test_*, main und dunder) in Kern, Werkbank, Brücke und Skripten, deren Name im gesamten getrackten Repo-Text nur an der Definition vorkommt. |
 | Verwaiste Skripte | 1 | Dateien direkt unter scripts/, deren Dateiname (bei Python-Modulen auch der Modulname) in keiner anderen getrackten Textdatei vorkommt. |
 | Stille Branches | 10 | Lokale und Remote-Refs außer Haupt- und Fokus-Branch. still: Commits, die nicht im Fokus-Branch sind, und seit mindestens 14 Tagen kein neuer Commit (gemessen am Commit-Datum der Fokus-Spitze); offen: dasselbe, aber jünger; gemergt: Ref liegt vollständig im Fokus-Branch. |
 | Gemergte Refs | 0 | Lokale und Remote-Refs außer Haupt- und Fokus-Branch. still: Commits, die nicht im Fokus-Branch sind, und seit mindestens 14 Tagen kein neuer Commit (gemessen am Commit-Datum der Fokus-Spitze); offen: dasselbe, aber jünger; gemergt: Ref liegt vollständig im Fokus-Branch. |
@@ -137,7 +137,7 @@ Die Suche findet 4 ungenutzte Definitionen (33 Zeilen), 1 verwaiste Skripte, 10 
 
 ## Maschine {#maschine}
 
-Die Kette hat 7 Stufen mit zusammen 4.314 Zeilen; die Stufen stammen aus `kette.json`. 3 Workflows und 8 Systemd-Units halten den Betrieb auf dem Pi.
+Die Kette hat 7 Stufen mit zusammen 4.353 Zeilen; die Stufen stammen aus `kette.json`. 3 Workflows und 8 Systemd-Units halten den Betrieb auf dem Pi.
 
 <div class="wiki-chart" data-chart="bar" data-title="Stufen der Kette" data-unit="Zeilen" markdown="1">
 
@@ -147,9 +147,9 @@ Die Kette hat 7 Stufen mit zusammen 4.314 Zeilen; die Stufen stammen aus `kette.
 | Anzeige finden | 452 | DisplayCandidate | 19 |
 | Nachführen | 129 | TrackResult | 5 |
 | Entzerren | 103 | DisplayCrop | 4 |
-| Wert lesen | 1.559 | ReadResult | 26 |
-| Freigabe | 268 | GateDecision | 22 |
-| Ausgabe | 758 | TxReceipt | 11 |
+| Wert lesen | 1.596 | ReadResult | 35 |
+| Freigabe | 269 | GateDecision | 23 |
+| Ausgabe | 759 | TxReceipt | 11 |
 
 </div>
 

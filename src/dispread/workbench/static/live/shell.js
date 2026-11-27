@@ -227,6 +227,11 @@ export function renderTitle(status, view = {}, handlers = {}) {
     el.classList.toggle('past', key === 'setup' && runPhase);
   }
   shell.testband.hidden = !status?.test_run;
+  // Vorläufige Sensorpakete im Kopf benennen; das mitgelieferte GSV-2AS behält seine Beschriftung.
+  if (status?.sensor_status === 'provisional' && status.sensor_name) {
+    const device = shell.root.querySelector('.device');
+    if (device) device.textContent = `${status.sensor_name} · vorläufig`;
+  }
   const actions = titleActions(status, view, handlers);
   const signature = JSON.stringify(actions.map(({kind, name, label, cls, text}) => [kind, name, label, cls, text]));
   if (signature !== shell.signature) {

@@ -65,6 +65,8 @@
 
 ### Weitere offene Aufgaben
 
+- Sensorpakete: P1 (`charset.json` und `protocol.json`) folgt nach dem
+  [Sensorplan](docs/SENSOR_PACKAGES.md#ausblick).
 - Laufablage und Export ([OQ-60](docs/open-questions.md#oq-60)),
   Nachberechnung ([OQ-59](docs/open-questions.md#oq-59)) und Bereinigung des
   alten Controllers ([OQ-61](docs/open-questions.md#oq-61)) weiterführen.

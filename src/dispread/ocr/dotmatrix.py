@@ -19,6 +19,8 @@ from dispread.layout import CharLayout
 from dispread.ocr import GlyphEvidence, ReadResult
 from dispread.ocr.dotmatrix_sampling import MIN_CONTRAST, normalized, sample_image
 from dispread.ocr.dotmatrix_templates import Templates, classify, load_templates, stack_templates
+from dispread.sensors import DisplayDefinition, get_sensor
+from dispread.sensors.definitions import CHAR_NUMBER_FORMAT_RULE, GSV2AS_FORMAT_RULE
 
 BACKEND_ID = "dotmatrix"
 BACKEND_VERSION = "3"
@@ -27,22 +29,46 @@ MAX_SATURATED = 0.02
 # Zellen 1-7: 0-2 Leerzellen, dann 6 Ziffern mit genau einem Punkt, die Ziffer
 # vor dem Punkt ist nie leer (OQ-41, gsv2as_leading_zero_v2); Zelle 8 leer.
 _NUMBER = re.compile(r"^( {0,2})(\d[\d.]*)$")
+_DEFAULT_DISPLAY = get_sensor().display
 
 
-def parse_gsv2as(cells: str) -> tuple[str, float] | None:
-    if len(cells) != 9 or cells[0] != "+" or cells[8] != " ":
+def parse_gsv2as(cells: str, display: DisplayDefinition = _DEFAULT_DISPLAY) -> tuple[str, float] | None:
+    roles = display.roles
+    if len(cells) != display.classified_cells or not roles.sign:
         return None
-    m = _NUMBER.match(cells[1:8])
+    sign = cells[roles.sign[0]]
+    if sign != display.anchor.char or any(cells[cell] != " " for cell in roles.separator):
+        return None
+    m = _NUMBER.match("".join(cells[cell] for cell in roles.number))
     if m is None:
         return None
     body = m.group(2)
     if body.count(".") != 1 or body.startswith(".") or body.endswith("."):
         return None
-    if sum(ch.isdigit() for ch in body) + len(m.group(1)) != 6:
+    if sum(ch.isdigit() for ch in body) + len(m.group(1)) != display.format.digits:
         return None
-    raw = "+" + body
+    raw = sign + body
     return raw, float(body)
 
+
+def parse_char_number(cells: str, display: DisplayDefinition) -> tuple[str, float] | None:
+    roles = display.roles
+    if len(cells) != display.classified_cells or any(cells[cell] != " " for cell in roles.separator):
+        return None
+    sign = "".join(cells[cell] for cell in roles.sign).strip(" ")
+    if roles.sign and sign not in display.format.sign_chars:
+        return None
+    body = "".join(cells[cell] for cell in roles.number).lstrip(" ")
+    pattern = r"[0-9]+\.[0-9]+" if display.format.decimal == "point" else r"[0-9]+"
+    digits = len(body.replace(".", ""))
+    minimum = display.format.min_digits or display.format.digits
+    if re.fullmatch(pattern, body) is None or not minimum <= digits <= display.format.digits:
+        return None
+    raw = sign + body
+    return raw, float(raw)
+
+
+FORMAT_RULES = {GSV2AS_FORMAT_RULE: parse_gsv2as, CHAR_NUMBER_FORMAT_RULE: parse_char_number}
 
 class DotMatrixReader:
     def __init__(self, templates: Templates, d_max_factor: float = 1.0) -> None:
@@ -68,8 +94,11 @@ class DotMatrixReader:
         return False
 
     def read(self, crop: np.ndarray, layout: CharLayout) -> ReadResult:
-        if layout.format_id != "gsv2as_v1":
-            raise ValueError(f"unbekanntes format_id {layout.format_id!r}, erwartet 'gsv2as_v1'")
+        parser = FORMAT_RULES.get(layout.format_id)
+        if parser is None:
+            raise ValueError(f"unbekanntes format_id {layout.format_id!r}, erwartet {', '.join(FORMAT_RULES)}")
+        display = layout.display
+        separators = display.roles.separator
         gray = crop if crop.ndim == 2 else cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         cells = range(layout.classified_cells)
         sampled = sample_image(gray, layout.grid, cells)
@@ -117,27 +146,35 @@ class DotMatrixReader:
         first_cell = next((i for i, d in enumerate(decisions) if d.reason), None)
         first_reject = decisions[first_cell].reason if first_cell is not None else None
         diag["reject_cell"] = first_cell
-        sign_ok = decisions[0].text == "+"
-        if not sign_ok:
-            diag["reject_cell"] = 0
-            reason = first_reject if decisions[0].text is None else "vorzeichen"
-            return self._reject(reason, diag, layout, glyphs, sign_readable=False)
+        sign_cells = display.roles.sign
+        if sign_cells:
+            sign = "".join(decisions[cell].text or "?" for cell in sign_cells).strip(" ")
+            allowed = ((display.anchor.char,) if layout.format_id == GSV2AS_FORMAT_RULE
+                       else display.format.sign_chars)
+            if sign not in allowed:
+                sign_cell = next((cell for cell in sign_cells if decisions[cell].text is None), sign_cells[0])
+                diag["reject_cell"] = sign_cell
+                reason = first_reject if decisions[sign_cell].text is None else "vorzeichen"
+                return self._reject(reason, diag, layout, glyphs, sign_readable=False)
         if first_reject:
-            if first_cell == 8:
+            if first_cell in separators:
                 return self._reject("leerzelle_gestoert", diag, layout, glyphs)
             return self._reject(first_reject, diag, layout, glyphs)
         cells_text = "".join(d.text for d in decisions)
-        parsed = parse_gsv2as(cells_text)
-        if decisions[8].text != " " or not blank_ok:
-            diag["reject_cell"] = 8 if decisions[8].text != " " else blank_cell
+        parsed = parser(cells_text, display)
+        blocked_separator = next((cell for cell in separators if decisions[cell].text != " "), None)
+        if blocked_separator is not None or not blank_ok:
+            diag["reject_cell"] = blocked_separator if blocked_separator is not None else blank_cell
             return self._reject("leerzelle_gestoert", diag, layout, glyphs)
         if parsed is None:
             return self._reject("format", diag, layout, glyphs)
         raw, value = parsed
         diag["reject_reason"] = None
+        number = "".join(cells_text[cell] for cell in display.roles.number)
+        point_index = number.index(".") - 1 if "." in number else None
         return ReadResult(
-            raw_text=raw, value=value, sign_detected=False, sign_region_readable=True,
-            decimal_point_detected=True, decimal_point_index=cells_text[1:8].index(".") - 1,
+            raw_text=raw, value=value, sign_detected=raw.startswith("-"), sign_region_readable=True,
+            decimal_point_detected=point_index is not None, decimal_point_index=point_index,
             unit_text=layout.unit, status_flags=frozenset(), glyphs=glyphs,
             backend_id=BACKEND_ID, backend_version=BACKEND_VERSION, diagnostics=diag,
         )
