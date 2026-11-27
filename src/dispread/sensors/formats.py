@@ -54,12 +54,59 @@ def required_characters(display: DisplayDefinition) -> set[str]:
     return set('0123456789 ') | set(display.format.sign_chars) | ({'.'} if display.format.decimal == 'point' else set())
 
 
+def _cells_from_value(text: str, definition) -> str | None:
+    """Getippten Wert ("0.1489", "+0,1489", "0.1489 mV/V") in die Zellen des Pakets setzen.
+
+    Nur eindeutige Faelle: Vorzeichen fehlt -> das einzige erlaubte Vorzeichen;
+    die Zahl steht rechtsbuendig im Zahlenblock (fuehrende Leerzellen wie an
+    der Anzeige). Alles andere bleibt None und wird abgelehnt, nicht geraten.
+    """
+    display = definition.display
+    value = text.strip().replace(',', '.')
+    unit = definition.unit
+    if unit and value.lower().endswith(unit.lower()):
+        value = value[: -len(unit)].rstrip()
+    match = re.fullmatch(rf'(?P<sign>[+-]?) *(?P<number>{_NUMBER})', value)
+    if match is None:
+        return None
+    sign, number = match['sign'], match['number']
+    roles = display.roles
+    if roles.sign:
+        allowed = display.format.sign_chars
+        if not sign:
+            if len(allowed) != 1:
+                return None
+            sign = allowed[0]
+        if len(roles.sign) != 1:
+            return None
+    elif sign:
+        return None
+    width = len(roles.number)
+    if len(number) > width:
+        return None
+    cells = [' '] * display.classified_cells
+    if roles.sign:
+        cells[roles.sign[0]] = sign
+    for cell, ch in zip(roles.number, number.rjust(width), strict=True):
+        cells[cell] = ch
+    return ''.join(cells)
+
+
 def setup_reference(text: str, definition) -> str:
-    """Prueft die Bedienereingabe gegen die festgelegten Zellgrenzen."""
+    """Prueft die Bedienereingabe gegen die festgelegten Zellgrenzen.
+
+    Angenommen werden der Zellentext wie angezeigt ("+ 0.1489 mV/V") und ein
+    getippter Wert ("0.1489", "+0,1489"), der eindeutig in die Zellen passt.
+    """
     from dispread.ocr.dotmatrix import parse_char_number
 
     display = definition.display
     end = display.classified_cells
+    typed = _cells_from_value(text, definition)
+    if typed is not None and parse_char_number(typed, display) is not None:
+        exact = text[:end] if len(text) >= end else None
+        if exact is None or parse_char_number(exact, display) is None:
+            return typed
     if len(text) == end:
         # Die Werkbank kann den klassifizierten Teil senden. Die Einheit
         # wird beim Bestaetigen separat gegen die Paketangabe geprueft.

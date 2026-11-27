@@ -13,6 +13,12 @@ was ist die Konsequenz.
   verlangt ein festes Plus in Zelle 0. Die Projekt-Tour übernimmt ihre
   GSV-2AS-Zellrollen aus der Paketdatei.
 
+* 2026-11-27: Werkbank-Einrichtung mit vorläufigem Sensorpaket nimmt getippte Werte
+  (`0.1489`, `+0,1489`, `0.1489 mV/V`) an und setzt sie eindeutig in die Paketzellen;
+  vorher war nur der exakte Zellentext mit Leerzellen gültig. Der Sensor-Assistent fragt
+  die Polarität ab und lehnt helle Zeichen auf dunklem/farbigem Grund mit Hinweis ab
+  (OQ-84, GSV-2TSD-DI weiß auf blau). Der Werkbank-Kopf nennt vorläufige Sensoren.
+
 * 2026-11-27: Das Releasearchiv liefert `dispread/sensors/agent_prompt.md` mit; im
   installierten Testpaket `rc-cccf6b8` brach der KI-Assistent ohne diese Datei sofort ab.
   Im Konsolenassistenten „Neuen Sensor hinzufügen“ scrollt nur der Formularteil,

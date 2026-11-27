@@ -74,6 +74,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-81](#oq-81) | — | offen | Wie startet die Rastersuche bei HD44780-Anzeigen ohne festes Plus in Zelle 0? |
 | [OQ-82](#oq-82) | — | offen | Wer hebt Sensorpakete auf verifiziert, nach welchem Kriterium? |
 | [OQ-83](#oq-83) | — | offen | Wie kennzeichnet die Ausgabe an GSVmulti Werte eines vorläufigen Sensorpakets? |
+| [OQ-84](#oq-84) | — | offen | Wie liest picam Anzeigen mit hellen Zeichen auf dunklem oder farbigem Grund? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3990,3 +3991,20 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Kalibrierauswertung erhalten? Einen dokumentierten Weg bis in die
   Auswertung prüfen.
 * **Zielort:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md).
+
+---
+
+<span id="oq-84"></span>
+
+## OQ-84 — Wie liest picam Anzeigen mit hellen Zeichen auf dunklem oder farbigem Grund?
+
+* **Status:** offen · **Zuständig:** Entwicklung
+* **Befund (2026-11-27):** Das GSV-2TSD-DI am Aufbau raspi01 zeigt weiße
+  Zeichen auf blau hinterleuchtetem LCD (`+ 0.1489 mV/V`). Abtastung,
+  Normierung (`bg_closing_v1`), Rastersuche und Vorlagen setzen dunkle
+  Punkte auf hellem Glas voraus. Der Sensor-Assistent fragt die Polarität
+  jetzt ab und bricht bei hellen Zeichen mit Hinweis ab.
+* **Zu klären:** Eigene Normierung und Vorlagen je Polarität oder
+  Invertierung vor der Abtastung; Abnahme auf frischen Aufstellungen.
+  Aufwandsschätzung aus der Analyse vom 10.11.: 2–6 Wochen.
+* **Zielort:** [Sensorpakete](SENSOR_PACKAGES.md) und [Validierung](VALIDATION.md).

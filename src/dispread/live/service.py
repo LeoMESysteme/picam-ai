@@ -478,6 +478,7 @@ class LiveService:
                     if self._config.definition.status == "provisional" else self._config.definition.release_notice
                 ),
                 **({"sensor_status": "provisional"} if self._config.definition.status == "provisional" else {}),
+                "sensor_name": self._config.definition.display_name,
                 "session_id": None if self._session_dir is None else self._session_dir.name,
                 "setup": setup,
                 "profile": self._profile_info,

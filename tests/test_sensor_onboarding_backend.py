@@ -74,7 +74,7 @@ def test_onboard_none(state, capsys):
         while not stopped.wait(0.01):
             for event in run.read_events():
                 if event['type'] == 'question' and not run.answer_path(event['id']).exists():
-                    run.write_answer(event['id'], True)
+                    run.write_answer(event['id'], event['options'][0]['value'] if event['kind'] == 'choice' else True)
 
     worker = threading.Thread(target=answer, daemon=True)
     worker.start()
@@ -239,7 +239,7 @@ def test_ai_onboarding_uses_confirmed_host_commands(state, monkeypatch, capsys, 
         while not stopped.wait(0.01) and time.monotonic() < deadline:
             for event in run.read_events():
                 if event['type'] == 'question' and not run.answer_path(event['id']).exists():
-                    run.write_answer(event['id'], True)
+                    run.write_answer(event['id'], event['options'][0]['value'] if event['kind'] == 'choice' else True)
         if not stopped.is_set():
             run.request_cancel()
 
@@ -452,3 +452,23 @@ def test_ask_cancelled_exits_three(state, capsys):
     result = capsys.readouterr()
     assert not result.out
     assert 'abgebrochen' in result.err
+
+
+def test_setup_reference_accepts_typed_value_for_char_number_package():
+    from dispread.sensors import get_sensor
+    from dispread.sensors.formats import derive_display, setup_reference
+
+    base = get_sensor()
+    display = derive_display('+ 0.1489 mV/V   ', 'mV/V')
+
+    class Definition:
+        unit = 'mV/V'
+
+    Definition.display = display
+    expected = '+ 0.1489 '
+    for typed in ('0.1489', '+0.1489', '0,1489', '0.1489 mV/V', '+ 0.1489 mV/V', ' 0.1489'):
+        assert setup_reference(typed, Definition) == expected, typed
+    for bad in ('-0.1489', '12345.678', 'abc', '0.1489 kg'):
+        with pytest.raises(ValueError):
+            setup_reference(bad, Definition)
+    assert base.id == 'gsv2as-161a'

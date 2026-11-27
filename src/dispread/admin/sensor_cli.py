@@ -114,6 +114,15 @@ def _confirm_format(run, example, unit, sign_chars=None, digits=None, *, timeout
         digits_text = f'{display.format.min_digits}–{digits_text}'
     run.step('format', 'done', f'{digits_text} Ziffern, Einheit {unit}')
     run.step('bestaetigung', 'running')
+    polarity = _ask(run, 'choice', 'Wie sehen die Zeichen auf der Anzeige aus?', options=[
+        {'label': 'Dunkle Zeichen auf hellem Grund (z. B. schwarz auf grau/grün)', 'value': 'dark_on_light'},
+        {'label': 'Helle Zeichen auf dunklem oder farbigem Grund (z. B. weiß auf blau)', 'value': 'bright_on_dark'},
+    ], timeout=timeout)
+    if polarity != 'dark_on_light':
+        message = ('Anzeigen mit hellen Zeichen auf dunklem/farbigem Grund liest picam noch nicht '
+                   '(Leser und Vorlagen kennen nur dunkle Zeichen). Ausbau folgt, siehe OQ-84.')
+        run.step('bestaetigung', 'failed', message)
+        raise OnboardingCancelled(message)
     prompt = (f'Anzeigebeispiel und Format bestätigen?\n|{example.ljust(16)}|\n|{"".join(roles)}|\n'
               f'V Vorzeichen, Z Zahl, T Trennung, E Einheit, L Leerzelle. {digits_text} Ziffern, Einheit: {unit}')
     if not _ask(run, 'confirm', prompt, timeout=timeout):
