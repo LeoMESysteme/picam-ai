@@ -380,6 +380,18 @@ def failed_tests(junit: Path, limit: int = 10) -> list[str]:
     return out[:limit]
 
 
+# Git setzt in Hooks GIT_DIR/GIT_INDEX_FILE. Erben Tests sie, schreiben ihre temporaeren
+# `git init/config`-Aufrufe in das echte Repository (core.bare, user.*). Nur die
+# Security-Schritte brauchen GIT_INDEX_FILE (gitleaks --staged), alle anderen bekommen nichts davon.
+GIT_ENV_ALL = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY",
+               "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE")
+
+
+def step_env(group: str) -> dict[str, str]:
+    drop = set(GIT_ENV_ALL) if group == "security" else set(GIT_ENV_ALL) | {"GIT_INDEX_FILE"}
+    return {k: v for k, v in os.environ.items() if k not in drop}
+
+
 def run_step(step: Step, strict_missing: bool) -> Result:
     if step.skip_reason:
         if step.required and strict_missing:
@@ -391,7 +403,7 @@ def run_step(step: Step, strict_missing: bool) -> Result:
         return Result(step, "ok" if ok else "fail", time.monotonic() - t0, msg)
     print(f"\n$ {sh_quote(step.cmd)}", flush=True)
     try:
-        rc = subprocess.run(step.cmd, cwd=step.cwd).returncode
+        rc = subprocess.run(step.cmd, cwd=step.cwd, env=step_env(step.group)).returncode
     except FileNotFoundError as exc:
         return Result(step, "fail", time.monotonic() - t0, str(exc))
     return Result(step, "ok" if rc == 0 else "fail", time.monotonic() - t0, f"Exit {rc}")

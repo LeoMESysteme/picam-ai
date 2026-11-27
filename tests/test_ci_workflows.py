@@ -99,3 +99,13 @@ def test_katalog_anker_existieren():
     required = {"ruff", "gitleaks", "bandit", "changelog", "pytest", "playwright", "release", "perf",
                 "hardware", "werkzeug-fehlt"}
     assert required <= anchors
+
+
+def test_schritte_erben_keine_git_hook_umgebung(monkeypatch):
+    """Hooks setzen GIT_DIR; Tests mit temporaeren Repos duerfen es nicht erben (sonst Schreibzugriff aufs echte .git/config)."""
+    for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        monkeypatch.setenv(k, "/irgendwo")
+    pytest_env = ci.step_env("pytest")
+    assert not any(k.startswith("GIT_") and k in ci.GIT_ENV_ALL + ("GIT_INDEX_FILE",) for k in pytest_env)
+    sec_env = ci.step_env("security")
+    assert "GIT_DIR" not in sec_env and sec_env["GIT_INDEX_FILE"] == "/irgendwo"

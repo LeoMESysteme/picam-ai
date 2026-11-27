@@ -5,6 +5,8 @@ was ist die Konsequenz.
 
 ## Unveröffentlicht
 
+* 2026-11-27: **CI-Runner: Git-Hook-Umgebung nicht an Tests vererben.** `scripts/ci.py` entfernt `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` u. a. für alle Schritte außer Security (gitleaks braucht den Index). Vorher erbten Tests im pre-push-Hook `GIT_DIR` und schrieben mit ihren temporären `git init/config`-Aufrufen `core.bare = true` und `user.name = Test` in die echte `.git/config`. Test: `tests/test_ci_workflows.py::test_schritte_erben_keine_git_hook_umgebung`. Messpfad unverändert.
+
 * 2026-11-27: Sensor-Marktplatz (Backend) und optionaler Schalter. Neu: `[features] sensor_assistant`
   in der Instanzkonfiguration (Vorgabe aus; Dev-Instanzen in `sensor-config.toml`), `dispread.sensors.features`,
   `picam sensor features on|off|status`. Aus: `onboard`, `propose` und `catalog pull|submit|pending|token set`
