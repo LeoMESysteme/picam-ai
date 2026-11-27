@@ -299,3 +299,21 @@ def test_process_end_without_done_points_to_log(tmp_path, monkeypatch):
         assert 'Kamera belegt' in '\n'.join(s.text for s in screen.query_one('#kal-log').lines)
 
     drive(tmp_path, monkeypatch, script, check)
+
+
+@pytest.mark.parametrize('size', [(80, 24), (100, 30)])
+def test_wizard_buttons_visible_in_small_terminal(client, size):
+    # Kleine Terminals: Formular scrollt, Abbrechen/Weiter bleiben sichtbar.
+    async def main():
+        app = admin_fakes.make_app('idle')
+        async with app.run_test(size=size) as pilot:
+            await pilot.pause(0.3)
+            screen = SensorWizardScreen(GOOD, [])
+            app.push_screen(screen)
+            await pilot.pause(0.3)
+            width, height = size
+            for button in ('#wiz-ok', '#wiz-cancel'):
+                region = screen.query_one(button).region
+                assert region.height > 0 and region.y >= 0 and region.bottom <= height, (button, region)
+                assert region.right <= width
+    asyncio.run(main())

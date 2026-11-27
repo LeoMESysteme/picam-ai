@@ -13,6 +13,11 @@ was ist die Konsequenz.
   verlangt ein festes Plus in Zelle 0. Die Projekt-Tour übernimmt ihre
   GSV-2AS-Zellrollen aus der Paketdatei.
 
+* 2026-11-27: Das Releasearchiv liefert `dispread/sensors/agent_prompt.md` mit; im
+  installierten Testpaket `rc-cccf6b8` brach der KI-Assistent ohne diese Datei sofort ab.
+  Im Konsolenassistenten „Neuen Sensor hinzufügen“ scrollt nur der Formularteil,
+  „Abbrechen“ und „Sensor einrichten“ bleiben auch in kleinen Terminals (80×24) sichtbar.
+
 * 2026-11-27: `picam sensor capture` öffnet die Kamera für ein direktes
   Standbild mit Formatvorgabe, ohne Kameraregler zu setzen. Im Onboarding ohne KI wird bei
   fehlendem Standbild statisch geprüft. Die Kameraeinrichtung folgt in `/live`.

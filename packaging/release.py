@@ -77,7 +77,7 @@ def _product_path(name: str) -> bool:
         return True
     if name.startswith("src/dispread/workbench/static/"):
         return path.suffix in STATIC_SUFFIXES or path.name == "LICENSE.noto"
-    return name == "src/dispread/workbench/PRODUCT.md"
+    return name in {"src/dispread/workbench/PRODUCT.md", "src/dispread/sensors/agent_prompt.md"}
 
 
 def _tar_entry(name: str, mode: int, size: int = 0, *, directory: bool = False) -> tarfile.TarInfo:

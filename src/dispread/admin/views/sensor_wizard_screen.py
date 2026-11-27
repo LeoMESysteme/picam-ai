@@ -101,8 +101,9 @@ class SensorWizardScreen(ModalScreen[dict | None]):
     BINDINGS = [Binding('escape', 'cancel', show=False)]
     DEFAULT_CSS = '''
     SensorWizardScreen { align: center middle; }
-    #wiz { width: 84; max-width: 96%; height: auto; max-height: 94%; padding: 1 2; background: $picam-raised; }
-    #wiz-body { height: auto; max-height: 100%; scrollbar-size-vertical: 1; }
+    #wiz { width: 84; max-width: 96%; height: 94%; max-height: 46; padding: 1 2; background: $picam-raised; }
+    /* Nur der Formularteil scrollt; Titel, Fehlermeldung und Knöpfe bleiben auch in kleinen Fenstern sichtbar. */
+    #wiz-body { height: 1fr; scrollbar-size-vertical: 1; }
     #wiz .wiz-label { height: auto; margin: 1 0 0 0; color: $picam-text-soft; }
     #wiz .wiz-note { height: auto; margin: 0; }
     #wiz Input { height: 1; border: none; padding: 0 1; background: $picam-field; }

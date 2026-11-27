@@ -310,3 +310,11 @@ def test_publish_dry_run(source, tmp_path, monkeypatch, state):
     else:
         assert result.returncode == 1
         assert ('Arbeitsbaum muss sauber sein' if state == 'dirty' else 'muss auf HEAD zeigen') in result.stderr
+
+
+def test_agent_prompt_is_product_file():
+    # Ohne den Prompt bricht der KI-Assistent im installierten Release sofort ab.
+    from release import _product_path
+
+    assert _product_path("src/dispread/sensors/agent_prompt.md")
+    assert not _product_path("src/dispread/sensors/notes.md")
