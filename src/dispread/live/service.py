@@ -28,7 +28,6 @@ from dispread.frames import FrameSource
 from dispread.frames.uvc_source import UvcError, UvcSource
 from dispread.gsv2as_cell_text import normalize_cell_text
 from dispread.hardware_ports import GSV_UART_PORT
-from dispread.live import RELEASE_NOTICE
 from dispread.live import setup as live_setup
 from dispread.live.diagnostics import MAX_BYTES as DIAGNOSTIC_BUDGET_BYTES
 from dispread.live.diagnostics import staging_leftovers
@@ -45,12 +44,13 @@ from dispread.live.storage import (  # noqa: F401 (Wiederexport)
 )
 from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.records import ValueStatus
+from dispread.sensors import get_sensor
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
 
 OVERLAYS = ("still", "stability", "overlay_source", "overlay_sampling", "overlay_rectified")
 SETUP_STEPS = ("fokus", "kamera", "belichtung", "standbilder", "vorschlag")
-DEVICE_ID = "gsv-sensor-161a"
+DEVICE_ID = get_sensor().device_id
 DIAGNOSTIC_CLOSE_TIMEOUT_S = 60.0
 _LOG = logging.getLogger(__name__)
 
@@ -467,7 +467,7 @@ class LiveService:
                 "output_port": self._output_port or GSV_UART_PORT,
                 "output_port_managed": self._output_port is not None,
                 "camera": self._owner.status(),
-                "release_notice": RELEASE_NOTICE,
+                "release_notice": self._config.definition.release_notice,
                 "session_id": None if self._session_dir is None else self._session_dir.name,
                 "setup": setup,
                 "profile": self._profile_info,
@@ -1009,7 +1009,7 @@ class LiveService:
             fit=result.fit,
             frame_path=setup_dir / "still.png",
             camera_settings=settings,
-            device_id=DEVICE_ID,
+            device_id=self._config.definition.device_id,
             session_id=session_dir.name,
             out_dir=setup_dir,
             cell_text=result.first_text,
@@ -1072,7 +1072,8 @@ class LiveService:
                     raise LiveError("Vorschlag hat sich geaendert - Rahmenbereiche bitte neu pruefen")
                 proposal, session_dir = self._proposal, self._session_dir
             if not format_checked:
-                raise LiveError("Einheit mV/V und Format gsv2as_v1 muessen geprueft sein")
+                raise LiveError(f"Einheit {self._config.unit} und Format "
+                                f"{self._config.definition.display.format.rule} muessen geprueft sein")
             overall = proposal.get("setup_checks", {}).get("overall")
             if overall == "FEHLER":
                 raise LiveError("Einrichtung meldet FEHLER - nicht bestaetigbar")
@@ -1119,8 +1120,8 @@ class LiveService:
             confirmation = {
                 "confirmed_by": profile.confirmed_by,
                 "confirmed_at_utc": profile.confirmed_at_utc,
-                "unit": "mV/V",
-                "format_id": "gsv2as_v1",
+                "unit": self._config.unit,
+                "format_id": self._config.definition.display.format.rule,
                 "format_checked": True,
                 "warning_acknowledged": bool(acknowledge_warning),
                 "setup_overall": overall,
@@ -1294,6 +1295,7 @@ class LiveService:
                             "ended_at_utc": self._wall().astimezone(UTC).isoformat(),
                             "run_id": run_id, "run_dir": out_dir.name,
                             "session_id": profile_path.parent.name,
+                            "sensor": self._config.definition.profile_ref,
                             "profile": {"path": str(profile_path)}, "focus_check": focus_check,
                         }
                         (out_dir / "session.json").write_text(

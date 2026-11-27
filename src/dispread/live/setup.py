@@ -42,15 +42,17 @@ from dispread.live.frame_tracking import (
 )
 from dispread.live.texts import REASONS
 from dispread.rectify import rectify
+from dispread.sensors import get_sensor
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.setup_checks import check_setup, diagnose_reader, display_defect_check, raster_offset_check
 from dispread.setup_hint import GREEN_HUE_MAX, GREEN_HUE_MIN, MIN_SATURATION, MIN_VALUE, find_green_hint_box
 from dispread.setup_overlays import draw_sampling_overlay, draw_source_overlay
 
-GSV2AS_EMPTY_CELLS = (8, 13, 14, 15)
-N_CELLS = 16
-DEFAULT_TARGET_SIZE = (400, 160)
-LATTICE_GRID = CharGrid(n_cells=N_CELLS, left=0.0, pitch=25.0, top=160.0 / 9.0, bottom=160.0)
+_DISPLAY = get_sensor().display
+GSV2AS_EMPTY_CELLS = _DISPLAY.empty_cells
+N_CELLS = _DISPLAY.cells
+DEFAULT_TARGET_SIZE = _DISPLAY.lattice.target_size
+LATTICE_GRID = CharGrid.from_display(_DISPLAY)
 WHITE_BALANCE_SETTLE_S = 3.0
 FOCUS_SOURCE_SIZE = (1920, 1080)
 # Vorabwerte: p80 gruener Boxpixel liegt an 12 Standbildern hoechstens 4 Graustufen

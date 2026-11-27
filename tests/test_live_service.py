@@ -1,5 +1,6 @@
 import threading
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -33,12 +34,11 @@ class FakeOwner:
 def test_status_run_counts_are_per_frame(tmp_path, monkeypatch):
     from test_live_session import _files, _session, embed
 
-    from dispread.live.session import LiveConfig
 
     now = [100.0]
     session = _session(tmp_path, [embed('+ 1.2345 ')] * 3, monotonic=lambda: now[0])
     _, config = _files(tmp_path)
-    session._config = LiveConfig(**{**config.__dict__, 'confirm_frames': 1})
+    session._config = replace(config, confirm_frames=1)
     session.start()
     service = LiveService(session._owner, tmp_path, monotonic=lambda: now[0])
     service._session, service._run_dir = session, tmp_path / 'run'
@@ -3577,6 +3577,7 @@ def test_run_start_checks_focus_after_restart_and_records_it(tmp_path, monkeypat
     assert (tmp_path / "run-01" / "focus-check.json").exists()
     meta = json.loads((tmp_path / "run-01" / "session.json").read_text())
     assert meta['schema'] == 'live-start-rejection/1'
+    assert meta['sensor'] == 'gsv2as-161a@1'
     assert meta['ended_at_utc'] and meta['run_id'] and meta['profile']['path']
     assert service.status()['last_start_rejection']['focus_check'] == meta['focus_check']
     with pytest.raises(LiveError):

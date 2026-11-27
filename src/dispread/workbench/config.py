@@ -14,6 +14,7 @@ from pathlib import Path
 
 from dispread.gsv2as_serial import REFERENCE_PORT
 from dispread.hardware_ports import GSV_UART_PORT, validate_port_pair
+from dispread.sensors import get_sensor
 
 _PATHS = {
     'data': 'directory', 'live_data': 'directory', 'socket': 'socket',
@@ -144,15 +145,19 @@ def load_config(path):
 def parse_config(config, base):
     if unknown := config.keys() - {'workbench', 'live'}:
         raise ValueError(f'unbekannte Abschnitte: {", ".join(sorted(unknown))}')
-    for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration'})):
+    for section, allowed in (('workbench', _FIELDS), ('live', {'templates', 'calibration', 'sensor'})):
         values = config.get(section, {})
         if not isinstance(values, dict):
             raise ValueError(f'{section}: TOML-Tabelle erforderlich')
         if unknown := values.keys() - allowed:
             raise ValueError(f'{section}: unbekannte Schluessel: {", ".join(sorted(unknown))}')
     workbench = _workbench(config.get('workbench', {}), base)
-    live = {name: _path(value, f'live.{name}', base, 'file')
-            for name, value in config.get('live', {}).items()}
+    live = {}
+    for name, value in config.get('live', {}).items():
+        if name == 'sensor':
+            live[name] = get_sensor(_text(value, 'live.sensor')).id
+        else:
+            live[name] = _path(value, f'live.{name}', base, 'file')
     return workbench, live, 'live' in config
 
 

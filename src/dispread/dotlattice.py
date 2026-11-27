@@ -11,13 +11,21 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-_PITCH = 25.0
+from dispread.sensors import get_sensor
+
+_DISPLAY = get_sensor().display
+_ANCHOR = _DISPLAY.anchor
+if (_ANCHOR.char, _ANCHOR.cell) != ("+", 0):
+    raise ValueError("Punktraster-Suche unterstuetzt nur den Plus-Anker in der ersten Zelle")
+
+_PITCH = _DISPLAY.lattice.pitch
 _PH = _PITCH / 6.0
-_TOP = 160.0 / 9.0
-_PV = 160.0 / 9.0
+_TOP = _DISPLAY.lattice.top
+_PV = (_DISPLAY.lattice.bottom - _TOP) / 8.0
+_N_COLUMNS = _DISPLAY.cells * 6
+_WIDTH, _HEIGHT = _DISPLAY.lattice.target_size
 # Quadecken bezeichnen wie in rectify die Mittelpunkte der Randpixel.
-# CharGrid-Grenzen und Punktabstaende bleiben kontinuierlich bei 400/160.
-_CORNERS = np.float32([[[0, 0], [399, 0], [399, 159], [0, 159]]])
+_CORNERS = np.float32([[[0, 0], [_WIDTH - 1, 0], [_WIDTH - 1, _HEIGHT - 1], [0, _HEIGHT - 1]]])
 _MIN_ASSIGNED = 70  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 _MAX_RMS_COLS = 0.2  # Vorabwert, aus den Aufstellungen vom 2026-09-29.
 # Mit punktgrosser Glaettung liegen korrekte Raster bei <= 0,09, um eine
@@ -81,7 +89,7 @@ def _assignment(src: np.ndarray, h: np.ndarray, col_tol: float = 0.3, row_tol: f
         & (r >= 0)
         & (r <= 6)
         & (c >= 0)
-        & (c < 96)
+        & (c < _N_COLUMNS)
         & ((c % 6) != 5)
     )
     return ok, c.astype(int), r.astype(int)
@@ -89,8 +97,7 @@ def _assignment(src: np.ndarray, h: np.ndarray, col_tol: float = 0.3, row_tol: f
 
 def _plus_coverage(ok: np.ndarray, c: np.ndarray, r: np.ndarray) -> int:
     """Zaehlt verschiedene Treffer des stets vorhandenen Pluszeichens."""
-    wanted = {(2, 1), (2, 2), (2, 4), (2, 5)} | {(i, 3) for i in range(5)}
-    return len(wanted.intersection(zip(c[ok].tolist(), r[ok].tolist(), strict=True)))
+    return len(_PLUS_DOTS.intersection(zip(c[ok].tolist(), r[ok].tolist(), strict=True)))
 
 
 def _plus_shape(ok: np.ndarray, c: np.ndarray, r: np.ndarray) -> bool:
@@ -106,7 +113,7 @@ def _plus_anchors(
 ) -> list[tuple[int, np.ndarray, np.ndarray, np.ndarray]]:
     """Sucht Plus-Mitte und lokale Punktperioden direkt im Quellbild."""
     anchors = []
-    approximate_pitch = pitch_scale * width / (1.2 * 96)
+    approximate_pitch = pitch_scale * width / (1.2 * _N_COLUMNS)
     row_tolerance2 = max(1.8, 0.38 * approximate_pitch) ** 2
     stem_tolerance2 = max(2.5, 0.5 * approximate_pitch) ** 2
     possible = src[src[:, 0] < left + 0.17 * width]
@@ -176,7 +183,7 @@ def _plus_anchors(
 
 def _has_minus_sign(src: np.ndarray, left: float, width: float) -> bool:
     """Erkennt einen linken Querbalken ohne senkrechte Plus-Punkte."""
-    pitch = width / (1.2 * 96)
+    pitch = width / (1.2 * _N_COLUMNS)
     sign_left = left + width / 12
     sign_dots = src[(src[:, 0] >= sign_left) & (src[:, 0] <= sign_left + 5 * pitch)]
     if len(sign_dots) < 5:
@@ -224,7 +231,7 @@ def _quad_score(src: np.ndarray, quad: np.ndarray) -> float:
     col = target[:, 0] / _PH - 0.5
     row = (target[:, 1] - _TOP) / _PV - 0.5
     c, r = np.rint(col), np.rint(row)
-    valid = (c >= 0) & (c < 96) & ((c % 6) != 5) & (r >= 0) & (r <= 6)
+    valid = (c >= 0) & (c < _N_COLUMNS) & ((c % 6) != 5) & (r >= 0) & (r <= 6)
     dc = (col - c) / 0.18
     dr = (row - r) / 0.23
     return float(np.exp(-0.5 * (dc[valid] ** 2 + dr[valid] ** 2)).sum())
@@ -297,7 +304,7 @@ def _source_candidates(image_bgr: np.ndarray, quad: np.ndarray) -> np.ndarray:
 def _lattice_candidates(image_bgr: np.ndarray, quad: np.ndarray) -> np.ndarray:
     """Erkennt LCD-Punkte im entzerrten Bild und gibt Quellkoordinaten zurueck."""
     scale = 2
-    w, hh = 400 * scale, 160 * scale
+    w, hh = _WIDTH * scale, _HEIGHT * scale
     hr = cv2.getPerspectiveTransform(
         quad.astype(np.float32),
         np.float32([[0, 0], [w - 1, 0], [w - 1, hh - 1], [0, hh - 1]]),
@@ -310,7 +317,7 @@ def _lattice_candidates(image_bgr: np.ndarray, quad: np.ndarray) -> np.ndarray:
     sy = (hh - 1) / np.linalg.norm(quad[3] - quad[0])
     if not (0.5 < sx < 30 and 0.5 < sy < 30):
         return np.empty((0, 2), np.float32)
-    col_pitch = float(np.linalg.norm(quad[1] - quad[0])) / 96
+    col_pitch = float(np.linalg.norm(quad[1] - quad[0])) / _N_COLUMNS
     row_pitch = float(np.linalg.norm(quad[3] - quad[0])) / 9
     sigma_x = max(0.7, _DOT_SIGMA_FRACTION * col_pitch)
     sigma_y = max(0.7, _DOT_SIGMA_FRACTION * row_pitch)
@@ -429,7 +436,7 @@ def _evaluate_fit(
         (np.abs(cursor_col - cursor_c) < 0.3)
         & (np.abs(cursor_row - 7) < 0.4)
         & (cursor_c >= 0)
-        & (cursor_c < 96)
+        & (cursor_c < _N_COLUMNS)
         & ((cursor_c % 6) != 5)
     )
     if np.any(cursor):
@@ -442,7 +449,7 @@ def _evaluate_fit(
         if np.any(cursor & (relative_depth >= _MIN_CURSOR_DEPTH_FRACTION)):
             return "cursorzeile_belegt"
     cells = tuple(sorted(set((c[ok] // 6).tolist())))
-    if 0 not in cells or set(r[ok]) != set(range(7)):
+    if _ANCHOR.cell not in cells or set(r[ok]) != set(range(7)):
         return "raster_unvollstaendig"
     d = _warp_points(src[ok], h) - _lat(c[ok], r[ok])
     rms_cols = float(np.sqrt(np.mean(d[:, 0] ** 2)) / _PH)
@@ -554,7 +561,7 @@ def _auto_fit(
     x, y, w, hh = hint_box
     x0, y0 = max(0, int(x * width)), max(0, int(y * height))
     x1, y1 = min(width, int((x + w) * width)), min(height, int((y + hh) * height))
-    point_pitch = (x1 - x0) / (1.2 * 96)
+    point_pitch = (x1 - x0) / (1.2 * _N_COLUMNS)
     pixel_scale = point_pitch / 4.5
     if x1 - x0 < 80 or y1 - y0 < 20:
         return "keine_startlage"
@@ -629,7 +636,7 @@ def _auto_fit(
     candidates: list[tuple[float, np.ndarray, int]] = []
     # Das Plus verankert Spalte und Zeile absolut. Die lokale waagerechte
     # und senkrechte Punktperiode begrenzt die linke Kante des Quads.
-    average_pitch = (bx1 - bx0) / 96
+    average_pitch = (bx1 - bx0) / _N_COLUMNS
     top_slopes = [top + dt for dt in (-0.01, 0.0, 0.01)] if top is not None else np.arange(-0.18, 0.081, 0.02)
     for anchor_index, (anchor_score, p, hv, vv) in enumerate(candidate_anchors):
         if not 0.7 * average_pitch <= hv[0] <= 1.55 * average_pitch:
@@ -695,7 +702,7 @@ def _auto_fit(
                     for dx in np.arange(-12, 12.01, 0.25):
                         cc = col + dx
                         c = np.rint(cc).astype(int)
-                        ok = row_ok & (np.abs(cc - c) < 0.28) & (c >= 0) & (c < 96) & ((c % 6) != 5)
+                        ok = row_ok & (np.abs(cc - c) < 0.28) & (c >= 0) & (c < _N_COLUMNS) & ((c % 6) != 5)
                         n = int(ok.sum())
                         if n < _MIN_ASSIGNED:
                             continue

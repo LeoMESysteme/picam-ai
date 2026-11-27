@@ -10,6 +10,7 @@ import pytest
 from dispread.admin import cli, configedit, probes, service
 from dispread.admin import instance as inst_mod
 from dispread.admin.instance import Instance, discover, parse_exec_start
+from dispread.live import DEFAULT_TEMPLATES
 
 EXEC = ('{ path=/r/.venv/bin/python ; argv[]=/r/.venv/bin/python -m dispread.workbench.cli serve '
         '--host 10.0.0.5 --port 8082 --data /r/var/wb --live-data /r/var/live '
@@ -47,7 +48,7 @@ def test_dev_instance_from_running_unit_is_remembered(tmp_path):
     assert (found.kind, found.unit, found.scope) == ('dev', 'dispread-werkbank-bruecke', 'user')
     assert (found.host, found.port, found.socket) == ('10.0.0.5', 8082, '/tmp/x/control.sock')
     assert found.url == 'https://10.0.0.5:8082/live'
-    assert found.templates == '/r/var/dotmatrix/templates-stufe2c-2026-09-30.json'
+    assert found.templates == str(DEFAULT_TEMPLATES)
     # Unit gestoppt (transient, verschwunden): Angaben bleiben bekannt.
     gone = discover(run=fake_run({'show': (0, 'LoadState=not-found\n', '')}))
     assert gone.kind == 'dev' and gone.argv == found.argv and gone.port == 8082

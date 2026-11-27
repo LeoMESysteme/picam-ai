@@ -532,6 +532,7 @@ def demo_records(count=600):
         raise ValueError("demo count must be 1..100000")
     for index in range(count):
         raw = f"{(index - count // 2) / 1000:+08.3f}"
+        # Die GSVmulti-Demo verwendet wie UserDefined die festgelegte Einheit mV/V (OQ-07).
         yield ValueRecord(index, Timestamp(index, TimeBaseKind.SYNTHETIC), float(raw), "mV/V",
                           ValueStatus.VALID, 1.0, "demo/userdefined", None, None, raw_text=raw)
 

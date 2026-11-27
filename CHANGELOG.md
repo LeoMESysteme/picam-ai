@@ -8,8 +8,11 @@ was ist die Konsequenz.
 * 2026-11-27: Das Sensorpaket `gsv2as-161a@1` enthält die Gerätebeschreibung,
   das Displayraster und die geprüften Stufe-2c-Vorlagen. Wheel und Releasearchiv
   liefern das Paket mit. Release-Bau und Veröffentlichung benötigen keine
-  externe Vorlagendatei mehr. Bestehende Installationen erreichen dieselben
-  Vorlagen weiterhin über ihren konfigurierten Pfad.
+  externe Vorlagendatei mehr. Einrichtung und Live-Leser beziehen Raster,
+  Format, Einheit und Vorlagen aus dem Paket. Die Laufmetadaten nennen die
+  Sensorversion. Vorhandene konfigurierte Vorlagen bleiben mit passender
+  Prüfsumme nutzbar. Fehlt die alte Stufe-2c-Datei, verwendet die Laufzeit
+  die Paketvorlage und meldet den Wechsel.
 
 * 2026-11-25: Aufräumen nach dem Hauptcheckout. Doku-Einträge vom 5./11./13.11. (Laborjournal, VALIDATION, Projektgeschichte, Hardware-Profil, USER ENTRIES), WLAN-Wächter-Quellen (`scripts/picam-wlan-watchdog*`, `systemd/picam-wlan-watchdog.*`, `docs/HOST_NETZWERK.md`), Analyse 2026-11-10 und TUI-Wunschliste nach master übernommen; Repowise-Verweise aus Agent-Anweisungen, Hooks und Pflegeprompt entfernt; CI installiert Doku-Werkzeuge mit `PIP_CONFIG_FILE=/dev/null` ohne piwheels (dessen Proxy brach am 11.11. 9 von 20 TLS-Handshakes ab; auf aarch64 kommen alle Pakete von PyPI). Kein Messpfadcode geändert.
 

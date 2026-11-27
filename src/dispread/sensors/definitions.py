@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+GSV2AS_FORMAT_RULE = "gsv2as_v1"
+
 
 @dataclass(frozen=True, slots=True)
 class TemplateRef:

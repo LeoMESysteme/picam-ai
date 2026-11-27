@@ -50,6 +50,7 @@ class UserDefinedFormatter:
         if record.status is not ValueStatus.VALID:
             return b"%NaN\r\n" if self.invalid_policy is InvalidValuePolicy.SEND_NAN else None
         raw = record.raw_text
+        # Die GSVmulti-Ausgabe bleibt auf mV/V festgelegt (OQ-07).
         if (
             record.unit != "mV/V"
             or record.value is None

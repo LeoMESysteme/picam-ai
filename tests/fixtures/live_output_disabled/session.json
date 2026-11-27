@@ -9,6 +9,7 @@
   "reader_tolerance": null,
   "session_id": "live-test",
   "device_id": "gsv-sensor-161a",
+  "sensor": "gsv2as-161a@1",
   "profile": {
     "path": "<root>/profile.json",
     "sha256": "<profile-sha256>"

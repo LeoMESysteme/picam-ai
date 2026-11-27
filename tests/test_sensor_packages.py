@@ -65,6 +65,9 @@ def change(directory, filename, key, value):
     ("display.json", "schema", 2, "schema"),
     ("sensor.json", "aliases", "GSV", "aliases"),
     ("sensor.json", "version", "1", "version"),
+    ("sensor.json", "status", "Verified", "status"),
+    ("sensor.json", "status", "verified ", "status"),
+    ("sensor.json", "status", "freigegeben", "status"),
     ("sensor.json", "templates.sha256", "123", "sha256"),
     *[("sensor.json", "templates.file", path, "file") for path in
       ("x/t.json", "..", "../t.json", "/t.json", "a..b", r"x\t.json", "C:t.json")],
@@ -75,7 +78,10 @@ def change(directory, filename, key, value):
     ("display.json", "roles.unit", [True], "unit"),
     ("display.json", "roles.number", [1, 3, 4, 5, 6, 7], "zusammen"),
     ("display.json", "lattice.target_size", [400], "target_size"),
+    ("display.json", "lattice.target_size", [401, 160], r"cells \* pitch"),
     ("display.json", "format.rule", "unbekannt", "rule"),
+    ("display.json", "format.sign_chars", ["-"], "anchor.char"),
+    ("display.json", "format.digits", 8, "format.digits"),
     ("display.json", "family", "unbekannt", "family"),
     ("display.json", "polarity", "unbekannt", "polarity"),
     ("display.json", "anchor.char", "-", "char"),
@@ -121,6 +127,7 @@ def test_registry_rejects_external_verified_and_duplicate_ids(tmp_path):
 
     directory = shutil.copytree(PACKAGE, tmp_path / "labor-01")
     change(directory, "sensor.json", "id", directory.name)
+    change(directory, "sensor.json", "aliases", ["Labor 01"])
     with pytest.raises(ValueError, match="verified"):
         registry([tmp_path])
     change(directory, "sensor.json", "status", "provisional")
@@ -130,4 +137,35 @@ def test_registry_rejects_external_verified_and_duplicate_ids(tmp_path):
     directory = directory.rename(tmp_path / PACKAGE.name)
     change(directory, "sensor.json", "id", PACKAGE.name)
     with pytest.raises(ValueError, match="[Dd]oppelt"):
+        registry([tmp_path])
+
+
+def test_registry_collects_errors_and_keeps_bundled_sensor_available(tmp_path):
+    from dispread.sensors import DEFAULT_SENSOR_ID, get_sensor, registry, registry_with_errors
+
+    for name in (".alt", "__pycache__", "fremd", "defekt"):
+        (tmp_path / name).mkdir()
+    (tmp_path / "defekt/sensor.json").write_text("{")
+    missing = tmp_path / "fehlt"
+    extra = [tmp_path, missing]
+    sensors, errors = registry_with_errors(extra)
+    assert sensors[DEFAULT_SENSOR_ID] == get_sensor(DEFAULT_SENSOR_ID, extra)
+    assert len(errors) == 3
+    assert all(any(name in error for error in errors) for name in ("fremd", "defekt", "Suchwurzel"))
+    with pytest.raises(ValueError, match="Suchwurzel"):
+        registry([missing])
+
+
+def test_registry_rejects_duplicate_aliases(tmp_path):
+    from dispread.sensors import get_sensor, registry, registry_with_errors
+
+    for name in ("labor-01", "labor-02"):
+        directory = shutil.copytree(PACKAGE, tmp_path / name)
+        change(directory, "sensor.json", "id", name)
+        change(directory, "sensor.json", "status", "draft")
+        change(directory, "sensor.json", "aliases", ["Labor"])
+    sensors, errors = registry_with_errors([tmp_path])
+    assert get_sensor().id in sensors
+    assert len(errors) == 1
+    with pytest.raises(ValueError, match="Doppelter Sensoralias"):
         registry([tmp_path])

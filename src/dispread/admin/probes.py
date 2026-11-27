@@ -466,18 +466,27 @@ def _sha256(path: Path) -> str:
 
 
 def fact_templates(instance: Instance) -> Fact:
-    from dispread.live import DEFAULT_TEMPLATES_SHA256
+    from dispread.live import resolve_templates_path
+    from dispread.sensors import get_sensor
 
-    if not instance.templates:
+    if instance.kind == 'none' or (instance.problem and instance.config):
         return Fact('vorlage', 'Lesevorlage', UNKNOWN, 'unbekannt')
-    path = Path(instance.templates)
+    try:
+        definition = get_sensor(instance.sensor)
+        configured = Path(instance.templates) if instance.templates else None
+        path = resolve_templates_path(definition, configured)
+    except (OSError, ValueError) as exc:
+        return Fact('vorlage', 'Lesevorlage', FAIL, str(exc))
     if not path.is_file():
         return Fact('vorlage', 'Lesevorlage', FAIL, 'fehlt', [('Datei', str(path))],
                     hint='Die eingefrorene Vorlage gehört zum Release; neu installieren.')
-    if _sha256(path) != DEFAULT_TEMPLATES_SHA256:
+    if _sha256(path) != definition.templates.sha256:
         return Fact('vorlage', 'Lesevorlage', FAIL, 'verändert', [('Datei', str(path))],
                     hint='Prüfsumme stimmt nicht. Vorlage aus dem Release wiederherstellen.')
-    return Fact('vorlage', 'Lesevorlage', OK, 'geprüft', [('Datei', str(path)), ('SHA-256', 'stimmt')])
+    details = [('Datei', str(path)), ('SHA-256', 'stimmt')]
+    if configured is not None and configured != path:
+        details.append(('Paketvorlage verwendet', f'Alte Vorlagendatei {configured} fehlt'))
+    return Fact('vorlage', 'Lesevorlage', OK, 'geprüft', details)
 
 
 CALIBRATION_HINT = ('Ohne gültige Timing-Kalibrierung startet kein Messlauf. Einmalig mit gestecktem '

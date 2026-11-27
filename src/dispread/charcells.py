@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
 from dispread.detect import Quad
 from dispread.rectify import _order_quad
+
+if TYPE_CHECKING:
+    from dispread.sensors.definitions import DisplayDefinition
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +40,11 @@ class CharGrid:
     bottom: float
     dot_columns: int = 5
     gap_columns: int = 1
+
+    @classmethod
+    def from_display(cls, display: DisplayDefinition) -> CharGrid:
+        lattice = display.lattice
+        return cls(display.cells, lattice.left, lattice.pitch, lattice.top, lattice.bottom)
 
     def cell_boxes(self) -> list[tuple[int, int, int, int]]:
         """Zellenboxen als `(x, y, w, h)`, gerundet auf ganze Pixel."""

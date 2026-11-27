@@ -31,7 +31,7 @@ def time_read_chain(
     result = None
     for _ in range(repeats):
         t0 = clock()
-        crop = rectify(image, quad, target_size=(400, 160))
+        crop = rectify(image, quad, target_size=layout.display.lattice.target_size)
         result = reader.read(crop.image, layout)
         durations.append((clock() - t0) / 1e6)
     durations.sort()

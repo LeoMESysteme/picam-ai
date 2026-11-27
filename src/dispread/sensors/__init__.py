@@ -11,6 +11,7 @@ from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING
 
 from .definitions import (
+    GSV2AS_FORMAT_RULE,
     AnchorDefinition,
     DisplayDefinition,
     FormatDefinition,
@@ -25,7 +26,6 @@ if TYPE_CHECKING:
 
 DEFAULT_SENSOR_ID = "gsv2as-161a"
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "data" / "sensors"
-_FORMAT_RULES = frozenset({"gsv2as_v1"})
 
 
 def _unique_keys(pairs):
@@ -139,15 +139,23 @@ def _display(path):
     if cell not in roles.sign:
         raise ValueError("anchor.cell muss eine Vorzeichenzelle sein")
     fmt = _object(data["format"], FormatDefinition, "format")
+    lattice = _lattice(data["lattice"])
+    anchor = AnchorDefinition(_supported(anchor["char"], "anchor.char", {"+"}), cell)
+    format_definition = FormatDefinition(
+        _supported(fmt["rule"], "format.rule", {GSV2AS_FORMAT_RULE}), _positive(fmt["digits"], "digits"),
+        _sequence(fmt["sign_chars"], "sign_chars", _text), _text(fmt["leading_zero_rule"], "leading_zero_rule"),
+    )
+    if anchor.char not in format_definition.sign_chars:
+        raise ValueError("anchor.char muss in format.sign_chars enthalten sein")
+    if format_definition.digits > len(roles.number):
+        raise ValueError("format.digits ist groesser als der Zahlenblock")
+    if lattice.target_size[0] != cells * lattice.pitch:
+        raise ValueError("lattice.target_size: Breite muss cells * pitch entsprechen")
     return DisplayDefinition(
         schema=data["schema"], family=_supported(data["family"], "family", {"hd44780_5x8"}),
         polarity=_supported(data["polarity"], "polarity", {"dark_on_light"}),
-        cells=cells, rows=_positive(data["rows"], "rows"), lattice=_lattice(data["lattice"]), roles=roles,
-        anchor=AnchorDefinition(_supported(anchor["char"], "anchor.char", {"+"}), cell),
-        format=FormatDefinition(
-            _supported(fmt["rule"], "format.rule", _FORMAT_RULES), _positive(fmt["digits"], "digits"),
-            _sequence(fmt["sign_chars"], "sign_chars", _text), _text(fmt["leading_zero_rule"], "leading_zero_rule"),
-        ),
+        cells=cells, rows=_positive(data["rows"], "rows"), lattice=lattice, roles=roles,
+        anchor=anchor, format=format_definition,
     )
 
 
@@ -172,10 +180,11 @@ def load_definition(directory: Path | str) -> SensorDefinition:
         raise ValueError("templates.sha256 braucht 64 kleine Hexzeichen")
     return SensorDefinition(
         id=sensor_id, schema=data["schema"], version=_positive(data["version"], "version"),
+        status=_supported(data["status"], "status", {"verified", "provisional", "draft"}),
         aliases=_sequence(data["aliases"], "aliases", _text), templates=TemplateRef(filename, digest),
         display=_display(directory / "display.json"), directory=directory,
         **{key: _text(data[key], key) for key in
-           ("status", "display_name", "manufacturer", "device_id", "unit", "release_notice")},
+           ("display_name", "manufacturer", "device_id", "unit", "release_notice")},
     )
 
 
@@ -186,24 +195,53 @@ def templates(definition: SensorDefinition) -> Templates:
     return load_templates(definition.templates_path, definition.templates.sha256)
 
 
-def registry(extra_roots: Iterable[Path | str] = ()) -> dict[str, SensorDefinition]:
-    """Sammelt mitgelieferte und lokale Pakete ohne Vorrang bei Kollisionen."""
+def registry_with_errors(
+    extra_roots: Iterable[Path | str] = (),
+) -> tuple[dict[str, SensorDefinition], list[str]]:
+    """Sammelt lesbare Pakete und meldet Fehler je Paket oder Suchwurzel."""
     sensors = {}
+    names = set()
+    errors = []
     for index, root in enumerate((_PACKAGE_ROOT, *map(Path, extra_roots))):
-        for directory in sorted(root.iterdir()):
-            if not directory.is_dir() or directory.name == "__pycache__":
+        try:
+            directories = sorted(root.iterdir())
+        except OSError as exc:
+            errors.append(f"Sensorpaket-Suchwurzel {root} nicht lesbar: {exc}")
+            continue
+        for directory in directories:
+            if directory.name.startswith(".") or directory.name == "__pycache__":
                 continue
-            sensor = load_definition(directory)
-            if index and sensor.status == "verified":
-                raise ValueError(f"Lokales Sensorpaket {sensor.id!r} darf nicht 'verified' sein")
-            if sensor.id in sensors:
-                raise ValueError(f"Doppelte Sensor-id {sensor.id!r}")
+            try:
+                if not directory.is_dir():
+                    continue
+                sensor = load_definition(directory)
+                if index and sensor.status == "verified":
+                    raise ValueError(f"Lokales Sensorpaket {sensor.id!r} darf nicht 'verified' sein")
+                if sensor.id in sensors:
+                    raise ValueError(f"Doppelte Sensor-id {sensor.id!r}")
+                package_names = (sensor.id, *sensor.aliases)
+                if names.intersection(package_names) or len(set(package_names)) != len(package_names):
+                    raise ValueError(f"Doppelter Sensoralias fuer {sensor.id!r}")
+            except (OSError, ValueError) as exc:
+                errors.append(f"{directory}: {exc}")
+                continue
             sensors[sensor.id] = sensor
+            names.update(package_names)
+    return sensors, errors
+
+
+def registry(extra_roots: Iterable[Path | str] = ()) -> dict[str, SensorDefinition]:
+    """Liefert das Verzeichnis nur bei einer fehler- und kollisionsfreien Suche."""
+    sensors, errors = registry_with_errors(extra_roots)
+    if errors:
+        raise ValueError("\n".join(errors))
     return sensors
 
 
-def get_sensor(id: str, extra_roots: Iterable[Path | str] = ()) -> SensorDefinition:
+def get_sensor(id: str = DEFAULT_SENSOR_ID, extra_roots: Iterable[Path | str] = ()) -> SensorDefinition:
     """Liefert das Paket zur Kennung oder meldet eine unbekannte Kennung."""
+    if id == DEFAULT_SENSOR_ID:
+        return load_definition(_PACKAGE_ROOT / DEFAULT_SENSOR_ID)
     sensors = registry(extra_roots)
     if id not in sensors:
         raise ValueError(f"Unbekannte Sensor-id {id!r}")
