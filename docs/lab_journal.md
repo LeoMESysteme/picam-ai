@@ -5319,3 +5319,14 @@ UART und laufender Werkbankdienst wurden dabei nicht verwendet.
 **Schluss.** Das aus einem Beispiel abgeleitete Format kann den
 gespeicherten Wert in diesem Raster lesen. Die Einrichtung, Nachführung
 und Geräteabnahme am Aufbau bleiben eigene Prüfungen.
+
+## 2026-11-27 — Sensor-Onboarding ohne Kamera auf raspi06 { #sensor-p0-onboarding-2026-11-27 }
+
+**Aufbau und Ergebnis.** Zum Stand `6247023` liefen die Einrichtung ohne KI
+und mit Claude-Agent je einmal durch. Beide erzeugten ein vorläufiges Paket,
+prüften es statisch und testeten die Aktivierung. Die Testpakete wurden danach
+entfernt. Der einzige Hardwarezugriff war die Kamerasuche.
+
+**Schluss.** Der Durchstich belegt Paketerzeugung und Auswahl ohne Standbild.
+Einrichtung und erster Lauf mit Kamera auf `/live` stehen aus.
+[Bedienablauf](SENSOR_PACKAGES.md#neuen-sensor-hinzufuegen)

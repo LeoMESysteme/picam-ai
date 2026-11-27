@@ -13,6 +13,10 @@ was ist die Konsequenz.
   verlangt ein festes Plus in Zelle 0. Die Projekt-Tour übernimmt ihre
   GSV-2AS-Zellrollen aus der Paketdatei.
 
+* 2026-11-27: `picam sensor capture` öffnet die Kamera für ein direktes
+  Standbild mit Formatvorgabe, ohne Kameraregler zu setzen. Im Onboarding ohne KI wird bei
+  fehlendem Standbild statisch geprüft. Die Kameraeinrichtung folgt in `/live`.
+
 * 2026-11-27: Das Sensorpaket `gsv2as-161a@1` enthält die Gerätebeschreibung,
   das Displayraster und die geprüften Stufe-2c-Vorlagen. Wheel und Releasearchiv
   liefern das Paket mit. Release-Bau und Veröffentlichung benötigen keine
@@ -20,7 +24,8 @@ was ist die Konsequenz.
   Format, Einheit und Vorlagen aus dem Paket. Die Laufmetadaten nennen die
   Sensorversion. Vorhandene konfigurierte Vorlagen bleiben mit passender
   Prüfsumme nutzbar. Fehlt die alte Stufe-2c-Datei, verwendet die Laufzeit
-  die Paketvorlage und meldet den Wechsel.
+  die Paketvorlage und meldet den Wechsel. Die [Sensorpaket-Doku](docs/SENSOR_PACKAGES.md)
+  beschreibt Schema, Einrichtung und Golden-Vergleich.
 
 * 2026-11-25: Aufräumen nach dem Hauptcheckout. Doku-Einträge vom 5./11./13.11. (Laborjournal, VALIDATION, Projektgeschichte, Hardware-Profil, USER ENTRIES), WLAN-Wächter-Quellen (`scripts/picam-wlan-watchdog*`, `systemd/picam-wlan-watchdog.*`, `docs/HOST_NETZWERK.md`), Analyse 2026-11-10 und TUI-Wunschliste nach master übernommen; Repowise-Verweise aus Agent-Anweisungen, Hooks und Pflegeprompt entfernt; CI installiert Doku-Werkzeuge mit `PIP_CONFIG_FILE=/dev/null` ohne piwheels (dessen Proxy brach am 11.11. 9 von 20 TLS-Handshakes ab; auf aarch64 kommen alle Pakete von PyPI). Kein Messpfadcode geändert.
 

@@ -60,7 +60,7 @@ bedeutet, dass kein einzelner Aktualisierungszeitpunkt dokumentiert ist.
 | P2 | p2-vielfalt | Mindestens sechs Geräteinstanzen über drei Displaytypen | offen | — | [Datensatzregeln](VALIDATION.md#datensatzaufbau) |
 | P3 | p3-leser | Dot-Matrix-Abnahme 3: 215/215 richtige Proben | belegt | 2026-09-30 | [Leser-Abnahme 3](VALIDATION.md#2026-09-30-abnahme-3-ab5ab6-bestanden-215215-0-falsch-0-abgelehnt) |
 | P3 | p3-live | Live-Bedienerläufe am begrenzten GSV-2AS-Aufbau | belegt | 2026-10-21 | [Bedienerläufe](VALIDATION.md#messpfad-live-bedienerlaeufe-2026-10-21) |
-| P3 | p3-geraete | Weitere Geräte, Vorzeichen und Einheiten prüfen | offen | — | [Gerätekreis](open-questions.md#oq-04) |
+| P3 | p3-geraete | Weitere Geräte, Vorzeichen und Einheiten prüfen | offen | — | [Gerätekreis](open-questions.md#oq-04), [Sensorpakete als Grundlage gebaut](SENSOR_PACKAGES.md) |
 | P3 | p3-schwellen | Freigabeschwellen und angepasste Toleranz real belegen | offen | — | [Freigabeevidenz](open-questions.md#oq-14) |
 | P3 | p3-fehlerklassen | Trefferquote nach Fehlerklassen aufschlüsseln | offen | — | [Fehlerklassen](VALIDATION.md#fehlerklassen-getrennt-zu-zahlen) |
 | P4 | p4-format | UserDefined-Spezifikation für den Prototyp beschaffen | belegt | 2026-10-28 | [Primärquelle und Nachweisgrenzen](GSVMULTI_PROTOCOL.md#quellen), [OQ-01](open-questions.md#oq-01), [OQ-07](open-questions.md#oq-07) |
@@ -105,6 +105,8 @@ stehen in der [Arbeitsliste](../TODO.md).
 Der nächste Installationsnachweis steht unter P7 (`p7-frischinstallation`).
 Auf die Produktionsabnahme (`p7-produktionsabnahme`) folgt nach dem
 vereinbarten Fahrplan das Anlernen des GSV-2TSD-DI. Die
+[Sensorpakete](SENSOR_PACKAGES.md) sind als Grundlage für weitere Geräte
+gebaut (P0 des Sensorplans im Integrationszweig). Die
 [Installationsanleitung](INSTALLER.md) beschreibt den veröffentlichten Stand.
 
 ## P0 — was tatsächlich steht

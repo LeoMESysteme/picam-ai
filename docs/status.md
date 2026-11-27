@@ -1,23 +1,12 @@
 # Status und Übergabe — 2026-11-27
 
-## Sensorpakete P0 im Worktree `sensor-p0`
+## Sensorpakete (Branch feat/sensor-p0)
 
-Der Backend-Durchstich reicht von `picam sensor onboard` über Bedienerfragen
-und Paketprüfung bis zur gespeicherten Auswahl `live.sensor`. Ein
-Werkbank-Neustart übernimmt die Einstellung. Der Live-Status und das Audit
-tragen bei lokalen Paketen den Status `provisional`. Probe und Messwert
-aus einer archivierten GSV-2AS-Aufnahme stehen in der
-[Validierung](VALIDATION.md#sensor-p0-2026-11-27). Der Golden-Vergleich
-blieb für alle 2.781 GSV-2AS-Proben byte-identisch. Die gezielte
-Backend-/Paketauswahl bestand 129 Tests. Sechs lokale HTTP-Tests und der
-Browser-Testserver scheiterten beim Öffnen des TCP-Sockets in der Sandbox.
-In der getrennten TUI-Prüfung meldete der Pilot-Test zum Fragenablauf
-einen Klick außerhalb des sichtbaren Bereichs.
-
-Die Entwicklung liegt auf `feat/sensor-p0` im Arbeitsbaum. Für die
-Integration stehen der gemeinsame TUI-Durchlauf mit realem Agenten und der
-erste Lauf am Aufbau aus. Der Paketgenerator verlangt für P0 ein festes
-Plus in Zelle 0. [OQ-81](open-questions.md#oq-81)
+- GSV-2AS-Paket, Laufzeit, `picam sensor` und Konsolenassistent sind gebaut. Lokale Pakete sind vorläufig. [Paketformat und Bedienung](SENSOR_PACKAGES.md)
+- T2/T4: 2.781 Golden-Proben byte-identisch. T4: 129 Backend-/Pakettests bestanden und Leseprobe auf archiviertem GSV-Bild belegt. [Validierung](VALIDATION.md#sensor-p0-2026-11-27)
+- Außerhalb der Sandbox bestanden 394 gezielte Tests (Sensoren-Tab, Konsole, Eingabefokus, Onboarding-Backend, Pakete, Live-API, Installationskonfiguration) mit `-n 4`.
+- raspi06: Paket ohne KI und mit Claude-Agent erzeugt, statisch geprüft und aktiviert. [Laborjournal](lab_journal.md#sensor-p0-onboarding-2026-11-27)
+- Offen bleiben die volle Suite auf dem Integrationsstand, der erste Lauf mit Kamera am Aufbau und Review/Merge nach `master` durch Leonhard. Die Ergänzung von `Konzept.md` braucht seine Freigabe.
 
 ## GitHub-Einstieg
 

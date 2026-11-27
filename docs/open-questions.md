@@ -72,6 +72,8 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-69](#oq-69) | — | teilweise geklärt | Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage? |
 | [OQ-70](#oq-70) | — | teilweise geklärt | Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen? |
 | [OQ-81](#oq-81) | — | offen | Wie startet die Rastersuche bei HD44780-Anzeigen ohne festes Plus in Zelle 0? |
+| [OQ-82](#oq-82) | — | offen | Wer hebt Sensorpakete auf verifiziert, nach welchem Kriterium? |
+| [OQ-83](#oq-83) | — | offen | Wie kennzeichnet die Ausgabe an GSVmulti Werte eines vorläufigen Sensorpakets? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3960,3 +3962,31 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   Ziffernzelle gegen einen Fit ohne Zeichenanker prüfen. Kandidaten mit
   Verschiebung um eine ganze Zelle müssen erkennbar abgelehnt werden.
 * **Zielort:** [Validierung](VALIDATION.md) und [Projekt-Historie](project_history.md).
+
+---
+
+<span id="oq-82"></span>
+
+## OQ-82 — Wer hebt Sensorpakete auf verifiziert, nach welchem Kriterium?
+
+* **Status:** offen · **Zuständig:** Leonhard/Labor
+* **Vorabdefault (2026-11-27):** Neue Pakete bleiben bis zur Klärung
+  vorläufig. Es gibt keine automatische Verifizierung.
+* **Zu klären:** Wer entscheidet über die Hochstufung, und welche
+  Prüfbelege sind dafür für ein Gerät und seine Aufstellungen nötig?
+* **Zielort:** [Sensorpakete](SENSOR_PACKAGES.md) und [Validierung](VALIDATION.md).
+
+---
+
+<span id="oq-83"></span>
+
+## OQ-83 — Wie kennzeichnet die Ausgabe an GSVmulti Werte eines vorläufigen Sensorpakets?
+
+* **Status:** offen · **Zuständig:** ME-Systeme intern
+* **Befund (2026-11-27):** Werkbank und Laufaudit führen `sensor_status`.
+  Die Kennzeichnung in GSVmulti hängt von den unterstützten
+  Ausgabeformaten ab. [OQ-07](#oq-07)
+* **Zu klären:** Welche Kennzeichnung bleibt beim Import und in der
+  Kalibrierauswertung erhalten? Einen dokumentierten Weg bis in die
+  Auswertung prüfen.
+* **Zielort:** [GSVmulti-Anbindung](GSVMULTI_PROTOCOL.md).

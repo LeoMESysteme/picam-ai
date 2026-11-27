@@ -6,6 +6,7 @@
 | --- | --- |
 | **Einen Pi erstmals einrichten** | [Installation in einer Zeile](INSTALLER.md#installation-in-einer-zeile) · [Timing kalibrieren](INSTALLER.md#timing-kalibrieren) |
 | **Anzeige bestätigen und ersten Lauf starten** | [Anzeige einrichten](anleitung/10-kamera-livevorschau.md#anzeige-einrichten) · [Lauf und Wertstatus](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus) |
+| **Einen neuen Sensor hinzufügen** | [Assistent in der Konsole](SENSOR_PACKAGES.md#neuen-sensor-hinzufuegen) · [Paketformat und Grenzen](SENSOR_PACKAGES.md) |
 | **Eine Meldung einordnen** | [Typische Werkbank-Fehler](anleitung/10-kamera-livevorschau.md#typische-fehler) · [Kamera-Inbetriebnahme](CAMERA_COMMISSIONING.md) |
 | **Messwerte in GSVmulti übertragen** | [Ausgabewege](GSVMULTI_PROTOCOL.md#ausgabewege) · [Windows-Brücke einrichten](GSVMULTI_PROTOCOL.md#gsvmulti-start) |
 | **Ergebnisse prüfen** | [Laufdateien](anleitung/10-kamera-livevorschau.md#dateien-und-lokale-bedienung) · [Session-Explorer](session-explorer.md) · [Zeitstempel](uebersicht/zeitstempel.md) |
