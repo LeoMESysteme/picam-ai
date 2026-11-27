@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "generated": "2026-11-27T15:55:52Z",
+  "sensors": [
+    {
+      "id": "gsv-s2a-test",
+      "version": 1,
+      "status": "provisional",
+      "display_name": "GSV-S2A(Test)",
+      "manufacturer": "ME-MEßsysteme",
+      "aliases": [],
+      "unit": "mV/V",
+      "family": "hd44780_5x8",
+      "polarity": "dark_on_light",
+      "example": "",
+      "files": {
+        "sensor.json": "edc2c31dd1a2c4ed36b78d1bd9c132a523b27f229155ed8b8d2c3e63d7e7d3d8",
+        "display.json": "65d326536047056e82579cb91bb9dd46266e6d25b06cd8558c8ed3801abdb869",
+        "templates.json": "6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a"
+      },
+      "submitted": "2026-11-27T15:55:52Z",
+      "checks": {
+        "runs": 0
+      }
+    }
+  ]
+}

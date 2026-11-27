@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "version": 1,
+  "id": "gsv-s2a-test",
+  "device_id": "gsv-s2a-test",
+  "status": "provisional",
+  "display_name": "GSV-S2A(Test)",
+  "manufacturer": "ME-MEßsysteme",
+  "aliases": [],
+  "unit": "mV/V",
+  "templates": {
+    "file": "templates.json",
+    "sha256": "6f20dec4f558e98be41203d0ab48eb4788d16e02c1350313a740c25cc03f693a"
+  },
+  "release_notice": "Anzeigefamilie HD44780 5×8. Einheit durch Bediener zu bestätigen."
+}
