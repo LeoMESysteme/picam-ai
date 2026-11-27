@@ -504,10 +504,18 @@ def parser() -> argparse.ArgumentParser:
     cal.add_argument('--yes', '-y', action='store_true', help='ohne Rückfrage (Import: ohne Eingabe)')
     sub.add_parser('url', help='Adresse der Werkbank')
     sub.add_parser('tui', help='Verwaltungskonsole öffnen')
+    from .sensor_cli import add_commands
+
+    add_commands(sub.add_parser('sensor', help='Sensorpakete verwalten und einrichten'))
     return root
 
 
 def main(argv=None) -> int:
+    rpc = os.environ.get('PICAM_SENSOR_AGENT_RPC')
+    if rpc:
+        from dispread.sensors.agent import request_tool
+
+        return request_tool(list(sys.argv[1:] if argv is None else argv), Path(rpc))
     try:
         args = parser().parse_args(argv)
     except SystemExit as error:
@@ -523,6 +531,10 @@ def main(argv=None) -> int:
             print(f'picam {probes.fact_version(instance).value}')
             return EXIT_OK
         command = args.command
+        if command == 'sensor':
+            from .sensor_cli import main as sensor_main
+
+            return sensor_main(args, instance)
         interactive = sys.stdin.isatty() and sys.stdout.isatty() and os.environ.get('TERM') != 'dumb'
         if command == 'tui' or (command is None and interactive and not args.ascii):
             choose_color_system()

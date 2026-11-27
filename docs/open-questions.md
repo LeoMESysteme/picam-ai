@@ -71,6 +71,7 @@ deren Reihenfolge. Darunter stehen alle übrigen Fragen.
 | [OQ-67](#oq-67) | — | offen | Warum fehlte einmal das written-Ereignis im kombinierten Zustands-/COM-Test? |
 | [OQ-69](#oq-69) | — | teilweise geklärt | Warum findet die Rastersuche im lesbaren Einrichtungsbild keine Startlage? |
 | [OQ-70](#oq-70) | — | teilweise geklärt | Warum scheitert die Einrichtung trotz gültigem Raster an den Nachführbereichen? |
+| [OQ-81](#oq-81) | — | offen | Wie startet die Rastersuche bei HD44780-Anzeigen ohne festes Plus in Zelle 0? |
 | [OQ-01](#oq-01) | — | geklärt | Welches serielle Format akzeptiert die eingesetzte GSVmulti-Version? |
 | [OQ-08](#oq-08) | — | geklärt | An welchem CAM-Anschluss hängt die Kamera? |
 | [OQ-12](#oq-12) | — | geklärt | Was ohne angeschlossene Kamera nicht verifizierbar war |
@@ -3944,3 +3945,18 @@ bietet: **Code-zu-Glyph-Paare** zur Klärung der Zeichensatz-ROM-Variante
   den Pi nach Bestätigung neu starten und seine Zuordnung in der Konsole
   mit sysfs vergleichen. TX mit passendem Pegelwandler am Empfänger prüfen.
 * **Zielort:** [Hardwareprofil](HARDWARE_PROFILE.md#pi-5-uarts-an-der-40-poligen-stiftleiste).
+
+
+<span id="oq-81"></span>
+
+## OQ-81 — Wie startet die Rastersuche bei HD44780-Anzeigen ohne festes Plus in Zelle 0?
+
+* **Status:** offen · **Zuständig:** ME-Systeme
+* **Befund (2026-11-27):** Der Paketgenerator lehnt solche Anzeigen ab.
+  Der vorhandene Rasterstart und die Rasterbelege erwarten die
+  Plus-Glyphe in Zelle 0.
+* **Günstigstes Experiment:** Reale Aufnahmen ohne Plus-Anker mit
+  bestätigtem Quad sammeln. Einen Rasterstart über eine sichtbare
+  Ziffernzelle gegen einen Fit ohne Zeichenanker prüfen. Kandidaten mit
+  Verschiebung um eine ganze Zelle müssen erkennbar abgelehnt werden.
+* **Zielort:** [Validierung](VALIDATION.md) und [Projekt-Historie](project_history.md).

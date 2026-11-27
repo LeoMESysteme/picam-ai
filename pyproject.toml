@@ -36,6 +36,7 @@ exclude = ["dispread.data", "dispread.data.*"]
 [tool.setuptools.package-data]
 "dispread" = ["data/sensors/**/*.json", "data/sensors/**/*.md"]
 "dispread.workbench" = ["static/*", "static/vendor/fonts/*", "static/live/*", "static/live/*/*"]
+"dispread.sensors" = ["agent_prompt.md"]
 
 [tool.ruff]
 line-length = 120

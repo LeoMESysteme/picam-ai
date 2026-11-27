@@ -31,7 +31,7 @@ RELEASE_NOTICE = _DEFAULT_SENSOR.release_notice
 
 def resolve_templates_path(definition: SensorDefinition, configured: Path | None) -> Path:
     """Waehlt die Paketvorlage auch fuer fehlende Pfade aelterer Installationen."""
-    if configured is None:
+    if configured is None or definition.id != _DEFAULT_SENSOR.id:
         return definition.templates_path
     if (definition.id == _DEFAULT_SENSOR.id
             and any(configured.parts[-len(suffix):] == suffix for suffix in _LEGACY_TEMPLATE_SUFFIXES)

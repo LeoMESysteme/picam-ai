@@ -14,7 +14,7 @@ from pathlib import Path
 
 from dispread.gsv2as_serial import REFERENCE_PORT
 from dispread.hardware_ports import GSV_UART_PORT, validate_port_pair
-from dispread.sensors import get_sensor
+from dispread.sensors import get_sensor, local_root
 
 _PATHS = {
     'data': 'directory', 'live_data': 'directory', 'socket': 'socket',
@@ -155,7 +155,7 @@ def parse_config(config, base):
     live = {}
     for name, value in config.get('live', {}).items():
         if name == 'sensor':
-            live[name] = get_sensor(_text(value, 'live.sensor')).id
+            live[name] = get_sensor(_text(value, 'live.sensor'), instance=workbench).id
         else:
             live[name] = _path(value, f'live.{name}', base, 'file')
     return workbench, live, 'live' in config
@@ -163,21 +163,33 @@ def parse_config(config, base):
 
 def apply_config(args, argv=None):
     """Apply a serve TOML file, preserving options explicitly passed on the CLI."""
-    if getattr(args, 'command', None) != 'serve' or getattr(args, 'config', None) is None:
+    if getattr(args, 'command', None) != 'serve':
         return args
-    source = Path(args.config)
+    source = getattr(args, 'config', None)
+    if source is None:
+        source = dev_sensor_config(args.data)
+        if not source.is_file():
+            return args
+    explicit = _explicit_options(sys.argv[1:] if argv is None else argv)
     try:
-        source = source.resolve()
+        source = Path(source).resolve()
         values, live, has_live = load_config(source)
         if has_live:
             from dispread.live.session import LiveConfig
 
-            values['live_config'] = LiveConfig(**live)
+            data = {name: getattr(args, name) if name in explicit else values.get(name)
+                    for name in ('data', 'live_data')}
+            if getattr(args, 'config', None) is None:
+                data['data'] = args.data
+            values['live_config'] = LiveConfig(**live, sensor_root=local_root(data))
     except (OSError, ValueError, RuntimeError) as error:
         raise ValueError(f'Konfiguration {source}: {error}') from error
-    explicit = _explicit_options(sys.argv[1:] if argv is None else argv)
     for name, value in values.items():
         if name not in explicit:
             setattr(args, name, value)
     return args
 
+
+def dev_sensor_config(data) -> Path:
+    """Konfiguration der Sensorauswahl fuer Starts ohne --config."""
+    return local_root({'data': data}).parent / 'sensor-config.toml'

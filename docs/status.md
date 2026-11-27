@@ -1,5 +1,24 @@
 # Status und Übergabe — 2026-11-27
 
+## Sensorpakete P0 im Worktree `sensor-p0`
+
+Der Backend-Durchstich reicht von `picam sensor onboard` über Bedienerfragen
+und Paketprüfung bis zur gespeicherten Auswahl `live.sensor`. Ein
+Werkbank-Neustart übernimmt die Einstellung. Der Live-Status und das Audit
+tragen bei lokalen Paketen den Status `provisional`. Probe und Messwert
+aus einer archivierten GSV-2AS-Aufnahme stehen in der
+[Validierung](VALIDATION.md#sensor-p0-2026-11-27). Der Golden-Vergleich
+blieb für alle 2.781 GSV-2AS-Proben byte-identisch. Die gezielte
+Backend-/Paketauswahl bestand 129 Tests. Sechs lokale HTTP-Tests und der
+Browser-Testserver scheiterten beim Öffnen des TCP-Sockets in der Sandbox.
+In der getrennten TUI-Prüfung meldete der Pilot-Test zum Fragenablauf
+einen Klick außerhalb des sichtbaren Bereichs.
+
+Die Entwicklung liegt auf `feat/sensor-p0` im Arbeitsbaum. Für die
+Integration stehen der gemeinsame TUI-Durchlauf mit realem Agenten und der
+erste Lauf am Aufbau aus. Der Paketgenerator verlangt für P0 ein festes
+Plus in Zelle 0. [OQ-81](open-questions.md#oq-81)
+
 ## GitHub-Einstieg
 
 Leonhard hat den GitHub-Quickstart für `master` freigegeben. Er führt vom

@@ -89,13 +89,15 @@ class LiveConfig:
     confirm_frames: int = 2
     clock_interval_s: float = 60.0
     sensor: str = DEFAULT_SENSOR_ID
+    sensor_root: Path | None = None
     definition: SensorDefinition = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        definition = get_sensor(self.sensor)
+        instance = {"sensor_root": self.sensor_root}
+        definition = get_sensor(self.sensor, instance=instance)
         configured = Path(self.templates) if self.templates is not None else None
         path = resolve_templates_path(definition, configured)
-        if configured is not None and configured != path:
+        if definition.id == DEFAULT_SENSOR_ID and configured is not None and configured != path:
             _LOG.warning("Alte Vorlagendatei %s fehlt; verwende Paketvorlage %s", configured, path)
         object.__setattr__(self, "definition", definition)
         object.__setattr__(self, "templates", path)
@@ -197,7 +199,8 @@ def build_live_pipeline(
     elif locator is None:
         locator = TrackedQuadLocator(image, profile.quad)
     gate = ReleaseGate(
-        default_gate_config(BACKEND_ID, confirm_frames=cfg.confirm_frames, expected_unit=cfg.unit)
+        default_gate_config(BACKEND_ID, confirm_frames=cfg.confirm_frames, expected_unit=cfg.unit,
+                            require_decimal_point=cfg.definition.display.format.decimal == "point")
     )
     pipeline = Pipeline(
         source=source,
@@ -464,6 +467,7 @@ class LiveSession:
             "session_id": profile.session_id,
             "device_id": profile.device_id,
             "sensor": cfg.definition.profile_ref,
+            **({"sensor_status": "provisional"} if cfg.definition.status == "provisional" else {}),
             "profile": {"path": str(self._profile_path), "sha256": _sha256(self._profile_path)},
             "templates": {"path": str(cfg.templates), "sha256": cfg.templates_sha256},
             "timing_calibration": {
@@ -477,7 +481,8 @@ class LiveSession:
             "camera": owner_status.get("source", {}),
             "release_notice": cfg.definition.release_notice,
             "started_at_utc": self._wall().isoformat(),
-            "audit": {"rotation": False, "path": "records.jsonl"},
+            "audit": {"rotation": False, "path": "records.jsonl",
+                      **({"sensor_status": "provisional"} if cfg.definition.status == "provisional" else {})},
         }
         confirmation_path = self._profile_path.parent / "confirmation.json"
         if confirmation_path.exists():

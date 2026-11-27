@@ -472,7 +472,7 @@ def fact_templates(instance: Instance) -> Fact:
     if instance.kind == 'none' or (instance.problem and instance.config):
         return Fact('vorlage', 'Lesevorlage', UNKNOWN, 'unbekannt')
     try:
-        definition = get_sensor(instance.sensor)
+        definition = get_sensor(instance.sensor, instance=instance)
         configured = Path(instance.templates) if instance.templates else None
         path = resolve_templates_path(definition, configured)
     except (OSError, ValueError) as exc:
@@ -484,6 +484,8 @@ def fact_templates(instance: Instance) -> Fact:
         return Fact('vorlage', 'Lesevorlage', FAIL, 'verändert', [('Datei', str(path))],
                     hint='Prüfsumme stimmt nicht. Vorlage aus dem Release wiederherstellen.')
     details = [('Datei', str(path)), ('SHA-256', 'stimmt')]
+    if definition.status == 'provisional':
+        return Fact('vorlage', 'Lesevorlage', WARN, 'vorläufiges Sensorpaket', details)
     if configured is not None and configured != path:
         details.append(('Paketvorlage verwendet', f'Alte Vorlagendatei {configured} fehlt'))
     return Fact('vorlage', 'Lesevorlage', OK, 'geprüft', details)

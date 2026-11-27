@@ -42,7 +42,7 @@ from dispread.live.frame_tracking import (
 )
 from dispread.live.texts import REASONS
 from dispread.rectify import rectify
-from dispread.sensors import get_sensor
+from dispread.sensors import SensorDefinition, get_sensor
 from dispread.session_profile import PROFILE_SCHEMA_VERSION, SessionProfile
 from dispread.setup_checks import check_setup, diagnose_reader, display_defect_check, raster_offset_check
 from dispread.setup_hint import GREEN_HUE_MAX, GREEN_HUE_MIN, MIN_SATURATION, MIN_VALUE, find_green_hint_box
@@ -786,6 +786,7 @@ def assist_measure(
     info: Callable[[str], None] = lambda _message: None,
     sleep: Callable[[float], None] | None = None,
     monotonic: Callable[[], float] | None = None,
+    definition: SensorDefinition | None = None,
     should_stop: Callable[[], bool] | None = None,
 ) -> AssistResult:
     """Zwei Standbilder mit Zellentext, Punktraster, 2j und Setup-Pruefungen.
@@ -806,6 +807,7 @@ def assist_measure(
     if fit_attempts < 1:
         raise SetupError("Startsuche braucht mindestens einen Versuch")
 
+    empty_cells = GSV2AS_EMPTY_CELLS if definition is None else definition.display.empty_cells
     stability_frames: list[np.ndarray] = []
 
     def capture_text(attempt: int, still: str) -> tuple[np.ndarray, str]:
@@ -852,7 +854,7 @@ def assist_measure(
                 _keep_attempt_still(out_dir, attempt)
                 continue
             raise SetupError("Kein gruener Bereich mit Punktstruktur gefunden; bitte --hint-box angeben")
-        fit = fit_lattice(first, hint_box, empty_cells=GSV2AS_EMPTY_CELLS)
+        fit = fit_lattice(first, hint_box, empty_cells=empty_cells)
         if on_attempt is not None:
             on_attempt({"attempt": attempt, "still": "still", "masked": first_text,
                         "fit": fit if isinstance(fit, str) else "ok"})
@@ -914,7 +916,7 @@ def assist_measure(
         old_heldout = raster_offset_check([(second, second_text)], original_quad)
         new_heldout = raster_offset_check([(second, second_text)], candidate_quad)
         if heldout_improves(old_heldout, new_heldout):
-            revised = evaluate_quad(first, hint_box, candidate_quad, empty_cells=GSV2AS_EMPTY_CELLS)
+            revised = evaluate_quad(first, hint_box, candidate_quad, empty_cells=empty_cells)
             if isinstance(revised, str):
                 raise SetupError(f"Verbessertes Raster-Quad abgelehnt: {revised}; kein Vorschlag")
             fit = revised
@@ -946,7 +948,7 @@ def assist_measure(
     reader_check = None
     if templates is not None:
         reader_check = diagnose_reader(reader_frame_texts, fit.quad, templates, templates_sha256,
-                                       reference_kind=reference_kind)
+                                       reference_kind=reference_kind, **({"definition": definition} if definition is not None else {}))
     return AssistResult(
         first=first, second=second, first_text=first_text, second_text=second_text, hint_box=hint_box,
         fit=fit, offset_check=offset_check, final_checks=final_checks, reader_check=reader_check,

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 GSV2AS_FORMAT_RULE = "gsv2as_v1"
+CHAR_NUMBER_FORMAT_RULE = "char_number_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,8 @@ class FormatDefinition:
     digits: int
     sign_chars: tuple[str, ...]
     leading_zero_rule: str
+    decimal: str = "point"
+    min_digits: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +56,7 @@ class DisplayDefinition:
     rows: int
     lattice: LatticeDefinition
     roles: RolesDefinition
-    anchor: AnchorDefinition
+    anchor: AnchorDefinition | None
     format: FormatDefinition
 
     @property

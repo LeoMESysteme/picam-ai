@@ -211,17 +211,22 @@ VALIDATE = "src/dispread/validate.py"
 DOTMATRIX = "src/dispread/ocr/dotmatrix.py"
 FONT = "src/dispread/ocr/dotmatrix_font.py"
 TEMPLATES = "src/dispread/ocr/dotmatrix_templates.py"
+GSV_DISPLAY = "src/dispread/data/sensors/gsv2as-161a/display.json"
+
+
+def _gsv_roles() -> dict:
+    return json.loads(_source(GSV_DISPLAY))["roles"]
 
 FACTS = {
     "layout.classified_cells": (
-        "src/dispread/layout.py:CharLayout.classified_cells",
+        f"{GSV_DISPLAY}:roles (sign, number, separator)",
         ["erkennung-raster", "erkennung-format"],
-        lambda: field_default("src/dispread/layout.py", "CharLayout", "classified_cells"),
+        lambda: sum(len(_gsv_roles()[role]) for role in ("sign", "number", "separator")),
     ),
     "layout.blank_cells": (
-        "src/dispread/layout.py:CharLayout.blank_cells",
+        f"{GSV_DISPLAY}:roles.blank",
         ["erkennung-raster", "erkennung-format"],
-        lambda: list(field_default("src/dispread/layout.py", "CharLayout", "blank_cells")),
+        lambda: _gsv_roles()["blank"],
     ),
     "record.fields": (
         f"{RECORDS}:ValueRecord (die neun Pflichtfelder aus Konzept §8)",

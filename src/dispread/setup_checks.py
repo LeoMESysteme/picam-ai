@@ -31,7 +31,8 @@ from dispread.layout import CharLayout
 from dispread.ocr.dotmatrix import DotMatrixReader
 from dispread.ocr.dotmatrix_sampling import SHIFTS, SampledImage, background_opening, raw_cell_depths, sample_image
 from dispread.rectify import rectify
-from dispread.sensors import get_sensor
+from dispread.sensors import SensorDefinition, get_sensor
+from dispread.sensors.definitions import CHAR_NUMBER_FORMAT_RULE
 
 _DEFAULT_SENSOR = get_sensor()
 _DISPLAY = _DEFAULT_SENSOR.display
@@ -461,12 +462,13 @@ def never_exact_hint(notes: list[dict]) -> str:
 
 def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[float]],
                     template_path: Path, template_sha256: str, *,
-                    reference_kind: str = 'eingabe') -> CheckResult:
+                    reference_kind: str = 'eingabe', definition: SensorDefinition = _DEFAULT_SENSOR) -> CheckResult:
     """Vergleicht Zellentscheidungen mit dem Solltext, ohne Lesewerte zu korrigieren."""
     if not frames:
         raise ValueError('Mindestens ein Standbild ist fuer das Gegenlesen erforderlich')
     reader = DotMatrixReader.from_file(Path(template_path), template_sha256)
-    layout = CharLayout.from_definition(_DEFAULT_SENSOR, grid=GRID)
+    layout = CharLayout.from_definition(definition, grid=GRID)
+    generic = definition.display.format.rule == CHAR_NUMBER_FORMAT_RULE
     reasons: dict[str, int] = {}
     masked_cells: list[list[int]] = []
     contradictions: list[dict] = []
@@ -476,13 +478,24 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
     depths = []
     for frame_index, (frame, reference) in enumerate(frames):
         if len(reference) != layout.classified_cells:
-            raise ValueError('Gegenlesen braucht neun Referenzzellen')
+            raise ValueError(f'Gegenlesen braucht {layout.classified_cells} Referenzzellen' if generic
+                             else 'Gegenlesen braucht neun Referenzzellen')
         masked = [i for i, ch in enumerate(reference) if ch == '?']
         masked_cells.append(masked)
         crop = rectify(frame, quad, target_size=TARGET_SIZE).image
         result = reader.read(crop, layout)
         diag = result.diagnostics
-        reason, frame_contradictions, note = _frame_verdict(diag, reference, frame_index, reference_kind)
+        if generic:
+            cells = diag.get('cells', ())
+            frame_contradictions = [
+                {'frame': frame_index, 'cell': i, 'read': cell['text'], 'reference': ch}
+                for i, (ch, cell) in enumerate(zip(reference, cells, strict=False))
+                if cell['text'] not in (None, ch)
+            ]
+            reason = 'zelle_widerspricht_referenz' if frame_contradictions else diag.get('reject_reason')
+            note = None
+        else:
+            reason, frame_contradictions, note = _frame_verdict(diag, reference, frame_index, reference_kind)
         verdicts.append([reason, frame_contradictions, note])
         observations.append([crop, reference, diag, reason])
         depths.append(raw_cell_depths(sample_image(_gray(crop), GRID, range(layout.classified_cells))).tolist())
@@ -537,7 +550,7 @@ def diagnose_reader(frames: Sequence[tuple[np.ndarray, str]], quad: list[list[fl
         metrics['tolerance'] = {'possible': False, 'factor': None, 'max_d_best': None, 'd_max': None,
                                 'reason': NEVER_EXACT_CODE, 'reference_kind': reference_kind}
         metrics['hinweis'] = ' '.join(filter(None, (metrics.get('hinweis'), NEVER_EXACT_TOLERANCE)))
-    elif status == 'WARNUNG':
+    elif status == 'WARNUNG' and not generic:
         tolerance = _tolerance_proposal(observations, reader, layout, template_path, template_sha256, reference_kind)
         metrics['tolerance'] = tolerance
         if tolerance['possible']:

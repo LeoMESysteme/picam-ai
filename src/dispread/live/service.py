@@ -7,6 +7,7 @@ oder tiefer (Spec 2026-10-12 §1/§3).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
@@ -45,6 +46,8 @@ from dispread.live.storage import (  # noqa: F401 (Wiederexport)
 from dispread.live.texts import LIVE_CAUSE_TEXT, REASONS, live_cause
 from dispread.records import ValueStatus
 from dispread.sensors import get_sensor
+from dispread.sensors.definitions import CHAR_NUMBER_FORMAT_RULE
+from dispread.sensors.formats import setup_reference
 from dispread.session_profile import SessionProfile
 from dispread.setup_checks import RESOLUTION_ERROR_PX
 
@@ -355,6 +358,8 @@ class LiveService:
 
     def setup_reference_status(self) -> dict:
         """Ob die Einrichtung den Wert seriell vom GSV-2AS lesen kann (nur Pfadpruefung)."""
+        if self._config.definition.display.format.rule == CHAR_NUMBER_FORMAT_RULE:
+            return {"serial_present": False, "port": self._reference_port}
         try:
             present = bool(self._reference_present())
         except OSError:
@@ -467,7 +472,12 @@ class LiveService:
                 "output_port": self._output_port or GSV_UART_PORT,
                 "output_port_managed": self._output_port is not None,
                 "camera": self._owner.status(),
-                "release_notice": self._config.definition.release_notice,
+                "release_notice": (
+                    "Vorläufiger Sensor – Messwerte für dieses Gerät sind nicht validiert. "
+                    + self._config.definition.release_notice
+                    if self._config.definition.status == "provisional" else self._config.definition.release_notice
+                ),
+                **({"sensor_status": "provisional"} if self._config.definition.status == "provisional" else {}),
                 "session_id": None if self._session_dir is None else self._session_dir.name,
                 "setup": setup,
                 "profile": self._profile_info,
@@ -514,6 +524,22 @@ class LiveService:
         """Werkzeugzugriff teilt die Kodierung mit dem Vorschau-Strom."""
         frame = self.preview_frame()
         return frame.jpeg if frame is not None else None
+
+    def confirmed_capture(self) -> tuple[bytes, dict]:
+        """Bestaetigtes Referenzbild und das zugehoerige Profil fuer eine Probelesung."""
+        with self._lock:
+            profile_path = self._profile_path
+        if profile_path is None:
+            raise LiveError("Zuerst die Einrichtung in /live bestaetigen")
+        try:
+            profile = SessionProfile.load(profile_path)
+            reference = profile.reference_frame or {}
+            original = Path(reference["path"]).read_bytes()
+            if hashlib.sha256(original).hexdigest() != reference.get("sha256"):
+                raise ValueError("Pruefsumme des Referenzbilds stimmt nicht")
+        except (OSError, ValueError, KeyError) as error:
+            raise LiveError(f"Bestaetigtes Referenzbild nicht lesbar: {error}") from error
+        return original, profile.to_dict()
 
     def setup_file(self, name: str) -> Path | None:
         if name not in OVERLAYS or self._session_dir is None:
@@ -643,7 +669,13 @@ class LiveService:
             text = None
             if cell_text is not None and not (isinstance(cell_text, str) and not cell_text.strip()):
                 try:
-                    text = normalize_cell_text(cell_text)
+                    definition = self._config.definition
+                    if definition.display.format.rule == CHAR_NUMBER_FORMAT_RULE:
+                        if not isinstance(cell_text, str):
+                            raise ValueError("Zeichenfolge erwartet")
+                        text = setup_reference(cell_text, definition)
+                    else:
+                        text = normalize_cell_text(cell_text)
                 except ValueError as exc:
                     raise LiveError(f"Zellentext: {exc}") from exc
             elif not self.setup_reference_status()["serial_present"]:
@@ -838,7 +870,7 @@ class LiveService:
     def _open_serial(self) -> Any:
         import serial
 
-        return serial.Serial(self._reference_port, live_setup.SERIAL_BAUDRATE, timeout=2.0)
+        return serial.Serial(self._reference_port, live_setup.SERIAL_BAUDRATE, timeout=2.0, exclusive=True)
 
     def _run_setup(self, *, session_dir: Path, cell_text: str | None, report: Callable[[str], None]) -> dict:
         """Fokus -> feste Kamera -> Displaybelichtung -> Standbilder -> Vorschlag."""
@@ -991,6 +1023,8 @@ class LiveService:
                 on_attempt=save_attempt,
                 templates=self._config.templates,
                 templates_sha256=self._config.templates_sha256,
+                **({"definition": self._config.definition}
+                   if self._config.definition.display.format.rule == CHAR_NUMBER_FORMAT_RULE else {}),
                 reference_kind="seriell" if cell_text is None else "eingabe",
                 report=self._report_setup_checks,
                 on_phase=self._report_setup_phase,
@@ -1296,6 +1330,8 @@ class LiveService:
                             "run_id": run_id, "run_dir": out_dir.name,
                             "session_id": profile_path.parent.name,
                             "sensor": self._config.definition.profile_ref,
+                            **({"sensor_status": "provisional"}
+                               if self._config.definition.status == "provisional" else {}),
                             "profile": {"path": str(profile_path)}, "focus_check": focus_check,
                         }
                         (out_dir / "session.json").write_text(

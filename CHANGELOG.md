@@ -5,6 +5,14 @@ was ist die Konsequenz.
 
 ## Unveröffentlicht
 
+* 2026-11-27: `picam sensor` kann HD44780-Anzeigen einrichten, vorläufige
+  Sensorpakete aus einem Zellbeispiel erzeugen und den aktiven Sensor setzen.
+  Der Assistent arbeitet mit Bedienerbestätigung, optional über Claude oder
+  Codex. Die Werkbank übernimmt die Auswahl beim Neustart und kennzeichnet
+  vorläufige Pakete im Status und im Laufaudit. Die vorhandene Rastersuche
+  verlangt ein festes Plus in Zelle 0. Die Projekt-Tour übernimmt ihre
+  GSV-2AS-Zellrollen aus der Paketdatei.
+
 * 2026-11-27: Das Sensorpaket `gsv2as-161a@1` enthält die Gerätebeschreibung,
   das Displayraster und die geprüften Stufe-2c-Vorlagen. Wheel und Releasearchiv
   liefern das Paket mit. Release-Bau und Veröffentlichung benötigen keine

@@ -66,6 +66,7 @@ class GateConfig:
     )
     #: Erwartete Einheit aus dem bestaetigten Profil.
     expected_unit: str | None = None
+    require_decimal_point: bool = True
 
 
 _READER_OWN_THRESHOLDS = frozenset({"dotmatrix"})
@@ -176,7 +177,7 @@ class ReleaseGate:
             reasons.append("sign_region_unreadable")
 
         # --- Dezimalpunkt: eigenstaendiges Kriterium -------------------------
-        if not read.decimal_point_detected and not reader_reason:
+        if cfg.require_decimal_point and not read.decimal_point_detected and not reader_reason:
             reasons.append("decimal_point_unknown")
 
         # --- Einheit: bestaetigt oder abgelehnt ------------------------------

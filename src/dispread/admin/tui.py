@@ -174,7 +174,7 @@ class HelpScreen(InfoScreen):
     KEYS = (
         ('Tab  ⇧Tab', 'nächster / voriger Tab (oder Klick auf den Tab)'),
         ('1 … 9  0', 'Dashboard, Lauf, Dienst, Kamera, Ausgabe, Zertifikat, Speicher, Netzwerk, UART, Konto'),
-        ('l   c', 'Protokoll, Einstellungen'),
+        ('l   o   c', 'Protokoll, Sensoren, Einstellungen'),
         ('↑ ↓ ← →', 'im Tab: Knopf, Listeneintrag oder Feld wählen'),
         ('Enter', 'Knopf oder Listeneintrag auslösen'),
         ('i', 'Erklärung zum aktuellen Tab'),

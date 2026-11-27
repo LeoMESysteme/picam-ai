@@ -175,6 +175,15 @@ def _dev_from_argv(argv: list[str], workdir: str | None) -> Instance:
                         calibration=absolute(str(DEFAULT_CALIBRATION)),
                         root=str(base))
     instance.pam_user = os.environ.get('USER')
+    from dispread.workbench.config import dev_sensor_config, load_config
+
+    sensor_config = dev_sensor_config(instance.data)
+    if sensor_config.is_file():
+        try:
+            _, live, _ = load_config(sensor_config)
+            instance.sensor = live.get('sensor', DEFAULT_SENSOR_ID)
+        except (OSError, ValueError) as error:
+            instance.problem = f'Sensorkonfiguration {sensor_config}: {error}'
     return instance
 
 
