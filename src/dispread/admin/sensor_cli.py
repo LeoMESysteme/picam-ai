@@ -148,8 +148,16 @@ def _run_none(run, instance, data, source):
     else:
         run.step('schnittstelle', 'skipped')
     run.step('kamera', 'running')
-    capture = sensor.capture(run, instance, source)
-    run.step('kamera', 'done', capture['path'])
+    try:
+        capture = sensor.capture(run, instance, source)
+    except OnboardingCancelled:
+        raise
+    except Exception as error:  # Kamera fehlt/belegt: Lauf geht ohne Standbild weiter
+        # Das Standbild dient nur der Vorschau und Probelesung; die Einrichtung
+        # mit Kamera folgt ohnehin in /live. Ohne Bild prueft check statisch.
+        run.step('kamera', 'skipped', f'Kein Standbild: {error}. Einrichtung später in /live.')
+    else:
+        run.step('kamera', 'done', capture['path'])
     run.step('format', 'running')
     example = data.get('example')
     if not example:

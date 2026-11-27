@@ -14,7 +14,6 @@ import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
-from urllib.parse import urlencode
 
 from . import bundled_sensors, get_sensor, load_definition, local_root, registry_with_errors, templates
 from .definitions import CHAR_NUMBER_FORMAT_RULE
@@ -161,10 +160,11 @@ def capture(run: RunDir, instance, source: str | None = None, *, confirmed: bool
             raise ValueError('Werkbank haelt die Kamera, liefert aber kein Bild. Vorschau in /live pruefen.')
     if image is None:
         if source is None:
-            settings = run.work_dir / 'capture-camera.json'
-            _write_json(settings, preview_settings().to_dict())
-            source = 'v4l2://?' + urlencode({'settings': str(settings.resolve())})
-        camera = open_source(source)
+            # Wie die Werkbank-Vorschau: nur Format, keine erfundenen Reglerwerte.
+            from dispread.frames.uvc_source import UvcSource
+            camera = UvcSource(preview_settings(), apply_controls=False)
+        else:
+            camera = open_source(source)
         try:
             camera.open()
             image = next(camera.frames()).image
