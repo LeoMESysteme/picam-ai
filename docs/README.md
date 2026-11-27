@@ -1,13 +1,17 @@
 # Dokumentationsübersicht
 
-Die [Startseite](../index.md) führt zu den veröffentlichten Seiten.
-Für Inbetriebnahme und Wartung siehe [Installation und Verwaltung](INSTALLER.md).
-[Messpfad und Freigabe](uebersicht/messpfad.md),
-[Zeitstempel richtig lesen](uebersicht/zeitstempel.md) und
-[Daten und Abnahme](uebersicht/daten-und-abnahme.md) erklären den Messbetrieb.
+## Direkt zur passenden Anleitung
 
-Der [Wiki-Abgleich vom 2026-10-21](wiki-audit-2026-10-21.md) hält Prüfung,
-Korrekturen und offene Befunde für alle 52 Navigationsseiten fest.
+| Was möchtest du tun? | Einstieg |
+| --- | --- |
+| **Einen Pi erstmals einrichten** | [Installation in einer Zeile](INSTALLER.md#installation-in-einer-zeile) · [Timing kalibrieren](INSTALLER.md#timing-kalibrieren) |
+| **Anzeige bestätigen und ersten Lauf starten** | [Anzeige einrichten](anleitung/10-kamera-livevorschau.md#anzeige-einrichten) · [Lauf und Wertstatus](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus) |
+| **Eine Meldung einordnen** | [Typische Werkbank-Fehler](anleitung/10-kamera-livevorschau.md#typische-fehler) · [Kamera-Inbetriebnahme](CAMERA_COMMISSIONING.md) |
+| **Messwerte in GSVmulti übertragen** | [Ausgabewege](GSVMULTI_PROTOCOL.md#ausgabewege) · [Windows-Brücke einrichten](GSVMULTI_PROTOCOL.md#gsvmulti-start) |
+| **Ergebnisse prüfen** | [Laufdateien](anleitung/10-kamera-livevorschau.md#dateien-und-lokale-bedienung) · [Session-Explorer](session-explorer.md) · [Zeitstempel](uebersicht/zeitstempel.md) |
+| **Einen vorhandenen Pi verwalten** | [Dienst und Diagnose](anleitung/09-betrieb.md) · [Update und Rückweg](INSTALLER.md#update-auf-die-neueste-version) |
+
+[Glossar](anleitung/glossar.md) · [Aktueller Stand](status.md) · [Offene Fragen](open-questions.md)
 
 ## Selbst programmieren
 
@@ -34,6 +38,7 @@ Korrekturen und offene Befunde für alle 52 Navigationsseiten fest.
 | [project_history.md](project_history.md) | Entscheidungen, die nicht aus dem Code ersichtlich sind: Problem / Entscheidung / Begründung / Alternativen / Konsequenz |
 | [lab_journal.md](lab_journal.md) | Append-only Laborjournal: Aufbau, Beobachtung, Deutung je Experiment — auch die Fehlversuche |
 | [../CHANGELOG.md](../CHANGELOG.md) | Nach außen sichtbare Änderungen |
+| [Wiki-Abgleich vom 21.10.2026](wiki-audit-2026-10-21.md) | Prüfung und Korrekturen der damaligen Navigationsseiten |
 
 ## Messwerte
 

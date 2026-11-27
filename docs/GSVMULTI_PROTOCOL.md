@@ -4,8 +4,19 @@ weg: entwickeln
 
 # GSVmulti-Anbindung
 
+[Ausgabeweg auswählen](#ausgabewege) · [Windows-Brücke einrichten](#gsvmulti-start) · [Release-Downloads](https://github.com/LeoMESysteme/picam-ai/releases/latest)
+
+Für einen ersten Lauf auf dem Pi kannst du die Ausgabe auf **Aus** lassen.
+Für einen späteren Lauf mit Übertragung wählst du vor dem Start in den
+Laufoptionen den passenden GSVmulti-Weg. **Netzwerk über Brücke** und **UART über Brücke**
+verwenden die Windows-Brücke und ein virtuelles COM-Portpaar.
+**UART direkt** führt vom Pi zum COM-Port in GSVmulti.
+[Ersten Lauf starten](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus)
+
 **Vorher lesen:** [Messpfad und Freigabe](uebersicht/messpfad.md#ausgabe-und-fehlersuche)
 und [Zeitstempel richtig lesen](uebersicht/zeitstempel.md#von-aufnahme-bis-gsvmulti).
+
+<a name="ausgabewege"></a>
 
 ## Stand der Anbindung {#stand-das-format-ist-unbekannt}
 
@@ -63,6 +74,8 @@ belegt das Schreiben an den COM-Port. Erst die GSVmulti-Aufzeichnung zeigt,
 welche Werte das Programm gespeichert hat.
 ([OQ-06](open-questions.md#oq-06), [OQ-47](open-questions.md#oq-47),
 [OQ-50](open-questions.md#oq-50), [OQ-51](open-questions.md#oq-51)).
+
+<a name="gsvmulti-start"></a>
 
 ## Windows-Brücke vorbereiten {#windows-bruecke}
 

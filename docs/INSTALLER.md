@@ -1,10 +1,19 @@
 # Installer für einen separaten Linux-Rechner
 
+[In einer Zeile installieren](#installation-in-einer-zeile) · [Timing kalibrieren](#timing-kalibrieren) · [Screenshots](#screenshots) · [Aktualisieren](#update-auf-die-neueste-version)
+
 Der Installer richtet eine Werkbank in neuen Zielverzeichnissen ein. Für
 eine vorhandene Release-Installation ist [`picam update`](#update-auf-die-neueste-version)
 der Wartungsweg. Bootdateien, Benutzergruppen und Tailscale bleiben bei der
 Installation unverändert. Ein Aufruf mit Angaben auf der Befehlszeile zeigt
 ohne `--apply` den Plan.
+
+**Nach der Installation** die ausgegebene Werkbank-Adresse (`/live`) öffnen,
+die Anzeige [einrichten und bestätigen](anleitung/10-kamera-livevorschau.md#anzeige-einrichten)
+und anschließend das [Timing kalibrieren](#timing-kalibrieren). Die
+Kalibrierung startet die Werkbank neu. Richte die Anzeige danach erneut ein
+und bestätige sie, bevor du den
+[ersten Lauf startest](anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus).
 
 ## Installation in einer Zeile
 
@@ -99,6 +108,22 @@ Konto gehörend, abweichende Dateien vorher als `.vor-picam-<Zeit>`
 gesichert) und einen markierten Block in `~/.bashrc` (gesichert, nur bei
 interaktiven SSH-Logins). Ruft `.bashrc` fastfetch schon auf, bleibt sie
 unverändert. Ein Fehler hier macht die Produktinstallation nicht rückgängig.
+
+## Screenshots
+
+### Abschlusskarte des Installers
+
+Hier stehen die Werkbank-Adresse und das Konto. Mit **Enter** öffnest du
+die Konsole mit der geführten Einrichtung. Die Aufnahme zeigt Beispieldaten.
+
+![Abschlusskarte mit Werkbank-Adresse, Anmeldung, Zertifikat und Enter zum Starten der Konsole](bilder/quickstart/installer-abschluss.png)
+
+### Konsole nach der Installation
+
+Der Einrichtungsassistent zeigt Adresse, Kamera und Timing-Kalibrierung
+nacheinander. Mit `picam --onboarding` kannst du ihn erneut öffnen.
+
+![picam-Konsole im Einrichtungsassistenten, Schritt Kamera und Fokus](quellen/picam-tour-2026-11-25/onboarding-kamera-100x30.svg)
 
 ## Verwalten mit `picam`
 
@@ -383,6 +408,8 @@ Timing-Kalibrierung vom bestehenden Pi. Eine fehlende gültige Kalibrierung
 sperrt weiterhin den Messstart. Softwareinstallation und erreichbare
 Werkbank sind keine Hardware- oder Messabnahme.
 
+<a name="timing-kalibrieren"></a>
+
 ### Timing-Kalibrierung bei der Inbetriebnahme (RS232 nur einmal)
 
 Die Kalibrierung misst die Zeit vom seriellen GSV-2AS-Telegramm bis zur
@@ -426,6 +453,10 @@ messbare Ereignisse, Nulltest bestanden, Kamera stimmt) atomar nach
 der Normierung und Protokoll bleiben unter `<data>/calibration/runs/<Zeit>/`.
 Scheitert die Rückstellung, nennt picam den Befehl
 `picam kalibrieren --rueckstellen <Datei>`.
+
+Nach dem Wiederanlauf die Werkbank im Browser neu öffnen. Vor dem
+ersten Messlauf die Anzeige erneut
+[einrichten und bestätigen](anleitung/10-kamera-livevorschau.md#anzeige-einrichten).
 
 Weitere Wege: `picam kalibrieren --pruefen [DATEI]` prüft eine Datei und
 zeigt ihre Werte; `--import DATEI` übernimmt eine anderswo gemessene Datei

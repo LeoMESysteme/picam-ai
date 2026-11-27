@@ -1,18 +1,88 @@
 # picam-ai · dispread
 
-Optische Auslesung von Messverstärkeranzeigen im Kalibrierlabor. Erkannte
-Werte werden mit Zeitbasis, Freigabestatus und Begründung dokumentiert.
+picam liest die Anzeige eines Messverstärkers mit einer Logitech StreamCam
+und protokolliert die Werte mit Zeitbasis und Freigabestatus. Die Werkbank
+läuft auf dem Raspberry Pi und lässt sich im Browser bedienen.
 
-Auf einem neuen Pi mit Debian/Raspberry Pi OS 13 im Terminal oder per SSH
-mit TTY installieren.
+<div class="wiki-messkette" data-messkette></div>
+
+[Quickstart](#quickstart) · [Hilfe und Doku](#hilfe-und-doku) · [Screenshots](#screenshots) · [Release-Downloads](https://github.com/LeoMESysteme/picam-ai/releases/latest)
+
+## Quickstart
+
+Für den Start brauchst du einen Raspberry Pi 5 mit Raspberry Pi OS 13
+(64 Bit), ein Linux-Konto mit Passwort und `sudo`-Zugang, eine Logitech
+StreamCam an USB 3, einen GSV-2AS mit gut beleuchtetem Display und einen
+USB-RS232-Adapter für die einmalige Timing-Kalibrierung.
+[Kamera und Aufbau](docs/CAMERA_COMMISSIONING.md)
+
+### 1. Installieren
+
+Auf dem Pi in einem Terminal oder per SSH mit TTY ausführen.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LeoMESysteme/picam-ai/master/get-picam.sh | bash
 ```
 
-[Installer und Updates](docs/INSTALLER.md) · [Aktueller Release](https://github.com/LeoMESysteme/picam-ai/releases/latest)
+Für eine dauerhaft installierte Werkbank **Systemdienst** wählen. Bedienkonto,
+erreichbare Adresse und Port bestätigen und den Dienst starten lassen. Die
+Abschlusskarte nennt die HTTPS-Adresse. **Enter** öffnet die Einrichtungskonsole.
+[Installer im Detail](docs/INSTALLER.md)
 
-<div class="wiki-messkette" data-messkette></div>
+### 2. Anzeige einrichten
+
+Im Browser die angezeigte Werkbank-Adresse (`/live`) öffnen. Beim ersten
+Zugriff den Zertifikat-Fingerabdruck mit der Abschlusskarte oder dem Tab
+**Zertifikat** in `picam` abgleichen. Dann mit dem Linux-Bedienkonto
+anmelden und **Einrichtung starten** wählen. Ohne angeschlossenen
+USB-RS232-Adapter den sichtbaren Anzeigewert eingeben. Vorschlag prüfen,
+Namen eintragen und **Einheit mV/V und Format geprüft** abhaken. Bei einer
+Warnung den Befund prüfen und **WARNUNG zur Kenntnis genommen** abhaken.
+Dann **Bestätigen**.
+[Zertifikat](docs/anleitung/10-kamera-livevorschau.md#zertifikat-auf-windows) · [Einrichtung](docs/anleitung/10-kamera-livevorschau.md#anzeige-einrichten)
+
+### 3. Timing kalibrieren
+
+Den USB-RS232-Adapter mit dem RS232-Ausgang des GSV-2AS verbinden.
+Im Einrichtungsassistenten **Timing-Kalibrierung → Kalibrieren …**
+wählen oder im Terminal ausführen.
+
+```bash
+picam kalibrieren
+```
+
+Auf das erfolgreiche Ergebnis und den Wiederanlauf der Werkbank warten.
+Für einen lokalen Lauf kann der RS232-Adapter jetzt wieder abgezogen
+werden. Danach die Werkbank im Browser neu öffnen, die Anzeige erneut
+einrichten und bestätigen. [Timing-Kalibrierung](docs/INSTALLER.md#timing-kalibrieren)
+
+### 4. Ersten Lauf starten
+
+Über den Pfeil neben **Lauf starten** die Laufoptionen öffnen. Bei
+**GSVmulti-Ausgabe** den Weg **Aus** wählen und **Lauf starten** drücken.
+Ein stabil erkannter Wert erscheint als **Freigegeben** mit seiner Einheit.
+Mit **Lauf stoppen** beenden. Das Audit heißt `records.jsonl` und liegt im
+Laufordner unter `/var/lib/picam/live/` beim Standard-Systemdienst.
+[Wertstatus und Laufablauf](docs/anleitung/10-kamera-livevorschau.md#lauf-und-wertstatus) · [Laufdateien](docs/anleitung/10-kamera-livevorschau.md#dateien-und-lokale-bedienung)
+
+## Hilfe und Doku
+
+| Wenn du … | Hier findest du Hilfe |
+| --- | --- |
+| **die Werkbank-Adresse suchst oder die Anmeldung scheitert** | `picam url` zeigt die Adresse, `picam status` den Dienstzustand. [Start und Anmeldung](docs/anleitung/10-kamera-livevorschau.md#start) |
+| **kein Kamerabild siehst** | Mit `picam doctor` starten und den USB-3-Anschluss prüfen. [Kamera-Inbetriebnahme](docs/CAMERA_COMMISSIONING.md) |
+| **„Lauf gesperrt“ siehst** | In `picam` den Kalibrierstatus und in der Werkbank die Einrichtung prüfen. [Laufsperre und Prüfmeldungen](docs/anleitung/10-kamera-livevorschau.md#laufstart-gesperrt) |
+| **ohne Aufbau üben möchtest** | In der Werkbank **Hilfe → Übungslauf** wählen. [Bedienablauf](docs/anleitung/10-kamera-livevorschau.md#werkbank-bedienen) |
+| **Werte in GSVmulti brauchst** | Ausgabeweg wählen und bei Bedarf die Windows-Brücke einrichten. [GSVmulti-Anbindung](docs/GSVMULTI_PROTOCOL.md) |
+| **aktualisieren oder Probleme am Dienst untersuchen willst** | [Update und Rückweg](docs/INSTALLER.md#update-auf-die-neueste-version) · [Betrieb und Diagnose](docs/anleitung/09-betrieb.md) |
+
+[Dokumentationsübersicht](docs/README.md) · [Glossar](docs/anleitung/glossar.md) · [Aktueller Projektstand](docs/status.md)
+
+## Screenshots
+
+![Werkbank im Übungslauf mit Kamerabild, Ablauf und freigegebenem Beispielwert](docs/bilder/quickstart/werkbank-uebung.png)
+
+*Werkbank im Übungslauf mit Beispieldaten.* [Einblicke in Installer und Konsole](docs/INSTALLER.md#screenshots)
 
 ## So kommst du zum ersten Messwert
 
@@ -24,7 +94,7 @@ Kamera, Licht und Messverstärker kommen an ihren Platz, bevor Software ins Spie
 
 * [Kamera anschließen und prüfen](docs/CAMERA_COMMISSIONING.md#aktuell-logitech-streamcam-uvc) — StreamCam an einen USB3-Port, Diagnose mit `camera-commissioning.sh`
 * [Halterung und Licht](docs/OPTICAL_SETUP.md#checkliste-vor-der-ersten-messreihe) — Checkliste vor der ersten Messreihe
-* [Messverstärker anschließen](docs/HARDWARE_PROFILE.md#messverstarker-gsv-2as-klemmenbelegung-und-schnittstelle) — GSV-2AS: Klemmenbelegung und Schnittstelle
+* [Messverstärker anschließen](docs/HARDWARE_PROFILE.md) — GSV-2AS: Klemmenbelegung und Schnittstelle
 * [Rechner und Schnittstellen](docs/HARDWARE_PROFILE.md#serielle-schnittstellen) — GSVmulti-Datenport `/dev/ttyAMA0`, Referenz über USB-RS232-Adapter
 
 ### Installieren
@@ -32,8 +102,8 @@ Kamera, Licht und Messverstärker kommen an ihren Platz, bevor Software ins Spie
 Die Werkbank läuft auf dem Pi; für GSVmulti kommt eine Brücke auf den Windows-Rechner.
 
 * [Neuen Pi geführt installieren und mit `picam` verwalten](docs/INSTALLER.md) — Installation aus dem Release, danach Konsole und Einzelbefehle für Status, Diagnose, Dienst und Updates
-* [Werkbank aus einem Entwicklungscheckout starten](docs/anleitung/10-kamera-livevorschau.md#werkbank-dienst) — `scripts/install-workbench.sh` und `scripts/werkbank-dienst.sh` für den getrennten Entwicklungsbetrieb
-* [Windows-Brücke und GSVmulti vorbereiten](docs/GSVMULTI_PROTOCOL.md#windows-bruecke) — GSVmulti-Brücke 1.1.0 als Setup oder portable EXE, virtuelles COM-Portpaar mit com0com oder SerialLoom
+* [Werkbank aus einem Entwicklungscheckout starten](docs/anleitung/10-kamera-livevorschau.md#entwicklungsdienst) — `scripts/install-workbench.sh` und `scripts/werkbank-dienst.sh` für den getrennten Entwicklungsbetrieb
+* [Windows-Brücke und GSVmulti vorbereiten](docs/GSVMULTI_PROTOCOL.md#gsvmulti-start) — Setup oder portable EXE, virtuelles COM-Portpaar mit com0com oder SerialLoom
 
 ### Einrichten
 
@@ -41,9 +111,9 @@ Im Browser wird die Anzeige eingerichtet, geprüft und mit Namen bestätigt.
 Eine neue Release-Installation braucht außerdem eine gültige Timing-Kalibrierung.
 
 * [Werkbank im Browser öffnen](docs/anleitung/10-kamera-livevorschau.md#zertifikat-auf-windows) — HTTPS: dem Zertifikat des Pi auf Windows vertrauen
-* [Anzeige einrichten und bestätigen](docs/anleitung/10-kamera-livevorschau.md#einrichten-prufen-und-bestatigen) — Vorschlag prüfen, Befunde lesen, namentlich bestätigen
+* [Anzeige einrichten und bestätigen](docs/anleitung/10-kamera-livevorschau.md#anzeige-einrichten) — Vorschlag prüfen, Befunde lesen, namentlich bestätigen
 * [Kamera einstellen](docs/anleitung/10-kamera-livevorschau.md#kamera-einstellen) — Fokus und Automatiken
-* [Timing bei der Inbetriebnahme kalibrieren](docs/INSTALLER.md#timing-kalibrierung-bei-der-inbetriebnahme-rs232-nur-einmal) — `picam kalibrieren` mit vorübergehend angeschlossenem USB-RS232-Adapter
+* [Timing bei der Inbetriebnahme kalibrieren](docs/INSTALLER.md#timing-kalibrieren) — `picam kalibrieren` mit vorübergehend angeschlossenem USB-RS232-Adapter
 
 ### Messen
 
@@ -84,15 +154,16 @@ Für Entwickler: Trennstellen, Verträge und Stellen, an denen man anbindet.
 * [Lernpfad](docs/anleitung/README.md) — Werkzeuge, Kette, Baukapitel
 * [Verträge](docs/anleitung/02-vertraege.md) — Schnittstellen und Datenklassen
 * [Ausgabeprotokoll anbinden](docs/GSVMULTI_PROTOCOL.md#die-naht-im-code) — die Naht im Code
-* [API-Referenz](api/index.md) — Docstrings aller Module
+* [API-Referenz im Projektwiki](https://picam-docs.pages.dev/api/index.html) — Docstrings aller Module, mit Forgejo-Anmeldung
 
 </div>
 
-**Für Entwickler:** die Verarbeitungskette, Stufe überfahren für Zweck und Anbindung.
+**Für Entwickler:** Die Verarbeitungskette im Projektwiki zeigt Zweck und Anbindung je Stufe.
 
 <div class="wiki-kette" data-variant="kompakt" markdown="1">
 
-Die Verarbeitungskette als Grafik braucht JavaScript; [Die Kette verstehen](docs/anleitung/01-kette-verstehen.md) beschreibt jede Stufe.
+Die Verarbeitungskette als Grafik braucht JavaScript im Projektwiki.
+[Die Kette verstehen](docs/anleitung/01-kette-verstehen.md) beschreibt jede Stufe anhand eines Frames.
 
 </div>
 
@@ -112,9 +183,9 @@ Zum Einstieg ohne Vorwissen: die [Projekt-Tour](docs/uebersicht/projekt-tour.md)
 
 ## Alle Seiten
 
-Die Tabellen sind zugleich ein vollständiges Verzeichnis der linken
-Seitennavigation. Jede Seite ist von dieser Startseite direkt verlinkt.
-Die [Dokumentationsübersicht](docs/README.md) erklärt die Rolle der Quellen.
+Die Tabellen führen zu den Anleitungen, Projektentscheidungen,
+Messbelegen und Schnittstellen. Die [Dokumentationsübersicht](docs/README.md)
+ordnet die Anleitungen nach Aufgaben.
 
 ### Projekt und Entscheidungen
 
@@ -181,16 +252,16 @@ Die [Dokumentationsübersicht](docs/README.md) erklärt die Rolle der Quellen.
 
 | Seite | Inhalt |
 | --- | --- |
-| [API-Überblick](api/index.md) | Einstieg in die Docstrings |
-| [Verträge und Datensätze](api/vertraege.md) | Record, Zeitstempel, Profile |
-| [Bildquellen](api/frames.md) | Quellen und Frames |
-| [Anzeige finden](api/detect.md) | Lokalisierung |
-| [Geometrie](api/geometrie.md) | Nachführung und Entzerrung |
-| [OCR](api/ocr.md) | Leser und Leseergebnisse |
-| [Freigabe](api/validate.md) | Gate-Entscheidungen |
-| [Ausgabe](api/sink.md) | JSONL, seriell, Formatter |
-| [Pipeline](api/pipeline.md) | Verdrahtung und Trace |
-| [Workbench](api/workbench.md) | Bedienoberfläche |
+| [API-Überblick](https://picam-docs.pages.dev/api/index.html) | Einstieg in die Docstrings im Projektwiki (Forgejo-Anmeldung) |
+| [Verträge und Datensätze](https://picam-docs.pages.dev/api/vertraege.html) | Record, Zeitstempel, Profile |
+| [Bildquellen](https://picam-docs.pages.dev/api/frames.html) | Quellen und Frames |
+| [Anzeige finden](https://picam-docs.pages.dev/api/detect.html) | Lokalisierung |
+| [Geometrie](https://picam-docs.pages.dev/api/geometrie.html) | Nachführung und Entzerrung |
+| [OCR](https://picam-docs.pages.dev/api/ocr.html) | Leser und Leseergebnisse |
+| [Freigabe](https://picam-docs.pages.dev/api/validate.html) | Gate-Entscheidungen |
+| [Ausgabe](https://picam-docs.pages.dev/api/sink.html) | JSONL, seriell, Formatter |
+| [Pipeline](https://picam-docs.pages.dev/api/pipeline.html) | Verdrahtung und Trace |
+| [Workbench](https://picam-docs.pages.dev/api/workbench.html) | Bedienoberfläche |
 | [AGENTS.md](AGENTS.md) | verbindliche Projektregeln |
 | [CLAUDE.md](CLAUDE.md) | ergänzender Entwicklerkontext |
 

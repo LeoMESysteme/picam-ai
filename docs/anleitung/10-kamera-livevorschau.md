@@ -4,6 +4,15 @@ weg: bedienen
 
 # Kamera-Workbench: HTTPS, Einstelltabelle und Shell
 
+[Adresse und Anmeldung](#start) · [Anzeige einrichten](#anzeige-einrichten) · [Lauf starten](#lauf-und-wertstatus) · [Typische Fehler](#typische-fehler) · [Laufdateien](#dateien-und-lokale-bedienung)
+
+Die Werkbank unter `/live` führt von der Kameraeinrichtung bis zum
+Messlauf. Nach [Installation](../INSTALLER.md) öffnest du die Werkbank,
+bestätigst die Anzeige und [kalibrierst das Timing](../INSTALLER.md#timing-kalibrieren).
+Nach dem Neustart durch die Kalibrierung richtest du die Anzeige erneut
+ein. Für den ersten Lauf genügt die Ausgabe **Aus**. Den Ablauf kannst
+du in der Werkbank über **Hilfe → Übungslauf** mit Beispieldaten ausprobieren.
+
 > **Kamerastand beachten:** Der Abschnitt „Kamera einstellen“ zeigt die
 > StreamCam-Regler als Karten; die eingeklappten historischen Blöcke betreffen
 > die Picamera2-Controls und den mechanischen Fokus der früheren IMX500. Die aktive
@@ -47,6 +56,8 @@ bash scripts/install-workbench.sh
 Adresse passt. Danach `https://pi-neu.local:8081/live` öffnen und das
 Linux-Passwort des Dienstkontos verwenden. Die Browseranmeldung gilt bis
 zu acht Stunden. Pro Client sind fünf Anmeldeversuche pro Minute möglich.
+
+<a name="entwicklungsdienst"></a>
 
 ## Werkbank als Benutzerdienst {#werkbank-dienst}
 
@@ -113,6 +124,8 @@ Socket und Pfade angeben. Der normale CLI-Standardsocket bleibt unverändert.
 Die [Installationsarten für Releases](../INSTALLER.md#drei-installationsarten)
 haben eigene Code-, Daten- und Laufzeitpfade.
 
+<a name="werkbank-bedienen"></a>
+
 ## Live-Seite `/live`
 
 Die Werkbank richtet die StreamCam ein, prüft die Aufstellung und startet
@@ -133,11 +146,14 @@ API-Aufrufe bleiben ohne Anmeldung bei 401.
 Harvest-Skript erhält währenddessen „belegt“. Ein Laufstopp gibt die
 Kamera nicht frei, damit die Vorschau weiterlaufen kann.
 
+<a name="anzeige-einrichten"></a>
+
 ### Einrichten, prüfen und bestätigen
 
 1. StreamCam an USB 3 anschließen und senkrecht auf die Displaymitte richten.
    Anzeige und Rahmen gleichmäßig beleuchten, Reflexionen vermeiden. Vorlagen
-   und gültige Timing-Kalibrierung bereithalten.
+   bereithalten. Bei der Erstinbetriebnahme folgt die Timing-Kalibrierung
+   nach der Bestätigung.
 2. **Einrichtung starten**. Mit vorhandenem RS232-Adapter liest die Werkbank
    den Zellentext vom GSV-2AS. Ohne Adapter fragt sie zuerst den aktuellen
    Anzeigewert ab. Im Eingabefenster sind `+` und `mV/V` vorgegeben, ein
@@ -309,6 +325,8 @@ Kenntnisnahme der Warnung erforderlich. Die Rasterprüfung verwendet den
 eingegebenen Wert und kann einen Übertrag über mehrere Stellen ablehnen.
 Andere Widersprüche ergeben **FEHLER**. Der Vergleichstext dient der
 Einrichtungsprüfung, spätere Messwerte kommen aus dem Leser.
+
+<a name="laufstart-gesperrt"></a>
 
 ### Lauf gesperrt / Testlauf
 
@@ -688,6 +706,11 @@ Sie ist kein genauer physischer Ereigniszeitpunkt. Auch die Aufnahmezeit
 des zugeordneten Bilds ist eine eigene Angabe mit ihrer eigenen Zeitbasis.
 
 ### Dateien und lokale Bedienung
+
+Bei der Standardinstallation als Systemdienst liegen Sitzungen und Läufe
+unter `/var/lib/picam/live/`. In der Tabelle steht `var/live/` für den
+Entwicklungs-Checkout. Bei einer angepassten Installation gilt der
+Datenordner der jeweiligen Instanz.
 
 | Ablage | Inhalt |
 | --- | --- |

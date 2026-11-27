@@ -1,5 +1,14 @@
 # Status und Übergabe — 2026-11-27
 
+## GitHub-Einstieg
+
+Leonhard hat den GitHub-Quickstart für `master` freigegeben. Er führt vom
+frischen Pi bis zum ersten Lauf mit Ausgabe **Aus**. README, Doku-Übersicht,
+Installer- und Werkbank-Anleitung sowie GSVmulti-Seite führen direkt zu
+den nächsten Bedien- und Diagnoseschritten. Die Bilder zeigen die
+Abschlusskarte, den Konsolenassistenten und den Werkbank-Übungslauf
+mit Beispieldaten.
+
 ## Veröffentlicht und integriert
 
 - **picam 1.1.1 und GSVmulti-Brücke 1.1.0.** Der öffentliche Release
